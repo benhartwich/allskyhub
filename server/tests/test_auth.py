@@ -109,3 +109,9 @@ async def test_signup_can_be_disabled(client: httpx.AsyncClient) -> None:
         assert (await client.get("/signup")).status_code == 404
     finally:
         settings.allow_signup = True
+
+
+def test_signup_is_off_by_default() -> None:
+    from allskyhub_server.settings import Settings
+
+    assert Settings(database_url="postgresql://x@localhost/x").allow_signup is False

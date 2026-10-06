@@ -1,0 +1,11 @@
+{% extends "base.html" %}
+{% block title %}Meine Kameras · allskyhub{% endblock %}
+{% block content %}
+<h1>Meine Kameras</h1>
+{% if not cameras %}
+<div class="card empty">
+  <h2>Noch keine Kamera gekoppelt</h2>
+  <p class="muted">Schalte deine Kamera ein und koppele sie mit der allskyhub-App.</p>
+</div>
+{% endif %}
+{% endblock %}

@@ -1,0 +1,106 @@
+# Codemagic builds of the Flutter app (app/, SPEC §2, M3).
+#
+# Before the release workflows can run, the following must be set up in the Codemagic UI
+# (Team settings → codemagic.yaml settings):
+#   - Android: a keystore uploaded as "allskyhub_upload" (code signing identities)
+#   - iOS: an App Store Connect API key as integration "allskyhub_asc" and the bundle id
+#     org.allskyhub.app registered in the Apple Developer account
+#   - Google Play: service account JSON in the env group "google_play"
+# The check workflows need none of that.
+
+definitions:
+  flutter: &flutter
+    flutter: stable
+  app_dir: &app_dir
+    working_directory: app
+  scripts:
+    - &get
+      name: Packages
+      script: flutter pub get
+    - &check
+      name: Analyze and test
+      script: |
+        dart format --output=none --set-exit-if-changed lib test
+        flutter analyze
+        flutter test
+
+workflows:
+  # Pull requests and pushes to main touching the app: analyze, test, debug APK, unsigned
+  # iOS build (mac minutes are billed, so not on every branch push).
+  app-check:
+    name: App check
+    instance_type: mac_mini_m2
+    max_build_duration: 45
+    <<: *app_dir
+    environment:
+      <<: *flutter
+      xcode: latest
+    triggering:
+      events: [push, pull_request]
+      branch_patterns:
+        - pattern: main
+          include: true
+          source: true
+      when:
+        changeset:
+          includes: ["app/**", "codemagic.yaml"]
+    scripts:
+      - *get
+      - *check
+      - name: Android debug APK
+        script: flutter build apk --debug
+      - name: iOS build without signing
+        script: flutter build ios --release --no-codesign
+    artifacts:
+      - build/app/outputs/flutter-apk/app-debug.apk
+
+  # Manual: signed Android App Bundle to the Play Store internal track.
+  android-release:
+    name: Android release
+    instance_type: linux_x2
+    max_build_duration: 45
+    <<: *app_dir
+    environment:
+      <<: *flutter
+      android_signing: [allskyhub_upload]
+      groups: [google_play]
+    scripts:
+      - *get
+      - *check
+      - name: App Bundle
+        script: flutter build appbundle --release --build-number=$BUILD_NUMBER
+    artifacts:
+      - build/app/outputs/bundle/release/*.aab
+    publishing:
+      google_play:
+        credentials: $GCLOUD_SERVICE_ACCOUNT_CREDENTIALS
+        track: internal
+        submit_as_draft: true
+
+  # Manual: signed iOS build to TestFlight.
+  ios-release:
+    name: iOS release
+    instance_type: mac_mini_m2
+    max_build_duration: 60
+    <<: *app_dir
+    integrations:
+      app_store_connect: allskyhub_asc
+    environment:
+      <<: *flutter
+      xcode: latest
+      ios_signing:
+        distribution_type: app_store
+        bundle_identifier: org.allskyhub.app
+    scripts:
+      - *get
+      - *check
+      - name: Signing
+        script: xcode-project use-profiles
+      - name: IPA
+        script: flutter build ipa --release --build-number=$BUILD_NUMBER --export-options-plist=/Users/builder/export_options.plist
+    artifacts:
+      - build/ios/ipa/*.ipa
+    publishing:
+      app_store_connect:
+        auth: integration
+        submit_to_testflight: true

@@ -44,3 +44,20 @@ jobs:
       - run: uv run pyright
       - run: uv run pytest -q -rs
       - run: uvx --from 'reuse[charset-normalizer]' reuse lint
+
+  # Flutter app (app/): format, analyze, test. Builds run on Codemagic (codemagic.yaml).
+  app:
+    runs-on: ubuntu-24.04
+    defaults:
+      run:
+        working-directory: app
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+      - run: flutter pub get
+      - run: dart format --output=none --set-exit-if-changed lib test
+      - run: flutter analyze
+      - run: flutter test

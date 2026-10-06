@@ -17,6 +17,7 @@ from allskyhub_server.models import Device
 from allskyhub_server.web.deps import (
     CurrentSession,
     DbSession,
+    OptionalSession,
     SettingsDep,
     client_ip,
     csrf_protect,
@@ -40,7 +41,10 @@ async def _own_device(db: DbSession, session: SessionInfo, device_id: str) -> De
 
 
 @router.get("/")
-async def home(request: Request, db: DbSession, session: CurrentSession) -> Response:
+async def home(request: Request, db: DbSession, session: OptionalSession) -> Response:
+    """Signed in: the user's cameras. Otherwise the public start page."""
+    if session is None:
+        return render(request, "landing.html")
     devices = await queries.owned(db, session.user.id)
     registry = _registry(request)
     cameras = [(d, registry.is_online(d.id)) for d in devices]

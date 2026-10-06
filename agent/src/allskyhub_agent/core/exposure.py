@@ -1,8 +1,8 @@
 """Auto exposure controller (SPEC §4.3).
 
 The only place that computes exposure and gain (architecture rule 4). It works in log
-space: the brightness error is turned into a damped, clamped ratio that is applied to
-exposure first and to gain only when exposure is at its limit.
+space: the brightness error is turned into a damped, clamped ratio. The resulting amount
+of light is put into exposure as far as the mode allows; only the rest goes into gain.
 """
 
 from __future__ import annotations
@@ -100,25 +100,13 @@ class AutoExposure:
         ratio = lim.target_mean / max(measured_mean, _MIN_MEAN)
         ratio = _clamp(ratio**self._cfg.damping, 1 / self._cfg.max_step, self._cfg.max_step)
 
-        exposure = float(used.exposure_us)
-        gain = used.gain
-        # Gain as a linear factor on top of the mode's minimum gain.
-        gain_factor = self._gain_factor(gain, lim)
+        # The wanted amount of light, as exposure (µs) x linear gain factor. It is always split
+        # with as much exposure as the mode allows and as little gain as needed: gain adds
+        # noise, so a gain left high (e.g. after focus mode) is traded back for exposure.
+        total = used.exposure_us * self._gain_factor(used.gain, lim) * ratio
+        exposure = _clamp(total, lim.min_exposure_us, lim.max_exposure_us)
+        gain_factor = max(1.0, total / exposure)
 
-        if ratio >= 1.0:
-            # Too dark: lengthen exposure first, then raise gain.
-            want = exposure * ratio
-            exposure = min(want, lim.max_exposure_us)
-            rest = want / exposure if exposure > 0 else 1.0
-            gain_factor *= rest
-        else:
-            # Too bright: lower gain first, then shorten exposure.
-            want_gain = gain_factor * ratio
-            gain_factor = max(want_gain, 1.0)
-            rest = want_gain / gain_factor
-            exposure *= rest
-
-        exposure = _clamp(exposure, lim.min_exposure_us, lim.max_exposure_us)
         nxt = Exposure(round(exposure), self._gain_from_factor(gain_factor, lim))
         self._last[mode] = nxt
         return nxt

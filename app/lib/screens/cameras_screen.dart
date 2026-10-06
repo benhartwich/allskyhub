@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../api/hub_client.dart';
 import 'camera_screen.dart';
+import 'onboarding_screen.dart';
 import 'pair_screen.dart';
 
 class CamerasScreen extends StatefulWidget {
@@ -28,8 +29,34 @@ class _CamerasScreenState extends State<CamerasScreen> {
   }
 
   Future<void> _pair() async {
+    final manual = await showModalBottomSheet<bool>(
+      context: context,
+      builder: (context) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ListTile(
+              leading: const Icon(Icons.wifi),
+              title: const Text('Kamera im WLAN einrichten'),
+              subtitle: const Text('Die App holt sich den Code von der Kamera'),
+              onTap: () => Navigator.pop(context, false),
+            ),
+            ListTile(
+              leading: const Icon(Icons.pin),
+              title: const Text('Code eingeben'),
+              onTap: () => Navigator.pop(context, true),
+            ),
+          ],
+        ),
+      ),
+    );
+    if (manual == null || !mounted) return;
     final paired = await Navigator.of(context).push<Camera>(
-      MaterialPageRoute(builder: (_) => PairScreen(client: widget.client)),
+      MaterialPageRoute(
+        builder: (_) => manual
+            ? PairScreen(client: widget.client)
+            : OnboardingScreen(client: widget.client),
+      ),
     );
     if (paired != null) await _reload();
   }

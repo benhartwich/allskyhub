@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The camera's setup API (SPEC §7) is plain HTTP on the LAN, at an address only known at
+     runtime; Android cannot limit cleartext to private IP ranges, so it is allowed in general.
+     The hosted hub is HTTPS (allskyhub.org); a self-hosted hub may be plain HTTP on a LAN. -->
+<network-security-config>
+    <base-config cleartextTrafficPermitted="true">
+        <trust-anchors>
+            <certificates src="system" />
+        </trust-anchors>
+    </base-config>
+</network-security-config>

@@ -1,0 +1,116 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>allskyhub camera</title>
+<style>
+  :root {
+    --bg: #0b0d12; --panel: #151922; --text: #e6e9ef; --muted: #8a93a6;
+    --accent: #6ea8ff; --good: #4cc38a; --line: #262c38;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text);
+         font: 16px/1.4 system-ui, -apple-system, "Segoe UI", sans-serif; }
+  main { max-width: 900px; margin: 0 auto; padding: 16px; }
+  h1 { font-size: 1.1rem; margin: 0 0 12px; font-weight: 600; }
+  .panel { background: var(--panel); border: 1px solid var(--line); border-radius: 12px;
+           padding: 12px; margin-bottom: 12px; }
+  img { width: 100%; height: auto; display: block; border-radius: 8px; background: #000; }
+  .meta { display: flex; flex-wrap: wrap; gap: 6px 16px; color: var(--muted);
+          font-size: .9rem; margin-top: 8px; }
+  .meta b { color: var(--text); font-weight: 500; }
+  .row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+  button { font: inherit; padding: 10px 16px; border-radius: 10px; border: 1px solid var(--line);
+           background: #1e2430; color: var(--text); min-height: 44px; }
+  button.primary { background: var(--accent); color: #0b0d12; border-color: var(--accent); }
+  .score { font-size: 3rem; font-weight: 700; font-variant-numeric: tabular-nums; }
+  .bar { height: 10px; background: #1e2430; border-radius: 6px; overflow: hidden; flex: 1; }
+  .bar > div { height: 100%; width: 0; background: var(--good); transition: width .3s; }
+  .hint { color: var(--muted); font-size: .9rem; margin: 8px 0 0; }
+  [hidden] { display: none !important; }
+</style>
+</head>
+<body>
+<main>
+  <h1>allskyhub camera</h1>
+
+  <section class="panel">
+    <img id="live" alt="Latest image">
+    <div class="meta" id="meta">Waiting for the first image…</div>
+  </section>
+
+  <section class="panel">
+    <div class="row">
+      <button id="focusBtn" class="primary">Start focus mode</button>
+      <button id="resetBtn" hidden>Reset best</button>
+    </div>
+    <div id="focusPanel" hidden>
+      <div class="row" style="margin-top:12px">
+        <span class="score" id="score">–</span>
+        <div class="bar"><div id="bar"></div></div>
+      </div>
+      <div class="meta">best <b id="best">–</b></div>
+      <p class="hint">Turn the focus ring in small steps. Higher is sharper; when the number
+        drops, you went past the best point, so turn back. Tighten the lock screw and check the
+        number again.</p>
+      <img id="crop" alt="Centre of the image at full resolution" style="margin-top:8px">
+    </div>
+  </section>
+</main>
+<script>
+const $ = (id) => document.getElementById(id);
+let lastFrames = -1;
+let focus = false;
+
+function fmtExposure(us) {
+  return us >= 1e6 ? (us / 1e6).toFixed(1) + " s" : (us / 1000).toFixed(2) + " ms";
+}
+
+function render(s) {
+  focus = s.focus_mode;
+  $("focusBtn").textContent = focus ? "Stop focus mode" : "Start focus mode";
+  $("focusPanel").hidden = !focus;
+  $("resetBtn").hidden = !focus;
+  if (s.frame) {
+    const f = s.frame;
+    const t = new Date(f.captured_at).toLocaleTimeString();
+    $("meta").innerHTML =
+      `<span><b>${t}</b></span><span>${f.mode}</span>` +
+      `<span>exposure <b>${fmtExposure(f.exposure_us)}</b></span>` +
+      `<span>gain <b>${f.gain}</b></span><span>brightness <b>${f.mean.toFixed(2)}</b></span>` +
+      (f.sensor_temp_c != null ? `<span>sensor <b>${f.sensor_temp_c.toFixed(1)} °C</b></span>` : "");
+  }
+  if (focus && s.sharpness != null) {
+    $("score").textContent = Math.round(s.sharpness);
+    $("best").textContent = s.sharpness_max != null ? Math.round(s.sharpness_max) : "–";
+    const pct = s.sharpness_max ? Math.min(100, 100 * s.sharpness / s.sharpness_max) : 0;
+    $("bar").style.width = pct + "%";
+  }
+  if (s.frames !== lastFrames) {
+    lastFrames = s.frames;
+    const q = "?n=" + s.frames;
+    $("live").src = "/api/live.jpg" + q;
+    if (focus) $("crop").src = "/api/crop.jpg" + q;
+  }
+}
+
+async function poll() {
+  try {
+    const r = await fetch("/api/status", { cache: "no-store" });
+    if (r.ok) render(await r.json());
+  } catch (e) { /* camera restarting; try again */ }
+  setTimeout(poll, focus ? 500 : 2000);
+}
+
+async function post(action) {
+  const r = await fetch("/api/focus", { method: "POST", body: action });
+  if (r.ok) render(await r.json());
+}
+
+$("focusBtn").onclick = () => post(focus ? "off" : "on");
+$("resetBtn").onclick = () => post("reset");
+poll();
+</script>
+</body>
+</html>

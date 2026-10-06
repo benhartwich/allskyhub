@@ -21,9 +21,11 @@ from allskyhub_agent.adapters.zwo import CameraError, ZwoCamera
 from allskyhub_agent.core.clock import Clock, SimClock, SystemClock
 from allskyhub_agent.core.exposure import AutoExposure
 from allskyhub_agent.core.sun import sun_elevation
+from allskyhub_agent.live import LiveState
 from allskyhub_agent.profiles import get_profile
 from allskyhub_agent.runner import Location, LoopConfig, Runner
 from allskyhub_agent.store.images import ImageStore
+from allskyhub_agent.web.server import WebServer
 from allskyhub_protocol import FrameInfo
 
 
@@ -51,6 +53,12 @@ def _parser() -> argparse.ArgumentParser:
     run.add_argument("--start", default=None, help="simulation start time, ISO 8601 with zone")
     run.add_argument("--day-delay", type=float, default=30.0)
     run.add_argument("--night-delay", type=float, default=0.0)
+    run.add_argument(
+        "--http",
+        default=None,
+        metavar="HOST:PORT",
+        help="serve the local web UI, e.g. 0.0.0.0:8080 (SPEC §7)",
+    )
     return p
 
 
@@ -89,6 +97,15 @@ def main(argv: list[str] | None = None) -> int:
         except (OSError, AsiError, CameraError) as exc:
             print(f"cannot open camera: {exc}", file=sys.stderr)
             return 1
+    live = LiveState()
+    web: WebServer | None = None
+    if args.http:
+        host, _, port = str(args.http).rpartition(":")
+        host = host or "0.0.0.0"  # noqa: S104 - the local UI is meant for the LAN (SPEC §7)
+        web = WebServer(live, host, int(port))
+        web.start()
+        print(f"web UI on http://{host}:{web.port}/")
+
     runner = Runner(
         camera=camera,
         auto_exposure=AutoExposure(profile.exposure),
@@ -98,6 +115,8 @@ def main(argv: list[str] | None = None) -> int:
         profile=profile.id,
         loop=LoopConfig(args.day_delay, args.night_delay),
         mask_radius_frac=profile.image_circle_frac,
+        live=live,
+        local_tz=tz,
     )
 
     def show(f: FrameInfo) -> None:
@@ -113,6 +132,8 @@ def main(argv: list[str] | None = None) -> int:
         pass
     finally:
         camera.close()
+        if web is not None:
+            web.stop()
     return 0
 
 

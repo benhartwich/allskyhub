@@ -24,7 +24,7 @@ ignore = ["S311"]
 known-first-party = ["allskyhub_protocol", "allskyhub_agent"]
 
 [tool.ruff.lint.per-file-ignores]
-"**/tests/**" = ["S101"]
+"**/tests/**" = ["S101", "S310"]
 
 [tool.pyright]
 typeCheckingMode = "strict"

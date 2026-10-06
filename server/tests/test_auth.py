@@ -12,10 +12,17 @@ async def test_healthz(client: httpx.AsyncClient) -> None:
     assert r.json() == {"status": "ok"}
 
 
-async def test_home_requires_login(client: httpx.AsyncClient) -> None:
+async def test_start_page_is_public(client: httpx.AsyncClient) -> None:
     r = await client.get("/")
+    assert r.status_code == 200
+    assert "Konto anlegen" in r.text
+    assert "Meine Kameras" not in r.text
+
+
+async def test_camera_pages_require_login(client: httpx.AsyncClient) -> None:
+    r = await client.get("/cameras/pair")
     assert r.status_code == 303
-    assert r.headers["location"] == "/login?next=/"
+    assert r.headers["location"] == "/login?next=/cameras/pair"
 
 
 async def test_signup_logs_in_and_shows_cameras(client: httpx.AsyncClient) -> None:
@@ -62,7 +69,7 @@ async def test_login_logout(client: httpx.AsyncClient) -> None:
     home = await client.get("/")
     r = await client.post("/logout", data={"csrf_token": csrf_from(home.text)})
     assert r.status_code == 303
-    assert (await client.get("/")).status_code == 303
+    assert "Meine Kameras" not in (await client.get("/")).text
 
     page = await client.get("/login")
     token = csrf_from(page.text)
@@ -76,7 +83,7 @@ async def test_login_logout(client: httpx.AsyncClient) -> None:
     )
     assert ok.status_code == 303
     assert ok.headers["location"] == "/"
-    assert (await client.get("/")).status_code == 200
+    assert "Meine Kameras" in (await client.get("/")).text
 
 
 async def test_post_without_csrf_is_rejected(client: httpx.AsyncClient) -> None:

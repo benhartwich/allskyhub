@@ -1,0 +1,11 @@
+[Unit]
+Description=allskyhub hub API socket (nginx proxies to it)
+
+[Socket]
+ListenStream=/run/allskyhub-server/api.sock
+SocketUser=allskyhub-server
+SocketGroup=www-data
+SocketMode=0660
+
+[Install]
+WantedBy=sockets.target

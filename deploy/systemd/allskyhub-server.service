@@ -1,0 +1,37 @@
+[Unit]
+Description=allskyhub hub (uvicorn, socket-activated)
+Requires=allskyhub-server.socket
+After=network.target postgresql.service allskyhub-server.socket
+Wants=postgresql.service
+
+[Service]
+Type=simple
+User=allskyhub-server
+Group=allskyhub-server
+EnvironmentFile=/etc/allskyhub-server/allskyhub-server.env
+Environment=TMPDIR=/var/lib/allskyhub-server/tmp
+WorkingDirectory=/opt/allskyhub-server
+# One worker: open device WebSockets live in the process (devices/connections.py).
+ExecStart=/opt/allskyhub-server/.venv/bin/allskyhub-server serve --workers 1
+Restart=on-failure
+RestartSec=2
+UMask=0027
+
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+PrivateDevices=yes
+ReadWritePaths=/var/lib/allskyhub-server
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectControlGroups=yes
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+RestrictNamespaces=yes
+RestrictRealtime=yes
+LockPersonality=yes
+SystemCallArchitectures=native
+CapabilityBoundingSet=
+
+[Install]
+WantedBy=multi-user.target

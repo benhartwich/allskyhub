@@ -32,6 +32,7 @@ sudo -u postgres createdb -O allskyhub_server allskyhub
 sudo -u allskyhub-server env $(xargs < /etc/allskyhub-server/allskyhub-server.env) \
   .venv/bin/allskyhub-server migrate
 cp deploy/systemd/allskyhub-server.* /etc/systemd/system/
+cp deploy/logrotate/allskyhub-nginx /etc/logrotate.d/   # nginx-Logs 14 Tage (Datenschutzerklärung)
 systemctl daemon-reload && systemctl enable --now allskyhub-server.socket
 ```
 

@@ -21,7 +21,7 @@ from allskyhub_server.db import create_engine, create_sessionmaker
 from allskyhub_server.devices.connections import ConnectionRegistry
 from allskyhub_server.devices.images import ImageStore
 from allskyhub_server.settings import Settings, get_settings
-from allskyhub_server.web import routes_auth, routes_cameras
+from allskyhub_server.web import routes_auth, routes_cameras, routes_legal
 from allskyhub_server.web.deps import LoginRequiredError
 from allskyhub_server.web.render import render
 from allskyhub_server.web.templating import STATIC_DIR
@@ -160,6 +160,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.mount("/static", CachedStaticFiles(directory=STATIC_DIR), name="static")
     app.include_router(routes_auth.router)
     app.include_router(routes_cameras.router)
+    app.include_router(routes_legal.router)
     app.include_router(device_api.router)
     app.include_router(app_api.router)
 

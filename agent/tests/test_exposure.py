@@ -84,3 +84,12 @@ def test_focus_mode_caps_exposure_and_moves_rest_into_gain() -> None:
     assert nxt.exposure_us <= 2_000_000
     # Leaving focus mode: the normal limits apply again.
     assert ae.current(Mode.NIGHT).exposure_us <= 60_000_000
+
+
+def test_gain_is_traded_back_for_exposure_after_focus_mode() -> None:
+    # Seen on real hardware: after focus mode (2 s, high gain) the gain stayed high and the
+    # exposure only crept up. Now the light moves back into exposure right away.
+    ae = AutoExposure(CFG, start={Mode.NIGHT: Exposure(2_000_000, 200.0)})
+    nxt = ae.update(Mode.NIGHT, ae.current(Mode.NIGHT), 0.20)  # on target, no change wanted
+    assert nxt.gain == 0.0
+    assert nxt.exposure_us == pytest.approx(20_000_000, rel=0.01)  # +20 dB = 10x exposure

@@ -1,0 +1,17 @@
+# nginx logs of allskyhub: kept 14 days (today + 13), as the privacy page says. A separate
+# directory, so the host's /var/log/nginx/*.log rule does not apply.
+/var/log/nginx/allskyhub/*.log {
+        daily
+        rotate 13
+        missingok
+        notifempty
+        compress
+        delaycompress
+        create 0640 root adm
+        sharedscripts
+        postrotate
+                if [ -f /run/nginx.pid ]; then
+                        kill -USR1 "$(cat /run/nginx.pid)"
+                fi
+        endscript
+}

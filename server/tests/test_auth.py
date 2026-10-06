@@ -115,3 +115,15 @@ def test_signup_is_off_by_default() -> None:
     from allskyhub_server.settings import Settings
 
     assert Settings(database_url="postgresql://x@localhost/x").allow_signup is False
+
+
+async def test_legal_pages_are_public_drafts(client: httpx.AsyncClient) -> None:
+    for path, title in (("/impressum", "Impressum"), ("/datenschutz", "Datenschutzerklärung")):
+        r = await client.get(path)
+        assert r.status_code == 200
+        assert f"<h1>{title}</h1>" in r.text
+        assert "Entwurf" in r.text  # not approved yet
+        assert "TODO" in r.text
+    home = await client.get("/")
+    assert 'href="/impressum"' in home.text
+    assert 'href="/datenschutz"' in home.text

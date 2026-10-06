@@ -28,7 +28,6 @@ def render(
         "session": session,
         "user": session.user if session else None,
         "csrf_token": session.csrf_token if session else anon_token,
-        "allow_signup": request.app.state.settings.allow_signup,
     }
     data.update(context or {})
     response = templates.TemplateResponse(request, template, data, status_code=status_code)

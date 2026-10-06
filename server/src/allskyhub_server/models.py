@@ -164,3 +164,16 @@ class AppToken(Base):
     created_at: Mapped[dt.datetime] = mapped_column(_tz(), server_default=func.now())
     last_used_at: Mapped[dt.datetime] = mapped_column(_tz(), server_default=func.now())
     expires_at: Mapped[dt.datetime] = mapped_column(_tz())
+
+
+class Invitation(Base):
+    """Accounts exist only by invitation; the link carries a token stored here as SHA-256."""
+
+    __tablename__ = "invitation"
+
+    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid7)
+    token_hash: Mapped[bytes] = mapped_column(LargeBinary(32), unique=True)
+    email: Mapped[str] = mapped_column(String(254), index=True)
+    created_at: Mapped[dt.datetime] = mapped_column(_tz(), server_default=func.now())
+    expires_at: Mapped[dt.datetime] = mapped_column(_tz())
+    used_at: Mapped[dt.datetime | None] = mapped_column(_tz())

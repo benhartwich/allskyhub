@@ -1,4 +1,4 @@
-"""Sign-up, login, logout."""
+"""Login, logout and accepting an invitation (the only way to an account)."""
 
 from __future__ import annotations
 
@@ -9,7 +9,7 @@ from urllib.parse import urlsplit
 from fastapi import APIRouter, Depends, Form, HTTPException, Request
 from fastapi.responses import RedirectResponse, Response
 
-from allskyhub_server.auth import accounts, ratelimit
+from allskyhub_server.auth import accounts, invitations, ratelimit
 from allskyhub_server.auth.sessions import ABSOLUTE_LIFETIME, create_session, delete_session
 from allskyhub_server.settings import Settings
 from allskyhub_server.web.deps import (
@@ -107,50 +107,52 @@ async def login(
     return await _start_session(request, db, settings, user.id, next)
 
 
-@router.get("/signup")
-async def signup_form(
-    request: Request, session: OptionalSession, settings: SettingsDep
+# The invitation token travels in the query string: never logged (app and nginx log paths only).
+@router.get("/invite")
+async def invitation_form(
+    request: Request, db: DbSession, session: OptionalSession, token: str = ""
 ) -> Response:
-    if not settings.allow_signup:
-        raise HTTPException(status_code=404)
-    if session is not None:
-        return RedirectResponse("/", status_code=303)
-    return render(request, "signup.html")
+    invitation = await invitations.open_invitation(db, token)
+    return render(
+        request,
+        "invite.html",
+        {"invitation": invitation, "token": token},
+        session=session,
+        status_code=200 if invitation else 404,
+    )
 
 
-@router.post("/signup")
-async def signup(
+@router.post("/invite")
+async def accept_invitation(
     request: Request,
     db: DbSession,
     settings: SettingsDep,
-    email: Annotated[str, Form(max_length=254)],
+    token: Annotated[str, Form(max_length=100)],
     password: Annotated[str, Form(max_length=1024)],
     password2: Annotated[str, Form(max_length=1024)],
 ) -> Response:
-    if not settings.allow_signup:
-        raise HTTPException(status_code=404)
     try:
         await ratelimit.hit(
             request.app.state.engine,
-            f"signup:ip:{client_ip(request, settings)}",
-            ratelimit.SIGNUP_PER_IP,
+            f"invite:ip:{client_ip(request, settings)}",
+            ratelimit.INVITE_PER_IP,
         )
     except ratelimit.RateLimitedError as exc:
-        resp = render(
-            request,
-            "signup.html",
-            {"error": "Zu viele neue Konten. Bitte später erneut versuchen.", "email": email},
-            status_code=429,
-        )
-        resp.headers["Retry-After"] = str(exc.retry_after)
-        return resp
+        raise HTTPException(
+            429, "Zu viele Versuche.", {"Retry-After": str(exc.retry_after)}
+        ) from None
     try:
         if password != password2:
             raise accounts.AccountError("Die Passwörter stimmen nicht überein.")
-        user = await accounts.create_user(db, email, password)
+        user = await invitations.accept(db, token, password)
     except accounts.AccountError as exc:
+        await db.rollback()
+        invitation = await invitations.open_invitation(db, token)
         return render(
-            request, "signup.html", {"error": exc.message, "email": email}, status_code=400
+            request,
+            "invite.html",
+            {"invitation": invitation, "token": token, "error": exc.message},
+            status_code=400,
         )
     return await _start_session(request, db, settings, user.id, "/")
 

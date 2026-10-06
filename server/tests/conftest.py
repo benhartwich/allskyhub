@@ -50,7 +50,6 @@ def settings(tmp_path_factory: pytest.TempPathFactory) -> Settings:
         data_dir=tmp_path_factory.mktemp("data"),
         session_cookie_secure=False,
         log_format="console",
-        allow_signup=True,  # the tests create accounts through the sign-up form
     )
 
 

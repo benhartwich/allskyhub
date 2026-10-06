@@ -1,0 +1,28 @@
+{% extends "base.html" %}
+{% block title %}Einladung · allskyhub{% endblock %}
+{% block content %}
+<div class="auth">
+  {% if invitation %}
+  <h1>Willkommen bei allskyhub</h1>
+  <p class="muted">Du wurdest eingeladen. Leg ein Passwort fest, dann kannst du deine Kamera koppeln.</p>
+  <form method="post" action="/invite" class="card stack">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <input type="hidden" name="token" value="{{ token }}">
+    <label>E-Mail-Adresse
+      <input type="email" value="{{ invitation.email }}" autocomplete="username" readonly>
+    </label>
+    <label>Passwort (mindestens 10 Zeichen)
+      <input type="password" name="password" autocomplete="new-password" minlength="10" required>
+    </label>
+    <label>Passwort wiederholen
+      <input type="password" name="password2" autocomplete="new-password" minlength="10" required>
+    </label>
+    <button type="submit">Konto anlegen</button>
+  </form>
+  {% else %}
+  <h1>Einladung ungültig</h1>
+  <p class="muted">Der Link ist abgelaufen, wurde schon benutzt oder ist unvollständig. Bitte um eine neue Einladung.</p>
+  <p><a class="button" href="/login">Zur Anmeldung</a></p>
+  {% endif %}
+</div>
+{% endblock %}

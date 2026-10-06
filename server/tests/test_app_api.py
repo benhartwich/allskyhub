@@ -8,7 +8,7 @@ from fastapi import FastAPI
 from allskyhub_protocol import FrameVariant
 from allskyhub_server.devices.images import ImageStore
 from tests.fake_device import FakeDevice
-from tests.helpers import PASSWORD, signup
+from tests.helpers import PASSWORD, make_account
 
 JPEG = b"\xff\xd8\xff\xe0" + b"\x01" * 32
 
@@ -22,7 +22,7 @@ async def _app_login(client: httpx.AsyncClient, email: str) -> dict[str, str]:
 
 
 async def test_login_rejects_wrong_password(client: httpx.AsyncClient) -> None:
-    email = await signup(client)
+    email = await make_account(client)
     r = await client.post("/api/v1/auth/login", json={"email": email, "password": "nope"})
     assert r.status_code == 401
     assert r.json() == {"detail": "Wrong email or password"}
@@ -37,7 +37,7 @@ async def test_requires_token(client: httpx.AsyncClient) -> None:
 async def test_claim_list_image_remove(
     app: FastAPI, client: httpx.AsyncClient, new_client: httpx.AsyncClient
 ) -> None:
-    email = await signup(client)
+    email = await make_account(client)
     auth = await _app_login(new_client, email)
     dev = FakeDevice()
     reg = await dev.register(new_client)
@@ -74,8 +74,8 @@ async def test_claim_list_image_remove(
 async def test_other_account_gets_404(
     client: httpx.AsyncClient, new_client: httpx.AsyncClient
 ) -> None:
-    owner = await _app_login(client, await signup(client))
-    other = await _app_login(new_client, await signup(new_client))
+    owner = await _app_login(client, await make_account(client))
+    other = await _app_login(new_client, await make_account(new_client))
     dev = FakeDevice()
     reg = await dev.register(client)
     assert reg.pairing_code
@@ -88,6 +88,6 @@ async def test_other_account_gets_404(
 
 
 async def test_logout_revokes_token(client: httpx.AsyncClient) -> None:
-    auth = await _app_login(client, await signup(client))
+    auth = await _app_login(client, await make_account(client))
     assert (await client.post("/api/v1/auth/logout", headers=auth)).status_code == 204
     assert (await client.get("/api/v1/cameras", headers=auth)).status_code == 401

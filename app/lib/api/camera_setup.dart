@@ -40,6 +40,10 @@ class SetupInfo {
   final String agentVersion;
 }
 
+/// The address answers, but not as a set-up allskyhub camera (404 on `/api/setup`: another
+/// device, or an agent without a configured hub).
+class NotACameraException implements Exception {}
+
 /// Turns user input like "192.168.1.50", "kamera.local:8080" or a full URL into the
 /// setup API's base URI.
 Uri cameraBaseUri(String input) {
@@ -64,6 +68,7 @@ class CameraSetupClient {
     final response = await _http
         .get(baseUri.replace(path: '/api/setup'))
         .timeout(const Duration(seconds: 4));
+    if (response.statusCode == 404) throw NotACameraException();
     if (response.statusCode != 200) {
       throw http.ClientException('setup API answered ${response.statusCode}');
     }

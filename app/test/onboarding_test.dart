@@ -24,6 +24,7 @@ class Fixture {
     'agent_version': '0.1.0',
   };
   bool cameraReachable = true;
+  bool isCamera = true;
   int claimStatus = 200;
   final claims = <Map<String, dynamic>>[];
 
@@ -33,6 +34,7 @@ class Fixture {
       httpClient: MockClient((request) async {
         expect(request.url.toString(), 'http://192.168.1.50:8080/api/setup');
         if (!cameraReachable) throw http.ClientException('no route to host');
+        if (!isCamera) return http.Response('not found', 404);
         return http.Response(jsonEncode(setup), 200);
       }),
     ),
@@ -149,5 +151,15 @@ void main() {
     await f.controller.tick();
     expect(f.controller.phase, OnboardingPhase.failed);
     expect(f.controller.error, contains('anderen Konto'));
+  });
+
+  test('404 on the setup API means no set-up camera at that address', () async {
+    final f = Fixture()..isCamera = false;
+    await f.controller.tick();
+    expect(f.controller.phase, OnboardingPhase.failed);
+    expect(
+      f.controller.error,
+      contains('keine eingerichtete allskyhub-Kamera'),
+    );
   });
 }

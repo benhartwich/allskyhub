@@ -87,6 +87,13 @@ class OnboardingController extends ChangeNotifier {
       final SetupInfo current;
       try {
         current = await setup.fetch();
+      } on NotACameraException {
+        _set(
+          OnboardingPhase.failed,
+          error:
+              'Unter dieser Adresse antwortet keine eingerichtete allskyhub-Kamera.',
+        );
+        return;
       } on Exception {
         if (_claimedAt == null) {
           _set(OnboardingPhase.connecting);

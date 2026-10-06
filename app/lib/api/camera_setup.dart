@@ -7,6 +7,9 @@ import 'package:http/http.dart' as http;
 /// Default port of the agent's local web server.
 const cameraSetupPort = 8080;
 
+/// The camera in its own setup network `allskyhub-XXXX` (SPEC §7.1).
+final setupModeUri = Uri.parse('http://10.42.0.1:$cameraSetupPort');
+
 /// `GET /api/setup` of the camera.
 class SetupInfo {
   SetupInfo({
@@ -17,6 +20,8 @@ class SetupInfo {
     this.expiresIn,
     this.profile = '',
     this.agentVersion = '',
+    this.setupMode = false,
+    this.lastError,
   });
 
   factory SetupInfo.fromJson(Map<String, dynamic> json) => SetupInfo(
@@ -27,6 +32,8 @@ class SetupInfo {
     expiresIn: json['expires_in'] as int?,
     profile: (json['profile'] as String?) ?? '',
     agentVersion: (json['agent_version'] as String?) ?? '',
+    setupMode: (json['setup_mode'] as bool?) ?? false,
+    lastError: json['last_error'] as String?,
   );
 
   final String deviceId;
@@ -38,7 +45,45 @@ class SetupInfo {
   final int? expiresIn;
   final String profile;
   final String agentVersion;
+
+  /// The camera is in its own setup network (SPEC §7.1).
+  final bool setupMode;
+
+  /// Why the last attempt to join a network failed: `wifi_auth`, `wifi_not_found`,
+  /// `no_internet`, or null.
+  final String? lastError;
+
+  /// Network name of the setup mode: `allskyhub-` and the id's first four characters.
+  String get setupSsid => 'allskyhub-${deviceId.substring(0, 4).toUpperCase()}';
 }
+
+/// One entry of `GET /api/wifi/networks` (SPEC §7.1).
+class WifiNetwork {
+  WifiNetwork({required this.ssid, required this.signal, required this.secure});
+
+  factory WifiNetwork.fromJson(Map<String, dynamic> json) => WifiNetwork(
+    ssid: json['ssid'] as String,
+    signal: json['signal'] as int,
+    secure: json['secure'] as bool,
+  );
+
+  final String ssid;
+
+  /// 0..100
+  final int signal;
+  final bool secure;
+}
+
+/// German text for `SetupInfo.lastError`.
+String? describeSetupError(String? code) => switch (code) {
+  null => null,
+  'wifi_auth' =>
+    'Die Kamera konnte sich nicht anmelden. Ist das WLAN-Passwort richtig?',
+  'wifi_not_found' =>
+    'Die Kamera hat das WLAN nicht gefunden. Steht sie in Reichweite?',
+  'no_internet' => 'Die Kamera ist im WLAN, kommt aber nicht ins Internet.',
+  _ => 'Die Kamera konnte sich nicht verbinden ($code).',
+};
 
 /// The address answers, but not as a set-up allskyhub camera (404 on `/api/setup`: another
 /// device, or an agent without a configured hub).
@@ -63,6 +108,43 @@ class CameraSetupClient {
 
   final Uri baseUri;
   final http.Client _http;
+
+  Future<List<WifiNetwork>> networks() async {
+    final response = await _http
+        .get(baseUri.replace(path: '/api/wifi/networks'))
+        .timeout(const Duration(seconds: 15));
+    if (response.statusCode != 200) {
+      throw http.ClientException('networks answered ${response.statusCode}');
+    }
+    final json = jsonDecode(utf8.decode(response.bodyBytes)) as List<dynamic>;
+    return [
+      for (final n in json) WifiNetwork.fromJson(n as Map<String, dynamic>),
+    ];
+  }
+
+  /// SPEC §7.1: the camera answers 202 and then leaves its setup network.
+  Future<void> sendNetwork({
+    required String ssid,
+    String? password,
+    required String country,
+    String? hubUrl,
+  }) async {
+    final response = await _http
+        .post(
+          baseUri.replace(path: '/api/setup/network'),
+          headers: {'Content-Type': 'application/json'},
+          body: jsonEncode({
+            'ssid': ssid,
+            if (password != null && password.isNotEmpty) 'password': password,
+            'country': country.toUpperCase(),
+            'hub_url': ?hubUrl,
+          }),
+        )
+        .timeout(const Duration(seconds: 10));
+    if (response.statusCode != 202) {
+      throw http.ClientException('network answered ${response.statusCode}');
+    }
+  }
 
   Future<SetupInfo> fetch() async {
     final response = await _http

@@ -1,9 +1,13 @@
 import 'package:flutter/material.dart';
 
+import '../api/discovery.dart';
 import '../api/hub_client.dart';
+import '../api/setup_mode.dart';
+import '../platform/wifi_binding.dart';
 import 'camera_screen.dart';
 import 'onboarding_screen.dart';
 import 'pair_screen.dart';
+import 'setup_mode_screen.dart';
 
 class CamerasScreen extends StatefulWidget {
   const CamerasScreen({
@@ -29,33 +33,47 @@ class _CamerasScreenState extends State<CamerasScreen> {
   }
 
   Future<void> _pair() async {
-    final manual = await showModalBottomSheet<bool>(
+    final choice = await showModalBottomSheet<_PairWay>(
       context: context,
       builder: (context) => SafeArea(
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
             ListTile(
+              leading: const Icon(Icons.add_circle_outline),
+              title: const Text('Neue Kamera einrichten'),
+              subtitle: const Text('Über das WLAN „allskyhub-…“ der Kamera'),
+              onTap: () => Navigator.pop(context, _PairWay.setupMode),
+            ),
+            ListTile(
               leading: const Icon(Icons.wifi),
-              title: const Text('Kamera im WLAN einrichten'),
+              title: const Text('Kamera ist schon im WLAN'),
               subtitle: const Text('Die App holt sich den Code von der Kamera'),
-              onTap: () => Navigator.pop(context, false),
+              onTap: () => Navigator.pop(context, _PairWay.lan),
             ),
             ListTile(
               leading: const Icon(Icons.pin),
               title: const Text('Code eingeben'),
-              onTap: () => Navigator.pop(context, true),
+              onTap: () => Navigator.pop(context, _PairWay.code),
             ),
           ],
         ),
       ),
     );
-    if (manual == null || !mounted) return;
+    if (choice == null || !mounted) return;
     final paired = await Navigator.of(context).push<Camera>(
       MaterialPageRoute(
-        builder: (_) => manual
-            ? PairScreen(client: widget.client)
-            : OnboardingScreen(client: widget.client),
+        builder: (_) => switch (choice) {
+          _PairWay.setupMode => SetupModeScreen(
+            controller: SetupModeController(
+              hub: widget.client,
+              binding: PlatformWifiBinding(),
+              discovery: NsdCameraDiscovery(),
+            ),
+          ),
+          _PairWay.lan => OnboardingScreen(client: widget.client),
+          _PairWay.code => PairScreen(client: widget.client),
+        },
       ),
     );
     if (paired != null) await _reload();
@@ -204,3 +222,5 @@ class _Message extends StatelessWidget {
     );
   }
 }
+
+enum _PairWay { setupMode, lan, code }

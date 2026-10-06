@@ -1,6 +1,9 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
     <!-- Hub API (release builds need it explicitly; debug adds it automatically). -->
     <uses-permission android:name="android.permission.INTERNET"/>
+    <!-- Setup mode (SPEC §7.1): bind to the camera's Wi-Fi; discovery by mDNS (§7.2). -->
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE"/>
+    <uses-permission android:name="android.permission.CHANGE_WIFI_MULTICAST_STATE"/>
     <application
         android:label="allskyhub"
         android:networkSecurityConfig="@xml/network_security_config"

@@ -148,3 +148,19 @@ class DeviceToken(Base):
     device_id: Mapped[str] = mapped_column(ForeignKey("device.id", ondelete="CASCADE"), index=True)
     auth_generation: Mapped[int] = mapped_column(Integer)
     expires_at: Mapped[dt.datetime] = mapped_column(_tz())
+
+
+class AppToken(Base):
+    """Bearer token of a signed-in app (M3), stored as SHA-256."""
+
+    __tablename__ = "app_token"
+
+    token_hash: Mapped[bytes] = mapped_column(LargeBinary(32), primary_key=True)
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("user_account.id", ondelete="CASCADE"), index=True
+    )
+    # Shown in a future "signed-in devices" list, e.g. "Pixel 8".
+    label: Mapped[str] = mapped_column(String(100), default="", server_default="")
+    created_at: Mapped[dt.datetime] = mapped_column(_tz(), server_default=func.now())
+    last_used_at: Mapped[dt.datetime] = mapped_column(_tz(), server_default=func.now())
+    expires_at: Mapped[dt.datetime] = mapped_column(_tz())

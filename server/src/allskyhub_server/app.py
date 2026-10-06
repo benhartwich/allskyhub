@@ -15,6 +15,7 @@ from fastapi.staticfiles import StaticFiles
 from sqlalchemy import text
 from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
+from allskyhub_server.api import app as app_api
 from allskyhub_server.api import device as device_api
 from allskyhub_server.db import create_engine, create_sessionmaker
 from allskyhub_server.devices.connections import ConnectionRegistry
@@ -160,6 +161,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(routes_auth.router)
     app.include_router(routes_cameras.router)
     app.include_router(device_api.router)
+    app.include_router(app_api.router)
 
     @app.get("/healthz", include_in_schema=False)
     async def healthz() -> dict[str, str]:  # pyright: ignore[reportUnusedFunction]

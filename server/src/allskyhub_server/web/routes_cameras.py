@@ -6,12 +6,11 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends, Form, HTTPException, Request
 from fastapi.responses import FileResponse, RedirectResponse, Response
-from sqlalchemy import select
 
 from allskyhub_protocol import CloseCode, FrameVariant
 from allskyhub_server.auth import ratelimit
 from allskyhub_server.auth.sessions import SessionInfo
-from allskyhub_server.devices import pairing
+from allskyhub_server.devices import pairing, queries
 from allskyhub_server.devices.connections import ConnectionRegistry
 from allskyhub_server.devices.images import ImageStore
 from allskyhub_server.models import Device
@@ -34,19 +33,15 @@ def _registry(request: Request) -> ConnectionRegistry:
 
 async def _own_device(db: DbSession, session: SessionInfo, device_id: str) -> Device:
     """404 for unknown devices and devices of other accounts alike."""
-    device = await db.get(Device, device_id)
-    if device is None or device.owner_id != session.user.id:
+    device = await queries.owned_one(db, session.user.id, device_id)
+    if device is None:
         raise HTTPException(404)
     return device
 
 
 @router.get("/")
 async def home(request: Request, db: DbSession, session: CurrentSession) -> Response:
-    devices = (
-        await db.scalars(
-            select(Device).where(Device.owner_id == session.user.id).order_by(Device.paired_at)
-        )
-    ).all()
+    devices = await queries.owned(db, session.user.id)
     registry = _registry(request)
     cameras = [(d, registry.is_online(d.id)) for d in devices]
     return render(request, "home.html", {"cameras": cameras}, session=session)

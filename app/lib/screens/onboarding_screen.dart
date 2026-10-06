@@ -11,9 +11,15 @@ class OnboardingScreen extends StatefulWidget {
     super.key,
     required this.client,
     this.setupClientFor,
+    this.cameraUri,
+    this.name = '',
   });
 
   final HubClient client;
+
+  /// Known from discovery (SPEC §7.2): skips typing the address.
+  final Uri? cameraUri;
+  final String name;
 
   /// For tests; defaults to a real HTTP client.
   final CameraSetupClient Function(Uri base)? setupClientFor;
@@ -29,6 +35,17 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
   String? _inputError;
 
   @override
+  void initState() {
+    super.initState();
+    _name.text = widget.name;
+    final uri = widget.cameraUri;
+    if (uri != null) {
+      _address.text = uri.authority;
+      _start(fromInitState: true);
+    }
+  }
+
+  @override
   void dispose() {
     _controller?.dispose();
     _address.dispose();
@@ -36,7 +53,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
     super.dispose();
   }
 
-  void _start() {
+  void _start({bool fromInitState = false}) {
     final Uri base;
     try {
       base = cameraBaseUri(_address.text);
@@ -54,11 +71,11 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
       hub: widget.client,
       name: _name.text.trim(),
     )..addListener(_changed);
-    setState(() {
-      _inputError = null;
-      _controller = controller;
-    });
+    _inputError = null;
+    _controller = controller;
     controller.start();
+    // From initState (address from discovery) the first build follows anyway.
+    if (!fromInitState) setState(() {});
   }
 
   void _changed() {

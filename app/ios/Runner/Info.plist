@@ -8,6 +8,10 @@
 		<key>NSAllowsLocalNetworking</key>
 		<true/>
 	</dict>
+	<key>NSBonjourServices</key>
+	<array>
+		<string>_allskyhub._tcp</string>
+	</array>
 	<key>NSLocalNetworkUsageDescription</key>
 	<string>allskyhub verbindet sich im WLAN mit deiner Kamera, um sie einzurichten.</string>
 	<key>CADisableMinimumFrameDurationOnPhone</key>

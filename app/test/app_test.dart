@@ -2,7 +2,9 @@ import 'dart:convert';
 
 import 'package:allskyhub_app/api/hub_client.dart';
 import 'package:allskyhub_app/api/session_store.dart';
+import 'package:allskyhub_app/api/camera_setup.dart';
 import 'package:allskyhub_app/main.dart';
+import 'package:allskyhub_app/screens/onboarding_screen.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
@@ -63,4 +65,36 @@ void main() {
     expect(find.text('Garten'), findsOneWidget);
     expect(find.text('online'), findsOneWidget);
   });
+
+  testWidgets('onboarding starts at once with an address from discovery', (
+    tester,
+  ) async {
+    Uri? asked;
+    await tester.pumpWidget(
+      MaterialApp(
+        home: OnboardingScreen(
+          client: _NoHub(),
+          cameraUri: Uri.parse('http://192.168.1.77:8080'),
+          name: 'Garten',
+          setupClientFor: (base) {
+            asked = base;
+            return CameraSetupClient(
+              base,
+              httpClient: MockClient((_) async => http.Response('', 503)),
+            );
+          },
+        ),
+      ),
+    );
+    await tester.pump();
+    expect(asked.toString(), 'http://192.168.1.77:8080');
+    expect(find.text('Suche die Kamera …'), findsOneWidget);
+    await tester.pumpWidget(
+      const SizedBox(),
+    ); // dispose: stops the polling timer
+  });
+}
+
+class _NoHub extends HubClient {
+  _NoHub() : super(baseUrl: 'https://hub.example', token: 'tok');
 }

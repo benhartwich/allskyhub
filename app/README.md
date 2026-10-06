@@ -14,14 +14,19 @@ distributed through the app stores.
 - Pairing without typing: the user enters the camera's address in the Wi-Fi, the app polls
   `GET http://<camera>:8080/api/setup` every 2 s, claims the code at the hub and waits until the
   camera reports `paired` (SPEC §6.2, §7). It refuses cameras that talk to another hub.
+- New camera through its setup network (SPEC §7.1): the user joins `allskyhub-XXXX`, the app
+  binds to that Wi-Fi (Android, `MainActivity.kt`), shows `/api/wifi/networks`, sends
+  `/api/setup/network` with the app's hub, then finds the camera at home by DNS-SD
+  `_allskyhub._tcp` (TXT `id`, SPEC §7.2, `nsd` plugin) and pairs it as above. `last_error` from
+  a failed attempt is shown when the user reconnects to the setup network.
 - Pairing by typing the code (fallback)
 
 Plain HTTP to the camera needs: Android `network_security_config.xml` (cleartext allowed,
 Android cannot limit it to private ranges), iOS `NSAllowsLocalNetworking` and
 `NSLocalNetworkUsageDescription`.
 
-Next: finding the camera without typing its address (mDNS or the setup hotspot's fixed
-address, SPEC §6.2 step 1), sending Wi-Fi credentials, push alerts, settings.
+Next: joining the setup network from the app (Android `WifiNetworkSpecifier`; iOS needs the
+Hotspot Configuration entitlement), push alerts, settings.
 
 The app talks to the hub's app API v1 (`server/src/allskyhub_server/api/app.py`; OpenAPI at
 `/api/docs` on a dev hub).

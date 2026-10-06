@@ -191,7 +191,7 @@ base64url-encoded without padding.
 
 ### 6.5 Hub → device
 
-`command`: `set_settings`, `focus_mode` (start/stop), `restart`, `update`,
+`command`: `set_settings`, `focus_mode` (`{on: bool}`, §7), `restart`, `update`,
 `upload_frame`. Each command is acknowledged with `ack` or `error` (`code` one of
 `not_found`, `invalid_args`, `unsupported`, `failed`).
 
@@ -229,8 +229,26 @@ capture and storage go on (§1, goal 4). After reconnecting it sends `hello` and
 
 ## 7. Local web UI
 
-A small mobile-first page served by the agent on the local network: live image, focus
-helper (sharpness value), status. It also works without any hub.
+A small mobile-first page served by the agent on the local network (default port 8080,
+plain HTTP): live image, status, focus helper and, while unpaired, the pairing code. It
+also works without any hub.
+
+**Focus mode.** Shows a sharpness score (variance of the Laplacian on the central crop,
+higher is sharper), the best value since focus mode started, and a 1:1 crop of the
+centre. Frames are not stored, follow each other without delay, and exposure is capped
+at 2 s with the rest moved into gain (§4.3), so feedback comes every few seconds even at
+night. The hub switches it with the `focus_mode` command, args `{on: bool}` (§6.5).
+
+**Setup API** for the app's onboarding (§6.2 step 3); the app polls it about every 2 s
+until `paired` is true:
+
+`GET /api/setup` → `{device_id, hub_url, profile, agent_version, paired, pairing_code,
+expires_in, connected}`, where `pairing_code` is the raw 6-character code (no hyphen)
+or `null` once paired or before the first registration, `expires_in` counts down in
+seconds, and `connected` says whether the WebSocket to the hub is open.
+
+Until pairing can restrict it, the local UI has no authentication and is meant for the
+local network only.
 
 ## 8. Updates
 

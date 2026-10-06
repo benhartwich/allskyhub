@@ -8,6 +8,7 @@ Routes:
     GET  /api/status       JSON snapshot of the live state
     GET  /api/live.jpg     latest frame, scaled
     GET  /api/crop.jpg     latest frame, 1:1 centre crop (focus mode only)
+    GET  /api/setup        device id, hub and pairing code for the app (SPEC §6.2, §7)
     POST /api/focus        body "on" | "off" | "reset"
 """
 
@@ -15,10 +16,12 @@ from __future__ import annotations
 
 import json
 import threading
+from dataclasses import asdict
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from importlib import resources
 
+from allskyhub_agent.hub.pairing import PairingState
 from allskyhub_agent.live import LiveState
 
 _MAX_BODY = 64
@@ -28,7 +31,9 @@ def _page() -> bytes:
     return resources.files("allskyhub_agent.web").joinpath("index.html").read_bytes()
 
 
-def make_handler(live: LiveState) -> type[BaseHTTPRequestHandler]:
+def make_handler(
+    live: LiveState, pairing: PairingState | None = None
+) -> type[BaseHTTPRequestHandler]:
     page = _page()
 
     class Handler(BaseHTTPRequestHandler):
@@ -52,6 +57,12 @@ def make_handler(live: LiveState) -> type[BaseHTTPRequestHandler]:
             elif path == "/api/status":
                 body = json.dumps(live.status()).encode()
                 self._send(HTTPStatus.OK, body, "application/json")
+            elif path == "/api/setup":
+                if pairing is None:
+                    self._send(HTTPStatus.NOT_FOUND, b"no hub configured", "text/plain")
+                else:
+                    body = json.dumps(asdict(pairing.info())).encode()
+                    self._send(HTTPStatus.OK, body, "application/json")
             elif path in ("/api/live.jpg", "/api/crop.jpg"):
                 img = live.live_jpeg() if path == "/api/live.jpg" else live.crop_jpeg()
                 if img is None:
@@ -86,8 +97,10 @@ def make_handler(live: LiveState) -> type[BaseHTTPRequestHandler]:
 
 
 class WebServer:
-    def __init__(self, live: LiveState, host: str, port: int) -> None:
-        self._httpd = ThreadingHTTPServer((host, port), make_handler(live))
+    def __init__(
+        self, live: LiveState, host: str, port: int, pairing: PairingState | None = None
+    ) -> None:
+        self._httpd = ThreadingHTTPServer((host, port), make_handler(live, pairing))
         self._httpd.daemon_threads = True
         self._thread = threading.Thread(target=self._httpd.serve_forever, daemon=True)
 

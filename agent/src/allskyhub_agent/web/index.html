@@ -35,6 +35,13 @@
 <main>
   <h1>allskyhub camera</h1>
 
+  <section class="panel" id="pairPanel" hidden>
+    <div class="meta" style="margin-top:0">Pairing code for the allskyhub app</div>
+    <div class="score" id="pairCode">–</div>
+    <p class="hint" id="pairHint">Open the app and add this camera. The code renews itself
+      every few minutes.</p>
+  </section>
+
   <section class="panel">
     <img id="live" alt="Latest image">
     <div class="meta" id="meta">Waiting for the first image…</div>
@@ -108,9 +115,24 @@ async function post(action) {
   if (r.ok) render(await r.json());
 }
 
+async function pollSetup() {
+  try {
+    const r = await fetch("/api/setup", { cache: "no-store" });
+    if (r.ok) {
+      const s = await r.json();
+      const show = !s.paired && s.pairing_code;
+      $("pairPanel").hidden = !show;
+      if (show) $("pairCode").textContent = s.pairing_code.slice(0, 3) + "-" + s.pairing_code.slice(3);
+      if (s.paired) return;  // nothing more to show
+    }
+  } catch (e) { /* try again */ }
+  setTimeout(pollSetup, 3000);
+}
+
 $("focusBtn").onclick = () => post(focus ? "off" : "on");
 $("resetBtn").onclick = () => post("reset");
 poll();
+pollSetup();
 </script>
 </body>
 </html>

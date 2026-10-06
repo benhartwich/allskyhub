@@ -17,6 +17,9 @@ from allskyhub_agent.live import LiveState
 from allskyhub_agent.store.images import ImageStore, night_id
 from allskyhub_protocol import FrameInfo, Mode
 
+# Name reported for focus-mode frames, which are not stored (SPEC §7).
+FOCUS_FRAME_NAME = "focus.jpg"
+
 
 @dataclass(frozen=True)
 class Location:
@@ -85,7 +88,7 @@ class Runner:
             frame.image, self._mask_for(frame.image.shape[0], frame.image.shape[1])
         )
         if focus:
-            nid, name = night_id(start, self._tz), "focus.jpg"
+            nid, name = night_id(start, self._tz), FOCUS_FRAME_NAME
         else:
             stored = self._store.save(frame.image, start)
             nid, name = stored.night_id, stored.name

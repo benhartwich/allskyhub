@@ -80,6 +80,10 @@ class LiveState:
         with self._lock:
             self._s.sharpness_max = None
 
+    def last_frame(self) -> FrameInfo | None:
+        with self._lock:
+            return self._s.frame
+
     def live_jpeg(self) -> bytes | None:
         with self._lock:
             return self._s.live_jpeg

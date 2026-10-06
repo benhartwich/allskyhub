@@ -68,8 +68,10 @@ class SimCamera:
         img[ys, xs] += (flux * scale).astype(np.float32)
         img += self._rng.normal(0.0, 0.004, img.shape).astype(np.float32)
         img[~self._disc] = 0.0
-        mono = (img * 255.0).clip(0.0, 255.0).astype(np.uint8)
-        rgb: Image = np.stack((mono, mono, mono), axis=2)
+        # ufuncs instead of clip()/stack(): their numpy 2.5 stubs are partially unknown to pyright.
+        mono = np.minimum(np.maximum(img * 255.0, 0.0), 255.0).astype(np.uint8)
+        rgb: Image = np.empty((self._h, self._w, 3), dtype=np.uint8)
+        rgb[:, :, :] = mono[:, :, None]
         if self._clock is not None:
             # A real camera blocks for exposure and readout; let simulated time pass the same way.
             self._clock.sleep(req.exposure_us / 1e6 + self._readout_s)

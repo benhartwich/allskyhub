@@ -58,3 +58,28 @@ button.link { min-height: 44px; padding: 0 8px; background: none; color: var(--a
 
 .auth { max-width: 26rem; width: 100%; margin: 0 auto; display: grid; gap: 18px; }
 .app-foot { text-align: center; color: var(--text-2); font-size: 13px; }
+
+.page-head { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; }
+.button.small { min-height: 44px; padding: 0 16px; font-size: 15px; }
+.back { display: inline-flex; align-items: center; min-height: 44px; font-weight: 600; text-decoration: none; }
+.warn { color: var(--warn); }
+.badge { display: inline-flex; padding: 2px 10px; border-radius: 999px; font-size: 12px; font-weight: 700;
+         background: var(--surface-2); color: var(--text-2); }
+.badge.ok { background: color-mix(in srgb, var(--ok) 18%, transparent); color: var(--ok); }
+.facts { display: grid; grid-template-columns: max-content 1fr; gap: 6px 16px; margin: 0; }
+.facts dt { color: var(--text-2); }
+.facts dd { margin: 0; overflow-wrap: anywhere; }
+.code { font-family: ui-monospace, monospace; font-size: 22px; letter-spacing: 3px; text-transform: uppercase; }
+
+.cams { list-style: none; padding: 0; margin: 0; display: grid; gap: 14px; }
+@media (min-width: 40rem) { .cams { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+a.card.cam { color: var(--text); text-decoration: none; }
+a.card.cam:hover { border-color: var(--accent); }
+.cam img, .live img, .sky-ph { width: 100%; aspect-ratio: 1; object-fit: cover; border-radius: 12px; display: block;
+                               background: radial-gradient(circle, #1a2340 0%, #05070f 70%); }
+.cam-meta { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+.live { margin: 0; display: grid; gap: 8px; }
+.live img { object-fit: contain; background: #000; }
+
+.card.danger { border-style: dashed; }
+button.danger { background: transparent; color: var(--danger); border: 1px solid var(--danger); }

@@ -1,0 +1,28 @@
+{%- set st = device.last_status or {} -%}
+{%- set fr = device.last_frame or {} -%}
+<figure class="live">
+  {% if device.latest_image_at %}
+  <img src="/cameras/{{ device.id }}/image/full.jpg?t={{ device.latest_image_at.timestamp() | int }}" alt="Aktuelles Himmelsbild">
+  <figcaption class="muted">Bild {{ device.latest_image_at | age }}{% if online %} · live{% endif %}</figcaption>
+  {% else %}
+  <div class="sky-ph" aria-hidden="true"></div>
+  <figcaption class="muted">{% if online %}Warte auf das erste Bild …{% else %}Noch kein Bild.{% endif %}</figcaption>
+  {% endif %}
+</figure>
+<div class="card">
+  <div class="cam-meta">
+    <h2>Status</h2>
+    <span class="badge {{ 'ok' if online else '' }}">{{ 'online' if online else 'offline' }}</span>
+  </div>
+  <dl class="facts">
+    <dt>Zuletzt gesehen</dt><dd>{{ device.last_seen_at | age }}</dd>
+    {% if st %}
+    <dt>Modus</dt><dd>{{ 'Nacht' if st.mode == 'night' else 'Tag' }}</dd>
+    <dt>Belichtung</dt><dd>{{ '%.3g' | format(st.exposure_us / 1e6) }} s, Gain {{ st.gain }}</dd>
+    {% if st.sensor_temp_c is not none %}<dt>Sensor</dt><dd>{{ '%.1f' | format(st.sensor_temp_c) }} °C</dd>{% endif %}
+    {% if st.disk_free_pct is not none %}<dt>Speicher frei</dt><dd>{{ st.disk_free_pct | round | int }} %</dd>{% endif %}
+    {% if not st.time_trusted %}<dt>Uhrzeit</dt><dd class="warn">nicht synchronisiert</dd>{% endif %}
+    {% endif %}
+    {% if fr %}<dt>Sonnenhöhe</dt><dd>{{ '%.1f' | format(fr.sun_elevation) }}°</dd>{% endif %}
+  </dl>
+</div>

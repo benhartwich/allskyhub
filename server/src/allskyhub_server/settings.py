@@ -24,6 +24,9 @@ class Settings(BaseSettings):
     allow_signup: bool = True
 
     data_dir: Path = Path("/var/lib/allskyhub-server")
+    # SPEC §6.5: the hub asks for a new latest image at most this often (live view: every frame).
+    latest_image_interval_s: int = Field(default=300, ge=10)
+    max_image_mb: int = Field(default=25, ge=1)
 
     session_cookie_name: str = "allskyhub_session"
     session_cookie_secure: bool = True
@@ -48,6 +51,10 @@ class Settings(BaseSettings):
     @property
     def is_dev(self) -> bool:
         return self.env == "dev"
+
+    @property
+    def image_dir(self) -> Path:
+        return self.data_dir / "images"
 
 
 @lru_cache(maxsize=1)

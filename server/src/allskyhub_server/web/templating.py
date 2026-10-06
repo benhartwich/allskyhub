@@ -37,5 +37,20 @@ def localtime(value: dt.datetime | None) -> str:
     return value.astimezone(UI_ZONE).strftime("%d.%m.%Y %H:%M")
 
 
+def age(value: dt.datetime | None) -> str:
+    """Age for status lines: "vor 3 Min."."""
+    if value is None:
+        return "nie"
+    seconds = int((dt.datetime.now(dt.UTC) - value).total_seconds())
+    if seconds < 60:
+        return "gerade eben"
+    if seconds < 3600:
+        return f"vor {seconds // 60} Min."
+    if seconds < 86400:
+        return f"vor {seconds // 3600} Std."
+    return f"vor {seconds // 86400} Tagen"
+
+
 cast(dict[str, Any], templates.env.globals)["asset"] = asset
+cast(dict[str, Any], templates.env.filters)["age"] = age
 cast(dict[str, Any], templates.env.filters)["localtime"] = localtime

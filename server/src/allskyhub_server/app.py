@@ -15,9 +15,12 @@ from fastapi.staticfiles import StaticFiles
 from sqlalchemy import text
 from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
+from allskyhub_server.api import device as device_api
 from allskyhub_server.db import create_engine, create_sessionmaker
+from allskyhub_server.devices.connections import ConnectionRegistry
+from allskyhub_server.devices.images import ImageStore
 from allskyhub_server.settings import Settings, get_settings
-from allskyhub_server.web import routes_auth, routes_home
+from allskyhub_server.web import routes_auth, routes_cameras
 from allskyhub_server.web.deps import LoginRequiredError
 from allskyhub_server.web.render import render
 from allskyhub_server.web.templating import STATIC_DIR
@@ -148,12 +151,15 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         openapi_url="/api/openapi.json" if settings.is_dev else None,
     )
     app.state.settings = settings
+    app.state.connections = ConnectionRegistry()
+    app.state.images = ImageStore(settings.image_dir)
     app.add_middleware(AccessLogMiddleware)
     _install_error_handlers(app)
 
     app.mount("/static", CachedStaticFiles(directory=STATIC_DIR), name="static")
     app.include_router(routes_auth.router)
-    app.include_router(routes_home.router)
+    app.include_router(routes_cameras.router)
+    app.include_router(device_api.router)
 
     @app.get("/healthz", include_in_schema=False)
     async def healthz() -> dict[str, str]:  # pyright: ignore[reportUnusedFunction]

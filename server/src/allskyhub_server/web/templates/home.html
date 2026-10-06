@@ -1,11 +1,34 @@
 {% extends "base.html" %}
 {% block title %}Meine Kameras · allskyhub{% endblock %}
 {% block content %}
-<h1>Meine Kameras</h1>
-{% if not cameras %}
+<div class="page-head">
+  <h1>Meine Kameras</h1>
+  <a class="button small" href="/cameras/pair">Kamera koppeln</a>
+</div>
+{% if cameras %}
+<ul class="cams">
+  {% for device, online in cameras %}
+  <li>
+    <a class="card cam" href="/cameras/{{ device.id }}">
+      {% if device.latest_image_at %}
+      <img src="/cameras/{{ device.id }}/image/thumb.jpg?t={{ device.latest_image_at.timestamp() | int }}" alt="Letztes Bild von {{ device.name }}" loading="lazy">
+      {% else %}
+      <div class="sky-ph" aria-hidden="true"></div>
+      {% endif %}
+      <div class="cam-meta">
+        <strong>{{ device.name }}</strong>
+        <span class="badge {{ 'ok' if online else '' }}">{{ 'online' if online else 'offline' }}</span>
+      </div>
+      <span class="muted">Zuletzt gesehen {{ device.last_seen_at | age }}</span>
+    </a>
+  </li>
+  {% endfor %}
+</ul>
+{% else %}
 <div class="card empty">
   <h2>Noch keine Kamera gekoppelt</h2>
-  <p class="muted">Schalte deine Kamera ein und koppele sie mit der allskyhub-App.</p>
+  <p class="muted">Schalte deine Kamera ein und koppele sie mit der allskyhub-App, oder gib den Kopplungscode hier ein.</p>
+  <p><a class="button" href="/cameras/pair">Kamera koppeln</a></p>
 </div>
 {% endif %}
 {% endblock %}

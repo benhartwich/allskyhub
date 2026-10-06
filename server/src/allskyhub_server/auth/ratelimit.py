@@ -56,3 +56,10 @@ async def hit(engine: AsyncEngine, key: str, limits: Sequence[Limit]) -> None:
 LOGIN_PER_ACCOUNT = (Limit(10, 900),)
 LOGIN_PER_IP = (Limit(50, 900),)
 SIGNUP_PER_IP = (Limit(5, 3600), Limit(20, 86400))
+# Device API (SPEC §6.6): a registering device calls challenge + register every ~5 s.
+DEVICE_CHALLENGE_PER_IP = (Limit(120, 60), Limit(2000, 3600))
+DEVICE_REGISTER_PER_IP = (Limit(60, 60),)
+DEVICE_TOKEN_PER_IP = (Limit(30, 60),)
+# SPEC §6.2 step 3: codes have 31^6 values; this keeps guessing hopeless.
+CLAIM_PER_USER = (Limit(10, 600), Limit(30, 86400))
+CLAIM_PER_IP = (Limit(30, 600),)

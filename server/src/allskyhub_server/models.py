@@ -4,17 +4,21 @@ from __future__ import annotations
 
 import datetime as dt
 import uuid
+from typing import Any
 
 from sqlalchemy import (
     Boolean,
     DateTime,
     ForeignKey,
+    Index,
     Integer,
     LargeBinary,
     MetaData,
     String,
     func,
+    text,
 )
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
 from allskyhub_server.ids import uuid7
@@ -72,3 +76,75 @@ class RateLimit(Base):
     key: Mapped[str] = mapped_column(String(200), primary_key=True)
     window_start: Mapped[dt.datetime] = mapped_column(_tz(), primary_key=True)
     count: Mapped[int] = mapped_column(Integer)
+
+
+class Device(Base):
+    """A camera (SPEC §6.2). Known from its first registration; paired while ``owner_id`` is set."""
+
+    __tablename__ = "device"
+
+    # SPEC §6.2: derived from the public key, 26 base32 characters.
+    id: Mapped[str] = mapped_column(String(26), primary_key=True)
+    public_key: Mapped[bytes] = mapped_column(LargeBinary(32), unique=True)
+    owner_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("user_account.id", ondelete="SET NULL"), index=True
+    )
+    name: Mapped[str] = mapped_column(String(100), default="", server_default="")
+    profile: Mapped[str] = mapped_column(String(64))
+    agent_version: Mapped[str] = mapped_column(String(64))
+    # Unpairing bumps it: tokens of an earlier pairing stop working at once.
+    auth_generation: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+    created_at: Mapped[dt.datetime] = mapped_column(_tz(), server_default=func.now())
+    paired_at: Mapped[dt.datetime | None] = mapped_column(_tz())
+    last_seen_at: Mapped[dt.datetime | None] = mapped_column(_tz())
+    # Latest `status` and `frame` bodies (SPEC §6.3), as sent.
+    last_status: Mapped[dict[str, Any] | None] = mapped_column(JSONB)
+    last_frame: Mapped[dict[str, Any] | None] = mapped_column(JSONB)
+    # When the latest full image was stored (SPEC §6.5).
+    latest_image_at: Mapped[dt.datetime | None] = mapped_column(_tz())
+
+
+class DeviceNonce(Base):
+    """Single-use challenge (SPEC §6.2), stored as SHA-256."""
+
+    __tablename__ = "device_nonce"
+
+    nonce_hash: Mapped[bytes] = mapped_column(LargeBinary(32), primary_key=True)
+    device_id: Mapped[str] = mapped_column(String(26))
+    expires_at: Mapped[dt.datetime] = mapped_column(_tz(), index=True)
+
+
+class PairingCode(Base):
+    """SPEC §6.2 step 2: one open code per device at a time."""
+
+    __tablename__ = "pairing_code"
+    __table_args__ = (
+        # Open codes are unique; claimed ones may repeat later.
+        Index(
+            "uq_pairing_code_open_code",
+            "code",
+            unique=True,
+            postgresql_where=text("claimed_at IS NULL"),
+        ),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid7)
+    device_id: Mapped[str] = mapped_column(ForeignKey("device.id", ondelete="CASCADE"), index=True)
+    code: Mapped[str] = mapped_column(String(6))
+    created_at: Mapped[dt.datetime] = mapped_column(_tz(), server_default=func.now())
+    expires_at: Mapped[dt.datetime] = mapped_column(_tz())
+    claimed_at: Mapped[dt.datetime | None] = mapped_column(_tz())
+    claimed_by: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("user_account.id", ondelete="SET NULL")
+    )
+
+
+class DeviceToken(Base):
+    """Bearer token of a paired device (SPEC §6.2 step 5), stored as SHA-256."""
+
+    __tablename__ = "device_token"
+
+    token_hash: Mapped[bytes] = mapped_column(LargeBinary(32), primary_key=True)
+    device_id: Mapped[str] = mapped_column(ForeignKey("device.id", ondelete="CASCADE"), index=True)
+    auth_generation: Mapped[int] = mapped_column(Integer)
+    expires_at: Mapped[dt.datetime] = mapped_column(_tz())

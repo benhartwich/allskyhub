@@ -9,11 +9,13 @@ from __future__ import annotations
 
 import asyncio
 import os
+import socket
 from collections.abc import AsyncIterator
 from pathlib import Path
 
 import httpx
 import pytest
+import uvicorn
 from alembic import command
 from alembic.config import Config
 from fastapi import FastAPI
@@ -96,3 +98,36 @@ async def client(app: FastAPI) -> AsyncIterator[httpx.AsyncClient]:
     transport = httpx.ASGITransport(app=app)
     async with httpx.AsyncClient(transport=transport, base_url="http://testserver") as c:
         yield c
+
+
+@pytest.fixture
+async def new_client(app: FastAPI) -> AsyncIterator[httpx.AsyncClient]:
+    """A second browser (no shared cookies) on the same app."""
+    transport = httpx.ASGITransport(app=app)
+    async with httpx.AsyncClient(transport=transport, base_url="http://testserver") as c:
+        yield c
+
+
+def _free_port() -> int:
+    with socket.socket() as s:
+        s.bind(("127.0.0.1", 0))
+        return int(s.getsockname()[1])
+
+
+@pytest.fixture
+async def live_app(app: FastAPI) -> AsyncIterator[str]:
+    """``app`` served by uvicorn on localhost, for WebSocket tests; yields host:port."""
+    port = _free_port()
+    config = uvicorn.Config(app, host="127.0.0.1", port=port, log_config=None, lifespan="off")
+    server = uvicorn.Server(config)
+    task = asyncio.create_task(server.serve())
+    for _ in range(100):
+        if server.started:
+            break
+        await asyncio.sleep(0.05)
+    assert server.started
+    try:
+        yield f"127.0.0.1:{port}"
+    finally:
+        server.should_exit = True
+        await task

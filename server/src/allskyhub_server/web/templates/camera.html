@@ -1,0 +1,23 @@
+{% extends "base.html" %}
+{% block title %}{{ device.name }} · allskyhub{% endblock %}
+{% block content %}
+<a class="back" href="/">← Meine Kameras</a>
+<h1>{{ device.name }}</h1>
+<div hx-get="/cameras/{{ device.id }}/live" hx-trigger="load, every 5s" hx-swap="innerHTML">
+  {% include "_live.html" %}
+</div>
+<div class="card">
+  <h2>Gerät</h2>
+  <dl class="facts">
+    <dt>Profil</dt><dd>{{ device.profile }}</dd>
+    <dt>Agent</dt><dd>{{ device.agent_version }}</dd>
+    <dt>Gekoppelt</dt><dd>{{ device.paired_at | localtime }}</dd>
+    <dt>Geräte-ID</dt><dd><code>{{ device.id }}</code></dd>
+  </dl>
+</div>
+<form method="post" action="/cameras/{{ device.id }}/remove" class="card danger">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+  <p class="muted">Entfernen trennt die Kamera von deinem Konto. Sie zeigt danach einen neuen Kopplungscode.</p>
+  <button type="submit" class="danger">Kamera entfernen</button>
+</form>
+{% endblock %}

@@ -32,3 +32,14 @@ async def signup(client: httpx.AsyncClient, email: str | None = None) -> str:
     )
     assert r.status_code == 303, r.text
     return email
+
+
+async def home_csrf(client: httpx.AsyncClient) -> str:
+    return csrf_from((await client.get("/")).text)
+
+
+async def claim(client: httpx.AsyncClient, code: str, name: str = "Garten") -> httpx.Response:
+    """Pair through the web form (SPEC §6.2 step 3, fallback)."""
+    return await client.post(
+        "/cameras/pair", data={"code": code, "name": name, "csrf_token": await home_csrf(client)}
+    )

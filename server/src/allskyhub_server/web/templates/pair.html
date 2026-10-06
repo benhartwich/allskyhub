@@ -1,0 +1,18 @@
+{% extends "base.html" %}
+{% block title %}Kamera koppeln · allskyhub{% endblock %}
+{% block content %}
+<div class="auth">
+  <h1>Kamera koppeln</h1>
+  <p class="muted">Den Code zeigt die Einrichtungsseite deiner Kamera im WLAN an. Mit der App geht es ohne Abtippen.</p>
+  <form method="post" action="/cameras/pair" class="card stack">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <label>Kopplungscode
+      <input name="code" value="{{ code or '' }}" placeholder="ABC-DEF" autocomplete="off" autocapitalize="characters" spellcheck="false" maxlength="20" required class="code">
+    </label>
+    <label>Name der Kamera
+      <input name="name" value="{{ name or '' }}" placeholder="z. B. Garten" maxlength="100">
+    </label>
+    <button type="submit">Koppeln</button>
+  </form>
+</div>
+{% endblock %}

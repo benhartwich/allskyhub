@@ -16,6 +16,8 @@ dependencies = [
   "pydantic>=2.11",
   "pydantic-settings>=2.10",
   "python-multipart>=0.0.20",
+  # Ed25519 signature checks of devices (SPEC §6.2).
+  "cryptography>=44",
 ]
 
 [tool.uv.sources]

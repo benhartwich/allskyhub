@@ -106,6 +106,8 @@ class Runner:
             sensor_temp_c=frame.sensor_temp_c,
             profile=self._profile,
         )
+        if not focus:
+            self._store.append_index(info)
         if self._live is not None:
             self._live.publish(info, frame.image, sharpness(frame.image))
         return info

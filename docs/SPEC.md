@@ -110,9 +110,37 @@ by days (default 14) and, from M1, by free disk space (keep at least 10 %).
 
 ## 5. Products (M4)
 
-Timelapse, keogram and startrails per night, plus detections (meteor, lightning,
-aurora, noctilucent clouds, sky quality, cloud cover). Detections are emitted as
-protocol events (§6.4).
+### 5.1 Frame index
+
+Every stored frame is appended to `<data>/images/<night-id>/frames.jsonl`, one JSON
+object per line: the frame's metadata (§4.4, the `frame` message body). Products and
+the hub's gallery read it instead of decoding every image. A missing or damaged line is
+skipped.
+
+### 5.2 Night products
+
+At dawn, when the mode switches from night to day, the agent builds three products from
+that night's frames (frames with mode `night` in the night id's index) in a background
+worker; capture never waits for it.
+
+- **Keogram** `keogram.jpg`: one column per frame, cut along the vertical line through
+  the image centre (a 3-pixel-wide band, averaged), in capture order; height scaled to
+  at most 1080 px.
+- **Startrails** `startrails.jpg`: the per-pixel maximum of all frames whose mean
+  brightness is at most `startrails_max_mean` (default 0.35), so twilight and moonlit
+  or cloud-lit frames do not wash out the trails. Built only with at least 10 such frames.
+- **Timelapse** `timelapse.mp4`: H.264, 25 fps, width at most 1920 px, `yuv420p`, built
+  with `ffmpeg` from the night frames in capture order.
+
+Each product gets a thumbnail in `thumbnails/` (same name, `.jpg`). A product that
+cannot be built (too few frames, no `ffmpeg`) is skipped and logged; the others are
+still built. Building again replaces the old files (written to a temp name, then
+renamed). Products of a night are kept as long as its folder (§4.5).
+
+### 5.3 Detections
+
+Meteor, lightning, aurora, noctilucent clouds, sky quality and cloud cover are emitted
+as protocol events (§6.4).
 
 ## 6. Device protocol v1 (draft)
 

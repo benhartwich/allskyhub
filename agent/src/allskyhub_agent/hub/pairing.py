@@ -45,6 +45,10 @@ class PairingState:
             self._code = None
             self._code_deadline = None
 
+    def set_hub_url(self, hub_url: str) -> None:
+        with self._lock:
+            self._hub_url = hub_url
+
     def set_connected(self, connected: bool) -> None:
         with self._lock:
             self._connected = connected

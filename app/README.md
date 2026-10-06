@@ -11,10 +11,17 @@ distributed through the app stores.
 - Camera list with thumbnails and online status, pull to refresh
 - Camera page with live view: polls the latest image with `live=true`, so the hub asks the camera
   for every frame while the page is open (SPEC §6.5); status, removing the camera
-- Pairing by typing the code (SPEC §6.2 step 3, fallback)
+- Pairing without typing: the user enters the camera's address in the Wi-Fi, the app polls
+  `GET http://<camera>:8080/api/setup` every 2 s, claims the code at the hub and waits until the
+  camera reports `paired` (SPEC §6.2, §7). It refuses cameras that talk to another hub.
+- Pairing by typing the code (fallback)
 
-Next: onboarding via the camera's setup hotspot / local setup API (SPEC §6.2 step 1, §7) that
-reads the pairing code without typing, push alerts, settings.
+Plain HTTP to the camera needs: Android `network_security_config.xml` (cleartext allowed,
+Android cannot limit it to private ranges), iOS `NSAllowsLocalNetworking` and
+`NSLocalNetworkUsageDescription`.
+
+Next: finding the camera without typing its address (mDNS or the setup hotspot's fixed
+address, SPEC §6.2 step 1), sending Wi-Fi credentials, push alerts, settings.
 
 The app talks to the hub's app API v1 (`server/src/allskyhub_server/api/app.py`; OpenAPI at
 `/api/docs` on a dev hub).

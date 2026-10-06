@@ -25,8 +25,9 @@ def _limits(max_night_us: int, max_gain: float, gain_db: float) -> ExposureConfi
 PROFILES: dict[str, Profile] = {
     "sim": Profile("sim", "sim", _limits(60_000_000, 400.0, 0.1)),
     "zwo-asi678mc": Profile("zwo-asi678mc", "zwo", _limits(60_000_000, 400.0, 0.1)),
-    # libcamera analogue gain is linear (1.0-16.0); expressed here as 0.1 dB units as well.
-    "rpi-hq": Profile("rpi-hq", "libcamera", _limits(200_000_000, 240.0, 0.1)),
+    # Raspberry Pi HQ (IMX477): analogue gain 1-22.3x = 0-27 dB, in 0.1 dB units like ZWO;
+    # the libcamera driver allows exposures up to about 230 s.
+    "rpi-hq": Profile("rpi-hq", "libcamera", _limits(200_000_000, 260.0, 0.1)),
 }
 
 

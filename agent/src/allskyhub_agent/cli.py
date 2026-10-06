@@ -16,10 +16,11 @@ from zoneinfo import ZoneInfo
 
 from allskyhub_agent import __version__, system
 from allskyhub_agent.adapters.asi_sdk import AsiError, AsiSdk
-from allskyhub_agent.adapters.camera import Camera
+from allskyhub_agent.adapters.camera import Camera, CameraError
+from allskyhub_agent.adapters.libcamera import LibcameraCamera, list_cameras
 from allskyhub_agent.adapters.network import Network, NmcliNetwork, SimNetwork
 from allskyhub_agent.adapters.sim import SimCamera, sky_radiance
-from allskyhub_agent.adapters.zwo import CameraError, ZwoCamera
+from allskyhub_agent.adapters.zwo import ZwoCamera
 from allskyhub_agent.core.clock import Clock, SimClock, SystemClock
 from allskyhub_agent.core.exposure import AutoExposure
 from allskyhub_agent.core.sun import sun_elevation
@@ -59,7 +60,7 @@ def _parser() -> argparse.ArgumentParser:
         help="path to libASICamera2.so for ZWO cameras",
     )
     sub = p.add_subparsers(dest="cmd", required=True)
-    sub.add_parser("probe", help="list connected ZWO cameras without opening them")
+    sub.add_parser("probe", help="list connected cameras (ZWO, libcamera) without opening them")
     prod = sub.add_parser("products", help="build a night's keogram, startrails, timelapse")
     prod.add_argument("--data", type=Path, required=True, help="data directory")
     prod.add_argument("--night", required=True, help="night id, YYYYMMDD")
@@ -91,11 +92,19 @@ def _parser() -> argparse.ArgumentParser:
 def main(argv: list[str] | None = None) -> int:
     args = _parser().parse_args(argv)
     if args.cmd == "probe":
-        sdk = AsiSdk(args.asi_sdk)
-        for i in range(sdk.num_cameras()):
-            info = sdk.camera_info(i)
-            print(f"{i}: {info.name}  {info.width}x{info.height}  {info.pixel_size_um} µm")
-        return 0
+        found = 0
+        if args.asi_sdk.exists():
+            sdk = AsiSdk(args.asi_sdk)
+            for i in range(sdk.num_cameras()):
+                info = sdk.camera_info(i)
+                print(f"zwo {i}: {info.name}  {info.width}x{info.height}  {info.pixel_size_um} µm")
+                found += 1
+        for cam in list_cameras():
+            print(f"libcamera {cam.index}: {cam.sensor}  {cam.width}x{cam.height}")
+            found += 1
+        if not found:
+            print("no camera found")
+        return 0 if found else 1
 
     tz = ZoneInfo(args.tz)
     if args.cmd == "products":
@@ -121,12 +130,15 @@ def main(argv: list[str] | None = None) -> int:
         if args.start:
             print("--start only works with --sim", file=sys.stderr)
             return 2
-        if profile.camera != "zwo":
-            print(f"camera type {profile.camera!r} is not supported yet", file=sys.stderr)
-            return 2
         clock = SystemClock()
         try:
-            camera = ZwoCamera(AsiSdk(args.asi_sdk))
+            if profile.camera == "zwo":
+                camera = ZwoCamera(AsiSdk(args.asi_sdk))
+            elif profile.camera == "libcamera":
+                camera = LibcameraCamera()
+            else:
+                print(f"camera type {profile.camera!r} is not supported", file=sys.stderr)
+                return 2
         except (OSError, AsiError, CameraError) as exc:
             print(f"cannot open camera: {exc}", file=sys.stderr)
             return 1

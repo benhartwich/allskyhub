@@ -2,11 +2,12 @@
 
 from __future__ import annotations
 
+import logging
 from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import UTC, tzinfo
 
-from allskyhub_agent.adapters.camera import Camera, CaptureRequest
+from allskyhub_agent.adapters.camera import Camera, CameraError, CaptureRequest
 from allskyhub_agent.core.clock import Clock
 from allskyhub_agent.core.daynight import DayNightConfig, next_mode
 from allskyhub_agent.core.exposure import AutoExposure, Exposure
@@ -16,6 +17,8 @@ from allskyhub_agent.core.sun import sun_elevation
 from allskyhub_agent.live import LiveState
 from allskyhub_agent.store.images import ImageStore, night_id
 from allskyhub_protocol import FrameInfo, Mode
+
+log = logging.getLogger(__name__)
 
 # Name reported for focus-mode frames, which are not stored (SPEC §7).
 FOCUS_FRAME_NAME = "focus.jpg"
@@ -128,10 +131,25 @@ class Runner:
     def run(
         self, frames: int | None = None, on_frame: Callable[[FrameInfo], None] | None = None
     ) -> int:
-        """Capture `frames` frames (forever if None); returns how many were taken."""
+        """Capture `frames` frames (forever if None); returns how many were taken.
+
+        A failed capture or a full disk never ends the loop: it is logged, and the next try
+        waits 5 s, doubling to at most 5 min while the failures go on.
+        """
         n = 0
+        failures = 0
         while frames is None or n < frames:
-            info = self.step()
+            try:
+                info = self.step()
+            except (CameraError, OSError) as exc:
+                failures += 1
+                wait = min(300.0, 5.0 * 2 ** (failures - 1))
+                log.warning(
+                    "capture failed (%d in a row): %s; retrying in %.0f s", failures, exc, wait
+                )
+                self._clock.sleep(wait)
+                continue
+            failures = 0
             n += 1
             if on_frame is not None:
                 on_frame(info)

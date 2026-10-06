@@ -20,11 +20,7 @@ from allskyhub_agent.adapters.asi_sdk import (
     ExposureStatus,
     ImageType,
 )
-from allskyhub_agent.adapters.camera import CaptureRequest, Frame, Image
-
-
-class CameraError(RuntimeError):
-    pass
+from allskyhub_agent.adapters.camera import CameraError, CaptureRequest, Frame, Image
 
 
 @dataclass(frozen=True)

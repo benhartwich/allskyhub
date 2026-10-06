@@ -1,0 +1,6 @@
+export ALLSKYHUB_SERVER_DATABASE_URL=postgresql://allskyhub:gD0y2n0K9uXdQmEso3TUjodt0SGYbgGc@127.0.0.1:55441/allskyhub
+export ALLSKYHUB_SERVER_TEST_DATABASE_URL=postgresql://allskyhub:gD0y2n0K9uXdQmEso3TUjodt0SGYbgGc@127.0.0.1:55441/allskyhub_test
+export ALLSKYHUB_SERVER_ENV=dev
+export ALLSKYHUB_SERVER_DATA_DIR=/var/www/allskyhub/.dev/data
+export ALLSKYHUB_SERVER_SESSION_COOKIE_SECURE=false
+export ALLSKYHUB_SERVER_LOG_FORMAT=console

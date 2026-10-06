@@ -46,7 +46,7 @@ def test_unknown_type_rejected() -> None:
 
 
 def test_type_body_mismatch_rejected() -> None:
-    hello = Hello(device_id="abcdef0123", profile="rpi-hq", agent_version="0.1.0")
+    hello = Hello(device_id="a" * 26, profile="rpi-hq", agent_version="0.1.0")
     with pytest.raises(ValidationError):
         Envelope(type="status", id="x", ts=TS, body=hello)
 

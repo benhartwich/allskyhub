@@ -1,4 +1,4 @@
-# allskyhub – Specification (draft v0.1)
+# allskyhub – Specification (draft v0.2)
 
 This document is the contract for the data model, the device protocol and the camera
 behaviour. Code references its sections (`# SPEC §4.3`). When code and spec disagree,
@@ -96,6 +96,11 @@ The controller aims for a target mean brightness (`target_mean`, 0..1, default d
 Every frame carries: capture time (UTC), mode, exposure (µs), gain, measured mean,
 sun elevation, sensor temperature if available, and the profile id.
 
+Timestamps come from the system clock, synchronized by NTP. A Pi has no real-time clock,
+so after a boot without network the clock can be wrong: the agent reports
+`time_trusted` (true once the clock is NTP-synchronized) in every `status` (§6.3), and
+the hub treats frames from a device with `time_trusted: false` as possibly misdated.
+
 ### 4.5 Storage
 
 Frames are stored as JPEG under `<data>/images/<night-id>/` with a thumbnail. The
@@ -114,26 +119,69 @@ protocol events (§6.4).
 ### 6.1 Transport
 
 The agent opens an outbound WebSocket (`wss://<hub>/device/v1/ws`, default hub
-`allskyhub.org`) and uses HTTPS for
-uploads. Every message is an envelope `{v: 1, type, id, ts, body}`.
+`allskyhub.org`) and uses HTTPS for registration, tokens and uploads (§6.6). Every
+WebSocket message is an envelope `{v: 1, type, id, ts, body}`.
+
+The WebSocket upgrade and every upload carry `Authorization: Bearer <access_token>`
+(§6.2, step 5). The hub closes the WebSocket with:
+
+| Code | Meaning | Agent does |
+|---|---|---|
+| 4401 | token expired or invalid | gets a new token, reconnects |
+| 4403 | device is no longer paired | registers again (§6.2) |
+| 4409 | a newer connection of the same device took over | does not reconnect on this socket |
+
+The agent reconnects with exponential backoff (1 s doubling to 5 min, with jitter).
 
 ### 6.2 Identity and pairing
 
-Each device generates an Ed25519 key pair on first boot; its device id is derived from
-the public key. Pairing:
+**Identity.** Each device generates an Ed25519 key pair on first boot. The private key
+lives at `/var/lib/allskyhub-agent/device.key` (mode 0600) and never leaves the device;
+losing it means pairing again as a new device. The **device id** is the lowercase
+RFC 4648 base32 encoding, without padding, of the first 16 bytes of
+SHA-256(raw 32-byte public key): 26 characters, `[a-z2-7]`.
 
-1. The app connects to the camera's setup hotspot (or the local network) and sends Wi-Fi
-   credentials and the hub URL.
-2. The agent registers its public key with the hub and receives a short pairing code.
-3. The app shows the code; the user confirms it in their hub account. The device is
-   bound to the account.
+**Proof of possession.** The device never relies on its clock to authenticate (no RTC).
+It asks the hub for a nonce (`POST /device/v1/challenge`, valid 5 minutes, single use) and
+signs the UTF-8 bytes
+
+```
+allskyhub-v1\n<purpose>\n<device_id>\n<nonce>
+```
+
+with its private key, `purpose` being `register` or `token`. Keys and signatures travel
+base64url-encoded without padding.
+
+**Pairing.**
+
+1. The app connects to the camera's setup hotspot (or finds it on the local network) and
+   sends Wi-Fi credentials and the hub URL.
+2. The agent registers (`POST /device/v1/register` with public key, profile, agent
+   version, nonce and signature). While the device is not paired the hub answers with a
+   **pairing code**: 6 characters from `ABCDEFGHJKMNPQRSTUVWXYZ23456789` (no 0/O, 1/I/L),
+   shown as `ABC-DEF`, valid 15 minutes. Registering again returns the same open code
+   until it expires, then a new one. The agent repeats the registration about every 5 s
+   until the answer says `paired: true`.
+3. The device has no display. The agent exposes the current code on its local setup API
+   and web UI (§7). In the normal flow the app reads the code from there and claims it
+   through the hub's app API with the user's account, so the user never types it. Typing
+   the code into the hub's web UI is the fallback. Claiming binds the device to the
+   account. Codes are single use; the hub rate-limits claims per user and per IP and
+   answers unknown, expired and used codes the same way.
+4. Once paired, registering returns `paired: true` and no code. If a user removes the
+   device from their account, the hub closes its WebSocket with 4403 and the next
+   registration returns a new code.
+5. **Token.** The paired agent gets an access token (`POST /device/v1/token` with device
+   id, nonce and signature; valid 1 hour) and uses it as bearer token for the WebSocket
+   and uploads. It fetches a new one before expiry or after close code 4401.
 
 ### 6.3 Device → hub
 
 - `hello`: device id, profile, agent version, capabilities.
-- `status`: mode, last exposure/gain/mean, temperatures, disk, uptime.
+- `status`: mode, last exposure/gain/mean, temperatures, disk, uptime, `time_trusted`
+  (§4.4).
 - `frame`: frame metadata (§4.4); the image itself goes over HTTPS when the hub asks
-  for it (live view, latest image, products).
+  for it (§6.5, `upload_frame`).
 - `event`: a detection (§6.4).
 
 ### 6.4 Events
@@ -143,8 +191,41 @@ the public key. Pairing:
 
 ### 6.5 Hub → device
 
-`command`: `set_settings`, `focus_mode` (start/stop), `restart`, `update`. Each command
-is acknowledged with `ack` or `error`.
+`command`: `set_settings`, `focus_mode` (start/stop), `restart`, `update`,
+`upload_frame`. Each command is acknowledged with `ack` or `error` (`code` one of
+`not_found`, `invalid_args`, `unsupported`, `failed`).
+
+**`upload_frame`** `{night_id, name, variant}` with `variant` `full` (default) or
+`thumb`: the device uploads that image with
+`PUT /device/v1/frames/{night_id}/{name}?variant=<variant>` (`image/jpeg`) and then
+answers `ack`. If the frame no longer exists (retention, §4.5) it answers `error` with
+`not_found`. The hub decides what to fetch and how often, for example the latest image
+at most every few minutes, thumbnails for the app's gallery, and every frame in full
+while someone watches the live view. The device needs no upload policy of its own.
+
+### 6.6 Device HTTP endpoints
+
+All bodies are JSON (models in `packages/protocol`, `allskyhub_protocol.device_api`)
+except the image upload.
+
+| Endpoint | Auth | Body → answer |
+|---|---|---|
+| `POST /device/v1/challenge` | none | `{device_id}` → `{nonce, expires_in}` |
+| `POST /device/v1/register` | signature (`register`) | `{public_key, profile, agent_version, nonce, signature}` → `{device_id, paired, pairing_code?, expires_in?}` |
+| `POST /device/v1/token` | signature (`token`) | `{device_id, nonce, signature}` → `{access_token, token_type: "bearer", expires_in}` |
+| `GET /device/v1/ws` | bearer | WebSocket (§6.1) |
+| `PUT /device/v1/frames/{night_id}/{name}?variant=` | bearer | `image/jpeg` → 204 |
+
+Errors are HTTP status codes with `{"detail": "..."}`: 400 invalid body, 401 bad
+signature, nonce or token, 403 device not paired (token), 404 unknown upload (the hub
+did not ask for this frame), 413 image too large, 429 rate limited (with
+`Retry-After`).
+
+### 6.7 Offline behaviour
+
+The device does not queue uploads or WebSocket messages while the hub is unreachable;
+capture and storage go on (§1, goal 4). After reconnecting it sends `hello` and a fresh
+`status`, and the hub requests whatever it wants with `upload_frame`.
 
 ## 7. Local web UI
 

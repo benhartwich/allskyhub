@@ -4,15 +4,21 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from dataclasses import dataclass
+from datetime import UTC, tzinfo
 
 from allskyhub_agent.adapters.camera import Camera, CaptureRequest
 from allskyhub_agent.core.clock import Clock
 from allskyhub_agent.core.daynight import DayNightConfig, next_mode
 from allskyhub_agent.core.exposure import AutoExposure, Exposure
+from allskyhub_agent.core.focus import sharpness
 from allskyhub_agent.core.metering import Mask, circle_mask, mean_brightness
 from allskyhub_agent.core.sun import sun_elevation
-from allskyhub_agent.store.images import ImageStore
+from allskyhub_agent.live import LiveState
+from allskyhub_agent.store.images import ImageStore, night_id
 from allskyhub_protocol import FrameInfo, Mode
+
+# Name reported for focus-mode frames, which are not stored (SPEC §7).
+FOCUS_FRAME_NAME = "focus.jpg"
 
 
 @dataclass(frozen=True)
@@ -39,6 +45,8 @@ class Runner:
         daynight: DayNightConfig | None = None,
         loop: LoopConfig | None = None,
         mask_radius_frac: float | None = None,
+        live: LiveState | None = None,
+        local_tz: tzinfo = UTC,
     ) -> None:
         self._cam = camera
         self._ae = auto_exposure
@@ -51,31 +59,45 @@ class Runner:
         self._mask_frac = mask_radius_frac
         self._mask: Mask | None = None
         self._mode: Mode | None = None
+        self._live = live
+        self._tz = local_tz
 
     @property
     def mode(self) -> Mode | None:
         return self._mode
 
+    @property
+    def focus_mode(self) -> bool:
+        return self._live is not None and self._live.focus_mode
+
     def step(self) -> FrameInfo:
-        """Take, store and evaluate one frame; does not wait afterwards."""
+        """Take, store and evaluate one frame; does not wait afterwards.
+
+        In focus mode (SPEC §7) frames are only published to the live view, not stored.
+        """
         start = self._clock.now()
         elevation = sun_elevation(start, self._loc.lat, self._loc.lon)
         mode = next_mode(self._mode, elevation, self._dn)
         self._mode = mode
 
-        settings = self._ae.current(mode)
+        focus = self.focus_mode
+        settings = self._ae.current(mode, focus)
         frame = self._cam.capture(CaptureRequest(settings.exposure_us, settings.gain))
 
         mean = mean_brightness(
             frame.image, self._mask_for(frame.image.shape[0], frame.image.shape[1])
         )
-        stored = self._store.save(frame.image, start)
-        self._ae.update(mode, Exposure(frame.exposure_us, frame.gain), mean)
+        if focus:
+            nid, name = night_id(start, self._tz), FOCUS_FRAME_NAME
+        else:
+            stored = self._store.save(frame.image, start)
+            nid, name = stored.night_id, stored.name
+        self._ae.update(mode, Exposure(frame.exposure_us, frame.gain), mean, focus)
 
-        return FrameInfo(
+        info = FrameInfo(
             captured_at=start,
-            night_id=stored.night_id,
-            name=stored.name,
+            night_id=nid,
+            name=name,
             mode=mode,
             exposure_us=frame.exposure_us,
             gain=frame.gain,
@@ -84,6 +106,9 @@ class Runner:
             sensor_temp_c=frame.sensor_temp_c,
             profile=self._profile,
         )
+        if self._live is not None:
+            self._live.publish(info, frame.image, sharpness(frame.image))
+        return info
 
     def _mask_for(self, height: int, width: int) -> Mask | None:
         """Image-circle mask for the frame size, built once (SPEC §4.3: metering in the mask)."""
@@ -94,6 +119,8 @@ class Runner:
         return self._mask
 
     def delay(self) -> float:
+        if self.focus_mode:
+            return 0.0
         return self._loop.night_delay_s if self._mode is Mode.NIGHT else self._loop.day_delay_s
 
     def run(

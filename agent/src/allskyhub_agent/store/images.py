@@ -58,6 +58,17 @@ class ImageStore:
         pil.resize((THUMB_WIDTH, h)).save(thumb, format="JPEG", quality=80)
         return StoredFrame(nid, name, path, thumb)
 
+    def path_for(self, night: str, name: str, thumbnail: bool = False) -> Path | None:
+        """Stored image (or its thumbnail) by night id and name; None if it does not exist.
+
+        Only plain names inside the night folder are accepted, never paths.
+        """
+        if not (len(night) == 8 and night.isdigit()) or "/" in name or name.startswith("."):
+            return None
+        folder = self._images / night
+        path = (folder / "thumbnails" / name) if thumbnail else (folder / name)
+        return path if path.is_file() else None
+
     def cleanup(self, now: datetime, keep_days: int) -> list[str]:
         """Delete night folders older than `keep_days`; returns the removed night ids."""
         oldest = night_id(now, self._tz)

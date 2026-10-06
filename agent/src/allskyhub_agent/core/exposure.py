@@ -8,7 +8,7 @@ exposure first and to gain only when exposure is at its limit.
 from __future__ import annotations
 
 import math
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 
 from allskyhub_protocol import Mode
 
@@ -44,9 +44,17 @@ class ExposureConfig:
     night: ModeLimits
     damping: float = 0.7
     max_step: float = 8.0
+    # Focus mode (SPEC §7) needs quick feedback: exposure is capped, gain makes up the rest.
+    focus_max_exposure_us: int = 2_000_000
 
-    def limits(self, mode: Mode) -> ModeLimits:
-        return self.day if mode is Mode.DAY else self.night
+    def limits(self, mode: Mode, focus: bool = False) -> ModeLimits:
+        lim = self.day if mode is Mode.DAY else self.night
+        if focus and lim.max_exposure_us > self.focus_max_exposure_us:
+            lim = replace(
+                lim,
+                max_exposure_us=max(lim.min_exposure_us, self.focus_max_exposure_us),
+            )
+        return lim
 
 
 @dataclass(frozen=True)
@@ -71,13 +79,24 @@ class AutoExposure:
         if start:
             self._last.update(start)
 
-    def current(self, mode: Mode) -> Exposure:
-        """Settings to use for the next frame in `mode` (SPEC §4.3: per-mode memory)."""
-        return self._last[mode]
+    def current(self, mode: Mode, focus: bool = False) -> Exposure:
+        """Settings to use for the next frame in `mode` (SPEC §4.3: per-mode memory).
 
-    def update(self, mode: Mode, used: Exposure, measured_mean: float) -> Exposure:
+        In focus mode an exposure above the focus cap is shortened and the difference is moved
+        into gain (as far as the gain limit allows), so the brightness stays about the same.
+        """
+        last = self._last[mode]
+        lim = self._cfg.limits(mode, focus)
+        if last.exposure_us <= lim.max_exposure_us:
+            return last
+        factor = self._gain_factor(last.gain, lim) * last.exposure_us / lim.max_exposure_us
+        return Exposure(lim.max_exposure_us, self._gain_from_factor(factor, lim))
+
+    def update(
+        self, mode: Mode, used: Exposure, measured_mean: float, focus: bool = False
+    ) -> Exposure:
         """Feed back the result of a frame taken with `used`; returns the next settings."""
-        lim = self._cfg.limits(mode)
+        lim = self._cfg.limits(mode, focus)
         ratio = lim.target_mean / max(measured_mean, _MIN_MEAN)
         ratio = _clamp(ratio**self._cfg.damping, 1 / self._cfg.max_step, self._cfg.max_step)
 

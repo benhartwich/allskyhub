@@ -92,3 +92,8 @@ button.danger { background: transparent; color: var(--danger); border: 1px solid
 .button.secondary { background: transparent; color: var(--accent); border: 1px solid var(--accent); }
 .features { display: grid; gap: 14px; }
 @media (min-width: 40rem) { .features { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+
+/* Imprint and privacy policy */
+.legal p + p { margin-top: 8px; }
+.todo { color: var(--warn); font-weight: 600; }
+.todo::before { content: "⚠ "; }

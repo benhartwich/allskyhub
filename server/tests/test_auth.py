@@ -109,3 +109,15 @@ async def test_signup_can_be_disabled(client: httpx.AsyncClient) -> None:
         assert (await client.get("/signup")).status_code == 404
     finally:
         settings.allow_signup = True
+
+
+async def test_legal_pages_are_public_drafts(client: httpx.AsyncClient) -> None:
+    for path, title in (("/impressum", "Impressum"), ("/datenschutz", "Datenschutzerklärung")):
+        r = await client.get(path)
+        assert r.status_code == 200
+        assert f"<h1>{title}</h1>" in r.text
+        assert "Entwurf" in r.text  # not approved yet
+        assert "TODO" in r.text
+    home = await client.get("/")
+    assert 'href="/impressum"' in home.text
+    assert 'href="/datenschutz"' in home.text

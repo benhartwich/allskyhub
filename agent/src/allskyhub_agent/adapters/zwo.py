@@ -108,7 +108,9 @@ class ZwoCamera:
 
         size = self._w * self._h * 3
         data = self._api.read_data(self._id, size)
-        bgr = np.frombuffer(data, dtype=np.uint8, count=size).reshape(self._h, self._w, 3)
+        # ndarray(buffer=...) instead of frombuffer(): numpy 2.5's frombuffer stub is partially
+        # unknown to pyright strict.
+        bgr = np.ndarray((self._h, self._w, 3), dtype=np.uint8, buffer=data[:size])
         rgb: Image = bgr[:, :, ::-1].copy()  # the SDK delivers BGR
         temp = self._api.get_control(self._id, Control.TEMPERATURE) / 10.0
         return Frame(image=rgb, exposure_us=req.exposure_us, gain=req.gain, sensor_temp_c=temp)

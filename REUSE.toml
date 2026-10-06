@@ -33,3 +33,9 @@ SPDX-License-Identifier = "GPL-3.0-or-later"
 path = "app/**"
 SPDX-FileCopyrightText = "2026 Benjamin Hartwich"
 SPDX-License-Identifier = "Apache-2.0"
+
+# Vendored third-party files (server/src/allskyhub_server/web/static/VENDORED.md).
+[[annotations]]
+path = "server/src/allskyhub_server/web/static/htmx.min.js"
+SPDX-FileCopyrightText = "Big Sky Software (htmx.org)"
+SPDX-License-Identifier = "0BSD"

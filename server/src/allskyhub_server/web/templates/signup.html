@@ -1,0 +1,22 @@
+{% extends "base.html" %}
+{% block title %}Konto anlegen · allskyhub{% endblock %}
+{% block content %}
+<div class="auth">
+  <h1>Konto anlegen</h1>
+  <p class="muted">Mit einem Konto koppelst du deine Allsky-Kamera und siehst ihre Bilder überall.</p>
+  <form method="post" action="/signup" class="card stack">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <label>E-Mail-Adresse
+      <input type="email" name="email" value="{{ email or '' }}" autocomplete="username" required>
+    </label>
+    <label>Passwort (mindestens 10 Zeichen)
+      <input type="password" name="password" autocomplete="new-password" minlength="10" required>
+    </label>
+    <label>Passwort wiederholen
+      <input type="password" name="password2" autocomplete="new-password" minlength="10" required>
+    </label>
+    <button type="submit">Konto anlegen</button>
+  </form>
+  <p class="muted">Schon ein Konto? <a href="/login">Anmelden</a></p>
+</div>
+{% endblock %}

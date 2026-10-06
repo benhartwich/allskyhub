@@ -1,0 +1,34 @@
+<!doctype html>
+<html lang="de">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#0b1020">
+  <link rel="icon" href="{{ asset('favicon.svg') }}" type="image/svg+xml">
+  <title>{% block title %}allskyhub{% endblock %}</title>
+  <meta name="htmx-config" content='{"includeIndicatorStyles": false, "allowEval": false}'>
+  <link rel="stylesheet" href="{{ asset('app.css') }}">
+  <script src="{{ asset('htmx.min.js') }}" defer></script>
+</head>
+<body {% if csrf_token %}hx-headers='{"X-CSRF-Token": "{{ csrf_token }}"}'{% endif %}>
+  <header class="appbar">
+    <a class="brand" href="/"><img src="{{ asset('favicon.svg') }}" width="28" height="28" alt="">allskyhub</a>
+    <div class="appbar-end">
+      {% if user %}
+      <form method="post" action="/logout" class="inline">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+        <button class="link">Abmelden</button>
+      </form>
+      {% elif request.url.path != '/login' %}
+      <a href="/login">Anmelden</a>
+      {% endif %}
+    </div>
+  </header>
+  <main>
+    {% if error %}<p class="msg error" role="alert">{{ error }}</p>{% endif %}
+    {% if notice %}<p class="msg ok" role="status">{{ notice }}</p>{% endif %}
+    {% block content %}{% endblock %}
+    <footer class="app-foot"><a href="https://github.com/benhartwich/allskyhub">Open Source (AGPL-3.0)</a></footer>
+  </main>
+</body>
+</html>

@@ -1,5 +1,5 @@
 [tool.uv.workspace]
-members = ["packages/protocol", "agent"]
+members = ["packages/protocol", "agent", "server"]
 
 [tool.uv]
 python-preference = "only-system"
@@ -8,6 +8,8 @@ python-downloads = "never"
 [dependency-groups]
 dev = [
   "pytest>=8.4",
+  "pytest-asyncio>=1.2",
+  "httpx>=0.28",
   "ruff>=0.13",
   "pyright[nodejs]>=1.1.405",
 ]
@@ -15,13 +17,16 @@ dev = [
 [tool.ruff]
 line-length = 100
 target-version = "py311"
+extend-exclude = ["server/migrations/versions"]
 
 [tool.ruff.lint]
 select = ["E", "F", "W", "I", "UP", "B", "SIM", "ASYNC", "S", "DTZ", "RUF", "PT", "TID", "C4", "RET", "PTH"]
 ignore = ["S311"]
+# German UI texts use typographic dashes and quotes.
+allowed-confusables = ["–", "„", "“"]
 
 [tool.ruff.lint.isort]
-known-first-party = ["allskyhub_protocol", "allskyhub_agent"]
+known-first-party = ["allskyhub_protocol", "allskyhub_agent", "allskyhub_server"]
 
 [tool.ruff.lint.per-file-ignores]
 "**/tests/**" = ["S101", "S310"]
@@ -31,10 +36,13 @@ typeCheckingMode = "strict"
 pythonVersion = "3.11"
 venvPath = "."
 venv = ".venv"
-include = ["packages", "agent"]
-exclude = ["**/__pycache__", ".venv"]
+include = ["packages", "agent", "server"]
+exclude = ["**/__pycache__", ".venv", "server/migrations/versions"]
 reportMissingTypeStubs = false
 
 [tool.pytest.ini_options]
-testpaths = ["packages/protocol/tests", "agent/tests"]
+testpaths = ["packages/protocol/tests", "agent/tests", "server/tests"]
 addopts = "--import-mode=importlib"
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "session"
+asyncio_default_test_loop_scope = "session"

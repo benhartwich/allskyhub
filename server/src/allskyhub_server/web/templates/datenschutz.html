@@ -1,0 +1,41 @@
+{% extends "base.html" %}
+{% block title %}Datenschutz · allskyhub{% endblock %}
+{% block content %}
+<article class="legal stack">
+  <h1>Datenschutzerklärung</h1>
+  {% include "_draft.html" %}
+
+  <section class="card">
+    <h2>Verantwortlicher</h2>
+    <p class="todo">TODO: Name, Anschrift und Kontakt des Verantwortlichen (siehe <a href="/impressum">Impressum</a>)</p>
+  </section>
+
+  <section class="card">
+    <h2>Welche Daten wir verarbeiten</h2>
+    <p><strong>Server-Logs.</strong> Bei jedem Aufruf speichert der Webserver IP-Adresse, Zeitpunkt, aufgerufenen Pfad (ohne Parameter), Statuscode, Datenmenge und Browserkennung. Zweck: Betrieb und Sicherheit des Dienstes. Die Logs werden nach 14 Tagen gelöscht.</p>
+    <p><strong>Konto.</strong> E-Mail-Adresse und ein Hash deines Passworts (Argon2id; das Passwort selbst speichern wir nicht). Zweck: Anmeldung und Zuordnung deiner Kameras.</p>
+    <p><strong>Kameras.</strong> Für gekoppelte Kameras: Geräte-ID, Name, Kameraprofil, Softwareversion, letzter Status (z. B. Belichtung, Temperatur, freier Speicher), Daten der letzten Aufnahme und das jeweils neueste Himmelsbild. Zweck: Anzeige im Web und in der App.</p>
+    <p><strong>Cookies.</strong> Nur technisch notwendige Cookies: ein Sitzungs-Cookie nach der Anmeldung und ein Schutz-Cookie gegen gefälschte Formularanfragen (CSRF). Kein Tracking, keine Analyse, keine Werbung.</p>
+    <p><strong>App.</strong> Die App speichert die Adresse des Hubs und ein Anmelde-Token sicher auf deinem Gerät. Bei der Einrichtung einer Kamera gibt sie deren WLAN-Namen und -Passwort direkt an die Kamera weiter; sie erreichen den Hub nicht.</p>
+  </section>
+
+  <section class="card">
+    <h2>Rechtsgrundlagen und Speicherdauer</h2>
+    <p class="todo">TODO: Rechtsgrundlagen (z. B. Art. 6 Abs. 1 lit. b und f DSGVO) prüfen und eintragen</p>
+    <p>Konto- und Kameradaten bleiben gespeichert, bis du die Kamera entfernst bzw. dein Konto gelöscht wird. Entfernst du eine Kamera, löschen wir ihre Bilder sofort.</p>
+    <p class="todo">TODO: Löschung des Kontos auf Anfrage beschreiben (eine Funktion dafür gibt es noch nicht)</p>
+  </section>
+
+  <section class="card">
+    <h2>Empfänger und Hosting</h2>
+    <p>Wir binden keine Dienste Dritter ein: keine externen Schriften, Skripte, CDNs oder Analysewerkzeuge.</p>
+    <p class="todo">TODO: Hosting-Anbieter und Serverstandort, ggf. Auftragsverarbeitungsvertrag</p>
+  </section>
+
+  <section class="card">
+    <h2>Deine Rechte</h2>
+    <p>Du hast das Recht auf Auskunft, Berichtigung, Löschung, Einschränkung der Verarbeitung, Datenübertragbarkeit und Widerspruch sowie das Recht auf Beschwerde bei einer Datenschutz-Aufsichtsbehörde.</p>
+    <p class="todo">TODO: Kontakt für Anfragen und zuständige Aufsichtsbehörde</p>
+  </section>
+</article>
+{% endblock %}

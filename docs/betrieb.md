@@ -62,3 +62,20 @@ curl -s https://allskyhub.org/healthz
 ```
 
 Geräte verbinden sich nach dem Neustart von selbst wieder (SPEC §6.1).
+
+## Konten (nur auf Einladung)
+
+Es gibt keine offene Registrierung. Alle Befehle als Dienstbenutzer mit der Env-Datei:
+
+```bash
+cd /opt/allskyhub-server
+alias ash='sudo -u allskyhub-server env $(xargs < /etc/allskyhub-server/allskyhub-server.env) .venv/bin/allskyhub-server'
+ash invite name@example.org            # gibt den Einladungslink aus (7 Tage, einmal verwendbar)
+ash users                              # Konten und Anzahl ihrer Kameras
+ash set-password name@example.org      # neues Passwort, beendet alle Sitzungen
+ash delete-user name@example.org --yes # Konto löschen, Kameras entkoppeln, Bilder löschen
+```
+
+Den Link schickst du selbst weiter (der Hub versendet keine E-Mails). Eine neue Einladung an
+dieselbe Adresse macht die vorige ungültig. Abgelaufene Einladungen, Sitzungen und Tokens räumt
+der Hub alle 6 Stunden auf.

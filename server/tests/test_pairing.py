@@ -6,7 +6,7 @@ import httpx
 
 from allskyhub_protocol import PAIRING_CODE_ALPHABET, Purpose
 from tests.fake_device import FakeDevice
-from tests.helpers import claim, home_csrf, signup
+from tests.helpers import claim, home_csrf, make_account
 
 
 async def test_register_returns_stable_code_until_claimed(client: httpx.AsyncClient) -> None:
@@ -60,7 +60,7 @@ async def test_claim_pairs_device_and_allows_token(
     dev = FakeDevice()
     reg = await dev.register(new_client)
     assert reg.pairing_code
-    await signup(client)
+    await make_account(client)
     code = reg.pairing_code
     r = await claim(client, f"{code[:3].lower()}-{code[3:].lower()}", "Garten")
     assert r.status_code == 303
@@ -81,11 +81,11 @@ async def test_code_is_single_use_and_wrong_codes_fail(
     dev = FakeDevice()
     reg = await dev.register(new_client)
     assert reg.pairing_code
-    await signup(client)
+    await make_account(client)
     assert (await claim(client, "ZZZZZZ")).status_code == 400
     assert (await claim(client, reg.pairing_code)).status_code == 303
 
-    await signup(new_client)
+    await make_account(new_client)
     r = await claim(new_client, reg.pairing_code)
     assert r.status_code == 400
     assert "ungültig oder abgelaufen" in r.text
@@ -97,9 +97,9 @@ async def test_other_accounts_cannot_see_camera(
     dev = FakeDevice()
     reg = await dev.register(client)
     assert reg.pairing_code
-    await signup(client)
+    await make_account(client)
     await claim(client, reg.pairing_code)
-    await signup(new_client)
+    await make_account(new_client)
     assert (await new_client.get(f"/cameras/{dev.device_id}")).status_code == 404
     assert (await new_client.get(f"/cameras/{dev.device_id}/image/full.jpg")).status_code == 404
     r = await new_client.post(
@@ -112,7 +112,7 @@ async def test_remove_unpairs_and_revokes_tokens(client: httpx.AsyncClient) -> N
     dev = FakeDevice()
     reg = await dev.register(client)
     assert reg.pairing_code
-    await signup(client)
+    await make_account(client)
     await claim(client, reg.pairing_code)
     await dev.token(client)
     r = await client.post(

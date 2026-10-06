@@ -20,9 +20,6 @@ class Settings(BaseSettings):
     env: Literal["dev", "prod"] = "prod"
     database_url: str = Field(description="postgresql://user:pass@host:port/db")
     base_url: str = "http://localhost:8000"
-    # Open sign-up is off: it has no e-mail verification, no password reset and no account
-    # deletion yet. Turn it on only for a closed test setup.
-    allow_signup: bool = False
 
     data_dir: Path = Path("/var/lib/allskyhub-server")
     # SPEC §6.5: the hub asks for a new latest image at most this often (live view: every frame).

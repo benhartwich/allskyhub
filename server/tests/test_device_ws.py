@@ -25,7 +25,7 @@ from allskyhub_protocol import (
     parse_envelope,
 )
 from tests.fake_device import FakeDevice
-from tests.helpers import claim, home_csrf, signup
+from tests.helpers import claim, home_csrf, make_account
 
 TS = dt.datetime(2026, 10, 6, 21, 30, tzinfo=dt.UTC)
 JPEG = b"\xff\xd8\xff\xe0" + b"\x00" * 64
@@ -48,7 +48,7 @@ def _frame(name: str = "image-20261006213000.jpg") -> FrameInfo:
 async def _paired(client: httpx.AsyncClient, dev: FakeDevice) -> str:
     reg = await dev.register(client)
     assert reg.pairing_code
-    await signup(client)
+    await make_account(client)
     await claim(client, reg.pairing_code)
     return await dev.token(client)
 

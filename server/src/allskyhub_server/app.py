@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import asyncio
+import contextlib
 import logging
 import time
 from collections.abc import AsyncGenerator
@@ -15,6 +17,7 @@ from fastapi.staticfiles import StaticFiles
 from sqlalchemy import text
 from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
+from allskyhub_server import maintenance
 from allskyhub_server.api import app as app_api
 from allskyhub_server.api import device as device_api
 from allskyhub_server.db import create_engine, create_sessionmaker
@@ -138,9 +141,13 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         engine = create_engine(settings)
         app.state.engine = engine
         app.state.sessionmaker = create_sessionmaker(engine)
+        cleanup = asyncio.create_task(maintenance.run_forever(app.state.sessionmaker))
         try:
             yield
         finally:
+            cleanup.cancel()
+            with contextlib.suppress(asyncio.CancelledError):
+                await cleanup
             await engine.dispose()
 
     app = FastAPI(

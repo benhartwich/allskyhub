@@ -1,0 +1,25 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+*.egg-info/
+.pytest_cache/
+.ruff_cache/
+dist/
+build/
+
+# Local config and data
+.env
+*.env
+/var/
+/data/
+
+# Flutter (app/)
+app/.dart_tool/
+app/build/
+app/.flutter-plugins*
+
+# Editors / OS
+.idea/
+.vscode/
+.DS_Store

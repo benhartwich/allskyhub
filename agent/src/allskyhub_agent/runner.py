@@ -1,0 +1,110 @@
+"""Capture loop (SPEC §4.1): mode → exposure → capture → store → feedback."""
+
+from __future__ import annotations
+
+from collections.abc import Callable
+from dataclasses import dataclass
+
+from allskyhub_agent.adapters.camera import Camera, CaptureRequest
+from allskyhub_agent.core.clock import Clock
+from allskyhub_agent.core.daynight import DayNightConfig, next_mode
+from allskyhub_agent.core.exposure import AutoExposure, Exposure
+from allskyhub_agent.core.metering import Mask, circle_mask, mean_brightness
+from allskyhub_agent.core.sun import sun_elevation
+from allskyhub_agent.store.images import ImageStore
+from allskyhub_protocol import FrameInfo, Mode
+
+
+@dataclass(frozen=True)
+class Location:
+    lat: float
+    lon: float
+
+
+@dataclass(frozen=True)
+class LoopConfig:
+    day_delay_s: float = 30.0
+    night_delay_s: float = 0.0
+
+
+class Runner:
+    def __init__(
+        self,
+        camera: Camera,
+        auto_exposure: AutoExposure,
+        store: ImageStore,
+        clock: Clock,
+        location: Location,
+        profile: str,
+        daynight: DayNightConfig | None = None,
+        loop: LoopConfig | None = None,
+        mask_radius_frac: float | None = None,
+    ) -> None:
+        self._cam = camera
+        self._ae = auto_exposure
+        self._store = store
+        self._clock = clock
+        self._loc = location
+        self._profile = profile
+        self._dn = daynight or DayNightConfig()
+        self._loop = loop or LoopConfig()
+        self._mask_frac = mask_radius_frac
+        self._mask: Mask | None = None
+        self._mode: Mode | None = None
+
+    @property
+    def mode(self) -> Mode | None:
+        return self._mode
+
+    def step(self) -> FrameInfo:
+        """Take, store and evaluate one frame; does not wait afterwards."""
+        start = self._clock.now()
+        elevation = sun_elevation(start, self._loc.lat, self._loc.lon)
+        mode = next_mode(self._mode, elevation, self._dn)
+        self._mode = mode
+
+        settings = self._ae.current(mode)
+        frame = self._cam.capture(CaptureRequest(settings.exposure_us, settings.gain))
+
+        mean = mean_brightness(
+            frame.image, self._mask_for(frame.image.shape[0], frame.image.shape[1])
+        )
+        stored = self._store.save(frame.image, start)
+        self._ae.update(mode, Exposure(frame.exposure_us, frame.gain), mean)
+
+        return FrameInfo(
+            captured_at=start,
+            night_id=stored.night_id,
+            name=stored.name,
+            mode=mode,
+            exposure_us=frame.exposure_us,
+            gain=frame.gain,
+            mean=round(mean, 5),
+            sun_elevation=round(elevation, 2),
+            sensor_temp_c=frame.sensor_temp_c,
+            profile=self._profile,
+        )
+
+    def _mask_for(self, height: int, width: int) -> Mask | None:
+        """Image-circle mask for the frame size, built once (SPEC §4.3: metering in the mask)."""
+        if self._mask_frac is None:
+            return None
+        if self._mask is None or self._mask.shape != (height, width):
+            self._mask = circle_mask(height, width, self._mask_frac)
+        return self._mask
+
+    def delay(self) -> float:
+        return self._loop.night_delay_s if self._mode is Mode.NIGHT else self._loop.day_delay_s
+
+    def run(
+        self, frames: int | None = None, on_frame: Callable[[FrameInfo], None] | None = None
+    ) -> int:
+        """Capture `frames` frames (forever if None); returns how many were taken."""
+        n = 0
+        while frames is None or n < frames:
+            info = self.step()
+            n += 1
+            if on_frame is not None:
+                on_frame(info)
+            self._clock.sleep(self.delay())
+        return n

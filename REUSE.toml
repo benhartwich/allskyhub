@@ -1,0 +1,35 @@
+# Licensing per path (REUSE, https://reuse.software). The last matching annotation wins.
+# Check: uvx reuse lint
+version = 1
+SPDX-PackageName = "allskyhub"
+SPDX-PackageDownloadLocation = "https://github.com/benhartwich/allskyhub"
+
+# Default: server, tools, deployment and repository files.
+[[annotations]]
+path = "**"
+SPDX-FileCopyrightText = "2026 Benjamin Hartwich"
+SPDX-License-Identifier = "AGPL-3.0-or-later"
+
+# Documentation and specification.
+[[annotations]]
+path = ["docs/**", "README.md", "CLAUDE.md"]
+SPDX-FileCopyrightText = "2026 Benjamin Hartwich"
+SPDX-License-Identifier = "CC-BY-4.0"
+
+# Protocol models: permissive, so third-party cameras, servers and integrations can use them.
+[[annotations]]
+path = "packages/protocol/**"
+SPDX-FileCopyrightText = "2026 Benjamin Hartwich"
+SPDX-License-Identifier = "Apache-2.0"
+
+# Camera agent and the Raspberry Pi image.
+[[annotations]]
+path = ["agent/**", "image/**"]
+SPDX-FileCopyrightText = "2026 Benjamin Hartwich"
+SPDX-License-Identifier = "GPL-3.0-or-later"
+
+# Mobile app: permissive, because the GPL conflicts with the App Store terms.
+[[annotations]]
+path = "app/**"
+SPDX-FileCopyrightText = "2026 Benjamin Hartwich"
+SPDX-License-Identifier = "Apache-2.0"

@@ -9,22 +9,35 @@ from __future__ import annotations
 
 import argparse
 import sys
+import threading
 from datetime import datetime
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
-from allskyhub_agent import __version__
+from allskyhub_agent import __version__, system
 from allskyhub_agent.adapters.asi_sdk import AsiError, AsiSdk
 from allskyhub_agent.adapters.camera import Camera
+from allskyhub_agent.adapters.network import Network, NmcliNetwork, SimNetwork
 from allskyhub_agent.adapters.sim import SimCamera, sky_radiance
 from allskyhub_agent.adapters.zwo import CameraError, ZwoCamera
 from allskyhub_agent.core.clock import Clock, SimClock, SystemClock
 from allskyhub_agent.core.exposure import AutoExposure
 from allskyhub_agent.core.sun import sun_elevation
+from allskyhub_agent.discovery import Announcer
+from allskyhub_agent.hub.identity import DEFAULT_KEY_PATH, DeviceIdentity
+from allskyhub_agent.hub.pairing import PairingState
+from allskyhub_agent.live import LiveState
 from allskyhub_agent.profiles import get_profile
 from allskyhub_agent.runner import Location, LoopConfig, Runner
+from allskyhub_agent.services import HubManager, run_announcer
+from allskyhub_agent.settings import DEFAULT_PATH as SETTINGS_PATH
+from allskyhub_agent.settings import AgentSettings
+from allskyhub_agent.setup.controller import SetupController
+from allskyhub_agent.setup.setup_file import DEFAULT_PATH as SETUP_FILE_PATH
+from allskyhub_agent.setup.setup_file import apply_once as apply_setup_file
 from allskyhub_agent.store.images import ImageStore
-from allskyhub_protocol import FrameInfo
+from allskyhub_agent.web.server import WebServer
+from allskyhub_protocol import FrameInfo, Status
 
 
 def _parser() -> argparse.ArgumentParser:
@@ -51,6 +64,22 @@ def _parser() -> argparse.ArgumentParser:
     run.add_argument("--start", default=None, help="simulation start time, ISO 8601 with zone")
     run.add_argument("--day-delay", type=float, default=30.0)
     run.add_argument("--night-delay", type=float, default=0.0)
+    run.add_argument("--hub", default=None, help="hub URL, e.g. https://allskyhub.org (SPEC §6)")
+    run.add_argument("--key", type=Path, default=DEFAULT_KEY_PATH, help="device key file")
+    run.add_argument(
+        "--network",
+        choices=("none", "nmcli", "sim"),
+        default="none",
+        help="manage the network: setup mode, setup file, saved hub URL (SPEC §7.1-7.3)",
+    )
+    run.add_argument("--settings", type=Path, default=SETTINGS_PATH, help="agent settings file")
+    run.add_argument("--setup-file", type=Path, default=SETUP_FILE_PATH)
+    run.add_argument(
+        "--http",
+        default=None,
+        metavar="HOST:PORT",
+        help="serve the local web UI, e.g. 0.0.0.0:8080 (SPEC §7)",
+    )
     return p
 
 
@@ -89,18 +118,83 @@ def main(argv: list[str] | None = None) -> int:
         except (OSError, AsiError, CameraError) as exc:
             print(f"cannot open camera: {exc}", file=sys.stderr)
             return 1
+    live = LiveState()
+    store = ImageStore(args.data, tz)
+    pairing: PairingState | None = None
+    hub: HubManager | None = None
+    setup: SetupController | None = None
+    stop_bg = threading.Event()
+
+    network: Network | None = None
+    if args.network == "nmcli":
+        network = NmcliNetwork()
+    elif args.network == "sim":
+        network = SimNetwork()
+    settings_path: Path | None = args.settings if network is not None else None
+    hub_url: str | None = args.hub
+    if network is not None:
+        applied = apply_setup_file(args.setup_file, network) if args.network == "nmcli" else None
+        if applied is not None and applied.hub_url:
+            AgentSettings(hub_url=applied.hub_url).save(args.settings)
+        hub_url = hub_url or AgentSettings.load(args.settings).hub_url
+
+    identity: DeviceIdentity | None = None
+    if hub_url:
+        identity = DeviceIdentity.load_or_create(args.key)
+        pairing = PairingState(identity.device_id, hub_url, profile.id, __version__)
+
+        def status() -> Status | None:
+            f = live.last_frame()
+            if f is None:
+                return None
+            return Status(
+                mode=f.mode,
+                exposure_us=f.exposure_us,
+                gain=f.gain,
+                mean=f.mean,
+                sensor_temp_c=f.sensor_temp_c,
+                cpu_temp_c=system.cpu_temp_c(),
+                disk_free_pct=system.disk_free_pct(args.data),
+                uptime_s=system.uptime_s(),
+                time_trusted=system.time_trusted(),
+            )
+
+        hub = HubManager(identity, pairing, store, live, profile.id, status, settings_path)
+        hub.start(hub_url)
+        print(f"device {identity.device_id}, hub {hub_url}")
+        if network is not None:
+            setup = SetupController(network, identity.device_id, on_hub_url=hub.restart)
+            threading.Thread(target=setup.run, args=(stop_bg,), name="setup", daemon=True).start()
+
+    web: WebServer | None = None
+    if args.http:
+        host, _, port = str(args.http).rpartition(":")
+        host = host or "0.0.0.0"  # noqa: S104 - the local UI is meant for the LAN (SPEC §7)
+        web = WebServer(live, host, int(port), pairing, setup)
+        web.start()
+        print(f"web UI on http://{host}:{web.port}/")
+        if identity is not None:
+            announcer = Announcer(identity.device_id, web.port)
+            threading.Thread(
+                target=run_announcer, args=(announcer, stop_bg), name="mdns", daemon=True
+            ).start()
+
     runner = Runner(
         camera=camera,
         auto_exposure=AutoExposure(profile.exposure),
-        store=ImageStore(args.data, tz),
+        store=store,
         clock=clock,
         location=loc,
         profile=profile.id,
         loop=LoopConfig(args.day_delay, args.night_delay),
         mask_radius_frac=profile.image_circle_frac,
+        live=live,
+        local_tz=tz,
     )
 
     def show(f: FrameInfo) -> None:
+        if hub is not None:
+            hub.notify_frame(f)
         local = f.captured_at.astimezone(tz).strftime("%Y-%m-%d %H:%M:%S")
         print(
             f"{local}  {f.mode.value:5}  sun {f.sun_elevation:6.1f}°  "
@@ -112,7 +206,12 @@ def main(argv: list[str] | None = None) -> int:
     except KeyboardInterrupt:
         pass
     finally:
+        stop_bg.set()
         camera.close()
+        if web is not None:
+            web.stop()
+        if hub is not None:
+            hub.stop()
     return 0
 
 

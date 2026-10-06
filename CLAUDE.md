@@ -65,7 +65,7 @@ uv run allskyhub-agent --sim --lat 48.14 --lon 14.39 run --frames 20 --data /tmp
 
 Vor jedem Commit: Tests, ruff, pyright und `reuse lint` grün.
 
-**numpy-Falle:** Die CI prüft auch Python 3.13 mit numpy 2.5. Deren Typangaben für `np.clip`, `np.stack`, `np.repeat` und `np.frombuffer` sind für pyright strict „partially unknown“; lokal mit numpy 2.4 fällt das nicht auf. Stattdessen ufuncs (`np.minimum`/`np.maximum`), `np.empty` + Zuweisung bzw. `np.ndarray(..., buffer=...)` nehmen.
+**numpy-Falle:** Die CI prüft auch Python 3.13 mit numpy 2.5. Deren Typangaben für `np.clip`, `np.stack`, `np.repeat`, `np.roll` und `np.frombuffer` sind für pyright strict „partially unknown“; lokal mit numpy 2.4 fällt das nicht auf. Stattdessen ufuncs (`np.minimum`/`np.maximum`), `np.empty` + Zuweisung bzw. `np.ndarray(..., buffer=...)` nehmen. Prüfen mit `tools/pyright-numpy25.sh`.
 
 ## Architekturregeln
 

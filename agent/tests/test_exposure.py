@@ -72,3 +72,15 @@ def test_modes_remember_their_own_settings() -> None:
 def test_invalid_limits_rejected() -> None:
     with pytest.raises(ValueError, match="min_exposure_us"):
         ModeLimits(0.3, 0, 100, 0, 0)
+
+
+def test_focus_mode_caps_exposure_and_moves_rest_into_gain() -> None:
+    ae = AutoExposure(CFG, start={Mode.NIGHT: Exposure(16_000_000, 0.0)})
+    cur = ae.current(Mode.NIGHT, focus=True)
+    assert cur.exposure_us == 2_000_000
+    # 8x shorter exposure -> +18.06 dB -> 180.6 units of 0.1 dB
+    assert cur.gain == pytest.approx(180.6, abs=0.1)
+    nxt = ae.update(Mode.NIGHT, cur, 0.2, focus=True)
+    assert nxt.exposure_us <= 2_000_000
+    # Leaving focus mode: the normal limits apply again.
+    assert ae.current(Mode.NIGHT).exposure_us <= 60_000_000

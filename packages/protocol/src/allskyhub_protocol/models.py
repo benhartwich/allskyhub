@@ -32,7 +32,7 @@ class Hello(_Body):
     """First message after connecting (SPEC §6.3)."""
 
     TYPE: ClassVar[str] = "hello"
-    device_id: str = Field(min_length=8, max_length=64)
+    device_id: str = Field(pattern=r"^[a-z2-7]{26}$")  # SPEC §6.2
     profile: str
     agent_version: str
     capabilities: list[str] = Field(default_factory=list[str])
@@ -50,6 +50,8 @@ class Status(_Body):
     cpu_temp_c: float | None = None
     disk_free_pct: float | None = Field(default=None, ge=0, le=100)
     uptime_s: int = Field(ge=0)
+    # SPEC §4.4: whether the system clock is NTP-synchronized (no RTC on a Pi).
+    time_trusted: bool
 
 
 class FrameInfo(_Body):
@@ -107,6 +109,7 @@ class CommandName(StrEnum):
     FOCUS_MODE = "focus_mode"
     RESTART = "restart"
     UPDATE = "update"
+    UPLOAD_FRAME = "upload_frame"
 
 
 class Command(_Body):

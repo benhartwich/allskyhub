@@ -68,8 +68,8 @@ class SimCamera:
         img[ys, xs] += (flux * scale).astype(np.float32)
         img += self._rng.normal(0.0, 0.004, img.shape).astype(np.float32)
         img[~self._disc] = 0.0
-        mono = np.clip(img * 255.0, 0, 255).astype(np.uint8)
-        rgb: Image = np.repeat(mono[:, :, None], 3, axis=2)
+        mono = (img * 255.0).clip(0.0, 255.0).astype(np.uint8)
+        rgb: Image = np.stack((mono, mono, mono), axis=2)
         if self._clock is not None:
             # A real camera blocks for exposure and readout; let simulated time pass the same way.
             self._clock.sleep(req.exposure_us / 1e6 + self._readout_s)

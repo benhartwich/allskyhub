@@ -27,6 +27,8 @@ from allskyhub_agent.discovery import Announcer
 from allskyhub_agent.hub.identity import DEFAULT_KEY_PATH, DeviceIdentity
 from allskyhub_agent.hub.pairing import PairingState
 from allskyhub_agent.live import LiveState
+from allskyhub_agent.products.build import build_night
+from allskyhub_agent.products.worker import ProductWorker
 from allskyhub_agent.profiles import get_profile
 from allskyhub_agent.runner import Location, LoopConfig, Runner
 from allskyhub_agent.services import HubManager, run_announcer
@@ -58,6 +60,9 @@ def _parser() -> argparse.ArgumentParser:
     )
     sub = p.add_subparsers(dest="cmd", required=True)
     sub.add_parser("probe", help="list connected ZWO cameras without opening them")
+    prod = sub.add_parser("products", help="build a night's keogram, startrails, timelapse")
+    prod.add_argument("--data", type=Path, required=True, help="data directory")
+    prod.add_argument("--night", required=True, help="night id, YYYYMMDD")
     run = sub.add_parser("run", help="capture frames")
     run.add_argument("--frames", type=int, default=None, help="stop after N frames")
     run.add_argument("--data", type=Path, required=True, help="data directory")
@@ -93,6 +98,13 @@ def main(argv: list[str] | None = None) -> int:
         return 0
 
     tz = ZoneInfo(args.tz)
+    if args.cmd == "products":
+        result = build_night(ImageStore(args.data, tz), args.night)
+        print(f"night {result.night_id}: {result.frames} night frames, built {result.built}")
+        for name, why in result.skipped.items():
+            print(f"  skipped {name}: {why}")
+        return 0
+
     loc = Location(args.lat, args.lon)
     profile = get_profile(args.profile or ("sim" if args.sim else "zwo-asi678mc"))
 
@@ -192,7 +204,11 @@ def main(argv: list[str] | None = None) -> int:
         local_tz=tz,
     )
 
+    products = ProductWorker(store)
+    products.start()
+
     def show(f: FrameInfo) -> None:
+        products.on_frame(f)
         if hub is not None:
             hub.notify_frame(f)
         local = f.captured_at.astimezone(tz).strftime("%Y-%m-%d %H:%M:%S")
@@ -208,6 +224,7 @@ def main(argv: list[str] | None = None) -> int:
     finally:
         stop_bg.set()
         camera.close()
+        products.stop()
         if web is not None:
             web.stop()
         if hub is not None:

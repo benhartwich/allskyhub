@@ -29,7 +29,7 @@ allowed-confusables = ["–", "„", "“"]
 known-first-party = ["allskyhub_protocol", "allskyhub_agent", "allskyhub_server"]
 
 [tool.ruff.lint.per-file-ignores]
-"**/tests/**" = ["S101", "S310"]
+"**/tests/**" = ["S101", "S310", "S603", "S607"]
 
 [tool.pyright]
 typeCheckingMode = "strict"

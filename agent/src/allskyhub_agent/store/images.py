@@ -8,10 +8,13 @@ from datetime import date, datetime, timedelta, tzinfo
 from pathlib import Path
 
 from PIL import Image as PILImage
+from pydantic import ValidationError
 
 from allskyhub_agent.adapters.camera import Image
+from allskyhub_protocol import FrameInfo
 
 THUMB_WIDTH = 400
+INDEX_NAME = "frames.jsonl"
 
 
 def night_id(captured_at: datetime, local_tz: tzinfo) -> str:
@@ -57,6 +60,32 @@ class ImageStore:
         thumb = thumbs / name
         pil.resize((THUMB_WIDTH, h)).save(thumb, format="JPEG", quality=80)
         return StoredFrame(nid, name, path, thumb)
+
+    def night_dir(self, night: str) -> Path:
+        return self._images / night
+
+    def append_index(self, info: FrameInfo) -> None:
+        """SPEC §5.1: one line per stored frame."""
+        folder = self._images / info.night_id
+        folder.mkdir(parents=True, exist_ok=True)
+        with (folder / INDEX_NAME).open("a", encoding="utf-8") as f:
+            f.write(info.model_dump_json() + "\n")
+
+    def read_index(self, night: str) -> list[FrameInfo]:
+        """Frames of a night in capture order; damaged lines are skipped (SPEC §5.1)."""
+        path = self._images / night / INDEX_NAME
+        out: list[FrameInfo] = []
+        try:
+            lines = path.read_text(encoding="utf-8").splitlines()
+        except OSError:
+            return out
+        for line in lines:
+            try:
+                out.append(FrameInfo.model_validate_json(line))
+            except ValidationError:
+                continue
+        out.sort(key=lambda f: f.captured_at)
+        return out
 
     def path_for(self, night: str, name: str, thumbnail: bool = False) -> Path | None:
         """Stored image (or its thumbnail) by night id and name; None if it does not exist.

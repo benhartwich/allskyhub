@@ -12,8 +12,8 @@ from allskyhub_agent.adapters.asi_sdk import (
     ExposureStatus,
     ImageType,
 )
-from allskyhub_agent.adapters.camera import CaptureRequest
-from allskyhub_agent.adapters.zwo import CameraError, ZwoCamera, ZwoSettings
+from allskyhub_agent.adapters.camera import CameraError, CaptureRequest
+from allskyhub_agent.adapters.zwo import ZwoCamera, ZwoSettings
 
 
 class FakeAsi:

@@ -15,6 +15,10 @@ import numpy.typing as npt
 Image = npt.NDArray[np.uint8]
 
 
+class CameraError(RuntimeError):
+    """A capture failed; the runner logs it and tries again."""
+
+
 @dataclass(frozen=True)
 class CaptureRequest:
     exposure_us: int

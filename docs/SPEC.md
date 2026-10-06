@@ -154,8 +154,9 @@ base64url-encoded without padding.
 
 **Pairing.**
 
-1. The app connects to the camera's setup hotspot (or finds it on the local network) and
-   sends Wi-Fi credentials and the hub URL.
+1. The camera gets onto the network: through the app in setup mode (§7.1), with a setup
+   file on the SD card (§7.3), or by Ethernet. The app then finds it on the home network
+   (§7.2).
 2. The agent registers (`POST /device/v1/register` with public key, profile, agent
    version, nonce and signature). While the device is not paired the hub answers with a
    **pairing code**: 6 characters from `ABCDEFGHJKMNPQRSTUVWXYZ23456789` (no 0/O, 1/I/L),
@@ -191,7 +192,7 @@ base64url-encoded without padding.
 
 ### 6.5 Hub → device
 
-`command`: `set_settings`, `focus_mode` (start/stop), `restart`, `update`,
+`command`: `set_settings`, `focus_mode` (`{on: bool}`, §7), `restart`, `update`,
 `upload_frame`. Each command is acknowledged with `ack` or `error` (`code` one of
 `not_found`, `invalid_args`, `unsupported`, `failed`).
 
@@ -229,8 +230,77 @@ capture and storage go on (§1, goal 4). After reconnecting it sends `hello` and
 
 ## 7. Local web UI
 
-A small mobile-first page served by the agent on the local network: live image, focus
-helper (sharpness value), status. It also works without any hub.
+A small mobile-first page served by the agent on the local network (default port 8080,
+plain HTTP): live image, status, focus helper and, while unpaired, the pairing code. It
+also works without any hub.
+
+**Focus mode.** Shows a sharpness score (variance of the Laplacian on the central crop,
+higher is sharper), the best value since focus mode started, and a 1:1 crop of the
+centre. Frames are not stored, follow each other without delay, and exposure is capped
+at 2 s with the rest moved into gain (§4.3), so feedback comes every few seconds even at
+night. The hub switches it with the `focus_mode` command, args `{on: bool}` (§6.5).
+
+**Setup API** for the app's onboarding (§6.2 step 3); the app polls it about every 2 s
+until `paired` is true:
+
+`GET /api/setup` → `{device_id, hub_url, profile, agent_version, paired, pairing_code,
+expires_in, connected}`, where `pairing_code` is the raw 6-character code (no hyphen)
+or `null` once paired or before the first registration, `expires_in` counts down in
+seconds, and `connected` says whether the WebSocket to the hub is open.
+
+Until pairing can restrict it, the local UI has no authentication and is meant for the
+local network only.
+
+### 7.1 Setup mode
+
+The camera opens its own Wi-Fi network for setup:
+
+- **When:** on start without any configured Wi-Fi and without Ethernet, or when the
+  configured Wi-Fi has been unreachable for 2 minutes and there is no Ethernet.
+- **Network:** open Wi-Fi `allskyhub-XXXX`, where `XXXX` is the first four characters of
+  the device id in upper case. The camera is `10.42.0.1`, hands out addresses by DHCP
+  and answers every DNS query with `10.42.0.1` (captive portal). The local web UI is at
+  `http://10.42.0.1:8080/`; port 80 redirects there.
+- **End:** after the camera has joined a network, or after 15 minutes without a request.
+
+Endpoints, only reachable from the setup network:
+
+| Endpoint | Body → answer |
+|---|---|
+| `GET /api/setup` | as in §7, plus `setup_mode: true` and `last_error` |
+| `GET /api/wifi/networks` | → `[{ssid, signal, secure}]`, strongest first, hidden networks left out |
+| `POST /api/setup/network` | `{ssid, password?, country, hub_url?}` → `202 {will_join: ssid}` |
+
+- `country` is the ISO 3166 code for the radio rules; `hub_url` overrides the configured
+  hub (default `https://allskyhub.org`).
+- After answering `202` the camera leaves setup mode and joins the network. If that fails
+  it opens the setup network again and `/api/setup` reports `last_error` as
+  `wifi_auth`, `wifi_not_found` or `no_internet` (otherwise `null`).
+- The Wi-Fi password is stored only in the system's network configuration, never in
+  logs and never sent to the hub.
+
+### 7.2 Discovery
+
+On every network the camera announces itself by mDNS: host name `allskyhub-xxxx.local`
+(same four characters, lower case) and the DNS-SD service `_allskyhub._tcp` on the local
+web UI's port with the TXT records `id=<device id>` and `v=1`. After sending the network,
+the app rejoins the home Wi-Fi, browses `_allskyhub._tcp`, picks the entry whose `id`
+it saw in setup mode, and goes on polling `/api/setup` there until `paired` is true.
+Typing the camera's address is the fallback.
+
+### 7.3 Setup file
+
+For setting up without the app (and for cameras on Ethernet with a fixed hub): a file
+`allskyhub-setup.json` on the SD card's boot partition (`/boot/firmware/`):
+
+```json
+{"allskyhub_setup": 1, "wifi": {"ssid": "Home", "password": "secret"},
+ "wifi_country": "AT", "hub_url": "https://allskyhub.org"}
+```
+
+It is read once at boot, applied (Wi-Fi as a NetworkManager connection, country, hub)
+and deleted. An unusable file is renamed to `allskyhub-setup.failed.json` and not tried
+again.
 
 ## 8. Updates
 

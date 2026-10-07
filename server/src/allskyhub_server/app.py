@@ -141,7 +141,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         engine = create_engine(settings)
         app.state.engine = engine
         app.state.sessionmaker = create_sessionmaker(engine)
-        cleanup = asyncio.create_task(maintenance.run_forever(app.state.sessionmaker))
+        cleanup = asyncio.create_task(
+            maintenance.run_forever(app.state.sessionmaker, app.state.images, settings)
+        )
         try:
             yield
         finally:

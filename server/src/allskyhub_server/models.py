@@ -7,14 +7,17 @@ import uuid
 from typing import Any
 
 from sqlalchemy import (
+    BigInteger,
     Boolean,
     DateTime,
+    Float,
     ForeignKey,
     Index,
     Integer,
     LargeBinary,
     MetaData,
     String,
+    UniqueConstraint,
     func,
     text,
 )
@@ -100,8 +103,9 @@ class Device(Base):
     # Latest `status` and `frame` bodies (SPEC §6.3), as sent.
     last_status: Mapped[dict[str, Any] | None] = mapped_column(JSONB)
     last_frame: Mapped[dict[str, Any] | None] = mapped_column(JSONB)
-    # When the latest full image was stored (SPEC §6.5).
+    # When the latest full image and thumbnail were stored (SPEC §6.5).
     latest_image_at: Mapped[dt.datetime | None] = mapped_column(_tz())
+    latest_thumb_at: Mapped[dt.datetime | None] = mapped_column(_tz())
 
 
 class DeviceNonce(Base):
@@ -177,3 +181,25 @@ class Invitation(Base):
     created_at: Mapped[dt.datetime] = mapped_column(_tz(), server_default=func.now())
     expires_at: Mapped[dt.datetime] = mapped_column(_tz())
     used_at: Mapped[dt.datetime | None] = mapped_column(_tz())
+
+
+class Frame(Base):
+    """A frame the hub asked the device for (SPEC §4.4 metadata) and what it holds of it."""
+
+    __tablename__ = "frame"
+    __table_args__ = (UniqueConstraint("device_id", "night_id", "name"),)
+
+    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid7)
+    device_id: Mapped[str] = mapped_column(ForeignKey("device.id", ondelete="CASCADE"))
+    night_id: Mapped[str] = mapped_column(String(8))
+    name: Mapped[str] = mapped_column(String(128))
+    captured_at: Mapped[dt.datetime] = mapped_column(_tz())
+    mode: Mapped[str] = mapped_column(String(8))
+    exposure_us: Mapped[int] = mapped_column(BigInteger)
+    gain: Mapped[float] = mapped_column(Float)
+    mean: Mapped[float] = mapped_column(Float)
+    sun_elevation: Mapped[float] = mapped_column(Float)
+    has_full: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
+    has_thumb: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
+    # Retention counts from here, not from the device clock (SPEC §4.4: it may be wrong).
+    created_at: Mapped[dt.datetime] = mapped_column(_tz(), server_default=func.now(), index=True)

@@ -95,6 +95,12 @@ class ConnectionRegistry:
         await conn.send_text(Envelope.wrap(cmd, ts=now).model_dump_json())
         return True
 
+    def is_requested(self, device_id: str, night_id: str, name: str, variant: FrameVariant) -> bool:
+        """The hub asked for this upload and the window is still open."""
+        conn = self._conns.get(device_id)
+        until = conn.requested.get((night_id, name, variant)) if conn else None
+        return until is not None and until > _now()
+
     def take_upload(self, device_id: str, night_id: str, name: str, variant: FrameVariant) -> bool:
         """Accept an upload only if the hub asked for it and the window is open."""
         conn = self._conns.get(device_id)

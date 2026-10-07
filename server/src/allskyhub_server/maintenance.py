@@ -6,19 +6,23 @@ import asyncio
 import datetime as dt
 import logging
 
-from sqlalchemy import delete
+from sqlalchemy import delete, select, update
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
+from allskyhub_protocol import FrameVariant
 from allskyhub_server.auth.sessions import IDLE_TIMEOUT
+from allskyhub_server.devices.images import ImageStore
 from allskyhub_server.models import (
     AppToken,
     DeviceNonce,
     DeviceToken,
+    Frame,
     Invitation,
     PairingCode,
     RateLimit,
     WebSession,
 )
+from allskyhub_server.settings import Settings
 
 log = logging.getLogger(__name__)
 
@@ -28,9 +32,12 @@ INVITATION_KEEP = dt.timedelta(days=30)
 RATE_LIMIT_KEEP = dt.timedelta(days=2)
 
 
-async def purge(db: AsyncSession, now: dt.datetime | None = None) -> None:
+async def purge(
+    db: AsyncSession, store: ImageStore, settings: Settings, now: dt.datetime | None = None
+) -> None:
     """Delete everything that has expired. Commits."""
     now = now or dt.datetime.now(dt.UTC)
+    await _purge_frames(db, store, settings, now)
     await db.execute(
         delete(Invitation).where(
             Invitation.used_at.is_(None), Invitation.expires_at < now - INVITATION_KEEP
@@ -53,12 +60,48 @@ async def purge(db: AsyncSession, now: dt.datetime | None = None) -> None:
     await db.commit()
 
 
-async def run_forever(maker: async_sessionmaker[AsyncSession]) -> None:
+async def _purge_frames(
+    db: AsyncSession, store: ImageStore, settings: Settings, now: dt.datetime
+) -> None:
+    """Archive retention: full images after ``keep_full_days``, the frame with its thumbnail
+    after ``keep_thumb_days`` (counted from arrival at the hub)."""
+    full_cutoff = now - dt.timedelta(days=settings.keep_full_days)
+    thumb_cutoff = now - dt.timedelta(days=settings.keep_thumb_days)
+    old_full = (
+        await db.execute(
+            select(Frame.device_id, Frame.night_id, Frame.name).where(
+                Frame.has_full.is_(True), Frame.created_at < full_cutoff
+            )
+        )
+    ).all()
+    for device_id, night_id, name in old_full:
+        await asyncio.to_thread(store.delete_frame, device_id, night_id, name, FrameVariant.FULL)
+    await db.execute(
+        update(Frame)
+        .where(Frame.has_full.is_(True), Frame.created_at < full_cutoff)
+        .values(has_full=False)
+    )
+    old = (
+        await db.execute(
+            select(Frame.device_id, Frame.night_id, Frame.name).where(
+                Frame.created_at < thumb_cutoff
+            )
+        )
+    ).all()
+    for device_id, night_id, name in old:
+        for variant in FrameVariant:
+            await asyncio.to_thread(store.delete_frame, device_id, night_id, name, variant)
+    await db.execute(delete(Frame).where(Frame.created_at < thumb_cutoff))
+
+
+async def run_forever(
+    maker: async_sessionmaker[AsyncSession], store: ImageStore, settings: Settings
+) -> None:
     """Started by the app's lifespan; one pass right away, then every ``INTERVAL``."""
     while True:
         try:
             async with maker() as db:
-                await purge(db)
+                await purge(db, store, settings)
         except Exception:
             log.exception("clean-up failed")
         await asyncio.sleep(INTERVAL.total_seconds())

@@ -19,6 +19,7 @@ from allskyhub_server.models import (
     Frame,
     Invitation,
     PairingCode,
+    Product,
     RateLimit,
     WebSession,
 )
@@ -38,6 +39,7 @@ async def purge(
     """Delete everything that has expired. Commits."""
     now = now or dt.datetime.now(dt.UTC)
     await _purge_frames(db, store, settings, now)
+    await _purge_products(db, store, settings, now)
     await db.execute(
         delete(Invitation).where(
             Invitation.used_at.is_(None), Invitation.expires_at < now - INVITATION_KEEP
@@ -92,6 +94,44 @@ async def _purge_frames(
         for variant in FrameVariant:
             await asyncio.to_thread(store.delete_frame, device_id, night_id, name, variant)
     await db.execute(delete(Frame).where(Frame.created_at < thumb_cutoff))
+
+
+async def _purge_products(
+    db: AsyncSession, store: ImageStore, settings: Settings, now: dt.datetime
+) -> None:
+    """Night products: the timelapse (large) after ``keep_full_days`` from its arrival,
+    everything of a night after ``keep_thumb_days`` from the announcement."""
+    full_cutoff = now - dt.timedelta(days=settings.keep_full_days)
+    thumb_cutoff = now - dt.timedelta(days=settings.keep_thumb_days)
+    old_videos = (
+        await db.execute(
+            select(Product.device_id, Product.night_id, Product.name).where(
+                Product.kind == "timelapse",
+                Product.has_full.is_(True),
+                Product.full_at < full_cutoff,
+            )
+        )
+    ).all()
+    for device_id, night_id, name in old_videos:
+        await asyncio.to_thread(store.delete_product, device_id, night_id, name, FrameVariant.FULL)
+    await db.execute(
+        update(Product)
+        .where(
+            Product.kind == "timelapse", Product.has_full.is_(True), Product.full_at < full_cutoff
+        )
+        .values(has_full=False, full_at=None)
+    )
+    old = (
+        await db.execute(
+            select(Product.device_id, Product.night_id, Product.name).where(
+                Product.created_at < thumb_cutoff
+            )
+        )
+    ).all()
+    for device_id, night_id, name in old:
+        for variant in FrameVariant:
+            await asyncio.to_thread(store.delete_product, device_id, night_id, name, variant)
+    await db.execute(delete(Product).where(Product.created_at < thumb_cutoff))
 
 
 async def run_forever(

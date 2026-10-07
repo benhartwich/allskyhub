@@ -6,17 +6,21 @@ import asyncio
 import contextlib
 import datetime as dt
 import logging
+import os
+import pathlib
+import tempfile
 from typing import Annotated, Any
 
 from fastapi import APIRouter, HTTPException, Path, Query, Request, WebSocket
 from fastapi.responses import Response
 from pydantic import ValidationError
-from sqlalchemy import update
+from sqlalchemy import select, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from starlette.websockets import WebSocketDisconnect, WebSocketState
 
 from allskyhub_protocol import (
+    PRODUCT_NAMES,
     Ack,
     ChallengeRequest,
     ChallengeResponse,
@@ -25,6 +29,8 @@ from allskyhub_protocol import (
     FrameInfo,
     FrameVariant,
     Hello,
+    ProductKind,
+    Products,
     RegisterRequest,
     RegisterResponse,
     Status,
@@ -36,7 +42,7 @@ from allskyhub_server.auth import ratelimit
 from allskyhub_server.devices import pairing
 from allskyhub_server.devices.connections import Connection, ConnectionRegistry
 from allskyhub_server.devices.images import JPEG_MAGIC, ImageStore
-from allskyhub_server.models import Device, Frame
+from allskyhub_server.models import Device, Frame, Product
 from allskyhub_server.settings import Settings
 from allskyhub_server.web.deps import DbSession, SettingsDep, client_ip
 
@@ -183,6 +189,81 @@ async def upload_frame(
     return Response(status_code=204)
 
 
+_PRODUCT_TYPES = dict(PRODUCT_NAMES.values())
+MP4_BRAND_OFFSET = 4  # ISO BMFF: size (4 bytes), then the box type "ftyp"
+
+
+def _looks_like(content_type: str, head: bytes) -> bool:
+    if content_type == "image/jpeg":
+        return head.startswith(JPEG_MAGIC)
+    return head[MP4_BRAND_OFFSET : MP4_BRAND_OFFSET + 4] == b"ftyp"
+
+
+@router.put("/products/{night_id}/{name}", status_code=204)
+async def upload_product(
+    request: Request,
+    db: DbSession,
+    settings: SettingsDep,
+    night_id: Annotated[str, Path(pattern=NIGHT_ID)],
+    name: str,
+    variant: Annotated[FrameVariant, Query()] = FrameVariant.FULL,
+) -> Response:
+    """SPEC §6.5, §6.6: a requested night product, streamed to disk (up to
+    ``max_product_mb``). Rejected uploads keep the request, so the device can retry."""
+    info = await _device_from_bearer(request, db)
+    if name not in _PRODUCT_TYPES:
+        raise HTTPException(404, "Unknown product")
+    registry: ConnectionRegistry = request.app.state.connections
+    if not registry.is_requested(info.device_id, night_id, name, variant, "product"):
+        raise HTTPException(404, "Upload was not requested")
+    expected = _PRODUCT_TYPES[name] if variant is FrameVariant.FULL else "image/jpeg"
+    if request.headers.get("content-type", "").split(";")[0].strip() != expected:
+        raise HTTPException(400, f"Content-Type must be {expected}")
+    limit = settings.max_product_mb * 1024 * 1024
+    declared = request.headers.get("content-length")
+    if declared is not None and declared.isdigit() and int(declared) > limit:
+        raise HTTPException(413, "Product too large")
+
+    store: ImageStore = request.app.state.images
+    target = store.product_path(info.device_id, night_id, name, variant)
+    await asyncio.to_thread(target.parent.mkdir, parents=True, exist_ok=True)
+    fd, tmp_name = tempfile.mkstemp(dir=target.parent, suffix=".part")
+    tmp = pathlib.Path(tmp_name)
+    try:
+        with os.fdopen(fd, "wb") as fh:
+            size, head, buffer = 0, b"", bytearray()
+            async for chunk in request.stream():
+                size += len(chunk)
+                if size > limit:
+                    raise HTTPException(413, "Product too large")
+                if len(head) < 12:
+                    head = (head + chunk)[:12]
+                buffer.extend(chunk)
+                if len(buffer) >= 1024 * 1024:
+                    await asyncio.to_thread(fh.write, bytes(buffer))
+                    buffer.clear()
+            await asyncio.to_thread(fh.write, bytes(buffer))
+        if not _looks_like(expected, head):
+            raise HTTPException(400, f"Body is not {expected}")
+        if not registry.take_upload(info.device_id, night_id, name, variant, "product"):
+            raise HTTPException(404, "Upload was not requested")
+        await asyncio.to_thread(tmp.replace, target)
+    finally:
+        await asyncio.to_thread(tmp.unlink, missing_ok=True)
+    full = variant is FrameVariant.FULL
+    await db.execute(
+        update(Product)
+        .where(
+            Product.device_id == info.device_id,
+            Product.night_id == night_id,
+            Product.name == name,
+        )
+        .values({"has_full": True, "full_at": _now()} if full else {"has_thumb": True})
+    )
+    await db.commit()
+    return Response(status_code=204)
+
+
 # --- WebSocket (SPEC §6.1, §6.3, §6.5) ------------------------------------------------------
 
 
@@ -264,6 +345,8 @@ async def _handle(
         await _touch(maker, conn.device_id, last_status=body.model_dump(mode="json"))
     elif isinstance(body, FrameInfo):
         await _on_frame(body, conn, maker, settings, registry)
+    elif isinstance(body, Products):
+        await _on_products(body, conn, maker, registry)
     elif isinstance(body, Ack | ErrorReply):
         if isinstance(body, ErrorReply):
             log.info(
@@ -326,3 +409,53 @@ async def _on_frame(
         await registry.request_upload(
             conn.device_id, frame.night_id, frame.name, FrameVariant.THUMB
         )
+
+
+# Keogram and startrails are a few MB: fetched in full right away. The timelapse (up to
+# hundreds of MB) only when someone opens it (app API, ``request_product``).
+FETCH_AT_ONCE = frozenset({ProductKind.KEOGRAM, ProductKind.STARTRAILS})
+FETCH_AT_ONCE_MAX = 50 * 1024 * 1024
+
+
+async def _on_products(
+    body: Products,
+    conn: Connection,
+    maker: async_sessionmaker[AsyncSession],
+    registry: ConnectionRegistry,
+) -> None:
+    """SPEC §6.3: record the night's products and fetch thumbnails and small products.
+
+    A product that was rebuilt (other size) is fetched again."""
+    wanted: list[tuple[str, FrameVariant]] = []
+    async with maker() as db:
+        for item in body.products:
+            row = await db.scalar(
+                select(Product).where(
+                    Product.device_id == conn.device_id,
+                    Product.night_id == body.night_id,
+                    Product.name == item.name,
+                )
+            )
+            if row is None:
+                row = Product(
+                    device_id=conn.device_id,
+                    night_id=body.night_id,
+                    name=item.name,
+                    kind=item.kind.value,
+                    content_type=item.content_type,
+                    size=item.size,
+                    duration_s=item.duration_s,
+                    thumbnail=item.thumbnail,
+                )
+                db.add(row)
+            elif row.size != item.size:
+                row.size, row.duration_s, row.thumbnail = item.size, item.duration_s, item.thumbnail
+                row.has_full = row.has_thumb = False
+                row.full_at = None
+            if item.thumbnail and not row.has_thumb:
+                wanted.append((item.name, FrameVariant.THUMB))
+            if item.kind in FETCH_AT_ONCE and item.size <= FETCH_AT_ONCE_MAX and not row.has_full:
+                wanted.append((item.name, FrameVariant.FULL))
+        await db.commit()
+    for name, variant in wanted:
+        await registry.request_product(conn.device_id, body.night_id, name, variant)

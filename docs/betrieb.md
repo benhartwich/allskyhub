@@ -15,6 +15,8 @@ So läuft der Hub auf allskyhub.org; für einen eigenen Hub die Domain ersetzen.
 
 Der Hub läuft mit **einem** Worker: offene Geräte-WebSockets liegen im Prozess.
 
+Nachtprodukte (Keogramm, Sternspuren, Zeitraffer) liegen unter `images/<kamera>/<nacht>/products/`. Zeitraffer können einige hundert MB groß sein (`ALLSKYHUB_SERVER_MAX_PRODUCT_MB`, Standard 512); die nginx-Konfiguration lässt dafür bis 520 MB ohne Zwischenpuffer durch. Der Hub holt sie erst, wenn jemand sie öffnet.
+
 ## Ersteinrichtung
 
 ```bash

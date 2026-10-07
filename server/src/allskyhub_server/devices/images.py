@@ -2,7 +2,8 @@
 
 Every image the hub asked for is archived per night:
 ``<root>/<device>/<night_id>/<variant>/<name>``. ``latest-<variant>.jpg`` is a hard link to
-the newest one, so the latest image costs no extra space. Retention: maintenance.py.
+the newest one, so the latest image costs no extra space. Night products (SPEC §5.2) live in
+``<root>/<device>/<night_id>/products/<variant>/<name>``. Retention: maintenance.py.
 """
 
 from __future__ import annotations
@@ -48,6 +49,21 @@ class ImageStore:
         link.unlink(missing_ok=True)
         os.link(target, link)
         link.replace(latest)
+
+    def product_path(self, device_id: str, night_id: str, name: str, variant: FrameVariant) -> Path:
+        """``name`` is one of the fixed product names (PRODUCT_NAMES)."""
+        return self.root / device_id / night_id / "products" / variant.value / name
+
+    def delete_product(
+        self, device_id: str, night_id: str, name: str, variant: FrameVariant
+    ) -> None:
+        path = self.product_path(device_id, night_id, name, variant)
+        path.unlink(missing_ok=True)
+        for directory in (path.parent, path.parent.parent, path.parent.parent.parent):
+            try:
+                directory.rmdir()
+            except OSError:
+                break
 
     def delete_frame(self, device_id: str, night_id: str, name: str, variant: FrameVariant) -> None:
         path = self.frame_path(device_id, night_id, name, variant)

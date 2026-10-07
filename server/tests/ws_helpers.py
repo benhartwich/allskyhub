@@ -14,11 +14,10 @@ from allskyhub_protocol import (
     Command,
     Envelope,
     FrameInfo,
-    Hello,
     Mode,
-    Status,
     parse_envelope,
 )
+from allskyhub_protocol.models import Body
 from tests.fake_device import FakeDevice
 from tests.helpers import claim, make_account
 
@@ -54,7 +53,7 @@ def device_ws(host: str, token: str) -> connect:
     )
 
 
-async def send(ws: ClientConnection, body: Hello | Status | FrameInfo) -> None:
+async def send(ws: ClientConnection, body: Body) -> None:
     await ws.send(Envelope.wrap(body, ts=TS).model_dump_json())
 
 

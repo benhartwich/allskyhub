@@ -203,3 +203,26 @@ class Frame(Base):
     has_thumb: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
     # Retention counts from here, not from the device clock (SPEC §4.4: it may be wrong).
     created_at: Mapped[dt.datetime] = mapped_column(_tz(), server_default=func.now(), index=True)
+
+
+class Product(Base):
+    """A night product the device announced (SPEC §5.2, §6.3) and what the hub holds of it."""
+
+    __tablename__ = "product"
+    __table_args__ = (UniqueConstraint("device_id", "night_id", "name"),)
+
+    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid7)
+    device_id: Mapped[str] = mapped_column(ForeignKey("device.id", ondelete="CASCADE"))
+    night_id: Mapped[str] = mapped_column(String(8))
+    kind: Mapped[str] = mapped_column(String(16))
+    name: Mapped[str] = mapped_column(String(32))
+    content_type: Mapped[str] = mapped_column(String(32))
+    size: Mapped[int] = mapped_column(BigInteger)
+    duration_s: Mapped[float | None] = mapped_column(Float)
+    # The device has a thumbnail to offer (always JPEG).
+    thumbnail: Mapped[bool] = mapped_column(Boolean)
+    has_full: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
+    has_thumb: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
+    full_at: Mapped[dt.datetime | None] = mapped_column(_tz())
+    # Retention counts from the first announcement (privacy policy).
+    created_at: Mapped[dt.datetime] = mapped_column(_tz(), server_default=func.now(), index=True)

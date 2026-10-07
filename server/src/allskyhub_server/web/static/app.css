@@ -95,5 +95,3 @@ button.danger { background: transparent; color: var(--danger); border: 1px solid
 
 /* Imprint and privacy policy */
 .legal p + p { margin-top: 8px; }
-.todo { color: var(--warn); font-weight: 600; }
-.todo::before { content: "⚠ "; }

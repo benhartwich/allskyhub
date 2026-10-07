@@ -3,6 +3,7 @@
 import 'package:flutter/material.dart';
 
 import '../api/hub_client.dart';
+import 'product_screens.dart';
 
 const _weekdays = ['Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa', 'So'];
 
@@ -15,6 +16,18 @@ String nightTitle(Night night) {
   String day(DateTime d) =>
       '${_weekdays[d.weekday - 1]} ${_two(d.day)}.${_two(d.month)}.';
   return '${day(evening)} → ${day(morning)}';
+}
+
+/// "120 Bilder · 19:02–05:41 · 3 Produkte"; first/last are null for nights with only products.
+String nightSubtitle(Night night) {
+  final first = night.first;
+  final last = night.last;
+  return [
+    if (night.frames > 0) '${night.frames} Bilder',
+    if (first != null && last != null) '${clock(first)}–${clock(last)}',
+    if (night.products > 0)
+      '${night.products} Produkt${night.products == 1 ? '' : 'e'}',
+  ].join(' · ');
 }
 
 String exposure(int microseconds) => microseconds >= 1000000
@@ -78,9 +91,7 @@ class _NightsScreenState extends State<NightsScreen> {
                 return ListTile(
                   leading: const Icon(Icons.nights_stay_outlined),
                   title: Text(nightTitle(night)),
-                  subtitle: Text(
-                    '${night.frames} Bilder · ${clock(night.first)}–${clock(night.last)}',
-                  ),
+                  subtitle: Text(nightSubtitle(night)),
                   trailing: const Icon(Icons.chevron_right),
                   onTap: () => Navigator.of(context).push(
                     MaterialPageRoute<void>(
@@ -122,6 +133,9 @@ class _NightScreenState extends State<NightScreen> {
     widget.camera.id,
     widget.night.nightId,
   );
+  late final Future<List<Product>> _products = widget.night.products == 0
+      ? Future.value(const <Product>[])
+      : widget.client.products(widget.camera.id, widget.night.nightId);
 
   @override
   Widget build(BuildContext context) {
@@ -137,69 +151,90 @@ class _NightScreenState extends State<NightScreen> {
           if (frames == null) {
             return const Center(child: CircularProgressIndicator());
           }
-          return GridView.builder(
-            padding: const EdgeInsets.all(4),
-            gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
-              maxCrossAxisExtent: 140,
-              mainAxisSpacing: 4,
-              crossAxisSpacing: 4,
-            ),
-            itemCount: frames.length,
-            itemBuilder: (context, i) {
-              final frame = frames[i];
-              return InkWell(
-                key: ValueKey(frame.name),
-                onTap: () => Navigator.of(context).push(
-                  MaterialPageRoute<void>(
-                    builder: (_) => FrameViewer(
+          return CustomScrollView(
+            slivers: [
+              SliverToBoxAdapter(
+                child: FutureBuilder<List<Product>>(
+                  future: _products,
+                  builder: (context, snapshot) {
+                    final products = snapshot.data ?? const <Product>[];
+                    if (products.isEmpty) return const SizedBox.shrink();
+                    return ProductStrip(
                       client: widget.client,
                       cameraId: widget.camera.id,
                       nightId: widget.night.nightId,
-                      frames: frames,
-                      initial: i,
-                    ),
-                  ),
+                      products: products,
+                    );
+                  },
                 ),
-                child: Stack(
-                  fit: StackFit.expand,
-                  children: [
-                    _ArchiveImage(
-                      client: widget.client,
-                      url: widget.client.frameUrl(
-                        widget.camera.id,
-                        widget.night.nightId,
-                        frame.name,
-                        thumb: true,
-                      ),
-                      fit: BoxFit.cover,
-                    ),
-                    Positioned(
-                      left: 4,
-                      bottom: 4,
-                      child: DecoratedBox(
-                        decoration: BoxDecoration(
-                          color: Colors.black54,
-                          borderRadius: BorderRadius.circular(4),
-                        ),
-                        child: Padding(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 4,
-                            vertical: 1,
+              ),
+              SliverPadding(
+                padding: const EdgeInsets.all(4),
+                sliver: SliverGrid.builder(
+                  gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
+                    maxCrossAxisExtent: 140,
+                    mainAxisSpacing: 4,
+                    crossAxisSpacing: 4,
+                  ),
+                  itemCount: frames.length,
+                  itemBuilder: (context, i) {
+                    final frame = frames[i];
+                    return InkWell(
+                      key: ValueKey(frame.name),
+                      onTap: () => Navigator.of(context).push(
+                        MaterialPageRoute<void>(
+                          builder: (_) => FrameViewer(
+                            client: widget.client,
+                            cameraId: widget.camera.id,
+                            nightId: widget.night.nightId,
+                            frames: frames,
+                            initial: i,
                           ),
-                          child: Text(
-                            clock(frame.capturedAt),
-                            style: const TextStyle(
-                              color: Colors.white,
-                              fontSize: 11,
+                        ),
+                      ),
+                      child: Stack(
+                        fit: StackFit.expand,
+                        children: [
+                          _ArchiveImage(
+                            client: widget.client,
+                            url: widget.client.frameUrl(
+                              widget.camera.id,
+                              widget.night.nightId,
+                              frame.name,
+                              thumb: true,
+                            ),
+                            fit: BoxFit.cover,
+                          ),
+                          Positioned(
+                            left: 4,
+                            bottom: 4,
+                            child: DecoratedBox(
+                              decoration: BoxDecoration(
+                                color: Colors.black54,
+                                borderRadius: BorderRadius.circular(4),
+                              ),
+                              child: Padding(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 4,
+                                  vertical: 1,
+                                ),
+                                child: Text(
+                                  clock(frame.capturedAt),
+                                  style: const TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 11,
+                                  ),
+                                ),
+                              ),
                             ),
                           ),
-                        ),
+                        ],
                       ),
-                    ),
-                  ],
+                    );
+                  },
                 ),
-              );
-            },
+              ),
+            ],
           );
         },
       ),

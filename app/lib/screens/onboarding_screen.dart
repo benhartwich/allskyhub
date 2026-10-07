@@ -78,13 +78,40 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
     if (!fromInitState) setState(() {});
   }
 
+  bool _finishing = false;
+
   void _changed() {
     final controller = _controller!;
     if (controller.phase == OnboardingPhase.done) {
-      Navigator.of(context).pop(controller.camera);
+      if (!_finishing) _finish(controller);
       return;
     }
     setState(() {});
+  }
+
+  /// Paired. If the camera has no location yet it will not capture (SPEC §7.1): say so.
+  Future<void> _finish(OnboardingController controller) async {
+    _finishing = true;
+    if (controller.info?.locationSet == false) {
+      await showDialog<void>(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: const Text('Standort fehlt'),
+          content: const Text(
+            'Die Kamera ist gekoppelt, kennt aber ihren Standort noch nicht und nimmt deshalb '
+            'noch nicht auf. Richte sie über ihr WLAN „allskyhub-…“ neu ein (dort fragt die App '
+            'nach dem Standort) oder trage ihn in der Einrichtungsdatei auf der SD-Karte ein.',
+          ),
+          actions: [
+            FilledButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Verstanden'),
+            ),
+          ],
+        ),
+      );
+    }
+    if (mounted) Navigator.of(context).pop(controller.camera);
   }
 
   void _restart() {

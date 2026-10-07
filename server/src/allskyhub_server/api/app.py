@@ -10,16 +10,17 @@ from __future__ import annotations
 import datetime as dt
 from typing import Annotated, Any
 
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Path, Request
 from fastapi.responses import FileResponse, Response
 from pydantic import BaseModel, ConfigDict, Field
+from sqlalchemy import func, select
 
 from allskyhub_protocol import CloseCode, FrameVariant
 from allskyhub_server.auth import accounts, app_tokens, ratelimit
 from allskyhub_server.devices import pairing, queries
 from allskyhub_server.devices.connections import ConnectionRegistry
 from allskyhub_server.devices.images import ImageStore
-from allskyhub_server.models import Device, User
+from allskyhub_server.models import Device, Frame, User
 from allskyhub_server.web.deps import DbSession, SettingsDep, client_ip
 
 router = APIRouter(prefix="/api/v1")
@@ -44,6 +45,26 @@ class LoginResponse(BaseModel):
 class ClaimRequest(_In):
     code: str = Field(max_length=20)
     name: str = Field(default="", max_length=100)
+
+
+class Night(BaseModel):
+    night_id: str
+    frames: int
+    first: dt.datetime
+    last: dt.datetime
+
+
+class FrameItem(BaseModel):
+    """A frame in the archive (SPEC §4.4); ``has_full`` is false once the full image aged
+    out (``keep_full_days``) or was not requested."""
+
+    name: str
+    captured_at: dt.datetime
+    mode: str
+    exposure_us: int
+    gain: float
+    sun_elevation: float
+    has_full: bool
 
 
 class Camera(BaseModel):
@@ -197,3 +218,70 @@ async def remove(request: Request, db: DbSession, user: AppUser, device_id: str)
     store.delete_device(device.id)
     await _registry(request).close(device.id, CloseCode.UNPAIRED)
     return Response(status_code=204)
+
+
+NIGHT_ID = r"^\d{8}$"
+FRAME_NAME = r"^[A-Za-z0-9._-]{1,128}$"
+
+
+@router.get("/cameras/{device_id}/nights")
+async def nights(db: DbSession, user: AppUser, device_id: str) -> list[Night]:
+    """Nights with archived frames, newest first."""
+    device = await _own(db, user, device_id)
+    rows = await db.execute(
+        select(
+            Frame.night_id, func.count(), func.min(Frame.captured_at), func.max(Frame.captured_at)
+        )
+        .where(Frame.device_id == device.id, Frame.has_thumb.is_(True))
+        .group_by(Frame.night_id)
+        .order_by(Frame.night_id.desc())
+    )
+    return [Night(night_id=n, frames=c, first=f, last=last) for n, c, f, last in rows]
+
+
+@router.get("/cameras/{device_id}/nights/{night_id}/frames")
+async def frames(
+    db: DbSession,
+    user: AppUser,
+    device_id: str,
+    night_id: Annotated[str, Path(pattern=NIGHT_ID)],
+) -> list[FrameItem]:
+    device = await _own(db, user, device_id)
+    rows = await db.scalars(
+        select(Frame)
+        .where(Frame.device_id == device.id, Frame.night_id == night_id, Frame.has_thumb.is_(True))
+        .order_by(Frame.captured_at)
+    )
+    return [
+        FrameItem(
+            name=f.name,
+            captured_at=f.captured_at,
+            mode=f.mode,
+            exposure_us=f.exposure_us,
+            gain=f.gain,
+            sun_elevation=f.sun_elevation,
+            has_full=f.has_full,
+        )
+        for f in rows
+    ]
+
+
+@router.get("/cameras/{device_id}/frames/{night_id}/{name}/{variant}.jpg")
+async def frame_image(
+    request: Request,
+    db: DbSession,
+    user: AppUser,
+    device_id: str,
+    night_id: Annotated[str, Path(pattern=NIGHT_ID)],
+    name: Annotated[str, Path(pattern=FRAME_NAME)],
+    variant: FrameVariant,
+) -> Response:
+    device = await _own(db, user, device_id)
+    store: ImageStore = request.app.state.images
+    path = store.frame_path(device.id, night_id, name, variant)
+    if not path.is_file():
+        raise HTTPException(404, "Not found")
+    # Archived images never change: the app may cache them.
+    return FileResponse(
+        path, media_type="image/jpeg", headers={"Cache-Control": "private, max-age=86400"}
+    )

@@ -24,6 +24,11 @@ class Settings(BaseSettings):
     data_dir: Path = Path("/var/lib/allskyhub-server")
     # SPEC §6.5: the hub asks for a new latest image at most this often (live view: every frame).
     latest_image_interval_s: int = Field(default=300, ge=10)
+    # Thumbnails for the per-night gallery are fetched more often than full images.
+    thumb_interval_s: int = Field(default=60, ge=10)
+    # Archive retention (privacy policy): full images and thumbnails.
+    keep_full_days: int = Field(default=7, ge=1)
+    keep_thumb_days: int = Field(default=30, ge=1)
     max_image_mb: int = Field(default=25, ge=1)
 
     session_cookie_name: str = "allskyhub_session"

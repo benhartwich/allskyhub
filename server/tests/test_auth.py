@@ -134,6 +134,8 @@ async def test_legal_pages_are_public(client: httpx.AsyncClient) -> None:
     assert privacy.status_code == 200
     assert "Datenschutzbehörde" in privacy.text
     assert "netcup GmbH" in privacy.text
+    assert "nach 7 Tagen" in privacy.text  # settings.keep_full_days
+    assert "nach 30 Tagen" in privacy.text  # settings.keep_thumb_days
     assert "Entwurf" not in privacy.text
     assert "TODO" not in privacy.text + imprint.text
     home = await client.get("/")

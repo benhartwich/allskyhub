@@ -11,11 +11,12 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from allskyhub_server import maintenance
 from allskyhub_server.models import Invitation, WebSession
+from allskyhub_server.settings import Settings
 from tests.helpers import invite, make_account
 
 
 async def test_purge_removes_old_invitations_and_expired_sessions(
-    app: FastAPI, client: httpx.AsyncClient, new_client: httpx.AsyncClient
+    app: FastAPI, settings: Settings, client: httpx.AsyncClient, new_client: httpx.AsyncClient
 ) -> None:
     await make_account(client)  # accepted invitation + live session
     await invite(new_client, "pending@example.org")  # open invitation
@@ -26,12 +27,12 @@ async def test_purge_removes_old_invitations_and_expired_sessions(
             return int(await db.scalar(select(func.count()).select_from(model)) or 0)
 
     async with maker() as db:
-        await maintenance.purge(db)
+        await maintenance.purge(db, app.state.images, settings)
     assert await count(Invitation) == 1  # the accepted one is gone, the open one stays
     assert await count(WebSession) == 1
 
     later = dt.datetime.now(dt.UTC) + dt.timedelta(days=7 + 30 + 1)
     async with maker() as db:
-        await maintenance.purge(db, now=later)
+        await maintenance.purge(db, app.state.images, settings, now=later)
     assert await count(Invitation) == 0
     assert await count(WebSession) == 0

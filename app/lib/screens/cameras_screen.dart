@@ -5,6 +5,7 @@ import '../api/hub_client.dart';
 import '../api/setup_mode.dart';
 import '../platform/wifi_binding.dart';
 import 'camera_screen.dart';
+import 'gallery_screens.dart';
 import 'onboarding_screen.dart';
 import 'pair_screen.dart';
 import 'setup_mode_screen.dart';
@@ -190,6 +191,22 @@ class _CameraCard extends StatelessWidget {
               title: Text(camera.name),
               subtitle: Text(camera.profile),
               trailing: Chip(label: Text(camera.online ? 'online' : 'offline')),
+            ),
+            Align(
+              alignment: Alignment.centerLeft,
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(8, 0, 8, 8),
+                child: TextButton.icon(
+                  icon: const Icon(Icons.photo_library_outlined),
+                  label: const Text('Galerie'),
+                  onPressed: () => Navigator.of(context).push(
+                    MaterialPageRoute<void>(
+                      builder: (_) =>
+                          NightsScreen(client: client, camera: camera),
+                    ),
+                  ),
+                ),
+              ),
             ),
           ],
         ),

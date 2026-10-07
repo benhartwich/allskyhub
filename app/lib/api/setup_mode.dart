@@ -4,6 +4,7 @@
 
 import 'package:flutter/foundation.dart';
 
+import '../platform/location.dart';
 import '../platform/wifi_binding.dart';
 import 'camera_setup.dart';
 import 'discovery.dart';
@@ -32,6 +33,7 @@ class SetupModeController extends ChangeNotifier {
     required this.hub,
     required this.binding,
     required this.discovery,
+    required this.locationSource,
     CameraSetupClient? setup,
     this.searchTimeout = const Duration(minutes: 2),
   }) : setup = setup ?? CameraSetupClient(setupModeUri);
@@ -39,6 +41,7 @@ class SetupModeController extends ChangeNotifier {
   final HubClient hub;
   final WifiBinding binding;
   final CameraDiscovery discovery;
+  final LocationSource locationSource;
   final CameraSetupClient setup;
   final Duration searchTimeout;
 
@@ -47,6 +50,30 @@ class SetupModeController extends ChangeNotifier {
   List<WifiNetwork> networks = const [];
   Uri? cameraUri;
   String? error;
+
+  /// Where the camera stands (SPEC §7.1): from the phone or typed in.
+  CameraLocation? location;
+  LocationProblem? locationProblem;
+  bool locating = false;
+
+  /// The phone's IANA time zone, sent along with the location.
+  String? timezone;
+
+  /// Use the phone's position (asks for permission).
+  Future<void> locate() async {
+    locating = true;
+    notifyListeners();
+    final result = await locationSource.current();
+    locating = false;
+    location = result.location ?? location;
+    locationProblem = result.problem;
+    notifyListeners();
+  }
+
+  void setLocation(CameraLocation? value) {
+    location = value;
+    notifyListeners();
+  }
 
   void _set(SetupPhase next, {String? error}) {
     phase = next;
@@ -72,6 +99,7 @@ class SetupModeController extends ChangeNotifier {
       }
       info = current;
       networks = await setup.networks();
+      timezone ??= await locationSource.timezone();
       _set(
         SetupPhase.chooseNetwork,
         error: describeSetupError(current.lastError),
@@ -111,6 +139,9 @@ class SetupModeController extends ChangeNotifier {
         password: password,
         country: country,
         hubUrl: hub.baseUrl,
+        latitude: location?.latitude,
+        longitude: location?.longitude,
+        timezone: timezone,
       );
     } on Exception {
       _set(

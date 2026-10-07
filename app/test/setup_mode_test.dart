@@ -6,6 +6,7 @@ import 'package:allskyhub_app/api/camera_setup.dart';
 import 'package:allskyhub_app/api/discovery.dart';
 import 'package:allskyhub_app/api/hub_client.dart';
 import 'package:allskyhub_app/api/setup_mode.dart';
+import 'package:allskyhub_app/platform/location.dart';
 import 'package:allskyhub_app/platform/wifi_binding.dart';
 import 'package:allskyhub_app/screens/setup_mode_screen.dart';
 import 'package:flutter/material.dart';
@@ -28,6 +29,18 @@ class FakeBinding implements WifiBinding {
 
   @override
   Future<void> unbind() async => calls.add('unbind');
+}
+
+class FakeLocation implements LocationSource {
+  LocationResult result = LocationResult.found(
+    CameraLocation(48.1372, 14.3951),
+  );
+
+  @override
+  Future<LocationResult> current() async => result;
+
+  @override
+  Future<String?> timezone() async => 'Europe/Vienna';
 }
 
 class FakeDiscovery implements CameraDiscovery {
@@ -56,11 +69,13 @@ class Fixture {
   Map<String, dynamic>? sent;
   final binding = FakeBinding();
   final discovery = FakeDiscovery();
+  final location = FakeLocation();
 
   late final controller = SetupModeController(
     hub: HubClient(baseUrl: hubUrl, token: 'tok'),
     binding: binding,
     discovery: discovery,
+    locationSource: location,
     setup: CameraSetupClient(
       setupModeUri,
       httpClient: MockClient((request) async {
@@ -109,12 +124,18 @@ void main() {
       expect(f.controller.networks.map((n) => n.ssid), ['Home', 'Guest']);
       expect(f.binding.calls, ['bind']);
 
+      expect(f.controller.timezone, 'Europe/Vienna');
+      await f.controller.locate();
+      expect(f.controller.location?.latitude, 48.14); // rounded to about 1 km
       await f.controller.send(ssid: 'Home', password: 'secret', country: 'de');
       expect(f.sent, {
         'ssid': 'Home',
         'password': 'secret',
         'country': 'DE',
         'hub_url': hubUrl,
+        'latitude': 48.14,
+        'longitude': 14.4,
+        'timezone': 'Europe/Vienna',
       });
       expect(f.binding.calls, ['bind', 'unbind']);
       expect(f.discovery.askedFor, deviceId);
@@ -192,6 +213,12 @@ void main() {
   testWidgets('screen: choose the network, password rules, send', (
     tester,
   ) async {
+    tester.view.physicalSize = const Size(
+      400,
+      2400,
+    ); // the whole form on one screen
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
     final f = Fixture();
     await tester.pumpWidget(
       MaterialApp(home: SetupModeScreen(controller: f.controller)),
@@ -213,13 +240,58 @@ void main() {
       'long enough',
     );
     await tester.pump();
+    final sendButton = find.widgetWithText(FilledButton, 'Kamera verbinden');
+    expect(
+      tester.widget<FilledButton>(sendButton).onPressed,
+      isNull,
+    ); // no location yet
+    f.location.result = const LocationResult.missing(LocationProblem.denied);
+    await tester.ensureVisible(find.byKey(const Key('locate')));
+    await tester.tap(find.byKey(const Key('locate')));
+    await tester.pump();
+    expect(
+      find.textContaining('Gib die Koordinaten der Kamera ein'),
+      findsOneWidget,
+    );
+    await tester.enterText(find.byKey(const Key('latitude')), '47,8');
+    await tester.enterText(find.byKey(const Key('longitude')), '13.05');
+    await tester.pump();
     await tester.ensureVisible(send);
     await tester.tap(send);
     await tester.pumpAndSettle();
     expect(f.sent, containsPair('password', 'long enough'));
+    expect(f.sent, containsPair('latitude', 47.8));
+    expect(f.sent, containsPair('longitude', 13.05));
+    expect(f.sent, containsPair('timezone', 'Europe/Vienna'));
     expect(
       find.text('Weiter suchen'),
       findsOneWidget,
     ); // discovery found nothing
+  });
+
+  test('manual coordinates are checked and rounded', () {
+    expect(CameraLocation.tryParse('47,812', '13.049')?.latitude, 47.81);
+    expect(CameraLocation.tryParse('91', '13'), isNull);
+    expect(CameraLocation.tryParse('47', 'x'), isNull);
+    expect(CameraLocation.tryParse('-33.9', '151.2')?.longitude, 151.2);
+  });
+
+  test('setup info reports a missing location', () {
+    final info = SetupInfo.fromJson({
+      'device_id': deviceId,
+      'hub_url': hubUrl,
+      'paired': true,
+      'location_set': false,
+      'timezone': null,
+      'camera': 'auto',
+    });
+    expect(info.locationSet, isFalse);
+    expect(info.camera, 'auto');
+    final old = SetupInfo.fromJson({
+      'device_id': deviceId,
+      'hub_url': hubUrl,
+      'paired': true,
+    });
+    expect(old.locationSet, isTrue); // older agents: no false alarm
   });
 }

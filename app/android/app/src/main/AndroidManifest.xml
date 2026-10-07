@@ -4,6 +4,8 @@
     <!-- Setup mode (SPEC §7.1): bind to the camera's Wi-Fi; discovery by mDNS (§7.2). -->
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE"/>
     <uses-permission android:name="android.permission.CHANGE_WIFI_MULTICAST_STATE"/>
+    <!-- SPEC §7.1: the camera's coarse location (about 1 km) during setup. -->
+    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION"/>
     <application
         android:label="allskyhub"
         android:networkSecurityConfig="@xml/network_security_config"

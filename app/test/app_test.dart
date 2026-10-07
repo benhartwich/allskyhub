@@ -93,6 +93,58 @@ void main() {
       const SizedBox(),
     ); // dispose: stops the polling timer
   });
+
+  testWidgets('after pairing, a camera without location gets a clear hint', (
+    tester,
+  ) async {
+    final setupJson = {
+      'device_id': 'aaaaaaaaaaaaaaaaaaaaaaaaaa',
+      'hub_url': 'https://hub.example',
+      'paired': true,
+      'location_set': false,
+    };
+    final hub = HubClient(
+      baseUrl: 'https://hub.example',
+      token: 'tok',
+      httpClient: MockClient(
+        (_) async => http.Response(jsonEncode(cameraJson), 200),
+      ),
+    );
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Builder(
+          builder: (context) => TextButton(
+            onPressed: () => Navigator.of(context).push(
+              MaterialPageRoute<void>(
+                builder: (_) => OnboardingScreen(
+                  client: hub,
+                  cameraUri: Uri.parse('http://192.168.1.77:8080'),
+                  setupClientFor: (base) => CameraSetupClient(
+                    base,
+                    httpClient: MockClient(
+                      (_) async => http.Response(jsonEncode(setupJson), 200),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+            child: const Text('start'),
+          ),
+        ),
+      ),
+    );
+    await tester.tap(find.text('start'));
+    // The spinner keeps animating, so pump step by step instead of settling.
+    for (var i = 0; i < 10; i++) {
+      await tester.pump(const Duration(milliseconds: 100));
+    }
+    expect(find.text('Standort fehlt'), findsOneWidget);
+    await tester.tap(find.text('Verstanden'));
+    for (var i = 0; i < 10; i++) {
+      await tester.pump(const Duration(milliseconds: 100));
+    }
+    expect(find.text('start'), findsOneWidget); // back on the list
+  });
 }
 
 class _NoHub extends HubClient {

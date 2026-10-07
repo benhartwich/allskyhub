@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../api/camera_setup.dart';
 import '../api/hub_client.dart';
 import '../api/setup_mode.dart';
+import '../platform/location.dart';
 import 'onboarding_screen.dart';
 
 /// A new camera without network: set it up through its own Wi-Fi (SPEC §7.1), then pair.
@@ -20,6 +21,8 @@ class _SetupModeScreenState extends State<SetupModeScreen> {
   final _country = TextEditingController();
   final _name = TextEditingController();
   final _address = TextEditingController();
+  final _latitude = TextEditingController();
+  final _longitude = TextEditingController();
   WifiNetwork? _network;
 
   SetupModeController get c => widget.controller;
@@ -28,6 +31,9 @@ class _SetupModeScreenState extends State<SetupModeScreen> {
   bool get _canSend {
     final network = _network;
     if (network == null || _country.text.trim().length != 2) return false;
+    if (c.location == null) {
+      return false; // the camera does not capture without it
+    }
     final length = _password.text.length;
     return !network.secure || (length >= 8 && length <= 63);
   }
@@ -49,10 +55,19 @@ class _SetupModeScreenState extends State<SetupModeScreen> {
     _country.dispose();
     _name.dispose();
     _address.dispose();
+    _latitude.dispose();
+    _longitude.dispose();
     super.dispose();
   }
 
   void _changed() {
+    // Show a position from the phone in the fields, so it can be checked or corrected.
+    final location = c.location;
+    if (location != null &&
+        CameraLocation.tryParse(_latitude.text, _longitude.text) == null) {
+      _latitude.text = location.latitude.toStringAsFixed(2);
+      _longitude.text = location.longitude.toStringAsFixed(2);
+    }
     if (c.phase == SetupPhase.found) {
       _pair(c.cameraUri!);
       return;
@@ -194,6 +209,8 @@ class _SetupModeScreenState extends State<SetupModeScreen> {
         ],
       ),
       const SizedBox(height: 20),
+      ..._locationSection(),
+      const SizedBox(height: 20),
       FilledButton(
         onPressed: !_canSend
             ? null
@@ -204,6 +221,78 @@ class _SetupModeScreenState extends State<SetupModeScreen> {
               ),
         child: const Text('Kamera verbinden'),
       ),
+    ];
+  }
+
+  List<Widget> _locationSection() {
+    final theme = Theme.of(context);
+    final problem = c.locationProblem;
+    void manual(String _) =>
+        c.setLocation(CameraLocation.tryParse(_latitude.text, _longitude.text));
+    return [
+      Text('Standort der Kamera', style: theme.textTheme.titleSmall),
+      const SizedBox(height: 4),
+      const Text(
+        'Die Kamera braucht ihren Standort für Sonnenstand und Tag/Nacht. Etwa 1 km genau genügt.',
+      ),
+      const SizedBox(height: 8),
+      OutlinedButton.icon(
+        key: const Key('locate'),
+        onPressed: c.locating ? null : c.locate,
+        icon: const Icon(Icons.my_location),
+        label: Text(
+          c.locating
+              ? 'Standort wird bestimmt …'
+              : 'Standort des Handys übernehmen',
+        ),
+      ),
+      if (problem != null) ...[
+        const SizedBox(height: 8),
+        Text(
+          describeLocationProblem(problem),
+          style: TextStyle(color: theme.colorScheme.error),
+        ),
+      ],
+      const SizedBox(height: 8),
+      Row(
+        children: [
+          Expanded(
+            child: TextField(
+              key: const Key('latitude'),
+              controller: _latitude,
+              keyboardType: const TextInputType.numberWithOptions(
+                decimal: true,
+                signed: true,
+              ),
+              onChanged: manual,
+              decoration: const InputDecoration(
+                labelText: 'Breite',
+                hintText: '48.14',
+              ),
+            ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: TextField(
+              key: const Key('longitude'),
+              controller: _longitude,
+              keyboardType: const TextInputType.numberWithOptions(
+                decimal: true,
+                signed: true,
+              ),
+              onChanged: manual,
+              decoration: const InputDecoration(
+                labelText: 'Länge',
+                hintText: '14.39',
+              ),
+            ),
+          ),
+        ],
+      ),
+      if (c.timezone != null) ...[
+        const SizedBox(height: 8),
+        Text('Zeitzone: ${c.timezone}', style: theme.textTheme.bodySmall),
+      ],
     ];
   }
 

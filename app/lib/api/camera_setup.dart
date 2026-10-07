@@ -22,6 +22,9 @@ class SetupInfo {
     this.agentVersion = '',
     this.setupMode = false,
     this.lastError,
+    this.locationSet = true,
+    this.timezone,
+    this.camera,
   });
 
   factory SetupInfo.fromJson(Map<String, dynamic> json) => SetupInfo(
@@ -34,6 +37,10 @@ class SetupInfo {
     agentVersion: (json['agent_version'] as String?) ?? '',
     setupMode: (json['setup_mode'] as bool?) ?? false,
     lastError: json['last_error'] as String?,
+    // Older agents do not report it; assume set so no false alarm is shown.
+    locationSet: (json['location_set'] as bool?) ?? true,
+    timezone: json['timezone'] as String?,
+    camera: json['camera'] as String?,
   );
 
   final String deviceId;
@@ -52,6 +59,15 @@ class SetupInfo {
   /// Why the last attempt to join a network failed: `wifi_auth`, `wifi_not_found`,
   /// `no_internet`, or null.
   final String? lastError;
+
+  /// The camera knows where it stands (SPEC §7.1); without it, it does not capture.
+  final bool locationSet;
+
+  /// IANA time zone the camera uses, e.g. "Europe/Vienna".
+  final String? timezone;
+
+  /// Camera driver: "auto", "zwo-asi678mc", "rpi-hq" or "sim".
+  final String? camera;
 
   /// Network name of the setup mode: `allskyhub-` and the id's first four characters.
   String get setupSsid => 'allskyhub-${deviceId.substring(0, 4).toUpperCase()}';
@@ -128,7 +144,11 @@ class CameraSetupClient {
     String? password,
     required String country,
     String? hubUrl,
+    double? latitude,
+    double? longitude,
+    String? timezone,
   }) async {
+    assert((latitude == null) == (longitude == null), 'both or neither');
     final response = await _http
         .post(
           baseUri.replace(path: '/api/setup/network'),
@@ -138,6 +158,9 @@ class CameraSetupClient {
             if (password != null && password.isNotEmpty) 'password': password,
             'country': country.toUpperCase(),
             'hub_url': ?hubUrl,
+            'latitude': ?latitude,
+            'longitude': ?longitude,
+            'timezone': ?timezone,
           }),
         )
         .timeout(const Duration(seconds: 10));

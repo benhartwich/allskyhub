@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 
 import '../api/hub_client.dart';
+import 'camera_status.dart';
 
 /// Live view: polls the latest image with `live=true` every few seconds, so the hub asks
 /// the camera for every frame while this screen is open (SPEC §6.5).
@@ -75,9 +76,13 @@ class _CameraScreenState extends State<CameraScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final status = _camera.status;
-    final exposure = status['exposure_us'];
-    final temp = status['sensor_temp_c'];
+    final theme = Theme.of(context);
+    final image = _camera.latestImageAt;
+    final rows = statusRows(
+      status: _camera.status,
+      frame: _camera.frame,
+      lastSeen: _camera.lastSeenAt,
+    );
     return Scaffold(
       appBar: AppBar(
         title: Text(_camera.name),
@@ -90,12 +95,13 @@ class _CameraScreenState extends State<CameraScreen> {
         ],
       ),
       body: ListView(
+        padding: const EdgeInsets.only(bottom: 24),
         children: [
           AspectRatio(
             aspectRatio: 1,
             child: ColoredBox(
               color: Colors.black,
-              child: _camera.latestImageAt == null
+              child: image == null
                   ? Center(
                       child: Text(
                         _camera.online
@@ -115,22 +121,75 @@ class _CameraScreenState extends State<CameraScreen> {
                     ),
             ),
           ),
-          ListTile(
-            title: Text(_camera.online ? 'Online' : 'Offline'),
-            subtitle: Text(
-              status.isEmpty
-                  ? 'Noch kein Status'
-                  : '${status['mode'] == 'night' ? 'Nacht' : 'Tag'}'
-                        '${exposure is num ? ' · ${(exposure / 1e6).toStringAsPrecision(3)} s' : ''}'
-                        '${status['gain'] != null ? ' · Gain ${status['gain']}' : ''}'
-                        '${temp is num ? ' · ${temp.toStringAsFixed(1)} °C' : ''}',
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
+            child: Row(
+              children: [
+                Chip(
+                  key: const Key('online'),
+                  avatar: Icon(
+                    Icons.circle,
+                    size: 12,
+                    color: _camera.online
+                        ? Colors.greenAccent
+                        : theme.disabledColor,
+                  ),
+                  label: Text(_camera.online ? 'Live' : 'Offline'),
+                ),
+                const SizedBox(width: 12),
+                if (image != null)
+                  Expanded(
+                    child: Text(
+                      'Bild ${formatAge(image)}',
+                      style: theme.textTheme.bodySmall,
+                    ),
+                  ),
+              ],
             ),
           ),
-          if (status['time_trusted'] == false)
-            const ListTile(
-              leading: Icon(Icons.warning_amber),
-              title: Text('Die Uhr der Kamera ist nicht synchronisiert.'),
+          Card(
+            margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('Status', style: theme.textTheme.titleMedium),
+                  const SizedBox(height: 8),
+                  for (final row in rows)
+                    Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 3),
+                      child: Row(
+                        children: [
+                          Expanded(
+                            child: Text(
+                              row.label,
+                              style: theme.textTheme.bodyMedium,
+                            ),
+                          ),
+                          Text(
+                            row.value,
+                            style: row.warning
+                                ? TextStyle(
+                                    color: theme.colorScheme.error,
+                                    fontWeight: FontWeight.w600,
+                                  )
+                                : theme.textTheme.bodyMedium?.copyWith(
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  if (_camera.status.isEmpty)
+                    Text(
+                      'Die Kamera hat noch keinen Status gemeldet.',
+                      style: theme.textTheme.bodySmall,
+                    ),
+                ],
+              ),
             ),
+          ),
         ],
       ),
     );

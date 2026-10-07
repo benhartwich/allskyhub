@@ -1,5 +1,6 @@
 // Client for the hub's app API v1 (server/src/allskyhub_server/api/app.py).
 
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:http/http.dart' as http;
@@ -60,33 +61,79 @@ class Camera {
       value is String ? DateTime.parse(value) : null;
 }
 
-/// A night with archived frames (hub app API `/nights`).
+/// A night with archived frames and/or night products (hub app API `/nights`).
 class Night {
   Night({
     required this.nightId,
     required this.frames,
-    required this.first,
-    required this.last,
+    this.first,
+    this.last,
+    this.products = 0,
   });
 
   factory Night.fromJson(Map<String, dynamic> json) => Night(
     nightId: json['night_id'] as String,
     frames: json['frames'] as int,
-    first: DateTime.parse(json['first'] as String),
-    last: DateTime.parse(json['last'] as String),
+    first: json['first'] == null
+        ? null
+        : DateTime.parse(json['first'] as String),
+    last: json['last'] == null ? null : DateTime.parse(json['last'] as String),
+    products: (json['products'] as int?) ?? 0,
   );
 
   /// `YYYYMMDD`: the evening the night started (SPEC §4.5).
   final String nightId;
   final int frames;
-  final DateTime first;
-  final DateTime last;
+
+  /// Time of the first and last archived frame; null for a night with only products.
+  final DateTime? first;
+  final DateTime? last;
+
+  /// Night products (keogram, startrails, timelapse) announced for this night.
+  final int products;
 
   DateTime get evening => DateTime(
     int.parse(nightId.substring(0, 4)),
     int.parse(nightId.substring(4, 6)),
     int.parse(nightId.substring(6, 8)),
   );
+}
+
+/// A night product (SPEC §5.2). `pending`: the hub asked the camera for the full file.
+class Product {
+  Product({
+    required this.kind,
+    required this.name,
+    required this.contentType,
+    required this.size,
+    required this.hasFull,
+    required this.hasThumb,
+    required this.pending,
+    this.durationS,
+  });
+
+  factory Product.fromJson(Map<String, dynamic> json) => Product(
+    kind: json['kind'] as String,
+    name: json['name'] as String,
+    contentType: json['content_type'] as String,
+    size: json['size'] as int,
+    durationS: (json['duration_s'] as num?)?.toDouble(),
+    hasFull: json['has_full'] as bool,
+    hasThumb: json['has_thumb'] as bool,
+    pending: json['pending'] as bool,
+  );
+
+  /// `keogram`, `startrails` or `timelapse`.
+  final String kind;
+  final String name;
+  final String contentType;
+  final int size;
+  final double? durationS;
+  final bool hasFull;
+  final bool hasThumb;
+  final bool pending;
+
+  bool get isVideo => contentType == 'video/mp4';
 }
 
 /// An archived frame (SPEC §4.4). Without `hasFull` only the thumbnail is left.
@@ -214,6 +261,40 @@ class HubClient {
     return [
       for (final f in json) FrameItem.fromJson(f as Map<String, dynamic>),
     ];
+  }
+
+  Future<List<Product>> products(String cameraId, String nightId) async {
+    final json =
+        await _send('GET', '/cameras/$cameraId/nights/$nightId/products')
+            as List<dynamic>;
+    return [for (final p in json) Product.fromJson(p as Map<String, dynamic>)];
+  }
+
+  Uri productUrl(
+    String cameraId,
+    String nightId,
+    String name, {
+    bool thumb = false,
+  }) => _uri(
+    '/cameras/$cameraId/products/$nightId/$name',
+    thumb ? {'variant': 'thumb'} : null,
+  );
+
+  /// Make sure the hub has the full product: true when it is there, false while the hub
+  /// fetches it from the camera (202). Never downloads the file itself.
+  Future<bool> ensureProduct(
+    String cameraId,
+    String nightId,
+    String name,
+  ) async {
+    final request = http.Request('GET', productUrl(cameraId, nightId, name))
+      ..headers.addAll(authHeaders);
+    final response = await _http.send(request);
+    // Only the status matters; drop the body (it may be a long video).
+    unawaited(response.stream.listen(null).cancel());
+    if (response.statusCode == 200 || response.statusCode == 206) return true;
+    if (response.statusCode == 202) return false;
+    throw HubException(response.statusCode, response.reasonPhrase ?? 'error');
   }
 
   Uri frameUrl(

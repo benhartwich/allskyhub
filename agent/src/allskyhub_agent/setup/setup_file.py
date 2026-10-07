@@ -7,8 +7,10 @@ import logging
 import re
 from dataclasses import dataclass
 from pathlib import Path
+from typing import cast
 
 from allskyhub_agent.adapters.network import JoinError, Network
+from allskyhub_agent.settings import CAMERA_CHOICES, valid_timezone
 
 log = logging.getLogger(__name__)
 
@@ -27,6 +29,10 @@ class SetupFile:
     password: str | None
     country: str | None
     hub_url: str | None
+    latitude: float | None = None
+    longitude: float | None = None
+    timezone: str | None = None
+    camera: str | None = None
 
 
 def parse(raw: bytes) -> SetupFile:
@@ -62,13 +68,41 @@ def parse(raw: bytes) -> SetupFile:
         if not isinstance(h, str) or not h.startswith(("https://", "http://")):
             raise SetupFileError("hub_url must be an http(s) URL")
         hub = h
-    return SetupFile(ssid, password, country, hub)
+    lat = lon = None
+    loc = d.get("location")
+    if loc is not None:
+        if not isinstance(loc, dict):
+            raise SetupFileError("location must be an object")
+        ld = cast("dict[str, object]", loc)
+        la, lo = ld.get("latitude"), ld.get("longitude")
+        if not (isinstance(la, int | float) and -90 <= la <= 90):
+            raise SetupFileError("location.latitude must be between -90 and 90")
+        if not (isinstance(lo, int | float) and -180 <= lo <= 180):
+            raise SetupFileError("location.longitude must be between -180 and 180")
+        lat, lon = float(la), float(lo)
+    tz = d.get("timezone")
+    if tz is not None and not (isinstance(tz, str) and valid_timezone(tz)):
+        raise SetupFileError("timezone must be an IANA time zone, e.g. Europe/Vienna")
+    cam = d.get("camera")
+    if cam is not None and cam not in CAMERA_CHOICES:
+        raise SetupFileError(f"camera must be one of {', '.join(CAMERA_CHOICES)}")
+    return SetupFile(
+        ssid,
+        password,
+        country,
+        hub,
+        lat,
+        lon,
+        tz if isinstance(tz, str) else None,
+        cam if isinstance(cam, str) else None,
+    )
 
 
 def apply_once(path: Path, network: Network) -> SetupFile | None:
     """Read, apply and delete the setup file; rename it to *.failed.json if unusable.
 
-    Returns what was applied (the caller stores `hub_url`), or None without a usable file.
+    Returns what was applied (the caller stores hub URL, location, time zone and camera),
+    or None without a usable file.
     """
     if not path.exists():
         return None

@@ -33,6 +33,9 @@ class NetworkRequest:
     password: str | None
     country: str
     hub_url: str | None
+    latitude: float | None = None
+    longitude: float | None = None
+    timezone: str | None = None
 
 
 class SetupController:
@@ -40,13 +43,13 @@ class SetupController:
         self,
         network: Network,
         device_id: str,
-        on_hub_url: Callable[[str], None] | None = None,
+        on_joined: Callable[[NetworkRequest], None] | None = None,
         sleep: Callable[[float], None] | None = None,
         monotonic: Callable[[], float] | None = None,
     ) -> None:
         self._net = network
         self._ssid = setup_ssid(device_id)
-        self._on_hub_url = on_hub_url
+        self._on_joined = on_joined
         self._sleep = sleep or time.sleep
         self._monotonic = monotonic or time.monotonic
         self._lock = threading.Lock()
@@ -146,8 +149,9 @@ class SetupController:
         with self._lock:
             self._last_error = None
         log.info("joined %r", req.ssid)
-        if req.hub_url and self._on_hub_url is not None:
-            self._on_hub_url(req.hub_url)
+        if self._on_joined is not None:
+            # Hub URL, location and time zone from the app are stored by the caller.
+            self._on_joined(req)
 
     def run(self, stop: threading.Event, interval_s: float = 2.0) -> None:
         while not stop.is_set():

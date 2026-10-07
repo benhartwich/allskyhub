@@ -20,6 +20,7 @@ import ipaddress
 import json
 import threading
 import time
+from collections.abc import Callable
 from dataclasses import asdict
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -30,6 +31,7 @@ from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_valida
 from allskyhub_agent.adapters.network import SETUP_ADDRESS
 from allskyhub_agent.hub.pairing import PairingState
 from allskyhub_agent.live import LiveState
+from allskyhub_agent.settings import AgentSettings, valid_timezone
 from allskyhub_agent.setup.controller import NetworkRequest, SetupController
 
 _MAX_BODY = 4096
@@ -45,6 +47,18 @@ class SetupNetworkBody(BaseModel):
     password: str | None = None
     country: str = Field(pattern=r"^[A-Za-z]{2}$")
     hub_url: str | None = Field(default=None, pattern=r"^https?://")
+    # From the phone during onboarding: needed for day and night (SPEC §4.2) and the
+    # local night folders (SPEC §4.5).
+    latitude: float | None = Field(default=None, ge=-90, le=90)
+    longitude: float | None = Field(default=None, ge=-180, le=180)
+    timezone: str | None = None
+
+    @field_validator("timezone")
+    @classmethod
+    def _tz(cls, v: str | None) -> str | None:
+        if v is not None and not valid_timezone(v):
+            raise ValueError("unknown time zone")
+        return v
 
     @field_validator("ssid")
     @classmethod
@@ -72,6 +86,7 @@ def make_handler(
     pairing: PairingState | None = None,
     setup: SetupController | None = None,
     setup_net: ipaddress.IPv4Network | ipaddress.IPv6Network = _SETUP_NET,
+    settings: Callable[[], AgentSettings] | None = None,
 ) -> type[BaseHTTPRequestHandler]:
     page = _page()
 
@@ -129,6 +144,11 @@ def make_handler(
                 info["setup_mode"] = setup is not None and setup.active
                 err = setup.last_error if setup is not None else None
                 info["last_error"] = err.value if err is not None else None
+                if settings is not None:
+                    cur = settings()
+                    info["location_set"] = cur.has_location
+                    info["timezone"] = cur.timezone
+                    info["camera"] = cur.camera
                 self._json(HTTPStatus.OK, info)
             elif path == "/api/wifi/networks":
                 if setup is None or not self._from_setup_network():
@@ -183,7 +203,21 @@ def make_handler(
                 fields = sorted({".".join(str(p) for p in e["loc"]) for e in exc.errors()})
                 self._json(HTTPStatus.BAD_REQUEST, {"detail": "invalid", "fields": fields})
                 return
-            req = NetworkRequest(body.ssid, body.password, body.country.upper(), body.hub_url)
+            if (body.latitude is None) != (body.longitude is None):
+                self._json(
+                    HTTPStatus.BAD_REQUEST,
+                    {"detail": "invalid", "fields": ["latitude", "longitude"]},
+                )
+                return
+            req = NetworkRequest(
+                body.ssid,
+                body.password,
+                body.country.upper(),
+                body.hub_url,
+                body.latitude,
+                body.longitude,
+                body.timezone,
+            )
             setup.request_network(req, time.monotonic())
             self._json(HTTPStatus.ACCEPTED, {"will_join": body.ssid})
 
@@ -199,9 +233,10 @@ class WebServer:
         pairing: PairingState | None = None,
         setup: SetupController | None = None,
         setup_net: str | None = None,
+        settings: Callable[[], AgentSettings] | None = None,
     ) -> None:
         net = ipaddress.ip_network(setup_net) if setup_net else _SETUP_NET
-        handler = make_handler(live, pairing, setup, net)
+        handler = make_handler(live, pairing, setup, net, settings)
         self._httpd = ThreadingHTTPServer((host, port), handler)
         self._httpd.daemon_threads = True
         self._thread = threading.Thread(target=self._httpd.serve_forever, daemon=True)

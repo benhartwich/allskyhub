@@ -38,7 +38,9 @@ def test_parse_scan_handles_escaped_colons_duplicates_and_hidden() -> None:
 def make(net: SimNetwork) -> tuple[SetupController, list[str], list[float]]:
     urls: list[str] = []
     slept: list[float] = []
-    ctl = SetupController(net, DEVICE, on_hub_url=urls.append, sleep=slept.append)
+    ctl = SetupController(
+        net, DEVICE, on_joined=lambda r: urls.append(r.hub_url or ""), sleep=slept.append
+    )
     return ctl, urls, slept
 
 
@@ -246,5 +248,98 @@ def test_setup_endpoints_refuse_other_networks(tmp_path: Path) -> None:
         assert _call(base + "/api/wifi/networks")[0] == 403
         body = b'{"ssid": "Home", "password": "secretpw", "country": "AT"}'
         assert _call(base + "/api/setup/network", body)[0] == 403
+    finally:
+        web.stop()
+
+
+def test_settings_location_timezone_camera(tmp_path: Path) -> None:
+    p = tmp_path / "settings.json"
+    s = AgentSettings().with_updates(latitude=48.1, longitude=14.4, timezone="Europe/Vienna")
+    assert s.has_location
+    s.save(p)
+    back = AgentSettings.load(p)
+    assert (back.latitude, back.longitude, back.timezone, back.camera) == (
+        48.1,
+        14.4,
+        "Europe/Vienna",
+        "auto",
+    )
+    # Bad values are ignored, the rest is kept.
+    assert back.with_updates(timezone="Mars/Olympus", camera="nikon") == back
+    assert back.with_updates(latitude=1.0) == back  # only both coordinates together
+    p.write_text('{"latitude": 91, "longitude": 10, "timezone": "Europe/Vienna"}')
+    assert not AgentSettings.load(p).has_location
+
+
+def test_setup_file_location_timezone_camera(tmp_path: Path) -> None:
+    f = parse(
+        b'{"allskyhub_setup": 1, "location": {"latitude": 48.14, "longitude": 14.39},'
+        b' "timezone": "Europe/Vienna", "camera": "sim"}'
+    )
+    assert (f.latitude, f.longitude, f.timezone, f.camera) == (48.14, 14.39, "Europe/Vienna", "sim")
+    for bad in (
+        b'{"allskyhub_setup": 1, "location": {"latitude": 99, "longitude": 0}}',
+        b'{"allskyhub_setup": 1, "timezone": "Nowhere/Town"}',
+        b'{"allskyhub_setup": 1, "camera": "canon"}',
+    ):
+        with pytest.raises(SetupFileError):
+            parse(bad)
+
+
+def test_setup_network_with_location(tmp_path: Path) -> None:
+    net = SimNetwork(passwords={"Home": "secretpw"})
+    joined: list[NetworkRequest] = []
+    ctl = SetupController(net, DEVICE, on_joined=joined.append, sleep=lambda s: None)
+    settings_file = tmp_path / "settings.json"
+    pairing = PairingState(DEVICE, "https://allskyhub.org", "sim", "0.1.0")
+    web = WebServer(
+        LiveState(),
+        "127.0.0.1",
+        0,
+        pairing,
+        ctl,
+        setup_net="127.0.0.0/8",
+        settings=lambda: AgentSettings.load(settings_file),
+    )
+    web.start()
+    base = f"http://127.0.0.1:{web.port}"
+    try:
+        ctl.tick(0.0)
+        _, info = _call(base + "/api/setup")
+        assert isinstance(info, dict)
+        assert info["location_set"] is False
+        assert info["timezone"] == "UTC"
+
+        body = b'{"ssid": "Home", "password": "secretpw", "country": "AT", "latitude": 48.1}'
+        status, err = _call(base + "/api/setup/network", body)
+        assert status == 400
+        assert isinstance(err, dict)
+        assert err["fields"] == ["latitude", "longitude"]
+
+        body = (
+            b'{"ssid": "Home", "password": "secretpw", "country": "AT",'
+            b' "latitude": 48.1, "longitude": 14.4, "timezone": "Not/AZone"}'
+        )
+        status, err = _call(base + "/api/setup/network", body)
+        assert status == 400
+        assert isinstance(err, dict)
+        assert err["fields"] == ["timezone"]
+
+        body = (
+            b'{"ssid": "Home", "password": "secretpw", "country": "AT",'
+            b' "latitude": 48.1, "longitude": 14.4, "timezone": "Europe/Vienna"}'
+        )
+        assert _call(base + "/api/setup/network", body)[0] == 202
+        ctl.tick(1.0)
+        assert len(joined) == 1
+        req = joined[0]
+        assert (req.latitude, req.longitude, req.timezone) == (48.1, 14.4, "Europe/Vienna")
+        AgentSettings().with_updates(
+            latitude=req.latitude, longitude=req.longitude, timezone=req.timezone
+        ).save(settings_file)
+        _, info = _call(base + "/api/setup")
+        assert isinstance(info, dict)
+        assert info["location_set"] is True
+        assert info["timezone"] == "Europe/Vienna"
     finally:
         web.stop()

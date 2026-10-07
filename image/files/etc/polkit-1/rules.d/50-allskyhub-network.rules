@@ -1,0 +1,9 @@
+// The agent (user "allskyhub") manages Wi-Fi itself for setup mode (SPEC §7.1): scan,
+// open the setup access point, add and activate the home Wi-Fi. Nothing else.
+polkit.addRule(function (action, subject) {
+    if (subject.user == "allskyhub" &&
+            action.id.indexOf("org.freedesktop.NetworkManager.") == 0) {
+        return polkit.Result.YES;
+    }
+    return polkit.Result.NOT_HANDLED;
+});

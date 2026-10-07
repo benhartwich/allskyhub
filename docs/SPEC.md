@@ -373,4 +373,4 @@ report healthy within a timeout.
 - **M2 – hub:** pairing, live image, latest image page, device status.
 - **M3 – app:** Flutter app (pairing, live view, settings, push), Codemagic builds.
 - **M4 – products and detections:** timelapse, keogram, startrails, detection modules.
-- **M5 – image and updates:** Pi image build, signed A/B updates.
+- **M5 – image and updates:** Pi image build (`docs/image.md`), signed A/B updates.

@@ -1,0 +1,25 @@
+[Unit]
+Description=allskyhub camera agent
+After=network.target NetworkManager.service allskyhub-firstboot.service allskyhub-setupfile.service
+Wants=NetworkManager.service
+
+[Service]
+User=allskyhub
+Group=allskyhub
+EnvironmentFile=/etc/allskyhub-agent/allskyhub-agent.env
+ExecStart=/opt/allskyhub-agent/current/.venv/bin/allskyhub-agent $ALLSKYHUB_AGENT_ARGS
+Restart=always
+RestartSec=5
+StateDirectory=allskyhub-agent
+StateDirectoryMode=0750
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+# Cameras: ZWO over USB (udev rule makes it 0666), Raspberry Pi cameras through /dev/video*,
+# /dev/media* and /dev/dma_heap (group video).
+SupplementaryGroups=video
+DevicePolicy=auto
+
+[Install]
+WantedBy=multi-user.target

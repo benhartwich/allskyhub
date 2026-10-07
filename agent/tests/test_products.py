@@ -23,6 +23,8 @@ from allskyhub_agent.products.build import (
     ProductConfig,
     build_night,
     keogram,
+    newest_products,
+    night_products,
     startrails,
 )
 from allskyhub_agent.products.worker import DawnDetector, ProductWorker
@@ -146,6 +148,15 @@ def test_full_night_products(tmp_path: Path) -> None:
     assert (folder / "thumbnails" / KEOGRAM).is_file()
     assert (folder / "thumbnails" / STARTRAILS).is_file()
     assert not list(folder.glob("*.tmp*"))
+
+    announced = night_products(store, "20261006")
+    assert announced is not None
+    names = {p.name: p for p in announced.products}
+    assert names[KEOGRAM].thumbnail is True
+    assert names[KEOGRAM].size == (folder / KEOGRAM).stat().st_size
+    if HAVE_FFMPEG:
+        assert names[TIMELAPSE].duration_s == pytest.approx(len(night) / 25, abs=0.1)
+        assert newest_products(store) == announced
 
     if HAVE_FFMPEG:
         assert TIMELAPSE in result.built

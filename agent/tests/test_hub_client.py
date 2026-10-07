@@ -26,6 +26,7 @@ from allskyhub_agent.hub.client import HubConfig, HubSession
 from allskyhub_agent.hub.identity import DeviceIdentity
 from allskyhub_agent.hub.pairing import PairingState
 from allskyhub_agent.live import LiveState
+from allskyhub_agent.products.build import newest_products
 from allskyhub_agent.store.images import ImageStore
 from allskyhub_agent.web.server import WebServer
 from allskyhub_protocol import (
@@ -37,6 +38,7 @@ from allskyhub_protocol import (
     FrameInfo,
     Hello,
     Mode,
+    Products,
     Purpose,
     Status,
     b64url_decode,
@@ -90,6 +92,7 @@ class FakeHub:
     tokens: int = 0
     nonces: set[str] = field(default_factory=set[str])
     uploads: list[tuple[str, str, bytes]] = field(default_factory=list[tuple[str, str, bytes]])
+    upload_headers: list[dict[str, str]] = field(default_factory=list[dict[str, str]])
     received: list[Envelope] = field(default_factory=list[Envelope])
     ws_auth: list[str] = field(default_factory=list[str])
     commands: list[Command] = field(default_factory=list[Command])
@@ -143,11 +146,17 @@ class FakeHub:
             return httpx.Response(
                 200, json={"access_token": f"tok{self.tokens}", "expires_in": 3600}
             )
-        if path.startswith("/device/v1/frames/") and req.method == "PUT":
+        if path.startswith(("/device/v1/frames/", "/device/v1/products/")) and req.method == "PUT":
             assert req.headers["Authorization"].startswith("Bearer tok")
             self.uploads.append((path, req.url.params["variant"], req.content))
+            self.upload_headers.append(dict(req.headers))
             return httpx.Response(204)
         return httpx.Response(404)
+
+    async def ahandle(self, req: httpx.Request) -> httpx.Response:
+        """For streamed bodies: read them first, then answer like `handle`."""
+        await req.aread()
+        return self.handle(req)
 
     async def ws_handler(self, ws: ServerConnection) -> None:
         assert ws.request is not None
@@ -320,3 +329,72 @@ def test_setup_endpoint(tmp_path: Path, paired: bool) -> None:
     assert body["hub_url"] == "https://allskyhub.org"
     assert body["paired"] is paired
     assert body["pairing_code"] == (None if paired else "ABCDEF")
+
+
+def test_products_announced_and_uploaded_streamed(tmp_path: Path) -> None:
+    """SPEC §6.3/§6.5/§6.7: products after connect, upload_product streams the file."""
+    store, night, _ = _store_with_frame(tmp_path)
+    folder = store.night_dir(night)
+    video = bytes(range(256)) * 9000  # ~2.3 MB, more than one 1 MB chunk
+    (folder / "timelapse.mp4").write_bytes(video)
+    (folder / "keogram.jpg").write_bytes(b"\xff\xd8keogram")
+    (folder / "thumbnails" / "timelapse.jpg").write_bytes(b"\xff\xd8thumb")
+    (folder / "products.json").write_text('{"duration_s": {"timelapse.mp4": 12.5}}')
+    identity = DeviceIdentity.load_or_create(tmp_path / "device.key")
+    hub = FakeHub(register_unpaired=0, close_code=1000)
+    hub.commands = [
+        Command(name=CommandName.UPLOAD_PRODUCT, args={"night_id": night, "name": "timelapse.mp4"}),
+        Command(
+            name=CommandName.UPLOAD_PRODUCT,
+            args={"night_id": night, "name": "timelapse.mp4", "variant": "thumb"},
+        ),
+        Command(
+            name=CommandName.UPLOAD_PRODUCT, args={"night_id": night, "name": "startrails.jpg"}
+        ),
+        Command(name=CommandName.UPLOAD_PRODUCT, args={"night_id": night, "name": "../x.jpg"}),
+    ]
+
+    async def scenario() -> None:
+        async with serve(hub.ws_handler, "127.0.0.1", 0) as server:
+            port = server.sockets[0].getsockname()[1]
+            cfg = HubConfig(hub_url=f"http://127.0.0.1:{port}")
+            pairing = PairingState(identity.device_id, cfg.hub_url, "sim", "0.1.0")
+            async with httpx.AsyncClient(
+                transport=httpx.MockTransport(hub.ahandle), base_url=cfg.hub_url
+            ) as http:
+                session = HubSession(
+                    cfg, identity, pairing, store, LiveState(), "sim", "0.1.0",
+                    lambda: None, http, latest_products=lambda: newest_products(store),
+                )  # fmt: skip
+                stop = asyncio.Event()
+                task = asyncio.create_task(session.run(stop))
+                await asyncio.wait_for(hub.done.wait(), 10)
+                stop.set()
+                await asyncio.wait_for(task, 10)
+
+    asyncio.run(scenario())
+    announced = [e.body for e in hub.received if isinstance(e.body, Products)]
+    assert announced, "no products message after connect"
+    files = {p.name: p for p in announced[0].products}
+    assert set(files) == {"keogram.jpg", "timelapse.mp4"}
+    assert files["timelapse.mp4"].size == len(video)
+    assert files["timelapse.mp4"].duration_s == 12.5
+    assert files["timelapse.mp4"].thumbnail is True
+    assert files["keogram.jpg"].thumbnail is False
+
+    kinds = [(r.TYPE, getattr(r, "code", None)) if r else None for r in hub.reply_order]
+    assert kinds == [
+        ("ack", None),
+        ("ack", None),
+        ("error", "not_found"),
+        ("error", "invalid_args"),
+    ]
+    # Product uploads run concurrently, so they may finish in any order.
+    by_variant = {u[1]: (u, h) for u, h in zip(hub.uploads, hub.upload_headers, strict=True)}
+    (path, _, body), headers = by_variant["full"]
+    assert (path, body) == (f"/device/v1/products/{night}/timelapse.mp4", video)
+    assert headers["content-type"] == "video/mp4"
+    assert headers["content-length"] == str(len(video))
+    (_, _, body), headers = by_variant["thumb"]
+    assert body == b"\xff\xd8thumb"
+    assert headers["content-type"] == "image/jpeg"

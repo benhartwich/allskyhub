@@ -75,3 +75,49 @@ def test_extra_fields_rejected() -> None:
     )
     with pytest.raises(ValidationError):
         parse_envelope(raw)
+
+
+def test_products_roundtrip_and_name_kind_check() -> None:
+    from allskyhub_protocol import ProductFile, ProductKind, Products
+
+    body = Products(
+        night_id="20261006",
+        products=[
+            ProductFile(
+                kind=ProductKind.KEOGRAM,
+                name="keogram.jpg",
+                content_type="image/jpeg",
+                size=1234,
+                thumbnail=True,
+            ),
+            ProductFile(
+                kind=ProductKind.TIMELAPSE,
+                name="timelapse.mp4",
+                content_type="video/mp4",
+                size=99_000_000,
+                thumbnail=True,
+                duration_s=21.4,
+            ),
+        ],
+    )
+    back = parse_envelope(Envelope.wrap(body, ts=TS).model_dump_json())
+    assert back.body == body
+    with pytest.raises(ValidationError):
+        ProductFile(
+            kind=ProductKind.KEOGRAM,
+            name="timelapse.mp4",
+            content_type="video/mp4",
+            size=1,
+            thumbnail=False,
+        )
+    with pytest.raises(ValidationError):
+        Products(night_id="20261006", products=[])
+
+
+def test_upload_product_args() -> None:
+    from allskyhub_protocol import FrameVariant, UploadProductArgs
+
+    a = UploadProductArgs.model_validate({"night_id": "20261006", "name": "timelapse.mp4"})
+    assert a.variant is FrameVariant.FULL
+    with pytest.raises(ValidationError):
+        UploadProductArgs.model_validate({"night_id": "20261006", "name": "../etc/passwd"})

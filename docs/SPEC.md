@@ -212,6 +212,14 @@ base64url-encoded without padding.
 - `frame`: frame metadata (§4.4); the image itself goes over HTTPS when the hub asks
   for it (§6.5, `upload_frame`).
 - `event`: a detection (§6.4).
+- `products`: the night products (§5.2) of one night, `{night_id, products: [{kind,
+  name, content_type, size, thumbnail, duration_s}]}` (`size` in bytes; `duration_s`
+  only for the timelapse, else null) with `kind` `keogram`, `startrails` or
+  `timelapse`, `name` `keogram.jpg`, `startrails.jpg` or `timelapse.mp4`, and
+  `content_type` `image/jpeg` or `video/mp4`. Sent when a night's products have been
+  built, and once after every (re)connect for the newest night that has products. Only
+  existing products are listed; the files themselves go over HTTPS when the hub asks for
+  them (§6.5, `upload_product`).
 
 ### 6.4 Events
 
@@ -221,7 +229,7 @@ base64url-encoded without padding.
 ### 6.5 Hub → device
 
 `command`: `set_settings`, `focus_mode` (`{on: bool}`, §7), `restart`, `update`,
-`upload_frame`. Each command is acknowledged with `ack` or `error` (`code` one of
+`upload_frame`, `upload_product`. Each command is acknowledged with `ack` or `error` (`code` one of
 `not_found`, `invalid_args`, `unsupported`, `failed`).
 
 **`upload_frame`** `{night_id, name, variant}` with `variant` `full` (default) or
@@ -231,6 +239,15 @@ answers `ack`. If the frame no longer exists (retention, §4.5) it answers `erro
 `not_found`. The hub decides what to fetch and how often, for example the latest image
 at most every few minutes, thumbnails for the app's gallery, and every frame in full
 while someone watches the live view. The device needs no upload policy of its own.
+
+**`upload_product`** `{night_id, name, variant}`, `variant` as for `upload_frame`: the
+device uploads that night product (§5.2) with
+`PUT /device/v1/products/{night_id}/{name}?variant=<variant>`, streamed with
+`Content-Length`; the content type is the product's (`image/jpeg` or `video/mp4`) for
+`full` and `image/jpeg` for `thumb` (the timelapse's thumbnail is a frame from the
+middle of the night). Then it answers `ack`, or `error` with `not_found` if the product
+does not exist (any more). The hub decides what to fetch, for example every thumbnail
+right away and the full product when someone opens it.
 
 ### 6.6 Device HTTP endpoints
 
@@ -244,6 +261,7 @@ except the image upload.
 | `POST /device/v1/token` | signature (`token`) | `{device_id, nonce, signature}` → `{access_token, token_type: "bearer", expires_in}` |
 | `GET /device/v1/ws` | bearer | WebSocket (§6.1) |
 | `PUT /device/v1/frames/{night_id}/{name}?variant=` | bearer | `image/jpeg` → 204 |
+| `PUT /device/v1/products/{night_id}/{name}?variant=` | bearer | `image/jpeg` or `video/mp4` → 204 |
 
 Errors are HTTP status codes with `{"detail": "..."}`: 400 invalid body, 401 bad
 signature, nonce or token, 403 device not paired (token), 404 unknown upload (the hub
@@ -253,8 +271,9 @@ did not ask for this frame), 413 image too large, 429 rate limited (with
 ### 6.7 Offline behaviour
 
 The device does not queue uploads or WebSocket messages while the hub is unreachable;
-capture and storage go on (§1, goal 4). After reconnecting it sends `hello` and a fresh
-`status`, and the hub requests whatever it wants with `upload_frame`.
+capture and storage go on (§1, goal 4). After reconnecting it sends `hello`, a fresh
+`status` and the newest night's `products`, and the hub requests whatever it wants with
+`upload_frame` and `upload_product`.
 
 ## 7. Local web UI
 

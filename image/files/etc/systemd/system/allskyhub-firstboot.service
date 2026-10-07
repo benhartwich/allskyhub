@@ -1,0 +1,15 @@
+[Unit]
+Description=allskyhub first boot: host name and Wi-Fi country
+# After cloud-init's first stage (host name and users from Raspberry Pi Imager), before
+# NetworkManager; never after cloud-final (ordering cycle, see image/build.sh).
+After=cloud-init-network.service systemd-hostnamed.service
+Before=NetworkManager.service
+ConditionPathExists=!/var/lib/allskyhub-agent/.firstboot-done
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/allskyhub-firstboot
+RemainAfterExit=yes
+
+[Install]
+WantedBy=multi-user.target

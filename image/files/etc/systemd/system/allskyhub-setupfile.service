@@ -1,0 +1,13 @@
+[Unit]
+Description=allskyhub: hand the setup file on the boot partition to the agent (SPEC §7.3)
+ConditionPathExists=/boot/firmware/allskyhub-setup.json
+Before=allskyhub-agent.service
+
+[Service]
+Type=oneshot
+# The boot partition belongs to root; the agent reads its copy and deletes it when applied.
+ExecStart=/usr/bin/install -o allskyhub -g allskyhub -m 0600 /boot/firmware/allskyhub-setup.json /var/lib/allskyhub-agent/setup.json
+ExecStart=/usr/bin/rm -f /boot/firmware/allskyhub-setup.json
+
+[Install]
+WantedBy=multi-user.target

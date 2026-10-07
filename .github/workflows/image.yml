@@ -1,0 +1,44 @@
+# allskyhub image for the Raspberry Pi 4 and 5 (SPEC §8, M5).
+# Native build on an arm64 runner; the image is a workflow artifact for 14 days.
+name: image
+
+on:
+  workflow_dispatch:
+  push:
+    branches: ["**"]
+    paths:
+      - "image/**"
+      - "agent/**"
+      - "packages/protocol/**"
+      - "uv.lock"
+      - ".github/workflows/image.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: image-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+      - name: build tools
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends parted e2fsprogs xz-utils
+      - uses: astral-sh/setup-uv@v6
+      - name: image
+        run: |
+          VERSION="$(date -u +%Y.%m.%d)-${GITHUB_SHA::7}"
+          sudo env UV_BIN="$(command -v uv)" ALLSKYHUB_IMAGE_VERSION="$VERSION" image/build.sh
+          sudo chown -R "$(id -u):$(id -g)" build
+      - uses: actions/upload-artifact@v4
+        with:
+          name: allskyhub-image
+          path: |
+            build/allskyhub-*.img.xz
+            build/allskyhub-*.img.xz.sha256
+          retention-days: 14
+          compression-level: 0

@@ -1,0 +1,18 @@
+#!/bin/sh
+# Runs once. Keeps anything set in Raspberry Pi Imager (host name, Wi-Fi country).
+set -eu
+
+if [ "$(hostname)" = "raspberrypi" ]; then
+    hostnamectl set-hostname allskyhub
+    sed -i "s/\braspberrypi\b/allskyhub/g" /etc/hosts
+fi
+
+# Raspberry Pi OS keeps Wi-Fi blocked until a country is set; setup mode needs the radio.
+# The app sends the real country with the Wi-Fi network (SPEC §7.1).
+if [ -z "$(raspi-config nonint get_wifi_country 2>/dev/null || true)" ]; then
+    raspi-config nonint do_wifi_country AT || true
+fi
+rfkill unblock wifi || true
+
+install -d -o allskyhub -g allskyhub -m 0750 /var/lib/allskyhub-agent
+touch /var/lib/allskyhub-agent/.firstboot-done

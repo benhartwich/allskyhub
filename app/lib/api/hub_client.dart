@@ -60,6 +60,66 @@ class Camera {
       value is String ? DateTime.parse(value) : null;
 }
 
+/// A night with archived frames (hub app API `/nights`).
+class Night {
+  Night({
+    required this.nightId,
+    required this.frames,
+    required this.first,
+    required this.last,
+  });
+
+  factory Night.fromJson(Map<String, dynamic> json) => Night(
+    nightId: json['night_id'] as String,
+    frames: json['frames'] as int,
+    first: DateTime.parse(json['first'] as String),
+    last: DateTime.parse(json['last'] as String),
+  );
+
+  /// `YYYYMMDD`: the evening the night started (SPEC §4.5).
+  final String nightId;
+  final int frames;
+  final DateTime first;
+  final DateTime last;
+
+  DateTime get evening => DateTime(
+    int.parse(nightId.substring(0, 4)),
+    int.parse(nightId.substring(4, 6)),
+    int.parse(nightId.substring(6, 8)),
+  );
+}
+
+/// An archived frame (SPEC §4.4). Without `hasFull` only the thumbnail is left.
+class FrameItem {
+  FrameItem({
+    required this.name,
+    required this.capturedAt,
+    required this.mode,
+    required this.exposureUs,
+    required this.gain,
+    required this.sunElevation,
+    required this.hasFull,
+  });
+
+  factory FrameItem.fromJson(Map<String, dynamic> json) => FrameItem(
+    name: json['name'] as String,
+    capturedAt: DateTime.parse(json['captured_at'] as String),
+    mode: json['mode'] as String,
+    exposureUs: json['exposure_us'] as int,
+    gain: (json['gain'] as num).toDouble(),
+    sunElevation: (json['sun_elevation'] as num).toDouble(),
+    hasFull: json['has_full'] as bool,
+  );
+
+  final String name;
+  final DateTime capturedAt;
+  final String mode;
+  final int exposureUs;
+  final double gain;
+  final double sunElevation;
+  final bool hasFull;
+}
+
 class HubClient {
   HubClient({required this.baseUrl, http.Client? httpClient, this.token})
     : _http = httpClient ?? http.Client();
@@ -138,6 +198,32 @@ class HubClient {
       );
 
   Future<void> remove(String id) => _send('DELETE', '/cameras/$id');
+
+  /// Nights with archived frames, newest first.
+  Future<List<Night>> nights(String cameraId) async {
+    final json =
+        await _send('GET', '/cameras/$cameraId/nights') as List<dynamic>;
+    return [for (final n in json) Night.fromJson(n as Map<String, dynamic>)];
+  }
+
+  /// Archived frames of one night, oldest first.
+  Future<List<FrameItem>> frames(String cameraId, String nightId) async {
+    final json =
+        await _send('GET', '/cameras/$cameraId/nights/$nightId/frames')
+            as List<dynamic>;
+    return [
+      for (final f in json) FrameItem.fromJson(f as Map<String, dynamic>),
+    ];
+  }
+
+  Uri frameUrl(
+    String cameraId,
+    String nightId,
+    String name, {
+    bool thumb = false,
+  }) => _uri(
+    '/cameras/$cameraId/frames/$nightId/$name/${thumb ? 'thumb' : 'full'}.jpg',
+  );
 
   /// URL of the latest image; `live` asks the hub for every frame (SPEC §6.5).
   Uri imageUrl(String id, {bool thumb = false, bool live = false, int? bust}) =>

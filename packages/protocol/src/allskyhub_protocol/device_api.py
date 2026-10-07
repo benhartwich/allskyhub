@@ -131,6 +131,14 @@ class UploadFrameArgs(_Model):
     variant: FrameVariant = FrameVariant.FULL
 
 
+class UploadProductArgs(_Model):
+    """`args` of the `upload_product` command (SPEC §6.5)."""
+
+    night_id: str = Field(pattern=r"^\d{8}$")
+    name: Literal["keogram.jpg", "startrails.jpg", "timelapse.mp4"]
+    variant: FrameVariant = FrameVariant.FULL
+
+
 class ErrorCode(StrEnum):
     """`code` of an `error` reply to a command (SPEC §6.5)."""
 

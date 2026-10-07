@@ -102,6 +102,48 @@ class Event(_Body):
         return self
 
 
+class ProductKind(StrEnum):
+    """Night products (SPEC §5.2)."""
+
+    KEOGRAM = "keogram"
+    STARTRAILS = "startrails"
+    TIMELAPSE = "timelapse"
+
+
+PRODUCT_NAMES: dict[ProductKind, tuple[str, str]] = {
+    ProductKind.KEOGRAM: ("keogram.jpg", "image/jpeg"),
+    ProductKind.STARTRAILS: ("startrails.jpg", "image/jpeg"),
+    ProductKind.TIMELAPSE: ("timelapse.mp4", "video/mp4"),
+}
+
+
+class ProductFile(BaseModel):
+    """One night product in a `products` message (SPEC §6.3)."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    kind: ProductKind
+    name: str
+    content_type: Literal["image/jpeg", "video/mp4"]
+    size: int = Field(ge=0)
+    thumbnail: bool
+    duration_s: float | None = Field(default=None, ge=0)
+
+    @model_validator(mode="after")
+    def _name_matches_kind(self) -> ProductFile:
+        if (self.name, self.content_type) != PRODUCT_NAMES[self.kind]:
+            raise ValueError(f"{self.kind.value} must be {PRODUCT_NAMES[self.kind]}")
+        return self
+
+
+class Products(_Body):
+    """The night products of one night (SPEC §6.3)."""
+
+    TYPE: ClassVar[str] = "products"
+    night_id: str = Field(pattern=r"^\d{8}$")
+    products: list[ProductFile] = Field(min_length=1, max_length=len(PRODUCT_NAMES))
+
+
 class CommandName(StrEnum):
     """Commands from the hub (SPEC §6.5)."""
 
@@ -110,6 +152,7 @@ class CommandName(StrEnum):
     RESTART = "restart"
     UPDATE = "update"
     UPLOAD_FRAME = "upload_frame"
+    UPLOAD_PRODUCT = "upload_product"
 
 
 class Command(_Body):
@@ -136,10 +179,10 @@ class ErrorReply(_Body):
     message: str = ""
 
 
-Body = Hello | Status | FrameInfo | Event | Command | Ack | ErrorReply
+Body = Hello | Status | FrameInfo | Products | Event | Command | Ack | ErrorReply
 
 _BODY_TYPES: dict[str, type[_Body]] = {
-    m.TYPE: m for m in (Hello, Status, FrameInfo, Event, Command, Ack, ErrorReply)
+    m.TYPE: m for m in (Hello, Status, FrameInfo, Products, Event, Command, Ack, ErrorReply)
 }
 
 

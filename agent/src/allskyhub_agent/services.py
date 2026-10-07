@@ -15,9 +15,10 @@ from allskyhub_agent.hub.client import HubClient, HubConfig, HubSession
 from allskyhub_agent.hub.identity import DeviceIdentity
 from allskyhub_agent.hub.pairing import PairingState
 from allskyhub_agent.live import LiveState
+from allskyhub_agent.products.build import newest_products
 from allskyhub_agent.settings import AgentSettings
 from allskyhub_agent.store.images import ImageStore
-from allskyhub_protocol import FrameInfo, Status
+from allskyhub_protocol import FrameInfo, Products, Status
 
 log = logging.getLogger(__name__)
 
@@ -59,6 +60,7 @@ class HubManager:
                 __version__,
                 self._status,
                 http,
+                latest_products=lambda: newest_products(self._store),
             )
 
         client = HubClient(make_session, cfg)
@@ -80,6 +82,12 @@ class HubManager:
             client = self._client
         if client is not None:
             client.notify_frame(info)
+
+    def notify_products(self, products: Products) -> None:
+        with self._lock:
+            client = self._client
+        if client is not None:
+            client.notify_products(products)
 
     def stop(self) -> None:
         with self._lock:

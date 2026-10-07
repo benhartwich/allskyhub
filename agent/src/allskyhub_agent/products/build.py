@@ -7,6 +7,7 @@ product under its final name.
 
 from __future__ import annotations
 
+import json
 import logging
 import shutil
 import subprocess
@@ -14,16 +15,18 @@ import tempfile
 from collections.abc import Iterable
 from dataclasses import dataclass, field
 from pathlib import Path
+from typing import cast
 
 import numpy as np
 import numpy.typing as npt
 from PIL import Image as PILImage
 
 from allskyhub_agent.store.images import THUMB_WIDTH, ImageStore
-from allskyhub_protocol import FrameInfo, Mode
+from allskyhub_protocol import PRODUCT_NAMES, FrameInfo, Mode, ProductFile, ProductKind, Products
 
 log = logging.getLogger(__name__)
 
+MANIFEST = "products.json"
 KEOGRAM = "keogram.jpg"
 STARTRAILS = "startrails.jpg"
 TIMELAPSE = "timelapse.mp4"
@@ -200,4 +203,70 @@ def build_night(store: ImageStore, night: str, cfg: ProductConfig | None = None)
 
     for name, why in result.skipped.items():
         log.info("night %s: %s skipped (%s)", night, name, why)
+    durations = (
+        {TIMELAPSE: round(len(paths) / cfg.timelapse_fps, 1)} if TIMELAPSE in result.built else {}
+    )
+    tmp = folder / (MANIFEST + ".tmp")
+    tmp.write_text(json.dumps({"built": result.built, "duration_s": durations}))
+    tmp.replace(folder / MANIFEST)
     return result
+
+
+def _thumb_name(name: str) -> str:
+    return Path(name).stem + ".jpg"
+
+
+def product_path(store: ImageStore, night: str, name: str, thumbnail: bool) -> Path | None:
+    """A night product (or its thumbnail) if it exists (SPEC §6.5, `upload_product`)."""
+    if not (len(night) == 8 and night.isdigit()):
+        return None
+    if name not in {n for n, _ in PRODUCT_NAMES.values()}:
+        return None
+    folder = store.night_dir(night)
+    path = folder / "thumbnails" / _thumb_name(name) if thumbnail else folder / name
+    return path if path.is_file() else None
+
+
+def night_products(store: ImageStore, night: str) -> Products | None:
+    """The `products` message for a night (SPEC §6.3), or None if it has none."""
+    folder = store.night_dir(night)
+    durations: dict[str, float] = {}
+    try:
+        data: object = json.loads((folder / MANIFEST).read_text())
+    except (OSError, ValueError):
+        data = None
+    if isinstance(data, dict):
+        raw = cast("dict[str, object]", data).get("duration_s")
+        if isinstance(raw, dict):
+            for k, v in cast("dict[str, object]", raw).items():
+                if isinstance(v, int | float):
+                    durations[k] = float(v)
+    files: list[ProductFile] = []
+    for kind in ProductKind:
+        name, ctype = PRODUCT_NAMES[kind]
+        path = folder / name
+        if not path.is_file():
+            continue
+        files.append(
+            ProductFile(
+                kind=kind,
+                name=name,
+                content_type=ctype,  # pyright: ignore[reportArgumentType]
+                size=path.stat().st_size,
+                thumbnail=(folder / "thumbnails" / _thumb_name(name)).is_file(),
+                duration_s=durations.get(name),
+            )
+        )
+    return Products(night_id=night, products=files) if files else None
+
+
+def newest_products(store: ImageStore) -> Products | None:
+    """The newest night that has products (sent after every reconnect, SPEC §6.7)."""
+    root = store.images_dir
+    if not root.is_dir():
+        return None
+    for d in sorted((p for p in root.iterdir() if p.is_dir() and p.name.isdigit()), reverse=True):
+        products = night_products(store, d.name)
+        if products is not None:
+            return products
+    return None

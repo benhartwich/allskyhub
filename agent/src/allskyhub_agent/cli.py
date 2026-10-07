@@ -28,7 +28,7 @@ from allskyhub_agent.discovery import Announcer
 from allskyhub_agent.hub.identity import DEFAULT_KEY_PATH, DeviceIdentity
 from allskyhub_agent.hub.pairing import PairingState
 from allskyhub_agent.live import LiveState
-from allskyhub_agent.products.build import build_night
+from allskyhub_agent.products.build import NightProducts, build_night, night_products
 from allskyhub_agent.products.worker import ProductWorker
 from allskyhub_agent.profiles import get_profile
 from allskyhub_agent.runner import Location, LoopConfig, Runner
@@ -216,7 +216,13 @@ def main(argv: list[str] | None = None) -> int:
         local_tz=tz,
     )
 
-    products = ProductWorker(store)
+    def products_done(result: NightProducts) -> None:
+        if hub is not None:
+            announced = night_products(store, result.night_id)
+            if announced is not None:
+                hub.notify_products(announced)
+
+    products = ProductWorker(store, on_done=products_done)
     products.start()
 
     def show(f: FrameInfo) -> None:

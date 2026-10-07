@@ -27,6 +27,7 @@ from allskyhub_agent.hub.backoff import Backoff
 from allskyhub_agent.hub.identity import DeviceIdentity
 from allskyhub_agent.hub.pairing import PairingState
 from allskyhub_agent.live import LiveState
+from allskyhub_agent.products.build import product_path
 from allskyhub_agent.runner import FOCUS_FRAME_NAME
 from allskyhub_agent.store.images import ImageStore
 from allskyhub_protocol import (
@@ -42,6 +43,7 @@ from allskyhub_protocol import (
     FrameInfo,
     FrameVariant,
     Hello,
+    Products,
     Purpose,
     RegisterRequest,
     RegisterResponse,
@@ -49,12 +51,13 @@ from allskyhub_protocol import (
     TokenRequest,
     TokenResponse,
     UploadFrameArgs,
+    UploadProductArgs,
     parse_envelope,
 )
 
 log = logging.getLogger(__name__)
 
-CAPABILITIES = ["upload_frame", "focus_mode"]
+CAPABILITIES = ["upload_frame", "upload_product", "focus_mode"]
 
 
 @dataclass(frozen=True)
@@ -114,6 +117,7 @@ class HubSession:
         http: httpx.AsyncClient,
         connect: Connector = default_connector,
         monotonic: Callable[[], float] = time.monotonic,
+        latest_products: Callable[[], Products | None] | None = None,
     ) -> None:
         self._cfg = cfg
         self._id = identity
@@ -127,6 +131,10 @@ class HubSession:
         self._connect = connect
         self._monotonic = monotonic
         self._frames: asyncio.Queue[FrameInfo] | None = None
+        self._latest_products = latest_products
+        # Products wait here until the writer sends them; a newer night replaces an older one.
+        self._products: Products | None = None
+        self._uploads: set[asyncio.Task[None]] = set()
         self._backoff = Backoff()
 
     # --- called from the capture thread via HubClient -------------------------------------
@@ -139,6 +147,11 @@ class HubSession:
             with contextlib.suppress(asyncio.QueueEmpty):
                 q.get_nowait()
         q.put_nowait(info)
+
+    def offer_products(self, products: Products) -> None:
+        """Announce a night's products on the open connection (SPEC §6.3)."""
+        if self._frames is not None:
+            self._products = products
 
     # --- main loop ---------------------------------------------------------------------
     async def run(self, stop: asyncio.Event) -> None:
@@ -225,6 +238,9 @@ class HubSession:
                         capabilities=CAPABILITIES,
                     ),
                 )
+                if self._latest_products is not None:
+                    # SPEC §6.7: the newest night's products after every (re)connect.
+                    self._products = await asyncio.to_thread(self._latest_products)
                 tasks: list[asyncio.Task[Any]] = [
                     asyncio.create_task(self._reader(ws, token)),
                     asyncio.create_task(self._writer(ws)),
@@ -251,10 +267,13 @@ class HubSession:
             return exc.rcvd.code if exc.rcvd else None
         finally:
             self._frames = None
+            self._products = None
+            for task in self._uploads:
+                task.cancel()
             self._pairing.set_connected(False)
 
     async def _send(
-        self, ws: WebSocketLike, body: Hello | Status | FrameInfo | Ack | ErrorReply
+        self, ws: WebSocketLike, body: Hello | Status | FrameInfo | Products | Ack | ErrorReply
     ) -> None:
         await ws.send(Envelope.wrap(body, ts=_now()).model_dump_json())
 
@@ -265,13 +284,16 @@ class HubSession:
         next_status = 0.0
         while True:
             now = self._monotonic()
+            products, self._products = self._products, None
+            if products is not None:
+                await self._send(ws, products)
             if now >= next_status:
                 status = self._status()
                 if status is not None:
                     await self._send(ws, status)
                 next_status = now + self._cfg.status_interval_s
             try:
-                frame = await asyncio.wait_for(q.get(), max(0.1, next_status - now))
+                frame = await asyncio.wait_for(q.get(), min(0.5, max(0.1, next_status - now)))
             except TimeoutError:
                 continue
             await self._send(ws, frame)
@@ -283,9 +305,21 @@ class HubSession:
             except ValidationError:
                 log.warning("invalid message from hub")
                 continue
-            if isinstance(env.body, Command):
-                reply = await self._command(env.id, env.body, token)
-                await self._send(ws, reply)
+            if not isinstance(env.body, Command):
+                continue
+            if env.body.name is CommandName.UPLOAD_PRODUCT:
+                # A timelapse can take minutes to upload; keep reading commands meanwhile.
+                task = asyncio.create_task(self._reply_later(ws, env.id, env.body, token))
+                self._uploads.add(task)
+                task.add_done_callback(self._uploads.discard)
+                continue
+            reply = await self._command(env.id, env.body, token)
+            await self._send(ws, reply)
+
+    async def _reply_later(self, ws: WebSocketLike, ref: str, cmd: Command, token: str) -> None:
+        reply = await self._upload_product(ref, cmd, token)
+        with contextlib.suppress(ConnectionClosed):
+            await self._send(ws, reply)
 
     async def _command(self, ref: str, cmd: Command, token: str) -> Ack | ErrorReply:
         if cmd.name is CommandName.UPLOAD_FRAME:
@@ -318,6 +352,42 @@ class HubSession:
                 headers={"Authorization": f"Bearer {token}", "Content-Type": "image/jpeg"},
             )
         except httpx.HTTPError as exc:
+            return ErrorReply(ref=ref, code=ErrorCode.FAILED, message=str(exc)[:200])
+        if r.is_success:
+            return Ack(ref=ref)
+        return ErrorReply(ref=ref, code=ErrorCode.FAILED, message=f"HTTP {r.status_code}")
+
+    async def _upload_product(self, ref: str, cmd: Command, token: str) -> Ack | ErrorReply:
+        """SPEC §6.5: PUT the requested night product, streamed, then ack."""
+        try:
+            args = UploadProductArgs.model_validate(cmd.args)
+        except ValidationError:
+            return ErrorReply(ref=ref, code=ErrorCode.INVALID_ARGS)
+        thumb = args.variant is FrameVariant.THUMB
+        path = product_path(self._store, args.night_id, args.name, thumbnail=thumb)
+        if path is None:
+            return ErrorReply(ref=ref, code=ErrorCode.NOT_FOUND)
+        ctype = "video/mp4" if path.suffix == ".mp4" else "image/jpeg"
+        size = path.stat().st_size
+
+        async def chunks() -> AsyncIterator[bytes]:
+            with path.open("rb") as f:
+                while chunk := await asyncio.to_thread(f.read, 1 << 20):
+                    yield chunk
+
+        try:
+            r = await self._http.put(
+                f"/device/v1/products/{args.night_id}/{args.name}",
+                params={"variant": args.variant.value},
+                content=chunks(),
+                headers={
+                    "Authorization": f"Bearer {token}",
+                    "Content-Type": ctype,
+                    "Content-Length": str(size),
+                },
+                timeout=httpx.Timeout(self._cfg.http_timeout_s, write=None),
+            )
+        except (httpx.HTTPError, OSError) as exc:
             return ErrorReply(ref=ref, code=ErrorCode.FAILED, message=str(exc)[:200])
         if r.is_success:
             return Ack(ref=ref)
@@ -361,6 +431,13 @@ class HubClient:
         if loop is not None and session is not None and not loop.is_closed():
             with contextlib.suppress(RuntimeError):
                 loop.call_soon_threadsafe(session.offer_frame, info)
+
+    def notify_products(self, products: Products) -> None:
+        """Never blocks; safe to call from the products worker."""
+        loop, session = self._loop, self._session
+        if loop is not None and session is not None and not loop.is_closed():
+            with contextlib.suppress(RuntimeError):
+                loop.call_soon_threadsafe(session.offer_products, products)
 
     def stop(self, timeout: float = 5.0) -> None:
         loop, stop = self._loop, self._stop

@@ -12,19 +12,31 @@ import datetime as dt
 import logging
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
+from typing import Literal
 
-from allskyhub_protocol import Command, CommandName, Envelope, FrameVariant, UploadFrameArgs
+from allskyhub_protocol import (
+    Command,
+    CommandName,
+    Envelope,
+    FrameVariant,
+    UploadFrameArgs,
+    UploadProductArgs,
+)
 
 log = logging.getLogger(__name__)
 
-# SPEC §6.5: how long the hub accepts an upload it asked for.
+# SPEC §6.5: how long after asking the hub accepts the start of an upload. Products wait
+# longer: the device may still be busy with an earlier timelapse.
 UPLOAD_WINDOW = dt.timedelta(minutes=2)
+PRODUCT_UPLOAD_WINDOW = dt.timedelta(minutes=30)
 # A viewer counts as watching for this long after the page last fetched an image.
 LIVE_HOLD = dt.timedelta(seconds=30)
 
 SendText = Callable[[str], Awaitable[None]]
 Close = Callable[[int], Awaitable[None]]
-UploadKey = tuple[str, str, FrameVariant]
+# (what, night_id, name, variant); what is "frame" or "product".
+UploadKey = tuple[str, str, str, FrameVariant]
+Kind = Literal["frame", "product"]
 
 
 def _now() -> dt.datetime:
@@ -84,27 +96,55 @@ class ConnectionRegistry:
         self, device_id: str, night_id: str, name: str, variant: FrameVariant
     ) -> bool:
         """Send ``upload_frame``; False when the device is not connected."""
+        args = UploadFrameArgs(night_id=night_id, name=name, variant=variant)
+        cmd = Command(name=CommandName.UPLOAD_FRAME, args=args.model_dump(mode="json"))
+        return await self._request(
+            device_id, ("frame", night_id, name, variant), cmd, UPLOAD_WINDOW
+        )
+
+    async def request_product(
+        self, device_id: str, night_id: str, name: str, variant: FrameVariant
+    ) -> bool:
+        """Send ``upload_product``; False when the device is not connected."""
+        args = UploadProductArgs.model_validate(
+            {"night_id": night_id, "name": name, "variant": variant}
+        )
+        cmd = Command(name=CommandName.UPLOAD_PRODUCT, args=args.model_dump(mode="json"))
+        key = ("product", night_id, name, variant)
+        return await self._request(device_id, key, cmd, PRODUCT_UPLOAD_WINDOW)
+
+    async def _request(
+        self, device_id: str, key: UploadKey, cmd: Command, window: dt.timedelta
+    ) -> bool:
         conn = self._conns.get(device_id)
         if conn is None:
             return False
-        args = UploadFrameArgs(night_id=night_id, name=name, variant=variant)
         now = _now()
         conn.requested = {k: v for k, v in conn.requested.items() if v > now}
-        conn.requested[(night_id, name, variant)] = now + UPLOAD_WINDOW
-        cmd = Command(name=CommandName.UPLOAD_FRAME, args=args.model_dump(mode="json"))
+        conn.requested[key] = now + window
         await conn.send_text(Envelope.wrap(cmd, ts=now).model_dump_json())
         return True
 
-    def is_requested(self, device_id: str, night_id: str, name: str, variant: FrameVariant) -> bool:
-        """The hub asked for this upload and the window is still open."""
+    def is_requested(
+        self, device_id: str, night_id: str, name: str, variant: FrameVariant, what: Kind = "frame"
+    ) -> bool:
+        """The hub asked for this upload and the window to start it is still open."""
         conn = self._conns.get(device_id)
-        until = conn.requested.get((night_id, name, variant)) if conn else None
+        until = conn.requested.get((what, night_id, name, variant)) if conn else None
         return until is not None and until > _now()
 
-    def take_upload(self, device_id: str, night_id: str, name: str, variant: FrameVariant) -> bool:
-        """Accept an upload only if the hub asked for it and the window is open."""
+    def is_pending(
+        self, device_id: str, night_id: str, name: str, variant: FrameVariant, what: Kind
+    ) -> bool:
+        """Asked for and not yet delivered (the app shows "wird geholt")."""
+        return self.is_requested(device_id, night_id, name, variant, what)
+
+    def take_upload(
+        self, device_id: str, night_id: str, name: str, variant: FrameVariant, what: Kind = "frame"
+    ) -> bool:
+        """Mark a valid upload as done. The window was checked when the upload started, so a
+        long one that ends after it still counts."""
         conn = self._conns.get(device_id)
         if conn is None:
             return False
-        until = conn.requested.pop((night_id, name, variant), None)
-        return until is not None and until > _now()
+        return conn.requested.pop((what, night_id, name, variant), None) is not None

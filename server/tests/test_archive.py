@@ -18,7 +18,7 @@ from allskyhub_server.devices.images import ImageStore
 from allskyhub_server.models import Device, Frame
 from allskyhub_server.settings import Settings
 from tests.fake_device import FakeDevice
-from tests.helpers import home_csrf
+from tests.helpers import home_csrf, owner_email
 from tests.ws_helpers import JPEG, device_ws, frame_info, next_command, paired_token, send
 
 
@@ -73,7 +73,7 @@ async def test_gallery_lists_archived_frames_and_thumbs_come_more_often(
             await asyncio.wait_for(ws.recv(), 0.3)
 
     # The app's gallery: one night, two frames, the first with its full image.
-    auth = await _app_auth(client, (await _email_of(app, dev.device_id)))
+    auth = await _app_auth(client, (await owner_email(app, dev.device_id)))
     base = f"/api/v1/cameras/{dev.device_id}"
     nights = (await client.get(f"{base}/nights", headers=auth)).json()
     assert [(n["night_id"], n["frames"]) for n in nights] == [("20261006", 2)]
@@ -100,22 +100,6 @@ async def test_gallery_lists_archived_frames_and_thumbs_come_more_often(
         from sqlalchemy import func, select
 
         assert await db.scalar(select(func.count()).select_from(Frame)) == 0
-
-
-async def _email_of(app: FastAPI, device_id: str) -> str:
-    from sqlalchemy import select
-
-    from allskyhub_server.models import User
-
-    maker: async_sessionmaker[AsyncSession] = app.state.sessionmaker
-    async with maker() as db:
-        email = await db.scalar(
-            select(User.email)
-            .join(Device, Device.owner_id == User.id)
-            .where(Device.id == device_id)
-        )
-    assert email
-    return email
 
 
 async def test_retention_drops_full_images_first_then_frames(

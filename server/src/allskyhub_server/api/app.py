@@ -11,7 +11,7 @@ import datetime as dt
 from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, HTTPException, Path, Request
-from fastapi.responses import FileResponse, Response
+from fastapi.responses import FileResponse, JSONResponse, Response
 from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import func, select
 
@@ -20,7 +20,7 @@ from allskyhub_server.auth import accounts, app_tokens, ratelimit
 from allskyhub_server.devices import pairing, queries
 from allskyhub_server.devices.connections import ConnectionRegistry
 from allskyhub_server.devices.images import ImageStore
-from allskyhub_server.models import Device, Frame, User
+from allskyhub_server.models import Device, Frame, Product, User
 from allskyhub_server.web.deps import DbSession, SettingsDep, client_ip
 
 router = APIRouter(prefix="/api/v1")
@@ -50,8 +50,24 @@ class ClaimRequest(_In):
 class Night(BaseModel):
     night_id: str
     frames: int
-    first: dt.datetime
-    last: dt.datetime
+    first: dt.datetime | None
+    last: dt.datetime | None
+    # Night products announced for this night (SPEC §5.2).
+    products: int = 0
+
+
+class ProductItem(BaseModel):
+    """A night product (SPEC §5.2, §6.3). ``pending``: the hub has asked the camera for the
+    full file and is waiting for it."""
+
+    kind: str
+    name: str
+    content_type: str
+    size: int
+    duration_s: float | None
+    has_full: bool
+    has_thumb: bool
+    pending: bool
 
 
 class FrameItem(BaseModel):
@@ -226,17 +242,29 @@ FRAME_NAME = r"^[A-Za-z0-9._-]{1,128}$"
 
 @router.get("/cameras/{device_id}/nights")
 async def nights(db: DbSession, user: AppUser, device_id: str) -> list[Night]:
-    """Nights with archived frames, newest first."""
+    """Nights with archived frames or products, newest first."""
     device = await _own(db, user, device_id)
+    by_night: dict[str, Night] = {}
     rows = await db.execute(
         select(
             Frame.night_id, func.count(), func.min(Frame.captured_at), func.max(Frame.captured_at)
         )
         .where(Frame.device_id == device.id, Frame.has_thumb.is_(True))
         .group_by(Frame.night_id)
-        .order_by(Frame.night_id.desc())
     )
-    return [Night(night_id=n, frames=c, first=f, last=last) for n, c, f, last in rows]
+    for night_id, count, first, last in rows:
+        by_night[night_id] = Night(night_id=night_id, frames=count, first=first, last=last)
+    products = await db.execute(
+        select(Product.night_id, func.count())
+        .where(Product.device_id == device.id)
+        .group_by(Product.night_id)
+    )
+    for night_id, count in products:
+        night = by_night.setdefault(
+            night_id, Night(night_id=night_id, frames=0, first=None, last=None)
+        )
+        night.products = count
+    return sorted(by_night.values(), key=lambda n: n.night_id, reverse=True)
 
 
 @router.get("/cameras/{device_id}/nights/{night_id}/frames")
@@ -285,3 +313,74 @@ async def frame_image(
     return FileResponse(
         path, media_type="image/jpeg", headers={"Cache-Control": "private, max-age=86400"}
     )
+
+
+PRODUCT_NAME = r"^(keogram\.jpg|startrails\.jpg|timelapse\.mp4)$"
+
+
+@router.get("/cameras/{device_id}/nights/{night_id}/products")
+async def products(
+    request: Request,
+    db: DbSession,
+    user: AppUser,
+    device_id: str,
+    night_id: Annotated[str, Path(pattern=NIGHT_ID)],
+) -> list[ProductItem]:
+    device = await _own(db, user, device_id)
+    registry = _registry(request)
+    rows = await db.scalars(
+        select(Product)
+        .where(Product.device_id == device.id, Product.night_id == night_id)
+        .order_by(Product.kind)
+    )
+    return [
+        ProductItem(
+            kind=p.kind,
+            name=p.name,
+            content_type=p.content_type,
+            size=p.size,
+            duration_s=p.duration_s,
+            has_full=p.has_full,
+            has_thumb=p.has_thumb,
+            pending=registry.is_pending(device.id, night_id, p.name, FrameVariant.FULL, "product"),
+        )
+        for p in rows
+    ]
+
+
+@router.get("/cameras/{device_id}/products/{night_id}/{name}", response_model=None)
+async def product_file(
+    request: Request,
+    db: DbSession,
+    user: AppUser,
+    device_id: str,
+    night_id: Annotated[str, Path(pattern=NIGHT_ID)],
+    name: Annotated[str, Path(pattern=PRODUCT_NAME)],
+    variant: FrameVariant = FrameVariant.FULL,
+) -> Response:
+    """The product file (videos with HTTP range requests, so players can seek).
+
+    If the hub does not have the full file yet, it asks the camera for it and answers
+    ``202 {"status": "requested"}``; poll again. 404 when the camera is offline."""
+    device = await _own(db, user, device_id)
+    product = await db.scalar(
+        select(Product).where(
+            Product.device_id == device.id, Product.night_id == night_id, Product.name == name
+        )
+    )
+    if product is None:
+        raise HTTPException(404, "Not found")
+    store: ImageStore = request.app.state.images
+    path = store.product_path(device.id, night_id, name, variant)
+    if path.is_file():
+        media = product.content_type if variant is FrameVariant.FULL else "image/jpeg"
+        return FileResponse(
+            path, media_type=media, headers={"Cache-Control": "private, max-age=86400"}
+        )
+    registry = _registry(request)
+    if variant is FrameVariant.FULL and (
+        registry.is_pending(device.id, night_id, name, variant, "product")
+        or await registry.request_product(device.id, night_id, name, variant)
+    ):
+        return JSONResponse({"status": "requested"}, status_code=202)
+    raise HTTPException(404, "Not available")

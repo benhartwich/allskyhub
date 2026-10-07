@@ -8,9 +8,11 @@ from typing import cast
 
 import httpx
 from fastapi import FastAPI
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from allskyhub_server.auth import invitations
+from allskyhub_server.models import Device, User
 
 PASSWORD = "correct horse battery"  # noqa: S105
 _CSRF_RE = re.compile(r'name="csrf_token" value="([^"]+)"')
@@ -60,3 +62,16 @@ async def claim(client: httpx.AsyncClient, code: str, name: str = "Garten") -> h
     return await client.post(
         "/cameras/pair", data={"code": code, "name": name, "csrf_token": await home_csrf(client)}
     )
+
+
+async def owner_email(app: FastAPI, device_id: str) -> str:
+    """The address of the account a device is paired with."""
+    maker: async_sessionmaker[AsyncSession] = app.state.sessionmaker
+    async with maker() as db:
+        email = await db.scalar(
+            select(User.email)
+            .join(Device, Device.owner_id == User.id)
+            .where(Device.id == device_id)
+        )
+    assert email
+    return email

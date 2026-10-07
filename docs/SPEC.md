@@ -291,7 +291,7 @@ night. The hub switches it with the `focus_mode` command, args `{on: bool}` (§6
 until `paired` is true:
 
 `GET /api/setup` → `{device_id, hub_url, profile, agent_version, paired, pairing_code,
-expires_in, connected}`, where `pairing_code` is the raw 6-character code (no hyphen)
+expires_in, connected, setup_mode, last_error, location_set, timezone, camera}`, where `pairing_code` is the raw 6-character code (no hyphen)
 or `null` once paired or before the first registration, `expires_in` counts down in
 seconds, and `connected` says whether the WebSocket to the hub is open.
 
@@ -316,10 +316,14 @@ Endpoints, only reachable from the setup network:
 |---|---|
 | `GET /api/setup` | as in §7, plus `setup_mode: true` and `last_error` |
 | `GET /api/wifi/networks` | → `[{ssid, signal, secure}]`, strongest first, hidden networks left out |
-| `POST /api/setup/network` | `{ssid, password?, country, hub_url?}` → `202 {will_join: ssid}` |
+| `POST /api/setup/network` | `{ssid, password?, country, hub_url?, latitude?, longitude?, timezone?}` → `202 {will_join: ssid}` |
 
 - `country` is the ISO 3166 code for the radio rules; `hub_url` overrides the configured
   hub (default `https://allskyhub.org`).
+- `latitude` and `longitude` (degrees, both or neither) and `timezone` (IANA name, e.g.
+  `Europe/Vienna`) come from the phone. The camera needs the location for day and night
+  (§4.2) and the time zone for its night folders (§4.5); it only starts capturing once it
+  has a location. They are stored with the camera's settings once it has joined.
 - After answering `202` the camera leaves setup mode and joins the network. If that fails
   it opens the setup network again and `/api/setup` reports `last_error` as
   `wifi_auth`, `wifi_not_found` or `no_internet` (otherwise `null`).
@@ -342,11 +346,16 @@ For setting up without the app (and for cameras on Ethernet with a fixed hub): a
 
 ```json
 {"allskyhub_setup": 1, "wifi": {"ssid": "Home", "password": "secret"},
- "wifi_country": "AT", "hub_url": "https://allskyhub.org"}
+ "wifi_country": "AT", "hub_url": "https://allskyhub.org",
+ "location": {"latitude": 48.14, "longitude": 14.39}, "timezone": "Europe/Vienna",
+ "camera": "auto"}
 ```
 
-It is read once at boot, applied (Wi-Fi as a NetworkManager connection, country, hub)
-and deleted. An unusable file is renamed to `allskyhub-setup.failed.json` and not tried
+All keys except `allskyhub_setup` are optional. `camera` is `auto` (default: a ZWO
+camera if one is connected, else a Raspberry Pi camera), `zwo-asi678mc`, `rpi-hq` or `sim`
+(a simulated camera, for testing an image without a camera). The file is read once at
+boot, applied (Wi-Fi as a NetworkManager connection, country, hub, location, time zone,
+camera) and deleted. An unusable file is renamed to `allskyhub-setup.failed.json` and not tried
 again.
 
 ## 8. Updates

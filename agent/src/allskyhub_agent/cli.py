@@ -8,10 +8,13 @@ allskyhub-agent --lat 0 --lon 0 --asi-sdk /path/libASICamera2.so probe
 from __future__ import annotations
 
 import argparse
+import logging
 import sys
 import threading
+import time
 from datetime import datetime
 from pathlib import Path
+from typing import Any
 from zoneinfo import ZoneInfo
 
 from allskyhub_agent import __version__, system
@@ -30,28 +33,32 @@ from allskyhub_agent.hub.pairing import PairingState
 from allskyhub_agent.live import LiveState
 from allskyhub_agent.products.build import NightProducts, build_night, night_products
 from allskyhub_agent.products.worker import ProductWorker
-from allskyhub_agent.profiles import get_profile
+from allskyhub_agent.profiles import Profile, get_profile
 from allskyhub_agent.runner import Location, LoopConfig, Runner
 from allskyhub_agent.services import HubManager, run_announcer
 from allskyhub_agent.settings import DEFAULT_PATH as SETTINGS_PATH
 from allskyhub_agent.settings import AgentSettings
-from allskyhub_agent.setup.controller import SetupController
+from allskyhub_agent.setup.controller import NetworkRequest, SetupController
 from allskyhub_agent.setup.setup_file import DEFAULT_PATH as SETUP_FILE_PATH
 from allskyhub_agent.setup.setup_file import apply_once as apply_setup_file
 from allskyhub_agent.store.images import ImageStore
 from allskyhub_agent.web.server import WebServer
 from allskyhub_protocol import FrameInfo, Status
 
+log = logging.getLogger(__name__)
+
 
 def _parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(prog="allskyhub-agent")
     p.add_argument("--version", action="version", version=__version__)
     p.add_argument("--sim", action="store_true", help="simulated camera and clock")
-    p.add_argument("--lat", type=float, required=True)
-    p.add_argument("--lon", type=float, required=True)
-    p.add_argument("--tz", default="Europe/Vienna", help="local time zone (night folders)")
+    p.add_argument("--lat", type=float, default=None, help="latitude (else from setup)")
+    p.add_argument("--lon", type=float, default=None, help="longitude (else from setup)")
+    p.add_argument("--tz", default=None, help="local time zone (night folders; else from setup)")
     p.add_argument(
-        "--profile", default=None, help="hardware profile (default: sim or zwo-asi678mc)"
+        "--profile",
+        default=None,
+        help="zwo-asi678mc, rpi-hq, sim or auto (default: from settings, else auto)",
     )
     p.add_argument(
         "--asi-sdk",
@@ -89,6 +96,20 @@ def _parser() -> argparse.ArgumentParser:
     return p
 
 
+def open_camera(hint: str, asi_sdk: Path) -> tuple[Camera | None, Profile]:
+    """Open the camera for a profile id, or find one with "auto" (ZWO first, SPEC §3).
+
+    Returns (None, profile) if no such camera is connected.
+    """
+    if hint in ("auto", "zwo-asi678mc") and asi_sdk.exists():
+        sdk = AsiSdk(asi_sdk)
+        if sdk.num_cameras() > 0:
+            return ZwoCamera(sdk), get_profile("zwo-asi678mc")
+    if hint in ("auto", "rpi-hq") and list_cameras():
+        return LibcameraCamera(), get_profile("rpi-hq")
+    return None, get_profile("zwo-asi678mc" if hint == "auto" else hint)
+
+
 def main(argv: list[str] | None = None) -> int:
     args = _parser().parse_args(argv)
     if args.cmd == "probe":
@@ -106,7 +127,7 @@ def main(argv: list[str] | None = None) -> int:
             print("no camera found")
         return 0 if found else 1
 
-    tz = ZoneInfo(args.tz)
+    tz = ZoneInfo(args.tz or "UTC")
     if args.cmd == "products":
         result = build_night(ImageStore(args.data, tz), args.night)
         print(f"night {result.night_id}: {result.frames} night frames, built {result.built}")
@@ -114,34 +135,6 @@ def main(argv: list[str] | None = None) -> int:
             print(f"  skipped {name}: {why}")
         return 0
 
-    loc = Location(args.lat, args.lon)
-    profile = get_profile(args.profile or ("sim" if args.sim else "zwo-asi678mc"))
-
-    clock: Clock
-    camera: Camera
-    if args.sim:
-        clock = SimClock(datetime.fromisoformat(args.start) if args.start else SystemClock().now())
-
-        def radiance() -> float:
-            return sky_radiance(sun_elevation(clock.now(), loc.lat, loc.lon))
-
-        camera = SimCamera(radiance, clock=clock)
-    else:
-        if args.start:
-            print("--start only works with --sim", file=sys.stderr)
-            return 2
-        clock = SystemClock()
-        try:
-            if profile.camera == "zwo":
-                camera = ZwoCamera(AsiSdk(args.asi_sdk))
-            elif profile.camera == "libcamera":
-                camera = LibcameraCamera()
-            else:
-                print(f"camera type {profile.camera!r} is not supported", file=sys.stderr)
-                return 2
-        except (OSError, AsiError, CameraError) as exc:
-            print(f"cannot open camera: {exc}", file=sys.stderr)
-            return 1
     live = LiveState()
     store = ImageStore(args.data, tz)
     pairing: PairingState | None = None
@@ -149,23 +142,45 @@ def main(argv: list[str] | None = None) -> int:
     setup: SetupController | None = None
     stop_bg = threading.Event()
 
+    # Product mode (SPEC §7.1-7.3): the agent manages the network and keeps hub URL,
+    # location, time zone and camera choice in its settings file.
     network: Network | None = None
     if args.network == "nmcli":
         network = NmcliNetwork()
     elif args.network == "sim":
         network = SimNetwork()
     settings_path: Path | None = args.settings if network is not None else None
+    settings_lock = threading.Lock()
+
+    def load_settings() -> AgentSettings:
+        with settings_lock:
+            return AgentSettings.load(args.settings) if settings_path else AgentSettings()
+
+    def update_settings(**changes: Any) -> AgentSettings:
+        with settings_lock:
+            new = AgentSettings.load(args.settings).with_updates(**changes)
+            new.save(args.settings)
+            return new
+
     hub_url: str | None = args.hub
     if network is not None:
         applied = apply_setup_file(args.setup_file, network) if args.network == "nmcli" else None
-        if applied is not None and applied.hub_url:
-            AgentSettings(hub_url=applied.hub_url).save(args.settings)
-        hub_url = hub_url or AgentSettings.load(args.settings).hub_url
+        if applied is not None:
+            update_settings(
+                hub_url=applied.hub_url,
+                latitude=applied.latitude,
+                longitude=applied.longitude,
+                timezone=applied.timezone,
+                camera=applied.camera,
+            )
+        hub_url = hub_url or load_settings().hub_url
 
+    profile_hint = "sim" if args.sim else (args.profile or load_settings().camera)
     identity: DeviceIdentity | None = None
+    profile_id = {"auto": "zwo-asi678mc"}.get(profile_hint, profile_hint)
     if hub_url:
         identity = DeviceIdentity.load_or_create(args.key)
-        pairing = PairingState(identity.device_id, hub_url, profile.id, __version__)
+        pairing = PairingState(identity.device_id, hub_url, profile_id, __version__)
 
         def status() -> Status | None:
             f = live.last_frame()
@@ -183,18 +198,33 @@ def main(argv: list[str] | None = None) -> int:
                 time_trusted=system.time_trusted(),
             )
 
-        hub = HubManager(identity, pairing, store, live, profile.id, status, settings_path)
+        hub = HubManager(identity, pairing, store, live, profile_id, status, settings_path)
         hub.start(hub_url)
         print(f"device {identity.device_id}, hub {hub_url}")
         if network is not None:
-            setup = SetupController(network, identity.device_id, on_hub_url=hub.restart)
+            hub_manager = hub
+
+            def joined(req: NetworkRequest) -> None:
+                before = load_settings().hub_url
+                after = update_settings(
+                    hub_url=req.hub_url,
+                    latitude=req.latitude,
+                    longitude=req.longitude,
+                    timezone=req.timezone,
+                )
+                if after.hub_url != before:
+                    hub_manager.restart(after.hub_url)
+
+            setup = SetupController(network, identity.device_id, on_joined=joined)
             threading.Thread(target=setup.run, args=(stop_bg,), name="setup", daemon=True).start()
 
     web: WebServer | None = None
     if args.http:
         host, _, port = str(args.http).rpartition(":")
         host = host or "0.0.0.0"  # noqa: S104 - the local UI is meant for the LAN (SPEC §7)
-        web = WebServer(live, host, int(port), pairing, setup)
+        web = WebServer(
+            live, host, int(port), pairing, setup, settings=load_settings if settings_path else None
+        )
         web.start()
         print(f"web UI on http://{host}:{web.port}/")
         if identity is not None:
@@ -202,6 +232,81 @@ def main(argv: list[str] | None = None) -> int:
             threading.Thread(
                 target=run_announcer, args=(announcer, stop_bg), name="mdns", daemon=True
             ).start()
+
+    def shutdown() -> None:
+        stop_bg.set()
+        if web is not None:
+            web.stop()
+        if hub is not None:
+            hub.stop()
+
+    # Location and time zone: the command line wins; in product mode they come from setup
+    # (SPEC §7.1, §7.3) and capture waits until they are known (SPEC §4.2).
+    loc: Location | None = None
+    if args.lat is not None and args.lon is not None:
+        loc = Location(args.lat, args.lon)
+    try:
+        while loc is None:
+            cur = load_settings()
+            if cur.latitude is not None and cur.longitude is not None:
+                loc = Location(cur.latitude, cur.longitude)
+                if args.tz is None:
+                    tz = ZoneInfo(cur.timezone)
+                    store = ImageStore(args.data, tz)
+                break
+            if settings_path is None:
+                print("--lat and --lon are needed without --network", file=sys.stderr)
+                shutdown()
+                return 2
+            log.info("waiting for the camera's location from setup")
+            time.sleep(5)
+    except KeyboardInterrupt:
+        shutdown()
+        return 0
+
+    clock: Clock
+    camera: Camera | None = None
+    profile: Profile = get_profile("sim")
+    location = loc
+    if args.sim or profile_hint == "sim":
+        # --sim on a laptop runs on simulated time (fast); the "sim" camera of a device
+        # (settings, e.g. for testing an image without a camera) runs in real time.
+        if args.start:
+            clock = SimClock(datetime.fromisoformat(args.start))
+        elif args.sim:
+            clock = SimClock(SystemClock().now())
+        else:
+            clock = SystemClock()
+        sim_clock = clock
+
+        def radiance() -> float:
+            return sky_radiance(sun_elevation(sim_clock.now(), location.lat, location.lon))
+
+        camera = SimCamera(radiance, clock=clock)
+        profile = get_profile("sim")
+    else:
+        if args.start:
+            print("--start only works with --sim", file=sys.stderr)
+            shutdown()
+            return 2
+        clock = SystemClock()
+        try:
+            while camera is None:
+                camera, profile = open_camera(profile_hint, args.asi_sdk)
+                if camera is None:
+                    if profile_hint != "auto":
+                        print(f"camera {profile_hint!r} not found", file=sys.stderr)
+                        shutdown()
+                        return 1
+                    log.warning("no camera found; looking again in 30 s")
+                    time.sleep(30)
+        except KeyboardInterrupt:
+            shutdown()
+            return 0
+        except (OSError, AsiError, CameraError) as exc:
+            print(f"cannot open camera: {exc}", file=sys.stderr)
+            shutdown()
+            return 1
 
     runner = Runner(
         camera=camera,
@@ -240,13 +345,9 @@ def main(argv: list[str] | None = None) -> int:
     except KeyboardInterrupt:
         pass
     finally:
-        stop_bg.set()
         camera.close()
         products.stop()
-        if web is not None:
-            web.stop()
-        if hub is not None:
-            hub.stop()
+        shutdown()
     return 0
 
 

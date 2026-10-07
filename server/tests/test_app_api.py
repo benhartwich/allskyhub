@@ -60,7 +60,7 @@ async def test_claim_list_image_remove(
     assert (await new_client.get(url, headers=auth)).status_code == 404
 
     store: ImageStore = app.state.images
-    store.save(dev.device_id, FrameVariant.FULL, JPEG)
+    store.save_frame(dev.device_id, "20261006", "a.jpg", FrameVariant.FULL, JPEG)
     img = await new_client.get(url + "?live=true", headers=auth)
     assert img.content == JPEG
     assert app.state.connections.is_live(dev.device_id)

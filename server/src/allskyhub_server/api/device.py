@@ -12,6 +12,7 @@ from fastapi import APIRouter, HTTPException, Path, Query, Request, WebSocket
 from fastapi.responses import Response
 from pydantic import ValidationError
 from sqlalchemy import update
+from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from starlette.websockets import WebSocketDisconnect, WebSocketState
 
@@ -35,7 +36,7 @@ from allskyhub_server.auth import ratelimit
 from allskyhub_server.devices import pairing
 from allskyhub_server.devices.connections import Connection, ConnectionRegistry
 from allskyhub_server.devices.images import JPEG_MAGIC, ImageStore
-from allskyhub_server.models import Device
+from allskyhub_server.models import Device, Frame
 from allskyhub_server.settings import Settings
 from allskyhub_server.web.deps import DbSession, SettingsDep, client_ip
 
@@ -148,7 +149,9 @@ async def upload_frame(
     """SPEC §6.5: only uploads the hub asked for are accepted."""
     info = await _device_from_bearer(request, db)
     registry: ConnectionRegistry = request.app.state.connections
-    if not registry.take_upload(info.device_id, night_id, name, variant):
+    # Checked before reading the body, taken only after it is valid, so a failed upload can
+    # be retried within the window.
+    if not registry.is_requested(info.device_id, night_id, name, variant):
         raise HTTPException(404, "Upload was not requested")
     limit = settings.max_image_mb * 1024 * 1024
     declared = request.headers.get("content-length")
@@ -161,13 +164,22 @@ async def upload_frame(
             raise HTTPException(413, "Image too large")
     if not data.startswith(JPEG_MAGIC):
         raise HTTPException(400, "Not a JPEG image")
+    if not registry.take_upload(info.device_id, night_id, name, variant):
+        raise HTTPException(404, "Upload was not requested")  # taken by a parallel upload
     store: ImageStore = request.app.state.images
-    await asyncio.to_thread(store.save, info.device_id, variant, bytes(data))
-    if variant is FrameVariant.FULL:
-        await db.execute(
-            update(Device).where(Device.id == info.device_id).values(latest_image_at=_now())
-        )
-        await db.commit()
+    await asyncio.to_thread(store.save_frame, info.device_id, night_id, name, variant, bytes(data))
+    full = variant is FrameVariant.FULL
+    await db.execute(
+        update(Frame)
+        .where(Frame.device_id == info.device_id, Frame.night_id == night_id, Frame.name == name)
+        .values({"has_full": True} if full else {"has_thumb": True})
+    )
+    await db.execute(
+        update(Device)
+        .where(Device.id == info.device_id)
+        .values({"latest_image_at": _now()} if full else {"latest_thumb_at": _now()})
+    )
+    await db.commit()
     return Response(status_code=204)
 
 
@@ -269,22 +281,48 @@ async def _on_frame(
     settings: Settings,
     registry: ConnectionRegistry,
 ) -> None:
-    """SPEC §6.5: the hub decides what to fetch. Every frame while someone watches live,
-    otherwise the latest image (and its thumbnail) at most every ``latest_image_interval_s``."""
+    """SPEC §6.5: the hub decides what to fetch.
+
+    * full image: every frame while someone watches live, otherwise at most every
+      ``latest_image_interval_s``;
+    * thumbnail (gallery): at most every ``thumb_interval_s`` and with every full image.
+
+    Every requested frame gets a ``Frame`` row with its metadata; uploads fill it in."""
+    now = _now()
     async with maker() as db:
         device = await db.get(Device, conn.device_id)
         if device is None:  # pragma: no cover - deleted while connected
             return
-        last_image = device.latest_image_at
         device.last_frame = frame.model_dump(mode="json")
-        device.last_seen_at = _now()
+        device.last_seen_at = now
+        full_due = device.latest_image_at is None or now - device.latest_image_at >= (
+            dt.timedelta(seconds=settings.latest_image_interval_s)
+        )
+        thumb_due = device.latest_thumb_at is None or now - device.latest_thumb_at >= (
+            dt.timedelta(seconds=settings.thumb_interval_s)
+        )
+        want_full = full_due or registry.is_live(conn.device_id)
+        want_thumb = thumb_due or want_full
+        if want_thumb:
+            await db.execute(
+                pg_insert(Frame)
+                .values(
+                    device_id=conn.device_id,
+                    night_id=frame.night_id,
+                    name=frame.name,
+                    captured_at=frame.captured_at,
+                    mode=frame.mode.value,
+                    exposure_us=frame.exposure_us,
+                    gain=frame.gain,
+                    mean=frame.mean,
+                    sun_elevation=frame.sun_elevation,
+                )
+                .on_conflict_do_nothing(index_elements=["device_id", "night_id", "name"])
+            )
         await db.commit()
-    due = last_image is None or _now() - last_image >= dt.timedelta(
-        seconds=settings.latest_image_interval_s
-    )
-    if registry.is_live(conn.device_id) or due:
+    if want_full:
         await registry.request_upload(conn.device_id, frame.night_id, frame.name, FrameVariant.FULL)
-    if due:
+    if want_thumb:
         await registry.request_upload(
             conn.device_id, frame.night_id, frame.name, FrameVariant.THUMB
         )

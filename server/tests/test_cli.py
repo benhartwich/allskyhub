@@ -56,7 +56,7 @@ async def test_set_password_and_delete_user(
     assert reg.pairing_code
     await claim(client, reg.pairing_code)
     store: ImageStore = app.state.images
-    store.save(dev.device_id, FrameVariant.FULL, b"\xff\xd8\xff")
+    store.save_frame(dev.device_id, "20261006", "a.jpg", FrameVariant.FULL, b"\xff\xd8\xff")
 
     monkeypatch.setattr(sys, "stdin", io.StringIO("another good password\n"))
     assert await _thread(run, "set-password", email, "--password-stdin") == 0

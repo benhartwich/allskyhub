@@ -6,7 +6,7 @@ So läuft der Hub auf allskyhub.org; für einen eigenen Hub die Domain ersetzen.
 |---|---|
 | Code | `/opt/allskyhub-server` (Git-Checkout, gehört root) |
 | Python-Umgebung | `/opt/allskyhub-server/.venv` (`uv sync --frozen --no-dev --package allskyhub-server`) |
-| Daten (Bilder) | `/var/lib/allskyhub-server` (Benutzer `allskyhub-server`) |
+| Daten (Bilder) | `/var/lib/allskyhub-server/images/<kamera>/<nacht>/{full,thumb}/` (Benutzer `allskyhub-server`); Vollbilder 7 Tage, Vorschaubilder 30 Tage (`ALLSKYHUB_SERVER_KEEP_FULL_DAYS`, `_KEEP_THUMB_DAYS`; bei Änderung die Datenschutzerklärung anpassen) |
 | Konfiguration | `/etc/allskyhub-server/allskyhub-server.env` (root:allskyhub-server, 0640), Vorlage `deploy/allskyhub-server.env.example` |
 | Datenbank | PostgreSQL 17 aus Debian, Rolle `allskyhub_server`, Datenbank `allskyhub` |
 | Dienst | `allskyhub-server.socket` + `.service` (`deploy/systemd/`), uvicorn auf `/run/allskyhub-server/api.sock` |

@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../api/discovery.dart';
 import '../api/hub_client.dart';
 import '../api/setup_mode.dart';
+import '../platform/location.dart';
 import '../platform/wifi_binding.dart';
 import 'camera_screen.dart';
 import 'gallery_screens.dart';
@@ -70,6 +71,7 @@ class _CamerasScreenState extends State<CamerasScreen> {
               hub: widget.client,
               binding: PlatformWifiBinding(),
               discovery: NsdCameraDiscovery(),
+              locationSource: PlatformLocationSource(),
             ),
           ),
           _PairWay.lan => OnboardingScreen(client: widget.client),

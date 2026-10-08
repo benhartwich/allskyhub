@@ -120,7 +120,8 @@ def test_lightning_event(tmp_path: Path) -> None:
     ev = got[0]
     assert ev.id == "lightning-20260715T210100Z"
     assert ev.has_image
-    assert set(ev.data) == {"area_frac", "peak", "storm_flashes", "storm"}
+    assert set(ev.data) == {"area_frac", "peak", "storm_flashes", "storm", "azimuth_deg",
+                            "altitude_deg"}  # fmt: skip
     assert ev.data["storm"] == "storm-20260715T210100Z"
     events = EventStore(store)
     assert events.night_events(ev.night_id) == [ev]

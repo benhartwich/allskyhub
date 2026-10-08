@@ -20,6 +20,7 @@ from pydantic import ValidationError
 
 from allskyhub_agent.adapters.camera import Image
 from allskyhub_agent.calib.orientation import Orienter
+from allskyhub_agent.calib.solve import Solution
 from allskyhub_agent.core.metering import Mask
 from allskyhub_agent.detect.aurora import AuroraConfig, AuroraDetector, AuroraUpdate
 from allskyhub_agent.detect.lightning import LightningConfig, LightningDetector, LightningHit
@@ -43,9 +44,33 @@ FULL_MAX_PX = 1920  # a lightning picture is the whole frame, at most this wide
 
 
 class EventStore:
-    def __init__(self, store: ImageStore) -> None:
+    def __init__(
+        self, store: ImageStore, orientation: Callable[[], Solution | None] | None = None
+    ) -> None:
         self._store = store
         self._lock = threading.Lock()
+        # SPEC §4.8: the orientation valid when an event is saved gives its sky position.
+        self._orientation = orientation
+
+    def _position(
+        self, frame: FrameInfo, x: float | None, y: float | None
+    ) -> dict[str, float | None]:
+        """`azimuth_deg` and `altitude_deg` of a pixel of the frame, null without an
+        orientation (SPEC §6.4)."""
+        sol = self._orientation() if self._orientation is not None else None
+        pos = None
+        if sol is not None and x is not None and y is not None:
+            size = self._frame_size(frame)
+            pos = sol.position(x, y, *size) if size is not None else None
+        az, alt = pos if pos is not None else (None, None)
+        return {"azimuth_deg": az, "altitude_deg": alt}
+
+    def _frame_size(self, frame: FrameInfo) -> tuple[int, int] | None:
+        try:
+            with PILImage.open(self._store.night_dir(frame.night_id) / frame.name) as im:
+                return im.width, im.height
+        except OSError:
+            return None
 
     def _dir(self, night: str) -> Path:
         return self._store.night_dir(night) / "events"
@@ -121,6 +146,7 @@ class EventStore:
                     "frames": 1,
                     "direction_deg": s.direction_deg,
                     "shower": active_shower(f.captured_at.date()),
+                    **self._position(f, s.cx, s.cy),
                 },
             )
             self._append(event)
@@ -145,6 +171,7 @@ class EventStore:
                     "peak": hit.flash.peak,
                     "storm_flashes": hit.storm_flashes,
                     "storm": "storm-" + hit.storm_start.astimezone(UTC).strftime("%Y%m%dT%H%M%SZ"),
+                    **self._position(f, hit.flash.x, hit.flash.y),
                 },
             )
             self._append(event)
@@ -183,6 +210,7 @@ class EventStore:
                     "direction_deg": ep.best.direction_deg,
                     "ongoing": ep.ongoing,
                     "image_rev": ep.image_rev,
+                    **self._position(ep.best_frame, ep.best.x, ep.best.y),
                 },
             )
             self._append(event)

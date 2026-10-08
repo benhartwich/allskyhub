@@ -14,11 +14,12 @@ from fastapi import APIRouter, Depends, HTTPException, Path, Query, Request
 from fastapi.responses import FileResponse, Response
 from pydantic import BaseModel, ConfigDict, Field
 
-from allskyhub_protocol import EVENT_ID_PATTERN, CloseCode, FrameVariant
+from allskyhub_protocol import EVENT_ID_PATTERN, CloseCode, FrameVariant, SetSettingsArgs
 from allskyhub_server.auth import accounts, app_tokens, ratelimit
 from allskyhub_server.auth.passwords import verify_secret_async
 from allskyhub_server.auth.tokens import hash_token
 from allskyhub_server.devices import archive, events, pairing, public, queries
+from allskyhub_server.devices import settings as settings_mod
 from allskyhub_server.devices.connections import ConnectionRegistry
 from allskyhub_server.devices.images import ImageStore
 from allskyhub_server.models import Device, EventRecord, User
@@ -427,6 +428,20 @@ async def night_events(
     device = await _own(db, user, device_id)
     rows = await events.events(db, device.id, night_id=night_id, limit=1000)
     return [_event(e) for e in rows]
+
+
+@router.put("/cameras/{device_id}/settings")
+async def camera_settings(
+    request: Request, body: SetSettingsArgs, db: DbSession, user: AppUser, device_id: str
+) -> dict[str, str]:
+    """SPEC §6.5 ``set_settings`` (roadmap #2): only the given keys change. Waits for the
+    camera's answer; 409 offline, 400 rejected (German message), 504 no answer. The camera
+    then restarts its capture and reports the new values in ``status.settings``."""
+    device = await _own(db, user, device_id)
+    outcome = await settings_mod.apply(_registry(request), device.id, body)
+    if not outcome.ok:
+        raise HTTPException(outcome.status, outcome.message)
+    return {"status": "applied"}
 
 
 @router.get("/cameras/{device_id}/events/export")

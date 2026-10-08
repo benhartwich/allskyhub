@@ -123,3 +123,7 @@ button.secondary { background: transparent; color: var(--accent); border: 1px so
 .event-thumb img, .event-thumb .sky-ph { width: 100%; aspect-ratio: 1; object-fit: cover; border-radius: 8px; }
 .event-row { display: grid; grid-template-columns: 110px 1fr; gap: 12px; align-items: center; }
 .row-links { display: flex; justify-content: space-between; }
+.grid-2 { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+select { width: 100%; min-height: 48px; padding: 10px 14px; border-radius: 12px; border: 1px solid var(--line);
+         background: var(--surface-2); color: var(--text); font: inherit; }
+button:disabled { opacity: .5; cursor: not-allowed; }

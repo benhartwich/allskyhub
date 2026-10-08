@@ -21,6 +21,11 @@ def sun_elevation(t: datetime, lat: float, lon: float) -> float:
 
     `lat` is north-positive, `lon` east-positive, both in degrees.
     """
+    return sun_position(t, lat, lon)[0]
+
+
+def sun_position(t: datetime, lat: float, lon: float) -> tuple[float, float]:
+    """(elevation, azimuth) of the sun's centre in degrees; azimuth from north, east = 90."""
     jc = (_julian_day(t) - 2451545.0) / 36525.0
 
     mean_lon = (280.46646 + jc * (36000.76983 + jc * 0.0003032)) % 360.0
@@ -60,5 +65,12 @@ def sun_elevation(t: datetime, lat: float, lon: float) -> float:
     cos_zenith = math.sin(phi) * math.sin(decl) + math.cos(phi) * math.cos(decl) * math.cos(
         math.radians(hour_angle)
     )
-    zenith = math.degrees(math.acos(max(-1.0, min(1.0, cos_zenith))))
-    return 90.0 - zenith
+    zen = math.acos(max(-1.0, min(1.0, cos_zenith)))
+    denom = math.cos(phi) * math.sin(zen)
+    if abs(denom) < 1e-9:
+        az = 180.0 if lat > math.degrees(decl) else 0.0  # sun at the zenith or a pole
+    else:
+        c = (math.sin(phi) * math.cos(zen) - math.sin(decl)) / denom
+        a = math.degrees(math.acos(max(-1.0, min(1.0, c))))
+        az = (a + 180.0) % 360.0 if hour_angle > 0 else (540.0 - a) % 360.0
+    return 90.0 - math.degrees(zen), az

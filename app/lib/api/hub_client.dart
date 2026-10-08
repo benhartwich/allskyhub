@@ -70,6 +70,7 @@ class Night {
     this.last,
     this.products = 0,
     this.events = 0,
+    this.sky = 0,
   });
 
   factory Night.fromJson(Map<String, dynamic> json) => Night(
@@ -81,6 +82,7 @@ class Night {
     last: json['last'] == null ? null : DateTime.parse(json['last'] as String),
     products: (json['products'] as int?) ?? 0,
     events: (json['events'] as int?) ?? 0,
+    sky: (json['sky'] as int?) ?? 0,
   );
 
   /// `YYYYMMDD`: the evening the night started (SPEC §4.5).
@@ -96,6 +98,9 @@ class Night {
 
   /// Detections (SPEC §6.4) reported for this night.
   final int events;
+
+  /// Sky measurements (SPEC §6.3 status.sky) for this night.
+  final int sky;
 
   DateTime get evening => DateTime(
     int.parse(nightId.substring(0, 4)),
@@ -170,6 +175,27 @@ class FrameItem {
   final double gain;
   final double sunElevation;
   final bool hasFull;
+}
+
+/// One sky measurement (SPEC §6.3): null where the camera could not judge (day, dusk).
+class SkySample {
+  SkySample({required this.at, this.cloudCover, this.sqmMag, this.stars});
+
+  factory SkySample.fromJson(Map<String, dynamic> json) => SkySample(
+    at: DateTime.parse(json['at'] as String),
+    cloudCover: (json['cloud_cover'] as num?)?.toDouble(),
+    sqmMag: (json['sqm_mag'] as num?)?.toDouble(),
+    stars: json['stars'] as int?,
+  );
+
+  final DateTime at;
+
+  /// 0..1
+  final double? cloudCover;
+
+  /// mag/arcsec², approximate until calibrated.
+  final double? sqmMag;
+  final int? stars;
 }
 
 /// A detection reported by the camera (SPEC §6.4).
@@ -406,6 +432,15 @@ class HubClient {
     final uri = _uri('/cameras/$cameraId/events', query);
     final json = await _sendUri('GET', uri) as List<dynamic>;
     return [for (final e in json) SkyEvent.fromJson(e as Map<String, dynamic>)];
+  }
+
+  Future<List<SkySample>> nightSky(String cameraId, String nightId) async {
+    final json =
+        await _send('GET', '/cameras/$cameraId/nights/$nightId/sky')
+            as List<dynamic>;
+    return [
+      for (final x in json) SkySample.fromJson(x as Map<String, dynamic>),
+    ];
   }
 
   Future<List<SkyEvent>> nightEvents(String cameraId, String nightId) async {

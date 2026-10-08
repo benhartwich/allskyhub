@@ -1,0 +1,14 @@
+#!/bin/sh
+# Sets the Wi-Fi country the agent wrote (two capital letters, ISO 3166). Runs as root,
+# started by allskyhub-wifi-country.path; the agent itself has no root rights.
+set -eu
+FILE=/var/lib/allskyhub-agent/wifi-country
+[ -f "$FILE" ] || exit 0
+country=$(head -c 3 "$FILE" | tr -d '\n')
+case "$country" in
+    [A-Z][A-Z]) ;;
+    *) echo "invalid Wi-Fi country '$country'"; exit 1 ;;
+esac
+[ "$(raspi-config nonint get_wifi_country 2>/dev/null || true)" = "$country" ] && exit 0
+raspi-config nonint do_wifi_country "$country"
+echo "Wi-Fi country set to $country"

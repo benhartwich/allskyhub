@@ -1,0 +1,8 @@
+[Unit]
+Description=allskyhub: apply the Wi-Fi country the agent received from the app (SPEC §7.1)
+
+[Path]
+PathChanged=/var/lib/allskyhub-agent/wifi-country
+
+[Install]
+WantedBy=multi-user.target

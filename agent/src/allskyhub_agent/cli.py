@@ -148,7 +148,7 @@ def main(argv: list[str] | None = None) -> int:
     # location, time zone and camera choice in its settings file.
     network: Network | None = None
     if args.network == "nmcli":
-        network = NmcliNetwork()
+        network = NmcliNetwork(country_file=args.settings.parent / "wifi-country")
     elif args.network == "sim":
         network = SimNetwork()
     settings_path: Path | None = args.settings if network is not None else None

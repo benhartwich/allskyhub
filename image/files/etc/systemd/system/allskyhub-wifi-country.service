@@ -1,0 +1,6 @@
+[Unit]
+Description=allskyhub: set the Wi-Fi country (SPEC §7.1)
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/allskyhub-wifi-country

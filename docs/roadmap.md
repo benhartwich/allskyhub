@@ -24,7 +24,7 @@ postkasten.cloud). Changes to `packages/protocol` and `docs/SPEC.md` have one ow
 | 1 | ~~Meteor detection → `event` (meteor) with image~~ done (v1) | agent | aircraft/satellite great-circle filter and star veto need the fisheye calibration (#8) |
 | 2 | ~~`set_settings` command~~ done | agent + hub | agent, hub API, web and app screen |
 | 3 | ~~Free-space retention (keep ≥ 10 % free)~~ done | agent | |
-| 4 | Wi-Fi country from the app | agent | root helper unit started via polkit |
+| 4 | ~~Wi-Fi country from the app~~ done | agent | root path unit in the image |
 | 5 | Lightning, aurora, NLC, sky quality, cloud detections | agent | ports of the existing Allsky modules |
 | 6 | Push notifications (FCM) for events | hub | Android first |
 | 7 | Signed agent updates with rollback (M5 part 2) | agent | like myboxi's updater |

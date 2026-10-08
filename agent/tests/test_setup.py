@@ -352,3 +352,19 @@ def test_settings_delays(tmp_path: Path) -> None:
     back = AgentSettings.load(p)
     assert (back.day_delay_s, back.night_delay_s) == (60.0, 5.0)
     assert back.with_updates(night_delay_s=-3) == back
+
+
+def test_wifi_country_handed_to_root_helper(tmp_path: Path) -> None:
+    from allskyhub_agent.adapters.network import NmcliNetwork
+
+    f = tmp_path / "wifi-country"
+    net = NmcliNetwork(country_file=f, country_wait_s=0)
+    net.set_country("at")
+    assert f.read_text() == "AT\n"
+    mtime = f.stat().st_mtime_ns
+    net.set_country("AT")  # unchanged: the file is not rewritten (no needless restart)
+    assert f.stat().st_mtime_ns == mtime
+    for bad in ("00", "AUT", "a", "../"):
+        net.set_country(bad)
+    assert f.read_text() == "AT\n"
+    NmcliNetwork(country_wait_s=0).set_country("DE")  # without a file: nothing happens

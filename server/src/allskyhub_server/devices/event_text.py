@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from typing import Any
+import datetime as dt
+from typing import Any, cast
 
 from allskyhub_server.models import EventRecord
 
@@ -22,6 +23,38 @@ _AXES = (
     "waagrecht",
     "diagonal, oben links – unten rechts",
 )
+
+
+COMPASS = ("N", "NO", "O", "SO", "S", "SW", "W", "NW")
+
+
+def compass(azimuth: float) -> str:
+    """Azimuth (0 = north, clockwise) as one of eight German compass points."""
+    return COMPASS[round((azimuth % 360) / 45) % 8]
+
+
+def orientation_line(status: dict[str, Any] | None) -> str | None:
+    """SPEC §4.8 ``status.orientation``: where north is in the image and how well it is
+    known, or None before the first calibration."""
+    o = (status or {}).get("orientation")
+    if not isinstance(o, dict):
+        return None
+    o = cast(dict[str, Any], o)
+    north = o.get("north_deg")
+    if not isinstance(north, int | float):
+        return None
+    parts = [f"Norden bei {round(north) % 360}° im Bild"]
+    if isinstance(stars := o.get("stars"), int):
+        parts.append(f"kalibriert auf {stars} Sternen")
+    if isinstance(rms := o.get("rms_deg"), int | float):
+        parts.append(f"±{rms:.1f}°".replace(".", ","))
+    if isinstance(solved := o.get("solved_at"), str):
+        try:
+            day = dt.datetime.fromisoformat(solved)
+            parts.append(f"{day.day}.{day.month}.")
+        except ValueError:
+            pass
+    return " · ".join(parts)
 
 
 def event_rows(event: EventRecord) -> list[tuple[str, str]]:
@@ -64,5 +97,10 @@ def event_rows(event: EventRecord) -> list[tuple[str, str]]:
         if data.pop("ongoing", None) is True:
             rows.append(("Status", "läuft noch"))
     data.pop("image_rev", None)
+    # With a calibrated camera (SPEC §4.8) the agent adds the real direction on the sky.
+    if isinstance(azimuth := data.pop("azimuth_deg", None), int | float):
+        rows.append(("Himmelsrichtung", f"{round(azimuth) % 360}° ({compass(azimuth)})"))
+    if isinstance(altitude := data.pop("altitude_deg", None), int | float):
+        rows.append(("Höhe über dem Horizont", f"{round(altitude)}°"))
     rows.extend((key, str(value)) for key, value in data.items() if value is not None)
     return rows

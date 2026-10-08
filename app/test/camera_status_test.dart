@@ -75,6 +75,26 @@ void main() {
     expect(warn('Uhrzeit'), isTrue);
   });
 
+  test('orientation row when the camera is calibrated', () {
+    final rows = statusRows(
+      status: {
+        'orientation': {
+          'north_deg': 18.3,
+          'mirrored': true,
+          'stars': 34,
+          'rms_deg': 0.3,
+        },
+      },
+      frame: const {},
+      lastSeen: null,
+      now: now,
+    );
+    expect(
+      rows.firstWhere((r) => r.label == 'Ausrichtung').value,
+      'Norden bei 18° · 34 Sterne · ±0,3°',
+    );
+  });
+
   test('missing fields are left out', () {
     final rows = statusRows(
       status: const {},

@@ -47,6 +47,7 @@
     <dt>Profil</dt><dd>{{ device.profile }}</dd>
     <dt>Agent</dt><dd>{{ device.agent_version }}</dd>
     <dt>Gekoppelt</dt><dd>{{ device.paired_at | localtime }}</dd>
+    <dt>Ausrichtung</dt><dd>{{ orientation or "noch nicht kalibriert (braucht eine klare Nacht)" }}</dd>
     <dt>Geräte-ID</dt><dd><code>{{ device.id }}</code></dd>
   </dl>
 </div>

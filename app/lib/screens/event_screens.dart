@@ -57,11 +57,79 @@ List<(String, String)> eventRows(SkyEvent event) {
       rows.add(('Meteorstrom', shower));
     }
   }
+  if (event.kind == 'lightning') {
+    final area = data.remove('area_frac');
+    if (area is num) {
+      rows.add(('Erhellter Himmel', '${(area * 100).round()} %'));
+    }
+    final peak = data.remove('peak');
+    if (peak is num) rows.add(('Aufhellung', '${(peak * 100).round()} %'));
+    final flashes = data.remove('storm_flashes');
+    if (flashes is num) rows.add(('Blitze in 30 Min.', '${flashes.round()}'));
+    data.remove('storm');
+  }
   for (final entry in data.entries) {
     if (entry.value != null) rows.add((entry.key, '${entry.value}'));
   }
   return rows;
 }
+
+final _stormKey = RegExp(r'^storm-\d{8}T\d{6}Z$');
+
+/// All flashes of one thunderstorm (SPEC §6.4 lightning `data.storm`), shown as one entry.
+class StormGroup {
+  StormGroup(this.key);
+
+  final String key;
+  final flashes = <SkyEvent>[];
+
+  DateTime get start =>
+      flashes.map((e) => e.start).reduce((a, b) => a.isBefore(b) ? a : b);
+  DateTime get end =>
+      flashes.map((e) => e.end).reduce((a, b) => a.isAfter(b) ? a : b);
+
+  /// The flash that lit up the largest part of the sky.
+  SkyEvent get cover => flashes.reduce((a, b) => _area(b) > _area(a) ? b : a);
+
+  static double _area(SkyEvent e) =>
+      (e.data['area_frac'] as num?)?.toDouble() ?? 0;
+}
+
+/// Events in order, with the flashes of each storm collapsed into one [StormGroup] at the
+/// place of its first (newest) flash. Items are [SkyEvent] or [StormGroup].
+List<Object> groupStorms(List<SkyEvent> events) {
+  final storms = <String, StormGroup>{};
+  final items = <Object>[];
+  for (final event in events) {
+    final key = event.kind == 'lightning' ? event.data['storm'] : null;
+    if (key is! String || !_stormKey.hasMatch(key)) {
+      items.add(event);
+      continue;
+    }
+    final storm = storms.putIfAbsent(key, () {
+      final group = StormGroup(key);
+      items.add(group);
+      return group;
+    });
+    storm.flashes.add(event);
+  }
+  return items;
+}
+
+String _stormLabel(StormGroup storm) =>
+    '${storm.flashes.length} Blitz${storm.flashes.length == 1 ? '' : 'e'}';
+
+void _openStorm(
+  BuildContext context,
+  HubClient client,
+  String cameraId,
+  StormGroup storm,
+) => Navigator.of(context).push(
+  MaterialPageRoute<void>(
+    builder: (_) =>
+        StormScreen(client: client, cameraId: cameraId, storm: storm),
+  ),
+);
 
 Widget _thumb(
   HubClient client,
@@ -150,6 +218,7 @@ class _EventsScreenState extends State<EventsScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final items = groupStorms(_events);
     return Scaffold(
       appBar: AppBar(
         title: Text('Ereignisse · ${widget.camera.name}'),
@@ -181,15 +250,44 @@ class _EventsScreenState extends State<EventsScreen> {
                 return false;
               },
               child: ListView.builder(
-                itemCount: _events.length + (_loading ? 1 : 0),
+                itemCount: items.length + (_loading ? 1 : 0),
                 itemBuilder: (context, i) {
-                  if (i >= _events.length) {
+                  if (i >= items.length) {
                     return const Padding(
                       padding: EdgeInsets.all(16),
                       child: Center(child: CircularProgressIndicator()),
                     );
                   }
-                  final event = _events[i];
+                  final item = items[i];
+                  if (item is StormGroup) {
+                    return ListTile(
+                      key: ValueKey(item.key),
+                      leading: SizedBox(
+                        width: 64,
+                        height: 64,
+                        child: ClipRRect(
+                          borderRadius: BorderRadius.circular(6),
+                          child: _thumb(
+                            widget.client,
+                            widget.camera.id,
+                            item.cover,
+                          ),
+                        ),
+                      ),
+                      title: const Text('Gewitter'),
+                      subtitle: Text(
+                        '${_stormLabel(item)} · ${eventTime(item.start)}–'
+                        '${eventTime(item.end).substring(7, 12)}',
+                      ),
+                      onTap: () => _openStorm(
+                        context,
+                        widget.client,
+                        widget.camera.id,
+                        item,
+                      ),
+                    );
+                  }
+                  final event = item as SkyEvent;
                   return ListTile(
                     key: ValueKey(event.id),
                     leading: SizedBox(
@@ -239,47 +337,121 @@ class EventStrip extends StatelessWidget {
       scrollDirection: Axis.horizontal,
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
       children: [
-        for (final event in events)
-          Padding(
-            key: ValueKey(event.id),
-            padding: const EdgeInsets.only(right: 8),
-            child: InkWell(
-              onTap: () => _open(context, client, cameraId, event),
-              child: SizedBox(
-                width: 100,
-                child: Stack(
-                  fit: StackFit.expand,
-                  children: [
-                    ClipRRect(
-                      borderRadius: BorderRadius.circular(8),
-                      child: _thumb(client, cameraId, event),
-                    ),
-                    Positioned(
-                      left: 4,
-                      bottom: 4,
-                      child: ColoredBox(
-                        color: Colors.black54,
-                        child: Padding(
-                          padding: const EdgeInsets.symmetric(horizontal: 4),
-                          child: Text(
-                            '${eventTitles[event.kind] ?? event.kind} '
-                            '${eventTime(event.start).substring(7, 12)}',
-                            style: const TextStyle(
-                              color: Colors.white,
-                              fontSize: 11,
-                            ),
-                          ),
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
+        for (final item in groupStorms(events))
+          if (item is StormGroup)
+            _tile(
+              context,
+              key: item.key,
+              event: item.cover,
+              label: 'Gewitter · ${_stormLabel(item)}',
+              onTap: () => _openStorm(context, client, cameraId, item),
+            )
+          else
+            _tile(
+              context,
+              key: (item as SkyEvent).id,
+              event: item,
+              label:
+                  '${eventTitles[item.kind] ?? item.kind} '
+                  '${eventTime(item.start).substring(7, 12)}',
+              onTap: () => _open(context, client, cameraId, item),
             ),
-          ),
       ],
     ),
   );
+
+  Widget _tile(
+    BuildContext context, {
+    required String key,
+    required SkyEvent event,
+    required String label,
+    required VoidCallback onTap,
+  }) => Padding(
+    key: ValueKey(key),
+    padding: const EdgeInsets.only(right: 8),
+    child: InkWell(
+      onTap: onTap,
+      child: SizedBox(
+        width: 100,
+        child: Stack(
+          fit: StackFit.expand,
+          children: [
+            ClipRRect(
+              borderRadius: BorderRadius.circular(8),
+              child: _thumb(client, cameraId, event),
+            ),
+            Positioned(
+              left: 4,
+              bottom: 4,
+              child: ColoredBox(
+                color: Colors.black54,
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 4),
+                  child: Text(
+                    label,
+                    style: const TextStyle(color: Colors.white, fontSize: 11),
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    ),
+  );
+}
+
+/// All flashes of one thunderstorm.
+class StormScreen extends StatelessWidget {
+  const StormScreen({
+    super.key,
+    required this.client,
+    required this.cameraId,
+    required this.storm,
+  });
+
+  final HubClient client;
+  final String cameraId;
+  final StormGroup storm;
+
+  @override
+  Widget build(BuildContext context) {
+    final flashes = [...storm.flashes]
+      ..sort((a, b) => a.start.compareTo(b.start));
+    return Scaffold(
+      appBar: AppBar(title: const Text('Gewitter')),
+      body: ListView(
+        padding: const EdgeInsets.all(8),
+        children: [
+          Padding(
+            padding: const EdgeInsets.all(8),
+            child: Text(
+              '${_stormLabel(storm)} · ${eventTime(storm.start)}–'
+              '${eventTime(storm.end).substring(7, 12)}',
+            ),
+          ),
+          GridView.count(
+            crossAxisCount: 3,
+            shrinkWrap: true,
+            physics: const NeverScrollableScrollPhysics(),
+            mainAxisSpacing: 6,
+            crossAxisSpacing: 6,
+            children: [
+              for (final flash in flashes)
+                InkWell(
+                  key: ValueKey(flash.id),
+                  onTap: () => _open(context, client, cameraId, flash),
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(8),
+                    child: _thumb(client, cameraId, flash),
+                  ),
+                ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
 }
 
 /// One detection: the full picture (fetched from the camera on demand) and its data.

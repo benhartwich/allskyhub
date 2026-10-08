@@ -43,5 +43,13 @@ def event_rows(event: EventRecord) -> list[tuple[str, str]]:
             rows.append(("Richtung", f"{round(direction)}° ({_AXES[axis]})"))
         if isinstance(shower := data.pop("shower", None), str) and shower:
             rows.append(("Meteorstrom", shower))
+    if event.kind == "lightning":
+        if isinstance(area := data.pop("area_frac", None), int | float):
+            rows.append(("Erhellter Himmel", f"{round(area * 100)} %"))
+        if isinstance(peak := data.pop("peak", None), int | float):
+            rows.append(("Aufhellung", f"{round(peak * 100)} %"))
+        if isinstance(flashes := data.pop("storm_flashes", None), int | float):
+            rows.append(("Blitze in 30 Min.", str(round(flashes))))
+        data.pop("storm", None)  # shown as the storm the flash belongs to
     rows.extend((key, str(value)) for key, value in data.items() if value is not None)
     return rows

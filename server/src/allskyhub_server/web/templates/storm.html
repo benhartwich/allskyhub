@@ -1,0 +1,10 @@
+{% extends "base.html" %}
+{% block title %}Gewitter · {{ device.name }} · allskyhub{% endblock %}
+{% block content %}
+<a class="back" href="/cameras/{{ device.id }}/nights/{{ storm.night_id }}">← {{ storm.night_id | night_title }}</a>
+<h1>Gewitter</h1>
+<p class="muted">{{ storm.start | localtime }} – {{ storm.end | clock }} · {{ storm.flashes | length }} Blitz{{ 'e' if storm.flashes | length != 1 }}</p>
+<div class="event-strip">
+  {% for e in storm.flashes %}{% include "_event_thumb.html" %}{% endfor %}
+</div>
+{% endblock %}

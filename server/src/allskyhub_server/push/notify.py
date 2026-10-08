@@ -15,6 +15,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from allskyhub_server.devices.connections import ConnectionRegistry
 from allskyhub_server.devices.event_text import EVENT_TITLES
+from allskyhub_server.devices.events import storm_key
 from allskyhub_server.models import Device, EventRecord, PushToken, User
 from allskyhub_server.push.fcm import Message
 
@@ -39,6 +40,7 @@ class Notifier:
         self._maker = maker
         self._sender = sender
         self._last_event: dict[str, dt.datetime] = {}
+        self._storms_notified: set[str] = set()
 
     @property
     def enabled(self) -> bool:
@@ -58,9 +60,6 @@ class Notifier:
         if self._sender is None:
             return
         now = _now()
-        last = self._last_event.get(device_id)
-        if last is not None and now - last < EVENT_QUIET:
-            return
         try:
             async with self._maker() as db:
                 row = (
@@ -76,8 +75,18 @@ class Notifier:
                 device, user, event = row
                 if not user.notify_events or event.label == "false_positive":
                     return
-                self._last_event[device_id] = now
-                title = EVENT_TITLES.get(event.kind, event.kind)
+                storm = storm_key(event)
+                if storm is not None:
+                    # Thunderstorms: once per storm, whatever its length.
+                    if storm in self._storms_notified:
+                        return
+                    self._storms_notified.add(storm)
+                else:
+                    last = self._last_event.get(device_id)
+                    if last is not None and now - last < EVENT_QUIET:
+                        return
+                    self._last_event[device_id] = now
+                title = "Gewitter" if storm else EVENT_TITLES.get(event.kind, event.kind)
                 await self._deliver(
                     db,
                     user.id,

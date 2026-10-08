@@ -387,6 +387,7 @@ async def _handle(
     elif isinstance(body, Event):
         await _on_event(body, conn, maker, registry)
     elif isinstance(body, Ack | ErrorReply):
+        registry.resolve(conn.device_id, body)
         if isinstance(body, ErrorReply):
             log.info(
                 "device command failed",

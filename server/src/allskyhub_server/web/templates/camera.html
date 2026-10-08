@@ -17,6 +17,30 @@
   </div>
 </section>
 {% endif %}
+<form method="post" action="/cameras/{{ device.id }}/settings" class="card stack">
+  <h2>Einstellungen</h2>
+  <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+  {% if not settings_reported %}<p class="muted">Die Kamera hat ihre aktuellen Einstellungen noch nicht gemeldet. Leere Felder bleiben unverändert.</p>{% endif %}
+  <div class="grid-2">
+    <label>Breite<input name="latitude" inputmode="decimal" value="{{ settings.latitude }}" placeholder="48.14"></label>
+    <label>Länge<input name="longitude" inputmode="decimal" value="{{ settings.longitude }}" placeholder="14.39"></label>
+  </div>
+  <label>Zeitzone<input name="timezone" value="{{ settings.timezone }}" placeholder="Europe/Vienna"></label>
+  <label>Kamera
+    <select name="camera">
+      <option value="">– unverändert –</option>
+      {% for value, title in camera_choices.items() %}
+      <option value="{{ value }}" {% if settings.camera == value %}selected{% endif %}>{{ title }}</option>
+      {% endfor %}
+    </select>
+  </label>
+  <div class="grid-2">
+    <label>Pause am Tag (s)<input name="day_delay_s" inputmode="decimal" value="{{ settings.day_delay_s }}"></label>
+    <label>Pause in der Nacht (s)<input name="night_delay_s" inputmode="decimal" value="{{ settings.night_delay_s }}"></label>
+  </div>
+  <p class="muted">Die Kamera übernimmt die Werte sofort und startet dafür die Aufnahme neu. Das geht nur, solange sie verbunden ist.</p>
+  <button type="submit"{% if not online %} disabled{% endif %}>Einstellungen übernehmen</button>
+</form>
 <div class="card">
   <h2>Gerät</h2>
   <dl class="facts">

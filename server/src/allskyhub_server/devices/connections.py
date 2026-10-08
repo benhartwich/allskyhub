@@ -15,9 +15,11 @@ from dataclasses import dataclass, field
 from typing import Literal
 
 from allskyhub_protocol import (
+    Ack,
     Command,
     CommandName,
     Envelope,
+    ErrorReply,
     FrameVariant,
     UploadEventArgs,
     UploadFrameArgs,
@@ -51,6 +53,14 @@ class Connection:
     close: Close
     # (night_id, name, variant) → until when the hub accepts that upload.
     requested: dict[UploadKey, dt.datetime] = field(default_factory=dict[UploadKey, dt.datetime])
+    # Commands waiting for their ack/error (SPEC §6.5), by envelope id.
+    replies: dict[str, asyncio.Future[Ack | ErrorReply]] = field(
+        default_factory=dict[str, "asyncio.Future[Ack | ErrorReply]"]
+    )
+
+
+class DeviceOfflineError(Exception):
+    """The device has no open WebSocket."""
 
 
 class ConnectionRegistry:
@@ -90,6 +100,32 @@ class ConnectionRegistry:
     def is_live(self, device_id: str) -> bool:
         until = self._live_until.get(device_id)
         return until is not None and until > _now()
+
+    # --- commands with a reply (SPEC §6.5) -------------------------------------------------
+
+    async def command(self, device_id: str, cmd: Command, wait_s: float) -> Ack | ErrorReply:
+        """Send ``cmd`` and wait for its ``ack`` or ``error``.
+
+        Raises ``DeviceOffline`` when the device is not connected and ``TimeoutError`` when
+        it does not answer in time."""
+        conn = self._conns.get(device_id)
+        if conn is None:
+            raise DeviceOfflineError(device_id)
+        env = Envelope.wrap(cmd, ts=_now())
+        reply: asyncio.Future[Ack | ErrorReply] = asyncio.get_running_loop().create_future()
+        conn.replies[env.id] = reply
+        try:
+            await conn.send_text(env.model_dump_json())
+            return await asyncio.wait_for(reply, wait_s)
+        finally:
+            conn.replies.pop(env.id, None)
+
+    def resolve(self, device_id: str, reply: Ack | ErrorReply) -> None:
+        """An ``ack``/``error`` arrived; wake whoever waits for it (others are ignored)."""
+        conn = self._conns.get(device_id)
+        future = conn.replies.get(reply.ref) if conn else None
+        if future is not None and not future.done():
+            future.set_result(reply)
 
     # --- uploads (SPEC §6.5) ----------------------------------------------------------
 

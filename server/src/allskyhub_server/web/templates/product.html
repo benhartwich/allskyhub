@@ -1,0 +1,7 @@
+{% extends "base.html" %}
+{% block title %}{{ titles[product.kind] }} · {{ device.name }} · allskyhub{% endblock %}
+{% block content %}
+<a class="back" href="/cameras/{{ device.id }}/nights/{{ night_id }}">← {{ night_id | night_title }}</a>
+<h1>{{ titles[product.kind] }}</h1>
+<div id="product">{% include "_product_view.html" %}</div>
+{% endblock %}

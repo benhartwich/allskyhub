@@ -1,0 +1,28 @@
+{% extends "base.html" %}
+{% block title %}{{ night_id | night_title }} · {{ device.name }} · allskyhub{% endblock %}
+{% block content %}
+<a class="back" href="/cameras/{{ device.id }}/gallery">← Galerie</a>
+<h1>{{ night_id | night_title }}</h1>
+{% if products %}
+<div class="public-products">
+  {% for p in products %}
+  <a href="/cameras/{{ device.id }}/products/{{ night_id }}/{{ p.name }}">
+    {% if p.has_thumb %}<img src="/cameras/{{ device.id }}/products/{{ night_id }}/{{ p.name }}/file?variant=thumb" alt="" loading="lazy">{% else %}<div class="sky-ph" aria-hidden="true"></div>{% endif %}
+    <span class="muted">{{ titles[p.kind] }}{% if p.duration_s %} · {{ p.duration_s | mmss }}{% endif %} · {{ p.size | filesize }}</span>
+  </a>
+  {% endfor %}
+</div>
+{% endif %}
+{% if frames %}
+<ul class="thumbs">
+  {% for f in frames %}
+  <li>
+    <a href="/cameras/{{ device.id }}/frames/{{ night_id }}/{{ f.name }}/{{ 'full' if f.has_full else 'thumb' }}.jpg" title="{{ f.captured_at | clock }}{{ '' if f.has_full else ' (nur Vorschau)' }}">
+      <img src="/cameras/{{ device.id }}/frames/{{ night_id }}/{{ f.name }}/thumb.jpg" alt="Aufnahme {{ f.captured_at | clock }}" loading="lazy">
+      <span>{{ f.captured_at | clock }}</span>
+    </a>
+  </li>
+  {% endfor %}
+</ul>
+{% endif %}
+{% endblock %}

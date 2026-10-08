@@ -1,0 +1,26 @@
+{% extends "base.html" %}
+{% block title %}Galerie · {{ device.name }} · allskyhub{% endblock %}
+{% block content %}
+<a class="back" href="/cameras/{{ device.id }}">← {{ device.name }}</a>
+<h1>Galerie</h1>
+{% if nights %}
+<ul class="card list nights">
+  {% for n in nights %}
+  <li>
+    <a href="/cameras/{{ device.id }}/nights/{{ n.night_id }}">
+      <strong>{{ n.night_id | night_title }}</strong>
+      <span class="muted">
+        {% if n.frames %}{{ n.frames }} Bild{{ "er" if n.frames != 1 }}{% endif %}
+        {% if n.first and n.last %} · {{ n.first | clock }}–{{ n.last | clock }}{% endif %}
+        {% if n.products %} · {{ n.products }} Produkt{{ 'e' if n.products != 1 }}{% endif %}
+      </span>
+    </a>
+  </li>
+  {% endfor %}
+</ul>
+{% else %}
+<div class="card empty">
+  <p class="muted">Noch keine Bilder im Archiv. Der Hub sammelt etwa jede Minute ein Vorschaubild, solange die Kamera verbunden ist.</p>
+</div>
+{% endif %}
+{% endblock %}

@@ -16,15 +16,12 @@ const eventTitles = {
   'sky_quality': 'Himmelsqualität',
 };
 
-const _compass = [
-  'oben',
-  'oben rechts',
-  'rechts',
-  'unten rechts',
-  'unten',
-  'unten links',
-  'links',
-  'oben links',
+// SPEC §6.4: direction_deg is the trail's axis in the image (0..180, 0 = up), no sense of travel.
+const _axes = [
+  'senkrecht',
+  'diagonal, oben rechts – unten links',
+  'waagrecht',
+  'diagonal, oben links – unten rechts',
 ];
 
 String _two(int n) => n.toString().padLeft(2, '0');
@@ -52,11 +49,8 @@ List<(String, String)> eventRows(SkyEvent event) {
     if (frames is num) rows.add(('Bilder', '${frames.round()}'));
     final direction = data.remove('direction_deg');
     if (direction is num) {
-      final sector = ((direction % 360) / 45).round() % 8;
-      rows.add((
-        'Richtung',
-        '${direction.round()}° (nach ${_compass[sector]})',
-      ));
+      final axis = ((direction % 180) / 45).round() % 4;
+      rows.add(('Richtung', '${direction.round()}° (${_axes[axis]})'));
     }
     final shower = data.remove('shower');
     if (shower is String && shower.isNotEmpty) {
@@ -374,11 +368,18 @@ class _EventScreenState extends State<EventScreen> {
                   Padding(
                     padding: const EdgeInsets.symmetric(vertical: 3),
                     child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Expanded(child: Text(label)),
-                        Text(
-                          value,
-                          style: const TextStyle(fontWeight: FontWeight.w600),
+                        const SizedBox(width: 12),
+                        // Long values (e.g. the axis) wrap instead of overflowing.
+                        Flexible(
+                          flex: 2,
+                          child: Text(
+                            value,
+                            textAlign: TextAlign.end,
+                            style: const TextStyle(fontWeight: FontWeight.w600),
+                          ),
                         ),
                       ],
                     ),

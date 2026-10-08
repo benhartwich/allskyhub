@@ -40,7 +40,7 @@ def test_event_rows_in_german() -> None:
         "Spurlänge": "412 px",
         "Helligkeit": "93 %",
         "Bilder": "3",
-        "Richtung": "135° (nach unten rechts)",
+        "Richtung": "135° (diagonal, oben links – unten rechts)",
         "Meteorstrom": "Orioniden",
         "extra": "7",
     }

@@ -19,6 +19,7 @@ from allskyhub_protocol import (
     CommandName,
     Envelope,
     FrameVariant,
+    UploadEventArgs,
     UploadFrameArgs,
     UploadProductArgs,
 )
@@ -34,9 +35,9 @@ LIVE_HOLD = dt.timedelta(seconds=30)
 
 SendText = Callable[[str], Awaitable[None]]
 Close = Callable[[int], Awaitable[None]]
-# (what, night_id, name, variant); what is "frame" or "product".
+# (what, night_id, name, variant); what is "frame", "product" or "event".
 UploadKey = tuple[str, str, str, FrameVariant]
-Kind = Literal["frame", "product"]
+Kind = Literal["frame", "product", "event"]
 
 
 def _now() -> dt.datetime:
@@ -112,6 +113,15 @@ class ConnectionRegistry:
         cmd = Command(name=CommandName.UPLOAD_PRODUCT, args=args.model_dump(mode="json"))
         key = ("product", night_id, name, variant)
         return await self._request(device_id, key, cmd, PRODUCT_UPLOAD_WINDOW)
+
+    async def request_event(
+        self, device_id: str, night_id: str, event_id: str, variant: FrameVariant
+    ) -> bool:
+        """Send ``upload_event``; False when the device is not connected."""
+        args = UploadEventArgs(night_id=night_id, event_id=event_id, variant=variant)
+        cmd = Command(name=CommandName.UPLOAD_EVENT, args=args.model_dump(mode="json"))
+        key = ("event", night_id, event_id, variant)
+        return await self._request(device_id, key, cmd, UPLOAD_WINDOW)
 
     async def _request(
         self, device_id: str, key: UploadKey, cmd: Command, window: dt.timedelta

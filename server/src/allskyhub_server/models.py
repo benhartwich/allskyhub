@@ -229,3 +229,25 @@ class Product(Base):
     full_at: Mapped[dt.datetime | None] = mapped_column(_tz())
     # Retention counts from the first announcement (privacy policy).
     created_at: Mapped[dt.datetime] = mapped_column(_tz(), server_default=func.now(), index=True)
+
+
+class EventRecord(Base):
+    """A detection the device reported (SPEC §6.4); upserted by the device's stable id."""
+
+    __tablename__ = "event"
+    __table_args__ = (UniqueConstraint("device_id", "event_id"),)
+
+    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid7)
+    device_id: Mapped[str] = mapped_column(ForeignKey("device.id", ondelete="CASCADE"))
+    event_id: Mapped[str] = mapped_column(String(48))
+    night_id: Mapped[str] = mapped_column(String(8), index=True)
+    kind: Mapped[str] = mapped_column(String(16))
+    start: Mapped[dt.datetime] = mapped_column(_tz(), index=True)
+    end: Mapped[dt.datetime] = mapped_column(_tz())
+    confidence: Mapped[float] = mapped_column(Float)
+    has_image: Mapped[bool] = mapped_column(Boolean)
+    data: Mapped[dict[str, Any]] = mapped_column(JSONB)
+    has_full: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
+    has_thumb: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
+    # Retention counts from the first report (privacy policy).
+    created_at: Mapped[dt.datetime] = mapped_column(_tz(), server_default=func.now(), index=True)

@@ -14,7 +14,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from allskyhub_protocol import FrameVariant
 from allskyhub_server.devices.connections import ConnectionRegistry
 from allskyhub_server.devices.images import ImageStore
-from allskyhub_server.models import Frame, Product
+from allskyhub_server.models import EventRecord, Frame, Product
 
 NIGHT_ID = r"^\d{8}$"
 FRAME_NAME = r"^[A-Za-z0-9._-]{1,128}$"
@@ -31,6 +31,8 @@ class NightSummary:
     last: dt.datetime | None = None
     products: int = 0
     kinds: list[str] = field(default_factory=list[str])
+    # Detections reported for this night (SPEC §6.4).
+    events: int = 0
 
 
 async def nights(db: AsyncSession, device_id: str) -> list[NightSummary]:
@@ -52,6 +54,13 @@ async def nights(db: AsyncSession, device_id: str) -> list[NightSummary]:
         night = by_night.setdefault(night_id, NightSummary(night_id))
         night.products += 1
         night.kinds.append(kind)
+    events = await db.execute(
+        select(EventRecord.night_id, func.count())
+        .where(EventRecord.device_id == device_id)
+        .group_by(EventRecord.night_id)
+    )
+    for night_id, count in events:
+        by_night.setdefault(night_id, NightSummary(night_id)).events = count
     return sorted(by_night.values(), key=lambda n: n.night_id, reverse=True)
 
 

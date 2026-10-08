@@ -61,8 +61,8 @@ async def night(
             "night_id": night_id,
             "frames": await archive.night_frames(db, device.id, night_id),
             "products": await archive.night_products(db, device.id, night_id),
-            "events": await events.events(
-                db, device.id, night_id=night_id, limit=500, hide_false=True
+            "events": events.collapse(
+                await events.events(db, device.id, night_id=night_id, limit=2000, hide_false=True)
             ),
             "titles": PRODUCT_TITLES,
             "event_titles": EVENT_TITLES,
@@ -175,7 +175,7 @@ async def event_list(
         "events.html",
         {
             "device": device,
-            "events": rows[50 * (page - 1) : 50 * page],
+            "events": events.collapse(rows[50 * (page - 1) : 50 * page]),
             "page": page,
             "more": len(rows) > 50 * page,
             "show_all": all,
@@ -290,4 +290,29 @@ async def export_events(db: DbSession, session: CurrentSession, device_id: str) 
     return JSONResponse(
         rows,
         headers={"Content-Disposition": f'attachment; filename="events-{device.id[:8]}.json"'},
+    )
+
+
+@router.get("/cameras/{device_id}/storms/{storm}")
+async def storm_page(
+    request: Request,
+    db: DbSession,
+    session: CurrentSession,
+    device_id: str,
+    storm: Annotated[str, Path(pattern=events.STORM_PATTERN)],
+) -> Response:
+    """All flashes of one thunderstorm (SPEC §6.4 lightning ``data.storm``)."""
+    device = await _own(db, session, device_id)
+    flashes = await events.storm_flashes(db, device.id, storm)
+    if not flashes:
+        raise HTTPException(404)
+    return render(
+        request,
+        "storm.html",
+        {
+            "device": device,
+            "storm": events.Storm(storm, flashes),
+            "event_titles": EVENT_TITLES,
+        },
+        session=session,
     )

@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import datetime as dt
+import re
+from dataclasses import dataclass, field
 
 from fastapi import HTTPException
 from fastapi.responses import FileResponse, JSONResponse, Response
@@ -19,6 +21,74 @@ PRIVATE_CACHE = "private, max-age=86400"
 
 
 LABELS = ("confirmed", "false_positive")
+STORM_PATTERN = r"^storm-\d{8}T\d{6}Z$"
+
+
+@dataclass
+class Storm:
+    """All lightning flashes with the same ``data.storm`` key (SPEC §6.4), shown as one."""
+
+    key: str
+    flashes: list[EventRecord] = field(default_factory=list[EventRecord])
+
+    is_storm = True
+
+    @property
+    def start(self) -> dt.datetime:
+        return min(e.start for e in self.flashes)
+
+    @property
+    def end(self) -> dt.datetime:
+        return max(e.end for e in self.flashes)
+
+    @property
+    def night_id(self) -> str:
+        return self.flashes[0].night_id
+
+    @property
+    def cover(self) -> EventRecord:
+        """The flash that lit up the largest part of the sky."""
+
+        def area(e: EventRecord) -> float:
+            value = e.data.get("area_frac")
+            return float(value) if isinstance(value, int | float) else 0.0
+
+        return max(self.flashes, key=area)
+
+
+def storm_key(event: EventRecord) -> str | None:
+    key = event.data.get("storm") if event.kind == "lightning" else None
+    return key if isinstance(key, str) and re.fullmatch(STORM_PATTERN, key) else None
+
+
+def collapse(rows: list[EventRecord]) -> list[EventRecord | Storm]:
+    """Lightning flashes of one storm become one entry, at the place of its newest flash."""
+    storms: dict[str, Storm] = {}
+    items: list[EventRecord | Storm] = []
+    for event in rows:
+        key = storm_key(event)
+        if key is None:
+            items.append(event)
+            continue
+        storm = storms.get(key)
+        if storm is None:
+            storm = storms[key] = Storm(key)
+            items.append(storm)
+        storm.flashes.append(event)
+    return items
+
+
+async def storm_flashes(db: AsyncSession, device_id: str, key: str) -> list[EventRecord]:
+    rows = await db.scalars(
+        select(EventRecord)
+        .where(
+            EventRecord.device_id == device_id,
+            EventRecord.kind == "lightning",
+            EventRecord.data["storm"].astext == key,
+        )
+        .order_by(EventRecord.start)
+    )
+    return list(rows)
 
 
 async def events(

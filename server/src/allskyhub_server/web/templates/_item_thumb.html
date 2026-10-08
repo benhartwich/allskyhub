@@ -1,0 +1,9 @@
+{% if e.is_storm is defined %}
+<a class="event-thumb" href="/cameras/{{ device.id }}/storms/{{ e.key }}">
+  {% set c = e.cover %}
+  {% if c.has_thumb %}<img src="/cameras/{{ device.id }}/events/{{ c.night_id }}/{{ c.event_id }}/image?variant=thumb" alt="" loading="lazy">{% else %}<div class="sky-ph" aria-hidden="true"></div>{% endif %}
+  <span>Gewitter · {{ e.flashes | length }} Blitz{{ 'e' if e.flashes | length != 1 }} · {{ e.start | clock }}–{{ e.end | clock }}</span>
+</a>
+{% else %}
+{% include "_event_thumb.html" %}
+{% endif %}

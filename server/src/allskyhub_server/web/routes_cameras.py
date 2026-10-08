@@ -104,7 +104,9 @@ async def camera(
         {
             "device": device,
             "online": _registry(request).is_online(device.id),
-            "events": await events.events(db, device.id, limit=6, hide_false=True),
+            "events": events.collapse(
+                await events.events(db, device.id, limit=200, hide_false=True)
+            )[:6],
             "event_titles": EVENT_TITLES,
             "camera_choices": camera_settings.CAMERA_CHOICES,
             "settings": settings_values(device),
@@ -243,7 +245,9 @@ async def change_settings(
         {
             "device": device,
             "online": _registry(request).is_online(device.id),
-            "events": await events.events(db, device.id, limit=6, hide_false=True),
+            "events": events.collapse(
+                await events.events(db, device.id, limit=200, hide_false=True)
+            )[:6],
             "event_titles": EVENT_TITLES,
             "camera_choices": camera_settings.CAMERA_CHOICES,
             "settings": settings_values(device, form),

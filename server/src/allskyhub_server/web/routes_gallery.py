@@ -4,8 +4,8 @@ from __future__ import annotations
 
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, Path, Query, Request
-from fastapi.responses import Response
+from fastapi import APIRouter, Depends, Form, HTTPException, Path, Query, Request
+from fastapi.responses import JSONResponse, RedirectResponse, Response
 
 from allskyhub_protocol import EVENT_ID_PATTERN, FrameVariant
 from allskyhub_server.devices import archive, events, queries
@@ -61,7 +61,9 @@ async def night(
             "night_id": night_id,
             "frames": await archive.night_frames(db, device.id, night_id),
             "products": await archive.night_products(db, device.id, night_id),
-            "events": await events.events(db, device.id, night_id=night_id, limit=500),
+            "events": await events.events(
+                db, device.id, night_id=night_id, limit=500, hide_false=True
+            ),
             "titles": PRODUCT_TITLES,
             "event_titles": EVENT_TITLES,
         },
@@ -163,10 +165,11 @@ async def event_list(
     session: CurrentSession,
     device_id: str,
     page: Annotated[int, Query(ge=1, le=1000)] = 1,
+    all: bool = False,
 ) -> Response:
-    """All detections, newest first, 50 per page."""
+    """All detections, newest first, 50 per page; false positives only with ``all``."""
     device = await _own(db, session, device_id)
-    rows = await events.events(db, device.id, limit=50 * page + 1)
+    rows = await events.events(db, device.id, limit=50 * page + 1, hide_false=not all)
     return render(
         request,
         "events.html",
@@ -175,6 +178,7 @@ async def event_list(
             "events": rows[50 * (page - 1) : 50 * page],
             "page": page,
             "more": len(rows) > 50 * page,
+            "show_all": all,
             "event_titles": EVENT_TITLES,
         },
         session=session,
@@ -259,4 +263,31 @@ async def event_image(
     device = await _own(db, session, device_id)
     return await events.event_file(
         db, request.app.state.images, _registry(request), device.id, night_id, event_id, variant
+    )
+
+
+@router.post("/cameras/{device_id}/events/{night_id}/{event_id}/label")
+async def label_event(
+    db: DbSession,
+    session: CurrentSession,
+    device_id: str,
+    night_id: NightId,
+    event_id: EventId,
+    label: Annotated[str, Form()],
+) -> Response:
+    """ "Kein Meteor" / "Echter Meteor" / reset; ``label`` "" clears it."""
+    device = await _own(db, session, device_id)
+    await events.set_label(db, device.id, night_id, event_id, label or None)
+    await db.commit()
+    return RedirectResponse(f"/cameras/{device.id}/events/{night_id}/{event_id}", status_code=303)
+
+
+@router.get("/cameras/{device_id}/events.json")
+async def export_events(db: DbSession, session: CurrentSession, device_id: str) -> Response:
+    """Download of all events with labels (for tuning the detector)."""
+    device = await _own(db, session, device_id)
+    rows = [events.export_row(e) for e in await events.events(db, device.id, limit=100_000)]
+    return JSONResponse(
+        rows,
+        headers={"Content-Disposition": f'attachment; filename="events-{device.id[:8]}.json"'},
     )

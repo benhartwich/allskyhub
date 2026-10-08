@@ -252,5 +252,9 @@ class EventRecord(Base):
     data: Mapped[dict[str, Any]] = mapped_column(JSONB)
     has_full: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
     has_thumb: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
+    # The owner's verdict: "confirmed" or "false_positive" (e.g. "kein Meteor", an aircraft);
+    # exported for tuning the detector.
+    label: Mapped[str | None] = mapped_column(String(16))
+    labelled_at: Mapped[dt.datetime | None] = mapped_column(_tz())
     # Retention counts from the first report (privacy policy).
     created_at: Mapped[dt.datetime] = mapped_column(_tz(), server_default=func.now(), index=True)

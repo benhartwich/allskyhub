@@ -8,7 +8,7 @@ to ``/api/v1/cameras/claim``.
 from __future__ import annotations
 
 import datetime as dt
-from typing import Annotated, Any
+from typing import Annotated, Any, Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Path, Query, Request
 from fastapi.responses import FileResponse, Response
@@ -120,6 +120,12 @@ class EventItem(BaseModel):
     has_thumb: bool
     has_full: bool
     data: dict[str, Any]
+    # The owner's verdict: "confirmed", "false_positive" or None.
+    label: str | None = None
+
+
+class LabelRequest(_In):
+    label: Literal["confirmed", "false_positive"] | None
 
 
 def _event(e: EventRecord) -> EventItem:
@@ -134,6 +140,7 @@ def _event(e: EventRecord) -> EventItem:
         has_thumb=e.has_thumb,
         has_full=e.has_full,
         data=e.data,
+        label=e.label,
     )
 
 
@@ -401,10 +408,12 @@ async def camera_events(
     device_id: str,
     before: dt.datetime | None = None,
     limit: Annotated[int, Query(ge=1, le=200)] = 50,
+    hide_false: bool = False,
 ) -> list[EventItem]:
-    """Newest detections across nights; page with ``before`` (the last item's ``start``)."""
+    """Newest detections across nights; page with ``before`` (the last item's ``start``);
+    ``hide_false`` leaves out the ones marked as false positives."""
     device = await _own(db, user, device_id)
-    rows = await events.events(db, device.id, before=before, limit=limit)
+    rows = await events.events(db, device.id, before=before, limit=limit, hide_false=hide_false)
     return [_event(e) for e in rows]
 
 
@@ -418,6 +427,32 @@ async def night_events(
     device = await _own(db, user, device_id)
     rows = await events.events(db, device.id, night_id=night_id, limit=1000)
     return [_event(e) for e in rows]
+
+
+@router.get("/cameras/{device_id}/events/export")
+async def export_events(
+    db: DbSession, user: AppUser, device_id: str, labelled_only: bool = False
+) -> list[dict[str, Any]]:
+    """All events with data and the owner's labels, for tuning the detector."""
+    device = await _own(db, user, device_id)
+    rows = await events.events(db, device.id, limit=100_000)
+    return [events.export_row(e) for e in rows if e.label or not labelled_only]
+
+
+@router.put("/cameras/{device_id}/events/{night_id}/{event_id}/label")
+async def label_event(
+    body: LabelRequest,
+    db: DbSession,
+    user: AppUser,
+    device_id: str,
+    night_id: Annotated[str, Path(pattern=archive.NIGHT_ID)],
+    event_id: Annotated[str, Path(pattern=EVENT_ID_PATTERN)],
+) -> EventItem:
+    """The owner's verdict, e.g. "false_positive" for "kein Meteor"; null clears it."""
+    device = await _own(db, user, device_id)
+    event = await events.set_label(db, device.id, night_id, event_id, body.label)
+    await db.commit()
+    return _event(event)
 
 
 @router.get("/cameras/{device_id}/events/{night_id}/{event_id}/image", response_model=None)

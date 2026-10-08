@@ -18,6 +18,9 @@ from allskyhub_server.models import EventRecord
 PRIVATE_CACHE = "private, max-age=86400"
 
 
+LABELS = ("confirmed", "false_positive")
+
+
 async def events(
     db: AsyncSession,
     device_id: str,
@@ -25,9 +28,13 @@ async def events(
     night_id: str | None = None,
     before: dt.datetime | None = None,
     limit: int = 50,
+    hide_false: bool = False,
 ) -> list[EventRecord]:
-    """Events newest first; one night, or across nights with paging by ``before``."""
+    """Events newest first; one night, or across nights with paging by ``before``.
+    ``hide_false`` leaves out those the owner marked as false positives."""
     query = select(EventRecord).where(EventRecord.device_id == device_id)
+    if hide_false:
+        query = query.where((EventRecord.label.is_(None)) | (EventRecord.label != "false_positive"))
     if night_id is not None:
         query = query.where(EventRecord.night_id == night_id)
     if before is not None:
@@ -64,3 +71,39 @@ async def event_file(
     ):
         return JSONResponse({"status": "requested"}, status_code=202)
     raise HTTPException(404, "Not available")
+
+
+async def set_label(
+    db: AsyncSession, device_id: str, night_id: str, event_id: str, label: str | None
+) -> EventRecord:
+    """The owner's verdict on an event (or None to clear it). The caller commits."""
+    if label is not None and label not in LABELS:
+        raise HTTPException(400, "Unknown label")
+    event = await db.scalar(
+        select(EventRecord).where(
+            EventRecord.device_id == device_id,
+            EventRecord.night_id == night_id,
+            EventRecord.event_id == event_id,
+        )
+    )
+    if event is None:
+        raise HTTPException(404, "Not found")
+    event.label = label
+    event.labelled_at = dt.datetime.now(dt.UTC) if label else None
+    await db.flush()
+    return event
+
+
+def export_row(event: EventRecord) -> dict[str, object]:
+    """One event for tuning the detector: what the camera said and what the owner said."""
+    return {
+        "id": event.event_id,
+        "night_id": event.night_id,
+        "kind": event.kind,
+        "start": event.start.isoformat(),
+        "end": event.end.isoformat(),
+        "confidence": event.confidence,
+        "data": event.data,
+        "label": event.label,
+        "labelled_at": event.labelled_at.isoformat() if event.labelled_at else None,
+    }

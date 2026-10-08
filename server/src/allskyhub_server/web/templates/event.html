@@ -5,6 +5,22 @@
 <h1>{{ event_titles[event.kind] or event.kind }}</h1>
 <p class="muted">{{ event.start | localtime }}</p>
 <div id="event">{% include "_event_view.html" %}</div>
+<form method="post" action="/cameras/{{ device.id }}/events/{{ event.night_id }}/{{ event.event_id }}/label" class="card label-form">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+  {% if event.label == "false_positive" %}
+  <p><strong>Als „kein {{ event_titles[event.kind] or event.kind }}“ markiert.</strong></p>
+  <button type="submit" name="label" value="" class="secondary">Markierung entfernen</button>
+  {% elif event.label == "confirmed" %}
+  <p><strong>Als echt bestätigt.</strong></p>
+  <button type="submit" name="label" value="" class="secondary">Markierung entfernen</button>
+  {% else %}
+  <p class="muted">Stimmt die Erkennung? Deine Antwort hilft, die Erkennung zu verbessern.</p>
+  <div class="actions">
+    <button type="submit" name="label" value="confirmed">Echt</button>
+    <button type="submit" name="label" value="false_positive" class="secondary">Kein {{ event_titles[event.kind] or event.kind }} (z. B. Flugzeug)</button>
+  </div>
+  {% endif %}
+</form>
 <div class="card">
   <dl class="facts">
     {% for label, value in rows %}<dt>{{ label }}</dt><dd>{{ value }}</dd>{% endfor %}

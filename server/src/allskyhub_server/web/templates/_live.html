@@ -17,12 +17,12 @@
   <dl class="facts">
     <dt>Zuletzt gesehen</dt><dd>{{ device.last_seen_at | age }}</dd>
     {% if st %}
-    <dt>Modus</dt><dd>{{ 'Nacht' if st.mode == 'night' else 'Tag' }}</dd>
-    <dt>Belichtung</dt><dd>{{ '%.3g' | format(st.exposure_us / 1e6) }} s, Gain {{ st.gain }}</dd>
-    {% if st.sensor_temp_c is not none %}<dt>Sensor</dt><dd>{{ '%.1f' | format(st.sensor_temp_c) }} °C</dd>{% endif %}
-    {% if st.disk_free_pct is not none %}<dt>Speicher frei</dt><dd>{{ st.disk_free_pct | round | int }} %</dd>{% endif %}
-    {% if not st.time_trusted %}<dt>Uhrzeit</dt><dd class="warn">nicht synchronisiert</dd>{% endif %}
+    {% if st.mode is defined %}<dt>Modus</dt><dd>{{ 'Nacht' if st.mode == 'night' else 'Tag' }}</dd>{% endif %}
+    {% if st.exposure_us is defined %}<dt>Belichtung</dt><dd>{{ '%.3g' | format(st.exposure_us / 1e6) }} s{% if st.gain is defined %}, Gain {{ st.gain }}{% endif %}</dd>{% endif %}
+    {% if st.sensor_temp_c is defined and st.sensor_temp_c is not none %}<dt>Sensor</dt><dd>{{ '%.1f' | format(st.sensor_temp_c) }} °C</dd>{% endif %}
+    {% if st.disk_free_pct is defined and st.disk_free_pct is not none %}<dt>Speicher frei</dt><dd>{{ st.disk_free_pct | round | int }} %</dd>{% endif %}
+    {% if st.time_trusted is defined and not st.time_trusted %}<dt>Uhrzeit</dt><dd class="warn">nicht synchronisiert</dd>{% endif %}
     {% endif %}
-    {% if fr %}<dt>Sonnenhöhe</dt><dd>{{ '%.1f' | format(fr.sun_elevation) }}°</dd>{% endif %}
+    {% if fr.sun_elevation is defined %}<dt>Sonnenhöhe</dt><dd>{{ '%.1f' | format(fr.sun_elevation) }}°</dd>{% endif %}
   </dl>
 </div>

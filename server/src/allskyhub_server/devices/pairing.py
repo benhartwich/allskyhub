@@ -214,6 +214,7 @@ async def unpair(db: AsyncSession, device: Device) -> None:
     device.latest_thumb_at = None
     device.last_frame = None
     device.last_status = None
+    device.public_slug = None  # a new owner decides again
     await db.flush()
 
 

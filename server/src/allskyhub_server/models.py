@@ -106,6 +106,9 @@ class Device(Base):
     # When the latest full image and thumbnail were stored (SPEC §6.5).
     latest_image_at: Mapped[dt.datetime | None] = mapped_column(_tz())
     latest_thumb_at: Mapped[dt.datetime | None] = mapped_column(_tz())
+    # Opt-in public sky page (/sky/<slug>): a random slug, never the device id; switching the
+    # page off drops it, so old links stop working.
+    public_slug: Mapped[str | None] = mapped_column(String(32), unique=True)
 
 
 class DeviceNonce(Base):

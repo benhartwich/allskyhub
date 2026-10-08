@@ -20,6 +20,7 @@ from pydantic import ValidationError
 
 from allskyhub_agent.adapters.camera import Image
 from allskyhub_agent.core.metering import Mask
+from allskyhub_agent.detect.aurora import AuroraConfig, AuroraDetector, AuroraUpdate
 from allskyhub_agent.detect.lightning import LightningConfig, LightningDetector, LightningHit
 from allskyhub_agent.detect.meteor import (
     MeteorConfig,
@@ -53,12 +54,14 @@ class EventStore:
             lines = (self._store.night_dir(night) / INDEX).read_text(encoding="utf-8").splitlines()
         except OSError:
             return out
+        by_id: dict[str, Event] = {}
         for line in lines:
             try:
-                out.append(Event.model_validate_json(line))
+                e = Event.model_validate_json(line)
             except ValidationError:
                 continue
-        return out
+            by_id[e.id] = e  # an episode is appended again as it grows: the last one counts
+        return list(by_id.values())
 
     def current_events(self) -> list[Event]:
         """The newest night's events (resent after every reconnect, SPEC §6.7)."""
@@ -126,17 +129,7 @@ class EventStore:
         f = hit.frame
         with self._lock:
             eid = self._new_id(EventKind.LIGHTNING, f)
-            has_image = False
-            try:
-                with PILImage.open(hit.image_path) as im:
-                    rgb = im.convert("RGB")
-            except OSError:
-                log.warning("lightning %s: frame %s unreadable", eid, hit.image_path)
-            else:
-                if rgb.width > FULL_MAX_PX:
-                    rgb = rgb.resize((FULL_MAX_PX, round(rgb.height * FULL_MAX_PX / rgb.width)))
-                self._write_pictures(rgb, f.night_id, eid)
-                has_image = True
+            has_image = self._save_full(hit.image_path, f.night_id, eid)
             event = Event(
                 id=eid,
                 night_id=f.night_id,
@@ -154,6 +147,57 @@ class EventStore:
             )
             self._append(event)
         return event
+
+    def save_aurora(self, update: AuroraUpdate) -> Event:
+        """Store or update an aurora episode (SPEC §6.4): same id, picture replaced when a
+        better frame comes, with `image_rev` counting the pictures."""
+        ep = update.episode
+        f = ep.start
+        with self._lock:
+            if ep.event_id is None:
+                ep.event_id = self._new_id(EventKind.AURORA, f)
+                # An episode left open by an agent restart has ended.
+                for old in self.night_events(f.night_id):
+                    if old.kind is EventKind.AURORA and old.data.get("ongoing") is True:
+                        self._append(
+                            old.model_copy(update={"data": {**old.data, "ongoing": False}})
+                        )
+            eid = ep.event_id
+            fresh = update.picture_changed or ep.image_rev == 0
+            if fresh and self._save_full(ep.best_path, f.night_id, eid):
+                ep.image_rev += 1
+            event = Event(
+                id=eid,
+                night_id=f.night_id,
+                kind=EventKind.AURORA,
+                start=f.captured_at,
+                end=ep.end,
+                confidence=round(min(1.0, 0.5 + ep.best.index / 10.0), 2),
+                has_image=ep.image_rev > 0,
+                data={
+                    "peak_index": ep.best.index,
+                    "green": ep.best.green,
+                    "frames": ep.frames,
+                    "direction_deg": ep.best.direction_deg,
+                    "ongoing": ep.ongoing,
+                    "image_rev": ep.image_rev,
+                },
+            )
+            self._append(event)
+        return event
+
+    def _save_full(self, path: Path, night: str, eid: str) -> bool:
+        """The whole frame (at most FULL_MAX_PX wide) as the event's picture."""
+        try:
+            with PILImage.open(path) as im:
+                rgb = im.convert("RGB")
+        except OSError:
+            log.warning("%s: frame %s unreadable", eid, path)
+            return False
+        if rgb.width > FULL_MAX_PX:
+            rgb = rgb.resize((FULL_MAX_PX, round(rgb.height * FULL_MAX_PX / rgb.width)))
+        self._write_pictures(rgb, night, eid)
+        return True
 
     def _save_crop(self, hit: MeteorHit, night: str, eid: str) -> bool:
         try:
@@ -207,6 +251,7 @@ class DetectionWorker:
         events: EventStore | None = None,
         lightning_cfg: LightningConfig | None = None,
         sky: SkyMeter | None = None,
+        aurora_cfg: AuroraConfig | None = None,
     ) -> None:
         self._store = store
         self.events = events or EventStore(store)
@@ -214,6 +259,7 @@ class DetectionWorker:
         self._meteor = MeteorDetector(cfg, mask, mask_radius_frac)
         self._lightning = LightningDetector(lightning_cfg, mask, mask_radius_frac)
         self._sky = sky
+        self._aurora = AuroraDetector(aurora_cfg, mask_radius_frac or 0.48)
         self._q: queue.Queue[_Job | None] = queue.Queue(maxsize=4)
         self._dropped = 0
         self._thread = threading.Thread(target=self._run, name="detect", daemon=True)
@@ -252,6 +298,19 @@ class DetectionWorker:
             if self._on_event is not None:
                 self._on_event(event)
 
+    def _emit_aurora(self, updates: list[AuroraUpdate]) -> None:
+        for u in updates:
+            event = self.events.save_aurora(u)
+            log.info(
+                "aurora %s: index %.1f %%, %d frame(s)%s",
+                event.id,
+                u.episode.best.index,
+                u.episode.frames,
+                "" if u.episode.ongoing else ", ended",
+            )
+            if self._on_event is not None:
+                self._on_event(event)
+
     def process_frame(self, frame: FrameInfo, image: Image) -> None:
         """Run the detectors on one frame in the calling thread (tests, replays)."""
         self.process(_Job(frame, image, self._store.night_dir(frame.night_id) / frame.name))
@@ -260,11 +319,11 @@ class DetectionWorker:
         if job.frame.mode is not Mode.NIGHT:
             self._emit(self._meteor.flush())
         rgb = np.asarray(job.image, dtype=np.uint8)
-        if self._sky is not None:
-            self._sky.measure(job.frame, rgb)
+        cloud = self._sky.measure(job.frame, rgb).cloud_cover if self._sky is not None else None
         gray = to_gray(rgb)
         self._emit(self._meteor.feed(job.frame, gray, job.path))
         self._emit_lightning(self._lightning.feed(job.frame, gray, job.path))
+        self._emit_aurora(self._aurora.feed(job.frame, rgb, job.path, cloud))
 
     def _run(self) -> None:
         while True:
@@ -272,6 +331,7 @@ class DetectionWorker:
             if job is None:
                 self._emit(self._meteor.flush())
                 self._lightning.flush()
+                self._emit_aurora(self._aurora.flush())
                 return
             try:
                 self.process(job)

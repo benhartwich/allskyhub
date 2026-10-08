@@ -12,8 +12,9 @@ import hashlib
 import re
 from enum import StrEnum
 from typing import Literal
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 # SPEC §6.2: lowercase RFC 4648 base32 of 16 bytes, without padding.
 DEVICE_ID_PATTERN = r"^[a-z2-7]{26}$"
@@ -145,6 +146,36 @@ class UploadEventArgs(_Model):
     night_id: str = Field(pattern=r"^\d{8}$")
     event_id: str = Field(pattern=r"^[a-z]+-\d{8}T\d{6}Z(-\d+)?$")
     variant: FrameVariant = FrameVariant.FULL
+
+
+CameraChoice = Literal["auto", "zwo-asi678mc", "rpi-hq", "sim"]
+
+
+class SetSettingsArgs(_Model):
+    """`args` of the `set_settings` command (SPEC §6.5): only the given keys change."""
+
+    latitude: float | None = Field(default=None, ge=-90, le=90)
+    longitude: float | None = Field(default=None, ge=-180, le=180)
+    timezone: str | None = None
+    camera: CameraChoice | None = None
+    day_delay_s: float | None = Field(default=None, ge=0, le=3600)
+    night_delay_s: float | None = Field(default=None, ge=0, le=3600)
+
+    @field_validator("timezone")
+    @classmethod
+    def _tz(cls, v: str | None) -> str | None:
+        if v is not None:
+            try:
+                ZoneInfo(v)
+            except (ZoneInfoNotFoundError, ValueError):
+                raise ValueError("unknown time zone") from None
+        return v
+
+    @model_validator(mode="after")
+    def _location_pair(self) -> SetSettingsArgs:
+        if (self.latitude is None) != (self.longitude is None):
+            raise ValueError("latitude and longitude go together")
+        return self
 
 
 class ErrorCode(StrEnum):

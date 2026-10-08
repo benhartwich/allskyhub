@@ -208,7 +208,8 @@ base64url-encoded without padding.
 
 - `hello`: device id, profile, agent version, capabilities.
 - `status`: mode, last exposure/gain/mean, temperatures, disk, uptime, `time_trusted`
-  (§4.4).
+  (§4.4), and `settings` (`{latitude, longitude, timezone, camera, day_delay_s,
+  night_delay_s}`, location null until known) for the app's settings screen.
 - `frame`: frame metadata (§4.4); the image itself goes over HTTPS when the hub asks
   for it (§6.5, `upload_frame`).
 - `event`: a detection (§6.4).
@@ -244,6 +245,13 @@ night (§6.7).
 `command`: `set_settings`, `focus_mode` (`{on: bool}`, §7), `restart`, `update`,
 `upload_frame`, `upload_product`, `upload_event`. Each command is acknowledged with `ack` or `error` (`code` one of
 `not_found`, `invalid_args`, `unsupported`, `failed`).
+
+**`set_settings`** with a partial object: `latitude` and `longitude` (both or neither),
+`timezone` (IANA), `camera` (`auto`, `zwo-asi678mc`, `rpi-hq`, `sim`), `day_delay_s` and
+`night_delay_s` (0..3600 s between frames). Only the given keys change; an unknown key or
+an invalid value changes nothing and is answered with `error` `invalid_args` naming the
+fields. On success the device stores the settings, answers `ack` and restarts its
+capture with them; its WebSocket reconnects within about 15 s.
 
 **`upload_frame`** `{night_id, name, variant}` with `variant` `full` (default) or
 `thumb`: the device uploads that image with

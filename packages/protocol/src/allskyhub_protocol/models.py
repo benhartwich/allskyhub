@@ -38,6 +38,19 @@ class Hello(_Body):
     capabilities: list[str] = Field(default_factory=list[str])
 
 
+class DeviceSettings(BaseModel):
+    """The device's current settings, reported in `status` (SPEC §6.3)."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    latitude: float | None = None
+    longitude: float | None = None
+    timezone: str
+    camera: str
+    day_delay_s: float = Field(ge=0)
+    night_delay_s: float = Field(ge=0)
+
+
 class Status(_Body):
     """Periodic device status (SPEC §6.3)."""
 
@@ -52,6 +65,7 @@ class Status(_Body):
     uptime_s: int = Field(ge=0)
     # SPEC §4.4: whether the system clock is NTP-synchronized (no RTC on a Pi).
     time_trusted: bool
+    settings: DeviceSettings | None = None
 
 
 class FrameInfo(_Body):

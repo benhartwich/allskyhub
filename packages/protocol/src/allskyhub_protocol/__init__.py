@@ -45,6 +45,8 @@ from allskyhub_protocol.models import (
     Products,
     SkyMetrics,
     Status,
+    UpdateState,
+    UpdateStatus,
     event_id,
     parse_envelope,
 )
@@ -84,6 +86,8 @@ __all__ = [
     "Status",
     "TokenRequest",
     "TokenResponse",
+    "UpdateState",
+    "UpdateStatus",
     "UploadEventArgs",
     "UploadFrameArgs",
     "UploadProductArgs",

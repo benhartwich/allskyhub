@@ -75,6 +75,29 @@ class Orientation(BaseModel):
     rms_deg: float = Field(ge=0)
 
 
+class UpdateState(StrEnum):
+    """The updater's last state (SPEC §8)."""
+
+    UP_TO_DATE = "up_to_date"
+    DOWNLOADING = "downloading"
+    WAITING = "waiting"  # downloaded, waits for the day
+    INSTALLING = "installing"
+    INSTALLED = "installed"
+    ROLLED_BACK = "rolled_back"
+    FAILED = "failed"
+
+
+class UpdateStatus(BaseModel):
+    """Reported in `status` (SPEC §6.3, §8)."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    state: UpdateState
+    version: str | None = None  # the version the state is about
+    at: AwareDatetime  # when the updater reached this state
+    code: str | None = None  # why it failed or rolled back, e.g. "unhealthy", "checksum"
+
+
 class Status(_Body):
     """Periodic device status (SPEC §6.3)."""
 
@@ -92,6 +115,7 @@ class Status(_Body):
     settings: DeviceSettings | None = None
     sky: SkyMetrics | None = None
     orientation: Orientation | None = None
+    update: UpdateStatus | None = None
 
 
 class FrameInfo(_Body):

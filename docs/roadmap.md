@@ -27,7 +27,7 @@ postkasten.cloud). Changes to `packages/protocol` and `docs/SPEC.md` have one ow
 | 4 | ~~Wi-Fi country from the app~~ done | agent | root path unit in the image |
 | 5 | ~~Lightning, sky quality and night cloud cover (`status.sky`), aurora~~ done; NLC done in #8 | agent | ports of the existing Allsky modules; NLC needs the sunward band, i.e. the image orientation from #8, and the module only found false alarms at 48° N without it; lightning v1 detects only, a short "storm exposure" comes later; day cloud cover needs a method that works without an IR cut filter |
 | 6 | Push notifications (FCM) for events | hub | hub side done (off until a Firebase service account is configured); app side needs the Firebase project (Benjamin) |
-| 7 | Signed agent updates with rollback (M5 part 2) | agent | like myboxi's updater |
+| 7 | ~~Signed agent updates with rollback (M5 part 2)~~ done | agent | port of myboxi's updater; needs the signing keys (docs/updates.md) before cameras go out |
 | 8 | Hot pixels without darks, sky mask, plate-solve orientation, event azimuths, NLC (all done); next: aurora pole sector | agent | |
 | 9 | ~~Public sky page per camera~~ | hub | done: opt-in, random link, web + app API |
 | 10 | ~~Self-service account: change password, delete account~~ | hub | done: web UI, app API and app |
@@ -42,3 +42,5 @@ postkasten.cloud). Changes to `packages/protocol` and `docs/SPEC.md` have one ow
 - Raspberry Pi HQ camera (CS mount) to test the rpi-hq profile; fits the Altair 1.55 mm.
 - Apple developer account (open), Play Console via WebInx.
 - Housing: Daniel Nimmervoll's design.
+- Update signing keys: create the main and emergency key pair, commit the public keys, set
+  the secret `ALLSKYHUB_UPDATE_KEY` (docs/updates.md) before images go to other people.

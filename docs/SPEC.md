@@ -223,13 +223,26 @@ base64url-encoded without padding.
 
 ### 6.4 Events
 
-`{kind, start, end, confidence, image?, data}` with `kind` one of `meteor`,
-`lightning`, `aurora`, `nlc`, `satellite`, `clouds`, `sky_quality`.
+`{id, night_id, kind, start, end, confidence, has_image, data}` with `kind` one of
+`meteor`, `lightning`, `aurora`, `nlc`, `satellite`, `clouds`, `sky_quality`.
+
+- `id` is stable on the device: the kind without underscores and the UTC start, e.g.
+  `meteor-20261008T214512Z`, with `-2`, `-3` … for further events of the same kind
+  starting in the same second. A resent event has the same id; the hub upserts by it.
+- `has_image`: the event has a picture, which the hub fetches with `upload_event` (§6.5).
+- `data` is a flat object of numbers, strings, booleans and nulls. Per kind:
+
+| kind | keys |
+|---|---|
+| `meteor` | `length_px` (int, track length), `peak` (0..1, peak brightness of the track), `frames` (int, frames it appears in), `direction_deg` (0..360 in the image, 0 = up, clockwise, or null), `shower` (name of an active shower, e.g. `Perseids`, or null) |
+
+Events are sent when detected and, after every (re)connect, again for the current
+night (§6.7).
 
 ### 6.5 Hub → device
 
 `command`: `set_settings`, `focus_mode` (`{on: bool}`, §7), `restart`, `update`,
-`upload_frame`, `upload_product`. Each command is acknowledged with `ack` or `error` (`code` one of
+`upload_frame`, `upload_product`, `upload_event`. Each command is acknowledged with `ack` or `error` (`code` one of
 `not_found`, `invalid_args`, `unsupported`, `failed`).
 
 **`upload_frame`** `{night_id, name, variant}` with `variant` `full` (default) or
@@ -249,6 +262,11 @@ middle of the night). Then it answers `ack`, or `error` with `not_found` if the 
 does not exist (any more). The hub decides what to fetch, for example every thumbnail
 right away and the full product when someone opens it.
 
+**`upload_event`** `{night_id, event_id, variant}`, `variant` as for `upload_frame`: the
+device uploads the event's picture with
+`PUT /device/v1/events/{night_id}/{event_id}?variant=<variant>` (`image/jpeg`), then
+answers `ack`, or `error` with `not_found` if the event has no picture or it is gone.
+
 ### 6.6 Device HTTP endpoints
 
 All bodies are JSON (models in `packages/protocol`, `allskyhub_protocol.device_api`)
@@ -262,6 +280,7 @@ except the image upload.
 | `GET /device/v1/ws` | bearer | WebSocket (§6.1) |
 | `PUT /device/v1/frames/{night_id}/{name}?variant=` | bearer | `image/jpeg` → 204 |
 | `PUT /device/v1/products/{night_id}/{name}?variant=` | bearer | `image/jpeg` or `video/mp4` → 204 |
+| `PUT /device/v1/events/{night_id}/{event_id}?variant=` | bearer | `image/jpeg` → 204 |
 
 Errors are HTTP status codes with `{"detail": "..."}`: 400 invalid body, 401 bad
 signature, nonce or token, 403 device not paired (token), 404 unknown upload (the hub
@@ -272,8 +291,8 @@ did not ask for this frame), 413 image too large, 429 rate limited (with
 
 The device does not queue uploads or WebSocket messages while the hub is unreachable;
 capture and storage go on (§1, goal 4). After reconnecting it sends `hello`, a fresh
-`status` and the newest night's `products`, and the hub requests whatever it wants with
-`upload_frame` and `upload_product`.
+`status`, the newest night's `products` and the current night's `event`s, and the hub
+requests whatever it wants with `upload_frame`, `upload_product` and `upload_event`.
 
 ## 7. Local web UI
 

@@ -14,6 +14,7 @@ from allskyhub_protocol.device_api import (
     RegisterResponse,
     TokenRequest,
     TokenResponse,
+    UploadEventArgs,
     UploadFrameArgs,
     UploadProductArgs,
     b64url,
@@ -23,6 +24,7 @@ from allskyhub_protocol.device_api import (
     signing_payload,
 )
 from allskyhub_protocol.models import (
+    EVENT_ID_PATTERN,
     PRODUCT_NAMES,
     PROTOCOL_VERSION,
     Ack,
@@ -39,11 +41,13 @@ from allskyhub_protocol.models import (
     ProductKind,
     Products,
     Status,
+    event_id,
     parse_envelope,
 )
 
 __all__ = [
     "DEVICE_ID_PATTERN",
+    "EVENT_ID_PATTERN",
     "PAIRING_CODE_ALPHABET",
     "PAIRING_CODE_LENGTH",
     "PRODUCT_NAMES",
@@ -72,11 +76,13 @@ __all__ = [
     "Status",
     "TokenRequest",
     "TokenResponse",
+    "UploadEventArgs",
     "UploadFrameArgs",
     "UploadProductArgs",
     "b64url",
     "b64url_decode",
     "device_id_from_public_key",
+    "event_id",
     "normalize_pairing_code",
     "parse_envelope",
     "signing_payload",

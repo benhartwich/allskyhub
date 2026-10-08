@@ -13,6 +13,18 @@
   {% endfor %}
 </div>
 {% endif %}
+{% if sky_charts %}
+<section class="card sky-charts">
+  <h2>Himmel in dieser Nacht</h2>
+  {% for c in sky_charts %}
+  <figure>
+    <figcaption><strong>{{ c.title }}</strong> <span class="muted">zuletzt {{ c.latest }} {{ c.unit }} · Skala {{ c.low }}–{{ c.high }}</span></figcaption>
+    {{ c.svg }}
+  </figure>
+  {% endfor %}
+  <p class="muted">Lücken: Die Kamera konnte den Himmel da nicht beurteilen (Tag, Dämmerung).</p>
+</section>
+{% endif %}
 {% if events %}
 <h2>Ereignisse</h2>
 <div class="event-strip">

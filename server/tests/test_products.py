@@ -121,6 +121,7 @@ async def test_products_flow(
                 "last": None,
                 "products": 3,
                 "events": 0,
+                "sky": 0,
             }
         ]
 

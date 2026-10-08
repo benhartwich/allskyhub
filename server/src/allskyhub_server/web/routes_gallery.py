@@ -8,7 +8,7 @@ from fastapi import APIRouter, Depends, Form, HTTPException, Path, Query, Reques
 from fastapi.responses import JSONResponse, RedirectResponse, Response
 
 from allskyhub_protocol import EVENT_ID_PATTERN, FrameVariant
-from allskyhub_server.devices import archive, events, queries
+from allskyhub_server.devices import archive, events, queries, sky_chart
 from allskyhub_server.devices.connections import ConnectionRegistry
 from allskyhub_server.devices.event_text import EVENT_TITLES, event_rows
 from allskyhub_server.models import Device, EventRecord
@@ -60,6 +60,7 @@ async def night(
             "device": device,
             "night_id": night_id,
             "frames": await archive.night_frames(db, device.id, night_id),
+            "sky_charts": sky_chart.charts(await archive.night_sky(db, device.id, night_id)),
             "products": await archive.night_products(db, device.id, night_id),
             "events": events.collapse(
                 await events.events(db, device.id, night_id=night_id, limit=2000, hide_false=True)

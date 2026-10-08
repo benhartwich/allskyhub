@@ -275,6 +275,17 @@ class HubClient {
   }
 
   /// Roadmap #10: needs the current password; signs out the web and every other app.
+  /// Days the hub keeps this account's detections: 30, 90 or 365 (privacy policy).
+  Future<int> eventKeepDays() async =>
+      ((await _send('GET', '/account/settings')
+              as Map<String, dynamic>)['event_keep_days']
+          as int);
+
+  Future<int> setEventKeepDays(int days) async =>
+      ((await _send('PUT', '/account/settings', body: {'event_keep_days': days})
+              as Map<String, dynamic>)['event_keep_days']
+          as int);
+
   Future<void> changePassword(String current, String newPassword) => _send(
     'POST',
     '/account/password',

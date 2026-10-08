@@ -9,11 +9,21 @@ import 'package:http/testing.dart';
 
 class FakeAccountHub {
   final calls = <String, Map<String, dynamic>>{};
+  int keepDays = 30;
 
   HubClient get client => HubClient(
     baseUrl: 'https://hub.example',
     token: 'tok',
     httpClient: MockClient((request) async {
+      if (request.url.path == '/api/v1/account/settings') {
+        if (request.method == 'PUT') {
+          keepDays =
+              (jsonDecode(request.body)
+                      as Map<String, dynamic>)['event_keep_days']
+                  as int;
+        }
+        return http.Response(jsonEncode({'event_keep_days': keepDays}), 200);
+      }
       final body = jsonDecode(request.body) as Map<String, dynamic>;
       calls[request.url.path] = body;
       if (request.url.path == '/api/v1/account/password') {
@@ -113,5 +123,18 @@ void main() {
     expect(hub.calls['/api/v1/account/delete'], {'password': 'right password'});
     expect(deleted, isTrue);
     expect(client.token, isNull);
+  });
+
+  testWidgets('event retention: shows the current choice and saves a new one', (
+    tester,
+  ) async {
+    final hub = FakeAccountHub();
+    await pumpAccount(tester, hub.client, () {});
+    await tester.pumpAndSettle();
+    expect(find.text('Ereignisse aufbewahren'), findsOneWidget);
+    await tester.tap(find.byKey(const ValueKey('keep-365')));
+    await tester.pumpAndSettle();
+    expect(hub.keepDays, 365);
+    expect(find.text('Gespeichert.'), findsOneWidget);
   });
 }

@@ -16,6 +16,7 @@ from allskyhub_agent.core.focus import sharpness
 from allskyhub_agent.core.metering import Mask, circle_mask, mean_brightness
 from allskyhub_agent.core.sun import sun_elevation
 from allskyhub_agent.live import LiveState
+from allskyhub_agent.process.hotpixels import HotPixels
 from allskyhub_agent.store.images import ImageStore, night_id
 from allskyhub_protocol import FrameInfo, Mode
 
@@ -52,6 +53,7 @@ class Runner:
         live: LiveState | None = None,
         analyzers: list[Callable[[FrameInfo, Image], None]] | None = None,
         local_tz: tzinfo = UTC,
+        hot_pixels: HotPixels | None = None,
     ) -> None:
         self._cam = camera
         self._ae = auto_exposure
@@ -69,6 +71,7 @@ class Runner:
         self._analyzers = analyzers or []
         self._stop = threading.Event()
         self._tz = local_tz
+        self._hot = hot_pixels
 
     @property
     def mode(self) -> Mode | None:
@@ -95,10 +98,16 @@ class Runner:
         mean = mean_brightness(
             frame.image, self._mask_for(frame.image.shape[0], frame.image.shape[1])
         )
+        image = frame.image
+        if self._hot is not None:
+            # SPEC §4.6: the map learns from raw frames, every frame gets the correction.
+            if not focus:
+                self._hot.observe(start, night_id(start, self._tz), elevation, image)
+            image = self._hot.apply(image)
         if focus:
             nid, name = night_id(start, self._tz), FOCUS_FRAME_NAME
         else:
-            stored = self._store.save(frame.image, start)
+            stored = self._store.save(image, start)
             nid, name = stored.night_id, stored.name
         self._ae.update(mode, Exposure(frame.exposure_us, frame.gain), mean, focus)
 
@@ -117,10 +126,10 @@ class Runner:
         if not focus:
             self._store.append_index(info)
         if self._live is not None:
-            self._live.publish(info, frame.image, sharpness(frame.image))
+            self._live.publish(info, image, sharpness(image))
         if not focus:
             for analyze in self._analyzers:
-                analyze(info, frame.image)
+                analyze(info, image)
         return info
 
     def _mask_for(self, height: int, width: int) -> Mask | None:

@@ -5,7 +5,8 @@
 #
 #   sudo image/build.sh
 #
-# Output: build/allskyhub-<version>.img.xz and .sha256
+# Output: build/allskyhub-<version>.img.xz and .sha256, and the agent update bundle
+#         build/allskyhub-agent-<agent version>-arm64.tar.xz (docs/updates.md)
 set -euo pipefail
 
 ROOT=$(cd "$(dirname "$0")/.." && pwd)
@@ -126,7 +127,8 @@ apt-get clean
 rm -rf /var/lib/apt/lists/*
 
 systemctl enable allskyhub-firstboot.service allskyhub-setupfile.service \
-    allskyhub-agent.service allskyhub-wifi-country.path nftables.service
+    allskyhub-agent.service allskyhub-wifi-country.path nftables.service \
+    allskyhub-updater.timer
 # The agent announces itself over mDNS (SPEC §7.2) with its own responder; avahi would hold
 # UDP 5353 and answer for the same host.
 systemctl mask avahi-daemon.service avahi-daemon.socket
@@ -141,6 +143,10 @@ runuser -u allskyhub -- /opt/allskyhub-agent/current/.venv/bin/allskyhub-agent \
     --start 2026-10-06T22:00:00+02:00
 rm -rf /tmp/selftest
 CHROOT
+
+echo "== update bundle (SPEC §8): the release directory as the camera runs it"
+tar -C "$MNT/opt/allskyhub-agent/releases" --owner=0 --group=0 --numeric-owner \
+    -cJf "$OUT/allskyhub-agent-$AGENT_VERSION-arm64.tar.xz" "$AGENT_VERSION"
 
 echo "== boot order"
 # No ordering cycles: systemd would break one by dropping a unit, NetworkManager for example.

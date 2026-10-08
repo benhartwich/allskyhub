@@ -1,0 +1,16 @@
+# Agent updates (SPEC §8): one run per start, from allskyhub-updater.timer. Root, because it
+# replaces /opt/allskyhub-agent/current and restarts the agent; it never switches at night.
+[Unit]
+Description=allskyhub agent update
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+EnvironmentFile=-/etc/allskyhub-agent/updater.env
+ExecStart=/opt/allskyhub-agent/current/.venv/bin/allskyhub-agent update
+StateDirectory=allskyhub-updater
+CacheDirectory=allskyhub-updater
+TimeoutStartSec=30min
+Nice=10
+IOSchedulingClass=idle

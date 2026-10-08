@@ -12,6 +12,7 @@ from dataclasses import dataclass
 
 from PIL import Image as PILImage
 
+from allskyhub_agent import __version__
 from allskyhub_agent.adapters.camera import Image
 from allskyhub_protocol import FrameInfo
 
@@ -97,6 +98,7 @@ class LiveState:
         with self._lock:
             s = self._s
             return {
+                "version": __version__,  # the updater's health check (SPEC §8)
                 "frames": s.frames,
                 "focus_mode": s.focus_mode,
                 "sharpness": s.sharpness,

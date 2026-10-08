@@ -9,13 +9,17 @@ from __future__ import annotations
 
 import argparse
 import logging
+import os
+import subprocess
 import sys
 import threading
 import time
 from datetime import datetime
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 from zoneinfo import ZoneInfo
+
+import httpx
 
 from allskyhub_agent import __version__, system
 from allskyhub_agent.adapters.asi_sdk import AsiError, AsiSdk
@@ -48,6 +52,8 @@ from allskyhub_agent.setup.controller import NetworkRequest, SetupController
 from allskyhub_agent.setup.setup_file import DEFAULT_PATH as SETUP_FILE_PATH
 from allskyhub_agent.setup.setup_file import apply_once as apply_setup_file
 from allskyhub_agent.store.images import ImageStore
+from allskyhub_agent.update.installer import Paths, Updater
+from allskyhub_agent.update.status import update_status
 from allskyhub_agent.web.server import WebServer
 from allskyhub_protocol import DeviceSettings, FrameInfo, SetSettingsArgs, Status
 
@@ -77,6 +83,14 @@ def _parser() -> argparse.ArgumentParser:
     prod = sub.add_parser("products", help="build a night's keogram, startrails, timelapse")
     prod.add_argument("--data", type=Path, required=True, help="data directory")
     prod.add_argument("--night", required=True, help="night id, YYYYMMDD")
+    upd = sub.add_parser("update", help="install a newer signed agent release (root, SPEC §8)")
+    upd.add_argument("--manifest-url", default=os.environ.get("ALLSKYHUB_UPDATE_MANIFEST_URL",
+                                                              DEFAULT_MANIFEST_URL))  # fmt: skip
+    upd.add_argument("--install-dir", type=Path, default=Path("/opt/allskyhub-agent"))
+    upd.add_argument("--keys", type=Path, default=Path("/etc/allskyhub-agent/update-keys"))
+    upd.add_argument("--state", type=Path, default=Path("/var/lib/allskyhub-updater/state.json"))
+    upd.add_argument("--work", type=Path, default=Path("/var/cache/allskyhub-updater"))
+    upd.add_argument("--agent-status", default="http://127.0.0.1:8080/api/status")
     run = sub.add_parser("run", help="capture frames")
     run.add_argument("--frames", type=int, default=None, help="stop after N frames")
     run.add_argument("--data", type=Path, required=True, help="data directory")
@@ -100,6 +114,40 @@ def _parser() -> argparse.ArgumentParser:
         help="serve the local web UI, e.g. 0.0.0.0:8080 (SPEC §7)",
     )
     return p
+
+
+DEFAULT_MANIFEST_URL = (
+    "https://github.com/benhartwich/allskyhub/releases/download/channel-stable/manifest.json"
+)
+
+
+def run_update(args: argparse.Namespace) -> int:
+    """One updater run (SPEC §8), started by allskyhub-updater.timer as root."""
+    logging.basicConfig(level=logging.INFO, format="%(levelname)s %(name)s: %(message)s")
+
+    def status() -> dict[str, Any] | None:
+        try:
+            r = httpx.get(args.agent_status, timeout=5)
+            data: object = r.json() if r.status_code == 200 else None
+        except (httpx.HTTPError, ValueError):
+            return None
+        return cast(dict[str, Any], data) if isinstance(data, dict) else None
+
+    def run_cmd(cmd: list[str]) -> int:
+        return subprocess.run(cmd, check=False, timeout=120).returncode  # noqa: S603
+
+    with httpx.Client(timeout=30) as http:
+        Updater(
+            paths=Paths(args.install_dir, args.work, args.state, args.keys),
+            manifest_url=args.manifest_url,
+            http=http,
+            status=status,
+            run=run_cmd,
+            sleep=time.sleep,
+            monotonic=time.monotonic,
+            fallback_version=__version__,
+        ).run_once()
+    return 0
 
 
 def open_camera(hint: str, asi_sdk: Path) -> tuple[Camera | None, Profile]:
@@ -134,6 +182,8 @@ def main(argv: list[str] | None = None) -> int:
         return 0 if found else 1
 
     tz = ZoneInfo(args.tz or "UTC")
+    if args.cmd == "update":
+        return run_update(args)
     if args.cmd == "products":
         result = build_night(ImageStore(args.data, tz), args.night)
         print(f"night {result.night_id}: {result.frames} night frames, built {result.built}")
@@ -214,6 +264,7 @@ def main(argv: list[str] | None = None) -> int:
                 settings=device_settings() if settings_path else None,
                 sky=sky_meter.latest if sky_meter is not None else None,
                 orientation=orienter.latest if orienter is not None else None,
+                update=update_status() if settings_path else None,
             )
 
         def device_settings() -> DeviceSettings:

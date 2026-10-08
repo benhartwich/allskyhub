@@ -1,0 +1,3 @@
+Public Ed25519 keys (PEM, *.pem) that the camera trusts for agent updates (SPEC §8).
+An update replaces /opt/allskyhub-agent, never this directory: new keys need a new image.
+See docs/updates.md.

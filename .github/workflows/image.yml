@@ -6,6 +6,8 @@ on:
   workflow_dispatch:
   push:
     branches: ["**"]
+    # A tag agent-vX.Y.Z publishes the update bundle (docs/updates.md); paths don't apply.
+    tags: ["agent-v*"]
     paths:
       - "image/**"
       - "agent/**"
@@ -42,3 +44,60 @@ jobs:
             build/allskyhub-*.img.xz.sha256
           retention-days: 14
           compression-level: 0
+      - uses: actions/upload-artifact@v4
+        with:
+          name: allskyhub-agent-bundle
+          path: build/allskyhub-agent-*-arm64.tar.xz
+          retention-days: 14
+          compression-level: 0
+
+  # SPEC §8: sign the manifest and publish it with the bundle. The private key is only in
+  # the secret ALLSKYHUB_UPDATE_KEY; without it nothing is published.
+  release:
+    if: startsWith(github.ref, 'refs/tags/agent-v')
+    needs: build
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      UPDATE_KEY: ${{ secrets.ALLSKYHUB_UPDATE_KEY }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: allskyhub-agent-bundle
+          path: dist
+      - name: version
+        run: |
+          VERSION="${GITHUB_REF_NAME#agent-v}"
+          AGENT=$(sed -n 's/^version = "\(.*\)"$/\1/p' agent/pyproject.toml | head -n 1)
+          [ "$VERSION" = "$AGENT" ] || { echo "tag $VERSION != agent $AGENT"; exit 1; }
+          echo "VERSION=$VERSION" >> "$GITHUB_ENV"
+      - name: manifest and signature
+        run: |
+          [ -n "$UPDATE_KEY" ] || { echo "::error::secret ALLSKYHUB_UPDATE_KEY is not set"; exit 1; }
+          BUNDLE="dist/allskyhub-agent-$VERSION-arm64.tar.xz"
+          URL="https://github.com/${GITHUB_REPOSITORY}/releases/download/agent-v$VERSION/allskyhub-agent-$VERSION-arm64.tar.xz"
+          python3 tools/release/make_manifest.py "$BUNDLE" "$VERSION" "$URL" > dist/manifest.json
+          umask 077
+          printf '%s\n' "$UPDATE_KEY" > "$RUNNER_TEMP/key.pem"
+          openssl pkeyutl -sign -inkey "$RUNNER_TEMP/key.pem" -rawin \
+            -in dist/manifest.json -out dist/manifest.json.sig
+          rm -f "$RUNNER_TEMP/key.pem"
+          # The signature must verify with a key the cameras trust.
+          ok=0
+          for k in image/files/etc/allskyhub-agent/update-keys/*.pem; do
+            [ -e "$k" ] || continue
+            openssl pkeyutl -verify -pubin -inkey "$k" -rawin -in dist/manifest.json \
+              -sigfile dist/manifest.json.sig && ok=1 && break
+          done
+          [ "$ok" = 1 ] || { echo "::error::signature does not match a key in the image"; exit 1; }
+      - name: publish
+        run: |
+          gh release create "agent-v$VERSION" "dist/allskyhub-agent-$VERSION-arm64.tar.xz" \
+            --title "agent $VERSION" --notes "Agent update $VERSION (docs/updates.md)." \
+            || gh release upload "agent-v$VERSION" "dist/allskyhub-agent-$VERSION-arm64.tar.xz" --clobber
+          gh release view channel-stable >/dev/null 2>&1 || gh release create channel-stable \
+            --title "update channel: stable" --notes "Manifest the cameras read (docs/updates.md)." --latest=false
+          gh release upload channel-stable dist/manifest.json dist/manifest.json.sig --clobber

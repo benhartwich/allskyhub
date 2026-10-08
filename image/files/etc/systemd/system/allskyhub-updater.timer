@@ -1,0 +1,10 @@
+[Unit]
+Description=Look for allskyhub agent updates
+
+[Timer]
+OnBootSec=10min
+OnUnitActiveSec=1h
+RandomizedDelaySec=15min
+
+[Install]
+WantedBy=timers.target

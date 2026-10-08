@@ -256,6 +256,11 @@ base64url-encoded without padding.
   an image direction d is (north_deg − d) mod 360 when mirrored, else
   (d − north_deg) mod 360; exact at the horizon, approximate above it if the camera
   leans.
+  `update` (null until the updater ran, §8): `{state, version, at, code}` with `state`
+  one of `up_to_date`, `downloading`, `waiting` (downloaded, waits for the day),
+  `installing`, `installed`, `rolled_back`, `failed`; `version` the release it is about,
+  `at` when that state was reached, `code` why it failed or rolled back (e.g.
+  `unhealthy`, `checksum`, `bad_signature`, `no_space`).
 - `frame`: frame metadata (§4.4); the image itself goes over HTTPS when the hub asks
   for it (§6.5, `upload_frame`).
 - `event`: a detection (§6.4).
@@ -455,6 +460,20 @@ again.
 Signed update packages (agent and profiles), installed by the device itself into an
 A/B slot; the previous version is restored automatically if the new one does not
 report healthy within a timeout.
+
+- **Channel:** a JSON manifest `{channel, version, released_at, bundle: {url, sha256,
+  size}}` (`allskyhub_protocol.updates`) at a fixed URL, with a detached Ed25519
+  signature over its bytes at the same URL + `.sig`. The camera trusts the public keys
+  in `/etc/allskyhub-agent/update-keys/`, which only an image brings.
+- **Bundle:** `<version>/` with the agent's venv, unpacked into
+  `/opt/allskyhub-agent/releases/`; `current` points to the running one and is
+  switched with one rename.
+- **Updater:** a root systemd timer (10 min after boot, then hourly). Only newer
+  versions, only with a valid signature and checksum, only while the agent reports day
+  mode. Healthy means the local `/api/status` (§7) reports the new `version`, and
+  `frames` > 0 if the old one captured, within 5 min; else it switches back and skips
+  that version. A power cut between switch and check is finished on the next run.
+- Details and key handling: `docs/updates.md`.
 
 ## 9. Milestones
 

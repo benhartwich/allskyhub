@@ -244,6 +244,17 @@ base64url-encoded without padding.
 |---|---|
 | `meteor` | `length_px` (int, track length), `peak` (0..1, peak brightness of the track), `frames` (int, frames it appears in), `direction_deg` (0..360 in the image, 0 = up, clockwise, or null), `shower` (name of an active shower, e.g. `Perseids`, or null) |
 | `lightning` | `area_frac` (0..1, part of the sky that lit up), `peak` (0..1, mean brightening of the lit area), `storm_flashes` (int, flashes in the last 30 min including this one), `storm` (string, `storm-` + UTC start of the storm like an event id; the same for all flashes of a storm, a gap of more than 30 min starts a new one) |
+| `aurora` | one event per episode (below): `peak_index` (0..100, % of the low horizon ring that is aurora-green in the best frame), `green` (mean green over red of those pixels, 8 bit), `frames` (int, candidate frames so far), `direction_deg` (0..360 in the image, 0 = up, clockwise, of the green's centroid; not a compass bearing), `ongoing` (bool), `image_rev` |
+
+Some phenomena last minutes to hours (`aurora`). They are one **episode** event: it is
+sent when the episode opens and sent again with the same id while it grows (at most
+every few minutes) and once more when it ends, with `ongoing` false. `start` stays,
+`end`, `confidence` and `data` change.
+
+`image_rev` (int ≥ 1) is in `data` of every event whose picture can be replaced (an
+episode's best frame). It is incremented whenever the picture changes; when a resent
+event has a higher `image_rev`, the hub fetches the picture again. Events without it
+keep their picture.
 
 Events are sent when detected and, after every (re)connect, again for the current
 night (§6.7).

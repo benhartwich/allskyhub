@@ -5,6 +5,7 @@ import '../api/hub_client.dart';
 import '../api/setup_mode.dart';
 import '../platform/location.dart';
 import '../platform/wifi_binding.dart';
+import 'account_screen.dart';
 import 'camera_screen.dart';
 import 'gallery_screens.dart';
 import 'onboarding_screen.dart';
@@ -88,6 +89,18 @@ class _CamerasScreenState extends State<CamerasScreen> {
       appBar: AppBar(
         title: const Text('Meine Kameras'),
         actions: [
+          IconButton(
+            tooltip: 'Konto',
+            icon: const Icon(Icons.person_outline),
+            onPressed: () => Navigator.of(context).push(
+              MaterialPageRoute<void>(
+                builder: (_) => AccountScreen(
+                  client: widget.client,
+                  onDeleted: widget.onSignOut,
+                ),
+              ),
+            ),
+          ),
           IconButton(
             tooltip: 'Abmelden',
             icon: const Icon(Icons.logout),

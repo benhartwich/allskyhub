@@ -224,6 +224,19 @@ class HubClient {
     token = null;
   }
 
+  /// Roadmap #10: needs the current password; signs out the web and every other app.
+  Future<void> changePassword(String current, String newPassword) => _send(
+    'POST',
+    '/account/password',
+    body: {'current': current, 'new': newPassword},
+  );
+
+  /// Roadmap #10: deletes the account, unpairs its cameras and removes their images.
+  Future<void> deleteAccount(String password) async {
+    await _send('POST', '/account/delete', body: {'password': password});
+    token = null;
+  }
+
   Future<List<Camera>> cameras() async {
     final json = await _send('GET', '/cameras') as List<dynamic>;
     return [for (final c in json) Camera.fromJson(c as Map<String, dynamic>)];

@@ -236,6 +236,7 @@ base64url-encoded without padding.
 | kind | keys |
 |---|---|
 | `meteor` | `length_px` (int, track length), `peak` (0..1, peak brightness of the track), `frames` (int, frames it appears in), `direction_deg` (0..360 in the image, 0 = up, clockwise, or null), `shower` (name of an active shower, e.g. `Perseids`, or null) |
+| `lightning` | `area_frac` (0..1, part of the sky that lit up), `peak` (0..1, mean brightening of the lit area), `storm_flashes` (int, flashes in the last 30 min including this one), `storm` (string, `storm-` + UTC start of the storm like an event id; the same for all flashes of a storm, a gap of more than 30 min starts a new one) |
 
 Events are sent when detected and, after every (re)connect, again for the current
 night (§6.7).

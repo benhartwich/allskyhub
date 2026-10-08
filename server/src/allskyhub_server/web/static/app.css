@@ -104,3 +104,15 @@ label.check input { width: 22px; min-height: 22px; }
 .public-products img { width: 100%; border-radius: 10px; background: #000; }
 .code-link { font-family: ui-monospace, monospace; overflow-wrap: anywhere; }
 button.secondary { background: transparent; color: var(--accent); border: 1px solid var(--accent); }
+
+/* Gallery */
+.nights a { display: grid; gap: 2px; text-decoration: none; color: var(--text); width: 100%; }
+.thumbs { list-style: none; padding: 0; margin: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(110px, 1fr)); gap: 6px; }
+.thumbs a { position: relative; display: block; }
+.thumbs img { width: 100%; aspect-ratio: 1; object-fit: cover; border-radius: 8px; background: #000; display: block; }
+.thumbs span { position: absolute; left: 4px; bottom: 4px; padding: 0 4px; border-radius: 4px; background: rgba(0,0,0,.6); color: #fff; font-size: 11px; }
+.product-video, .product-image { width: 100%; border-radius: 12px; background: #000; }
+.list { list-style: none; padding: 0; margin: 0; }
+.list.card { display: block; padding: 4px 18px; }
+.list > li { padding: 12px 0; border-bottom: 1px solid var(--line); }
+.list > li:last-child { border-bottom: 0; }

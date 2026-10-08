@@ -2,7 +2,10 @@
 {% block title %}{{ device.name }} · allskyhub{% endblock %}
 {% block content %}
 <a class="back" href="/">← Meine Kameras</a>
-<h1>{{ device.name }}</h1>
+<div class="page-head">
+  <h1>{{ device.name }}</h1>
+  <a class="button small" href="/cameras/{{ device.id }}/gallery">Galerie</a>
+</div>
 <div hx-get="/cameras/{{ device.id }}/live" hx-trigger="load, every 5s" hx-swap="innerHTML">
   {% include "_live.html" %}
 </div>

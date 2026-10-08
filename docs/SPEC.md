@@ -128,6 +128,18 @@ the frame is not used. It is relearned every night, kept in
 `<data>/calibration/skymask.png`, and used for metering (§4.3), the detections and the
 sky values in `status` (§6.3); until there is one, the profile's image circle is used.
 
+### 4.8 Orientation
+
+The agent plate-solves a clear frame (sun ≤ −18°, sky meter ≤ 10 % cloud and ≥ 150
+stars, with a second clear frame 20–40 min earlier whose points mark text and hot
+pixels) against the stars brighter than magnitude 3 (Hipparcos) at the frame's
+mid-exposure time and the camera's location; the clock must be trusted (§4.4). Two
+point pairs give guesses for centre, scale and rotation; the best are refined with the
+lens r = a1·t + a3·t³ (t = zenith angle / 90°), a small tilt and a shrinking search
+window, and only a clear winner (≥ 12 stars, ≤ 0.6° RMS, no close rival) is accepted.
+At most 3 tries a night, solved again after 7 days; the result is kept in
+`<data>/calibration/orientation.json` and reported in `status` (§6.3).
+
 ## 5. Products (M4)
 
 ### 5.1 Frame index
@@ -237,6 +249,13 @@ base64url-encoded without padding.
   stars visible in the upper sky at night (sun ≤ −12°), else null. `sqm_mag` (mag/arcsec², approximate until calibrated) is the
   sky background normalised by exposure and gain, only at astronomical night (sun ≤
   −18°), else null. `stars` is the number of stars detected at night, else null.
+  `orientation` (null until solved, §4.8): `{north_deg, mirrored, solved_at, stars,
+  rms_deg}`. `north_deg` (0..360) is the image direction of north at the horizon, 0 = up,
+  clockwise, like `direction_deg` in events; `mirrored` true means east is
+  counter-clockwise from north (the usual view of a camera looking up). The azimuth of
+  an image direction d is (north_deg − d) mod 360 when mirrored, else
+  (d − north_deg) mod 360; exact at the horizon, approximate above it if the camera
+  leans.
 - `frame`: frame metadata (§4.4); the image itself goes over HTTPS when the hub asks
   for it (§6.5, `upload_frame`).
 - `event`: a detection (§6.4).

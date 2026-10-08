@@ -24,6 +24,7 @@ from allskyhub_agent.adapters.libcamera import LibcameraCamera, list_cameras
 from allskyhub_agent.adapters.network import Network, NmcliNetwork, SimNetwork
 from allskyhub_agent.adapters.sim import SimCamera, sky_radiance
 from allskyhub_agent.adapters.zwo import ZwoCamera
+from allskyhub_agent.calib.orientation import Orienter
 from allskyhub_agent.core.clock import Clock, SimClock, SystemClock
 from allskyhub_agent.core.exposure import AutoExposure
 from allskyhub_agent.core.sun import sun_elevation
@@ -185,6 +186,8 @@ def main(argv: list[str] | None = None) -> int:
     event_store = EventStore(store)
     # Sky condition for status (SPEC §6.3); configured for the profile once it is known.
     sky_meter: SkyMeter | None = None
+    # Plate-solved image orientation (SPEC §4.8), created with the detection worker.
+    orienter: Orienter | None = None
     identity: DeviceIdentity | None = None
     profile_id = {"auto": "zwo-asi678mc"}.get(profile_hint, profile_hint)
     if hub_url:
@@ -207,6 +210,7 @@ def main(argv: list[str] | None = None) -> int:
                 time_trusted=system.time_trusted(),
                 settings=device_settings() if settings_path else None,
                 sky=sky_meter.latest if sky_meter is not None else None,
+                orientation=orienter.latest if orienter is not None else None,
             )
 
         def device_settings() -> DeviceSettings:
@@ -357,6 +361,12 @@ def main(argv: list[str] | None = None) -> int:
 
     sky_meter = SkyMeter(SkyConfig(sqm_offset=profile.sqm_offset), profile.image_circle_frac)
     sky_mask = SkyMask(Path(args.data) / "calibration" / "skymask.png")
+    here = loc
+    orienter = Orienter(
+        Path(args.data) / "calibration" / "orientation.json",
+        location=lambda: (here.lat, here.lon),
+        time_trusted=system.time_trusted if settings_path else lambda: True,
+    )
     detect = DetectionWorker(
         store,
         on_event=hub.notify_event if hub is not None else None,
@@ -364,6 +374,7 @@ def main(argv: list[str] | None = None) -> int:
         events=event_store,
         sky=sky_meter,
         sky_mask=sky_mask,
+        orienter=orienter,
     )
     detect.start()
 

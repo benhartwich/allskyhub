@@ -19,6 +19,7 @@ from PIL import Image as PILImage
 from pydantic import ValidationError
 
 from allskyhub_agent.adapters.camera import Image
+from allskyhub_agent.calib.orientation import Orienter
 from allskyhub_agent.core.metering import Mask
 from allskyhub_agent.detect.aurora import AuroraConfig, AuroraDetector, AuroraUpdate
 from allskyhub_agent.detect.lightning import LightningConfig, LightningDetector, LightningHit
@@ -254,6 +255,7 @@ class DetectionWorker:
         sky: SkyMeter | None = None,
         aurora_cfg: AuroraConfig | None = None,
         sky_mask: SkyMask | None = None,
+        orienter: Orienter | None = None,
     ) -> None:
         self._store = store
         self.events = events or EventStore(store)
@@ -263,6 +265,7 @@ class DetectionWorker:
         self._sky = sky
         self._aurora = AuroraDetector(aurora_cfg, mask_radius_frac or 0.48)
         self._sky_mask = sky_mask
+        self._orienter = orienter
         self._mask_version = -1
         self._q: queue.Queue[_Job | None] = queue.Queue(maxsize=4)
         self._dropped = 0
@@ -331,7 +334,10 @@ class DetectionWorker:
                 if self._sky is not None:
                     self._sky.set_mask(learned)
             self._mask_version = self._sky_mask.version
-        cloud = self._sky.measure(job.frame, rgb).cloud_cover if self._sky is not None else None
+        metrics = self._sky.measure(job.frame, rgb) if self._sky is not None else None
+        cloud = metrics.cloud_cover if metrics is not None else None
+        if self._orienter is not None:
+            self._orienter.consider(job.frame, job.path, metrics)
         gray = to_gray(rgb)
         self._emit(self._meteor.feed(job.frame, gray, job.path))
         self._emit_lightning(self._lightning.feed(job.frame, gray, job.path))

@@ -6,14 +6,16 @@ import asyncio
 import datetime as dt
 import logging
 
-from sqlalchemy import delete, select, update
+from sqlalchemy import delete, func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from allskyhub_protocol import FrameVariant
+from allskyhub_server.auth.accounts import DEFAULT_EVENT_KEEP_DAYS
 from allskyhub_server.auth.sessions import IDLE_TIMEOUT
 from allskyhub_server.devices.images import ImageStore
 from allskyhub_server.models import (
     AppToken,
+    Device,
     DeviceNonce,
     DeviceToken,
     EventRecord,
@@ -22,6 +24,7 @@ from allskyhub_server.models import (
     PairingCode,
     Product,
     RateLimit,
+    User,
     WebSession,
 )
 from allskyhub_server.settings import Settings
@@ -139,14 +142,22 @@ async def _purge_products(
 async def _purge_events(
     db: AsyncSession, store: ImageStore, settings: Settings, now: dt.datetime
 ) -> None:
-    """Events like frames: the full picture after ``keep_full_days``, the event with its
-    thumbnail after ``keep_thumb_days`` (from the first report)."""
+    """Detections, per account (``User.event_keep_days``): the event with its pictures after
+    that many days from the first report. With the default (30 days) the full picture goes
+    after ``keep_full_days`` like a frame's; a longer choice keeps it with the event."""
+    keep = func.make_interval(0, 0, 0, User.event_keep_days)
+    owned = (
+        select(EventRecord.device_id, EventRecord.night_id, EventRecord.event_id)
+        .join(Device, Device.id == EventRecord.device_id)
+        .join(User, User.id == Device.owner_id)
+    )
     full_cutoff = now - dt.timedelta(days=settings.keep_full_days)
-    thumb_cutoff = now - dt.timedelta(days=settings.keep_thumb_days)
     old_full = (
         await db.execute(
-            select(EventRecord.device_id, EventRecord.night_id, EventRecord.event_id).where(
-                EventRecord.has_full.is_(True), EventRecord.created_at < full_cutoff
+            owned.where(
+                EventRecord.has_full.is_(True),
+                EventRecord.created_at < full_cutoff,
+                User.event_keep_days <= DEFAULT_EVENT_KEEP_DAYS,
             )
         )
     ).all()
@@ -154,22 +165,20 @@ async def _purge_events(
         await asyncio.to_thread(
             store.delete_event, device_id, night_id, event_id, FrameVariant.FULL
         )
-    await db.execute(
-        update(EventRecord)
-        .where(EventRecord.has_full.is_(True), EventRecord.created_at < full_cutoff)
-        .values(has_full=False)
-    )
-    old = (
         await db.execute(
-            select(EventRecord.device_id, EventRecord.night_id, EventRecord.event_id).where(
-                EventRecord.created_at < thumb_cutoff
-            )
+            update(EventRecord)
+            .where(EventRecord.device_id == device_id, EventRecord.event_id == event_id)
+            .values(has_full=False)
         )
-    ).all()
-    for device_id, night_id, event_id in old:
+    expired = (await db.execute(owned.where(EventRecord.created_at < now - keep))).all()
+    for device_id, night_id, event_id in expired:
         for variant in FrameVariant:
             await asyncio.to_thread(store.delete_event, device_id, night_id, event_id, variant)
-    await db.execute(delete(EventRecord).where(EventRecord.created_at < thumb_cutoff))
+        await db.execute(
+            delete(EventRecord).where(
+                EventRecord.device_id == device_id, EventRecord.event_id == event_id
+            )
+        )
 
 
 async def run_forever(

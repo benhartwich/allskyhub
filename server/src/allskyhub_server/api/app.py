@@ -49,6 +49,12 @@ class PasswordChange(_In):
     new: str = Field(max_length=1024)
 
 
+class AccountSettings(BaseModel):
+    """Per-account settings (privacy policy): days to keep detections, one of 30, 90, 365."""
+
+    event_keep_days: int
+
+
 class AccountDelete(_In):
     password: str = Field(max_length=1024)
 
@@ -433,6 +439,21 @@ async def event_image(
 
 async def _limit_account(request: Request, user: User) -> None:
     await _limit(request, f"account:{user.id}", ratelimit.LOGIN_PER_ACCOUNT)
+
+
+@router.get("/account/settings")
+async def get_settings(user: AppUser) -> AccountSettings:
+    return AccountSettings(event_keep_days=user.event_keep_days)
+
+
+@router.put("/account/settings")
+async def put_settings(body: AccountSettings, db: DbSession, user: AppUser) -> AccountSettings:
+    try:
+        accounts.set_event_keep_days(user, body.event_keep_days)
+    except accounts.AccountError as exc:
+        raise HTTPException(400, exc.message) from None
+    await db.commit()
+    return AccountSettings(event_keep_days=user.event_keep_days)
 
 
 @router.post("/account/password", status_code=204)

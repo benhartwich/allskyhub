@@ -95,3 +95,15 @@ async def delete_account(db: AsyncSession, user: User) -> list[str]:
     await db.delete(user)
     await db.flush()
     return [d.id for d in devices]
+
+
+# Choices for User.event_keep_days (privacy policy).
+EVENT_KEEP_CHOICES = (30, 90, 365)
+DEFAULT_EVENT_KEEP_DAYS = 30
+
+
+def set_event_keep_days(user: User, days: int) -> None:
+    """The caller commits."""
+    if days not in EVENT_KEEP_CHOICES:
+        raise AccountError("Diese Aufbewahrungsdauer gibt es nicht.")
+    user.event_keep_days = days

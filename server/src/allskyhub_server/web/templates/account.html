@@ -5,6 +5,17 @@
 <h1>Konto</h1>
 <p class="muted">Angemeldet als {{ user.email }}</p>
 
+<form method="post" action="/account/events" class="card stack">
+  <h2>Ereignisse aufbewahren</h2>
+  <p class="muted">Wie lange erkannte Meteore und andere Ereignisse deiner Kameras gespeichert bleiben. Bei mehr als 30 Tagen sichern wir auch jedes Bild in voller Größe.</p>
+  <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+  {% for days in keep_choices %}
+  <label class="check"><input type="radio" name="keep_days" value="{{ days }}" {% if user.event_keep_days == days %}checked{% endif %}>
+    {{ '1 Jahr' if days == 365 else days ~ ' Tage' }}{% if days == 30 %} (Standard){% endif %}</label>
+  {% endfor %}
+  <button type="submit">Speichern</button>
+</form>
+
 <form method="post" action="/account/password" class="card stack">
   <h2>Passwort ändern</h2>
   <input type="hidden" name="csrf_token" value="{{ csrf_token }}">

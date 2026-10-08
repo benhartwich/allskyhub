@@ -52,6 +52,9 @@ class User(Base):
     email: Mapped[str] = mapped_column(String(254), unique=True)
     password_hash: Mapped[str] = mapped_column(String(255))
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, server_default="true")
+    # How long detections are kept (privacy policy): 30 (default), 90 or 365 days. Above 30
+    # the hub also keeps each event's full picture for that long.
+    event_keep_days: Mapped[int] = mapped_column(Integer, default=30, server_default="30")
     created_at: Mapped[dt.datetime] = mapped_column(_tz(), server_default=func.now())
 
 

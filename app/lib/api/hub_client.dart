@@ -280,6 +280,13 @@ class HubClient {
   }
 
   /// Roadmap #10: needs the current password; signs out the web and every other app.
+  /// SPEC §6.5 set_settings: only the given keys change; the hub waits for the camera's
+  /// answer. Throws a [HubException] with a German message (400 rejected, 409 offline, 504).
+  Future<void> updateCameraSettings(
+    String cameraId,
+    Map<String, Object> changes,
+  ) => _send('PUT', '/cameras/$cameraId/settings', body: changes);
+
   /// Days the hub keeps this account's detections: 30, 90 or 365 (privacy policy).
   Future<int> eventKeepDays() async =>
       ((await _send('GET', '/account/settings')

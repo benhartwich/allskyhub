@@ -63,6 +63,18 @@ class SkyMetrics(BaseModel):
     stars: int | None = Field(default=None, ge=0)
 
 
+class Orientation(BaseModel):
+    """The image's orientation from a plate solve, reported in `status` (SPEC §6.3, §4.8)."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    north_deg: float = Field(ge=0, lt=360)  # image direction of north, 0 = up, clockwise
+    mirrored: bool  # east counter-clockwise from north (the usual view of a sky camera)
+    solved_at: AwareDatetime
+    stars: int = Field(ge=0)
+    rms_deg: float = Field(ge=0)
+
+
 class Status(_Body):
     """Periodic device status (SPEC §6.3)."""
 
@@ -79,6 +91,7 @@ class Status(_Body):
     time_trusted: bool
     settings: DeviceSettings | None = None
     sky: SkyMetrics | None = None
+    orientation: Orientation | None = None
 
 
 class FrameInfo(_Body):

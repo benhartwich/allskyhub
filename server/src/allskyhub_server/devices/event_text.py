@@ -57,6 +57,49 @@ def orientation_line(status: dict[str, Any] | None) -> str | None:
     return " · ".join(parts)
 
 
+UPDATE_STATES = {
+    "up_to_date": "aktuell",
+    "downloading": "Update {v} wird geladen",
+    "waiting": "Update {v} geladen, wird tagsüber installiert",
+    "installing": "Update {v} wird installiert",
+    "installed": "Update {v} installiert",
+    "rolled_back": "Update {v} zurückgerollt",
+    "failed": "Update {v} fehlgeschlagen",
+}
+UPDATE_CODES = {
+    "unhealthy": "die neue Version lief nicht sauber",
+    "checksum": "Prüfsumme falsch",
+    "download": "Download fehlgeschlagen",
+    "bad_bundle": "Paket beschädigt",
+    "bad_signature": "Signatur ungültig",
+    "bad_manifest": "Update-Beschreibung ungültig",
+    "no_space": "zu wenig Speicher",
+}
+
+
+def update_line(status: dict[str, Any] | None) -> tuple[str, bool] | None:
+    """Roadmap #7 ``status.update``: German text and whether it is a warning, or None
+    before the updater has run once."""
+    u = (status or {}).get("update")
+    if not isinstance(u, dict):
+        return None
+    u = cast(dict[str, Any], u)
+    state = u.get("state")
+    if not isinstance(state, str) or state not in UPDATE_STATES:
+        return None
+    text = UPDATE_STATES[state].format(v=u.get("version") or "")
+    code = u.get("code")
+    if isinstance(code, str) and code:
+        text += f" ({UPDATE_CODES.get(code, code)})"
+    if isinstance(at := u.get("at"), str) and state not in ("up_to_date", "downloading"):
+        try:
+            when = dt.datetime.fromisoformat(at)
+            text += f", {when.day}.{when.month}."
+        except ValueError:
+            pass
+    return text, state in ("rolled_back", "failed")
+
+
 def event_rows(event: EventRecord) -> list[tuple[str, str]]:
     """Label/value rows: meteor keys as in SPEC §6.4, unknown keys as they come."""
     rows = [("Sicherheit", f"{round(event.confidence * 100)} %")]

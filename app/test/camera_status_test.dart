@@ -95,6 +95,34 @@ void main() {
     );
   });
 
+  test('software update state', () {
+    expect(updateLine({'state': 'up_to_date', 'version': '0.1.0'}), (
+      'aktuell',
+      false,
+    ));
+    expect(
+      updateLine({
+        'state': 'rolled_back',
+        'version': '0.2.0',
+        'code': 'unhealthy',
+      }),
+      ('Update 0.2.0 zurückgerollt (die neue Version lief nicht sauber)', true),
+    );
+    expect(updateLine({'state': 'bogus'}), isNull);
+    final rows = statusRows(
+      status: {
+        'update': {'state': 'installed', 'version': '0.2.0'},
+      },
+      frame: const {},
+      lastSeen: null,
+      now: now,
+    );
+    expect(
+      rows.firstWhere((r) => r.label == 'Software').value,
+      'Update 0.2.0 installiert',
+    );
+  });
+
   test('missing fields are left out', () {
     final rows = statusRows(
       status: const {},

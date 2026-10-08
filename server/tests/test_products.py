@@ -114,7 +114,14 @@ async def test_products_flow(
         assert by_name["timelapse.mp4"]["duration_s"] == 42.5
         nights = (await client.get(f"{api}/nights", headers=auth)).json()
         assert nights == [
-            {"night_id": NIGHT, "frames": 0, "first": None, "last": None, "products": 3}
+            {
+                "night_id": NIGHT,
+                "frames": 0,
+                "first": None,
+                "last": None,
+                "products": 3,
+                "events": 0,
+            }
         ]
 
         # Opening the timelapse asks the camera for it.

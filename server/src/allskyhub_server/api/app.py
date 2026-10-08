@@ -11,18 +11,17 @@ import datetime as dt
 from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, HTTPException, Path, Query, Request
-from fastapi.responses import FileResponse, JSONResponse, Response
+from fastapi.responses import FileResponse, Response
 from pydantic import BaseModel, ConfigDict, Field
-from sqlalchemy import func, select
 
 from allskyhub_protocol import EVENT_ID_PATTERN, CloseCode, FrameVariant
 from allskyhub_server.auth import accounts, app_tokens, ratelimit
 from allskyhub_server.auth.passwords import verify_secret_async
 from allskyhub_server.auth.tokens import hash_token
-from allskyhub_server.devices import events, pairing, public, queries
+from allskyhub_server.devices import archive, events, pairing, public, queries
 from allskyhub_server.devices.connections import ConnectionRegistry
 from allskyhub_server.devices.images import ImageStore
-from allskyhub_server.models import Device, EventRecord, Frame, Product, User
+from allskyhub_server.models import Device, EventRecord, User
 from allskyhub_server.web.deps import DbSession, SettingsDep, client_ip
 from allskyhub_server.web.routes_account import finish_deletion
 
@@ -70,6 +69,8 @@ class Night(BaseModel):
     last: dt.datetime | None
     # Night products announced for this night (SPEC §5.2).
     products: int = 0
+    # Detections reported for this night (SPEC §6.4).
+    events: int = 0
 
 
 class ProductItem(BaseModel):
@@ -292,35 +293,21 @@ async def remove(request: Request, db: DbSession, user: AppUser, device_id: str)
     return Response(status_code=204)
 
 
-NIGHT_ID = r"^\d{8}$"
-FRAME_NAME = r"^[A-Za-z0-9._-]{1,128}$"
-
-
 @router.get("/cameras/{device_id}/nights")
 async def nights(db: DbSession, user: AppUser, device_id: str) -> list[Night]:
     """Nights with archived frames or products, newest first."""
     device = await _own(db, user, device_id)
-    by_night: dict[str, Night] = {}
-    rows = await db.execute(
-        select(
-            Frame.night_id, func.count(), func.min(Frame.captured_at), func.max(Frame.captured_at)
+    return [
+        Night(
+            night_id=n.night_id,
+            frames=n.frames,
+            first=n.first,
+            last=n.last,
+            products=n.products,
+            events=n.events,
         )
-        .where(Frame.device_id == device.id, Frame.has_thumb.is_(True))
-        .group_by(Frame.night_id)
-    )
-    for night_id, count, first, last in rows:
-        by_night[night_id] = Night(night_id=night_id, frames=count, first=first, last=last)
-    products = await db.execute(
-        select(Product.night_id, func.count())
-        .where(Product.device_id == device.id)
-        .group_by(Product.night_id)
-    )
-    for night_id, count in products:
-        night = by_night.setdefault(
-            night_id, Night(night_id=night_id, frames=0, first=None, last=None)
-        )
-        night.products = count
-    return sorted(by_night.values(), key=lambda n: n.night_id, reverse=True)
+        for n in await archive.nights(db, device.id)
+    ]
 
 
 @router.get("/cameras/{device_id}/nights/{night_id}/frames")
@@ -328,14 +315,9 @@ async def frames(
     db: DbSession,
     user: AppUser,
     device_id: str,
-    night_id: Annotated[str, Path(pattern=NIGHT_ID)],
+    night_id: Annotated[str, Path(pattern=archive.NIGHT_ID)],
 ) -> list[FrameItem]:
     device = await _own(db, user, device_id)
-    rows = await db.scalars(
-        select(Frame)
-        .where(Frame.device_id == device.id, Frame.night_id == night_id, Frame.has_thumb.is_(True))
-        .order_by(Frame.captured_at)
-    )
     return [
         FrameItem(
             name=f.name,
@@ -346,7 +328,7 @@ async def frames(
             sun_elevation=f.sun_elevation,
             has_full=f.has_full,
         )
-        for f in rows
+        for f in await archive.night_frames(db, device.id, night_id)
     ]
 
 
@@ -356,22 +338,12 @@ async def frame_image(
     db: DbSession,
     user: AppUser,
     device_id: str,
-    night_id: Annotated[str, Path(pattern=NIGHT_ID)],
-    name: Annotated[str, Path(pattern=FRAME_NAME)],
+    night_id: Annotated[str, Path(pattern=archive.NIGHT_ID)],
+    name: Annotated[str, Path(pattern=archive.FRAME_NAME)],
     variant: FrameVariant,
 ) -> Response:
     device = await _own(db, user, device_id)
-    store: ImageStore = request.app.state.images
-    path = store.frame_path(device.id, night_id, name, variant)
-    if not path.is_file():
-        raise HTTPException(404, "Not found")
-    # Archived images never change: the app may cache them.
-    return FileResponse(
-        path, media_type="image/jpeg", headers={"Cache-Control": "private, max-age=86400"}
-    )
-
-
-PRODUCT_NAME = r"^(keogram\.jpg|startrails\.jpg|timelapse\.mp4)$"
+    return archive.frame_file(request.app.state.images, device.id, night_id, name, variant)
 
 
 @router.get("/cameras/{device_id}/nights/{night_id}/products")
@@ -380,15 +352,10 @@ async def products(
     db: DbSession,
     user: AppUser,
     device_id: str,
-    night_id: Annotated[str, Path(pattern=NIGHT_ID)],
+    night_id: Annotated[str, Path(pattern=archive.NIGHT_ID)],
 ) -> list[ProductItem]:
     device = await _own(db, user, device_id)
     registry = _registry(request)
-    rows = await db.scalars(
-        select(Product)
-        .where(Product.device_id == device.id, Product.night_id == night_id)
-        .order_by(Product.kind)
-    )
     return [
         ProductItem(
             kind=p.kind,
@@ -400,7 +367,7 @@ async def products(
             has_thumb=p.has_thumb,
             pending=registry.is_pending(device.id, night_id, p.name, FrameVariant.FULL, "product"),
         )
-        for p in rows
+        for p in await archive.night_products(db, device.id, night_id)
     ]
 
 
@@ -410,36 +377,15 @@ async def product_file(
     db: DbSession,
     user: AppUser,
     device_id: str,
-    night_id: Annotated[str, Path(pattern=NIGHT_ID)],
-    name: Annotated[str, Path(pattern=PRODUCT_NAME)],
+    night_id: Annotated[str, Path(pattern=archive.NIGHT_ID)],
+    name: Annotated[str, Path(pattern=archive.PRODUCT_NAME)],
     variant: FrameVariant = FrameVariant.FULL,
 ) -> Response:
-    """The product file (videos with HTTP range requests, so players can seek).
-
-    If the hub does not have the full file yet, it asks the camera for it and answers
-    ``202 {"status": "requested"}``; poll again. 404 when the camera is offline."""
+    """See ``archive.product_file``: the file, or 202 while the hub fetches it."""
     device = await _own(db, user, device_id)
-    product = await db.scalar(
-        select(Product).where(
-            Product.device_id == device.id, Product.night_id == night_id, Product.name == name
-        )
+    return await archive.product_file(
+        db, request.app.state.images, _registry(request), device.id, night_id, name, variant
     )
-    if product is None:
-        raise HTTPException(404, "Not found")
-    store: ImageStore = request.app.state.images
-    path = store.product_path(device.id, night_id, name, variant)
-    if path.is_file():
-        media = product.content_type if variant is FrameVariant.FULL else "image/jpeg"
-        return FileResponse(
-            path, media_type=media, headers={"Cache-Control": "private, max-age=86400"}
-        )
-    registry = _registry(request)
-    if variant is FrameVariant.FULL and (
-        registry.is_pending(device.id, night_id, name, variant, "product")
-        or await registry.request_product(device.id, night_id, name, variant)
-    ):
-        return JSONResponse({"status": "requested"}, status_code=202)
-    raise HTTPException(404, "Not available")
 
 
 @router.get("/cameras/{device_id}/events")
@@ -461,7 +407,7 @@ async def night_events(
     db: DbSession,
     user: AppUser,
     device_id: str,
-    night_id: Annotated[str, Path(pattern=NIGHT_ID)],
+    night_id: Annotated[str, Path(pattern=archive.NIGHT_ID)],
 ) -> list[EventItem]:
     device = await _own(db, user, device_id)
     rows = await events.events(db, device.id, night_id=night_id, limit=1000)
@@ -474,7 +420,7 @@ async def event_image(
     db: DbSession,
     user: AppUser,
     device_id: str,
-    night_id: Annotated[str, Path(pattern=NIGHT_ID)],
+    night_id: Annotated[str, Path(pattern=archive.NIGHT_ID)],
     event_id: Annotated[str, Path(pattern=EVENT_ID_PATTERN)],
     variant: FrameVariant = FrameVariant.FULL,
 ) -> Response:

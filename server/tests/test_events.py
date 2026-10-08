@@ -92,6 +92,8 @@ async def test_events_flow(
         assert listed[0]["data"]["length_px"] == 412
         assert listed[0]["has_thumb"] is True
         assert listed[0]["has_full"] is False
+        nights = (await client.get(f"{api}/nights", headers=auth)).json()
+        assert [(n["night_id"], n["events"]) for n in nights] == [(NIGHT, 1)]
         night = (await client.get(f"{api}/nights/{NIGHT}/events", headers=auth)).json()
         assert [e["id"] for e in night] == [METEOR]
         assert (await client.get(f"{api}/nights/20261001/events", headers=auth)).json() == []

@@ -51,6 +51,40 @@ def age(value: dt.datetime | None) -> str:
     return f"vor {seconds // 86400} Tagen"
 
 
+_WEEKDAYS = ("Mo", "Di", "Mi", "Do", "Fr", "Sa", "So")
+
+
+def night_title(night_id: str) -> str:
+    """ "Di 06.10. → Mi 07.10.": a night spans two dates (SPEC §4.5, id = evening)."""
+    evening = dt.date(int(night_id[:4]), int(night_id[4:6]), int(night_id[6:8]))
+    morning = evening + dt.timedelta(days=1)
+    return " → ".join(
+        f"{_WEEKDAYS[d.weekday()]} {d.day:02d}.{d.month:02d}." for d in (evening, morning)
+    )
+
+
+def clock(value: dt.datetime | None) -> str:
+    return "–" if value is None else value.astimezone(UI_ZONE).strftime("%H:%M")
+
+
+def mmss(seconds: float | None) -> str:
+    if seconds is None:
+        return "–"
+    s = round(seconds)
+    return f"{s // 60}:{s % 60:02d}"
+
+
+def filesize(size: int) -> str:
+    if size >= 1024 * 1024:
+        return f"{size / (1024 * 1024):.1f} MB".replace(".", ",")
+    return f"{-(-size // 1024)} KB"
+
+
 cast(dict[str, Any], templates.env.globals)["asset"] = asset
-cast(dict[str, Any], templates.env.filters)["age"] = age
+_filters = cast(dict[str, Any], templates.env.filters)
+_filters["age"] = age
+_filters["night_title"] = night_title
+_filters["clock"] = clock
+_filters["mmss"] = mmss
+_filters["filesize"] = filesize
 cast(dict[str, Any], templates.env.filters)["localtime"] = localtime

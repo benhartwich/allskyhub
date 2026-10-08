@@ -91,9 +91,10 @@ install -m 0644 "$OUT/cache/asi.rules" "$MNT/etc/udev/rules.d/99-asi.rules"
 tar -C "$ROOT/image/files" "${TAR_ROOT[@]}" -cf - . | tar -C "$MNT" --no-overwrite-dir -xf -
 echo "$VERSION" > "$MNT/etc/allskyhub-image-version"
 # A unit's EnvironmentFile without "-" must exist, or the unit never starts.
-for f in $(sed -n 's/^EnvironmentFile=\([^-].*\)$/\1/p' "$ROOT"/image/files/etc/systemd/system/*); do
-    [ -f "$MNT$f" ] || { echo "missing $f (EnvironmentFile of a unit)"; exit 1; }
-done
+sed -n 's/^EnvironmentFile=\([^-].*\)$/\1/p' "$ROOT"/image/files/etc/systemd/system/* |
+    while read -r f; do
+        [ -f "$MNT$f" ] || { echo "missing $f (EnvironmentFile of a unit)"; exit 1; }
+    done
 
 echo "== chroot"
 chroot "$MNT" /usr/bin/env RELEASE="$RELEASE" AGENT_VERSION="$AGENT_VERSION" \

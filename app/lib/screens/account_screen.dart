@@ -25,8 +25,37 @@ class _AccountScreenState extends State<AccountScreen> {
   final _new2 = TextEditingController();
   final _deletePassword = TextEditingController();
   bool _busy = false;
+  int? _keepDays;
   String? _message;
   bool _messageIsError = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadSettings();
+  }
+
+  Future<void> _loadSettings() async {
+    try {
+      final days = await widget.client.eventKeepDays();
+      if (mounted) setState(() => _keepDays = days);
+    } on Exception {
+      // Older hub or offline: the section stays hidden.
+    }
+  }
+
+  Future<void> _setKeepDays(int days) async {
+    final before = _keepDays;
+    setState(() => _keepDays = days);
+    try {
+      final saved = await widget.client.setEventKeepDays(days);
+      if (mounted) setState(() => _keepDays = saved);
+      _show('Gespeichert.');
+    } on Exception catch (e) {
+      if (mounted) setState(() => _keepDays = before);
+      _show(_describe(e), error: true);
+    }
+  }
 
   @override
   void dispose() {
@@ -128,6 +157,35 @@ class _AccountScreenState extends State<AccountScreen> {
               ),
             ),
             const SizedBox(height: 16),
+          ],
+          if (_keepDays != null) ...[
+            Text('Ereignisse aufbewahren', style: theme.textTheme.titleMedium),
+            const SizedBox(height: 4),
+            const Text(
+              'Wie lange erkannte Meteore und andere Ereignisse gespeichert bleiben. '
+              'Bei mehr als 30 Tagen sichern wir auch jedes Bild in voller Größe.',
+            ),
+            RadioGroup<int>(
+              groupValue: _keepDays,
+              onChanged: (days) {
+                if (days != null && !_busy) _setKeepDays(days);
+              },
+              child: Column(
+                children: [
+                  for (final (days, label) in const [
+                    (30, '30 Tage (Standard)'),
+                    (90, '90 Tage'),
+                    (365, '1 Jahr'),
+                  ])
+                    RadioListTile<int>(
+                      key: ValueKey('keep-$days'),
+                      value: days,
+                      title: Text(label),
+                    ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 24),
           ],
           Text('Passwort ändern', style: theme.textTheme.titleMedium),
           TextField(

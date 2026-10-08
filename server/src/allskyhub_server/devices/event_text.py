@@ -15,9 +15,13 @@ EVENT_TITLES = {
     "clouds": "Wolken",
     "sky_quality": "Himmelsqualität",
 }
-_COMPASS = (
-    "oben", "oben rechts", "rechts", "unten rechts", "unten", "unten links", "links", "oben links"
-)  # fmt: skip
+# SPEC §6.4: direction_deg is the trail's axis in the image (0..180, 0 = up), no sense of travel.
+_AXES = (
+    "senkrecht",
+    "diagonal, oben rechts – unten links",
+    "waagrecht",
+    "diagonal, oben links – unten rechts",
+)
 
 
 def event_rows(event: EventRecord) -> list[tuple[str, str]]:
@@ -35,8 +39,8 @@ def event_rows(event: EventRecord) -> list[tuple[str, str]]:
         if isinstance(frames := data.pop("frames", None), int | float):
             rows.append(("Bilder", str(round(frames))))
         if isinstance(direction := data.pop("direction_deg", None), int | float):
-            sector = round((direction % 360) / 45) % 8
-            rows.append(("Richtung", f"{round(direction)}° (nach {_COMPASS[sector]})"))
+            axis = round((direction % 180) / 45) % 4
+            rows.append(("Richtung", f"{round(direction)}° ({_AXES[axis]})"))
         if isinstance(shower := data.pop("shower", None), str) and shower:
             rows.append(("Meteorstrom", shower))
     rows.extend((key, str(value)) for key, value in data.items() if value is not None)

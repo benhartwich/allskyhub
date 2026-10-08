@@ -80,7 +80,7 @@ void main() {
     expect(rows['Spurlänge'], '412 px');
     expect(rows['Helligkeit'], '93 %');
     expect(rows['Bilder'], '3');
-    expect(rows['Richtung'], '135° (nach unten rechts)');
+    expect(rows['Richtung'], '135° (diagonal, oben links – unten rechts)');
     expect(rows['Meteorstrom'], 'Orioniden');
     expect(rows['extra'], '7');
   });

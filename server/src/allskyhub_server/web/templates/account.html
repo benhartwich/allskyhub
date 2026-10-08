@@ -1,0 +1,34 @@
+{% extends "base.html" %}
+{% block title %}Konto · allskyhub{% endblock %}
+{% block content %}
+<a class="back" href="/">← Meine Kameras</a>
+<h1>Konto</h1>
+<p class="muted">Angemeldet als {{ user.email }}</p>
+
+<form method="post" action="/account/password" class="card stack">
+  <h2>Passwort ändern</h2>
+  <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+  <input type="email" value="{{ user.email }}" autocomplete="username" hidden readonly>
+  <label>Aktuelles Passwort
+    <input type="password" name="current" autocomplete="current-password" required>
+  </label>
+  <label>Neues Passwort (mindestens 10 Zeichen)
+    <input type="password" name="password" autocomplete="new-password" minlength="10" required>
+  </label>
+  <label>Neues Passwort wiederholen
+    <input type="password" name="password2" autocomplete="new-password" minlength="10" required>
+  </label>
+  <button type="submit">Passwort ändern</button>
+</form>
+
+<form method="post" action="/account/delete" class="card stack danger">
+  <h2>Konto löschen</h2>
+  <p class="muted">Löscht dein Konto sofort. Deine Kameras werden entkoppelt, alle ihre Bilder, Nachtprodukte und öffentlichen Seiten gelöscht. Das lässt sich nicht rückgängig machen.</p>
+  <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+  <label>Passwort
+    <input type="password" name="current" autocomplete="current-password" required>
+  </label>
+  <label class="check"><input type="checkbox" name="confirm" value="true" required> Ja, mein Konto endgültig löschen</label>
+  <button type="submit" class="danger">Konto löschen</button>
+</form>
+{% endblock %}

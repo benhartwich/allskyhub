@@ -17,11 +17,14 @@ from sqlalchemy import func, select
 
 from allskyhub_protocol import CloseCode, FrameVariant
 from allskyhub_server.auth import accounts, app_tokens, ratelimit
+from allskyhub_server.auth.passwords import verify_secret_async
+from allskyhub_server.auth.tokens import hash_token
 from allskyhub_server.devices import pairing, public, queries
 from allskyhub_server.devices.connections import ConnectionRegistry
 from allskyhub_server.devices.images import ImageStore
 from allskyhub_server.models import Device, Frame, Product, User
 from allskyhub_server.web.deps import DbSession, SettingsDep, client_ip
+from allskyhub_server.web.routes_account import finish_deletion
 
 router = APIRouter(prefix="/api/v1")
 
@@ -40,6 +43,15 @@ class LoginRequest(_In):
 class LoginResponse(BaseModel):
     access_token: str
     token_type: str = "bearer"  # noqa: S105
+
+
+class PasswordChange(_In):
+    current: str = Field(max_length=1024)
+    new: str = Field(max_length=1024)
+
+
+class AccountDelete(_In):
+    password: str = Field(max_length=1024)
 
 
 class PublicRequest(_In):
@@ -397,6 +409,41 @@ async def product_file(
     ):
         return JSONResponse({"status": "requested"}, status_code=202)
     raise HTTPException(404, "Not available")
+
+
+async def _limit_account(request: Request, user: User) -> None:
+    await _limit(request, f"account:{user.id}", ratelimit.LOGIN_PER_ACCOUNT)
+
+
+@router.post("/account/password", status_code=204)
+async def change_password(
+    request: Request, body: PasswordChange, db: DbSession, user: AppUser
+) -> Response:
+    """Roadmap #10: signs out the web and every other app; this app stays signed in."""
+    await _limit_account(request, user)
+    try:
+        await accounts.change_password(
+            db, user, body.current, body.new, keep_app_token=hash_token(_bearer(request))
+        )
+    except accounts.AccountError as exc:
+        await db.rollback()
+        raise HTTPException(400, exc.message) from None
+    await db.commit()
+    return Response(status_code=204)
+
+
+@router.post("/account/delete", status_code=204)
+async def delete_account(
+    request: Request, body: AccountDelete, db: DbSession, user: AppUser
+) -> Response:
+    """Roadmap #10: deletes the account at once, unpairs its cameras, removes their images."""
+    await _limit_account(request, user)
+    if not await verify_secret_async(user.password_hash, body.password):
+        raise HTTPException(400, "Das Passwort stimmt nicht.")
+    device_ids = await accounts.delete_account(db, user)
+    await db.commit()
+    await finish_deletion(request, device_ids)
+    return Response(status_code=204)
 
 
 @router.put("/cameras/{device_id}/public")

@@ -95,6 +95,8 @@ button.danger { background: transparent; color: var(--danger); border: 1px solid
 
 /* Imprint and privacy policy */
 .legal p + p { margin-top: 8px; }
+label.check { display: flex; align-items: center; gap: 10px; font-weight: 600; }
+label.check input { width: 22px; min-height: 22px; }
 
 /* Public sky page */
 .public-products { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 12px; }

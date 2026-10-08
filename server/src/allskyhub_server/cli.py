@@ -180,12 +180,11 @@ def _cmd_set_password(args: argparse.Namespace) -> int:
 
 def _cmd_delete_user(args: argparse.Namespace) -> int:
     """Delete an account: its cameras are unpaired and their images removed."""
-    from sqlalchemy import delete, select
+    from sqlalchemy import select
 
-    from allskyhub_server.auth.accounts import normalize_email
-    from allskyhub_server.devices import pairing
+    from allskyhub_server.auth.accounts import delete_account, normalize_email
     from allskyhub_server.devices.images import ImageStore
-    from allskyhub_server.models import Device, Invitation, User
+    from allskyhub_server.models import User
 
     async def work(db: AsyncSession, settings: Settings) -> int:
         email = normalize_email(args.email)
@@ -196,16 +195,13 @@ def _cmd_delete_user(args: argparse.Namespace) -> int:
         if not args.yes:
             print(f"Zum Löschen von {email} zusätzlich --yes angeben.", file=sys.stderr)
             return 2
-        devices = (await db.scalars(select(Device).where(Device.owner_id == user.id))).all()
-        for device in devices:
-            await pairing.unpair(db, device)
-        await db.execute(delete(Invitation).where(Invitation.email == email))
-        await db.delete(user)
+        device_ids = await delete_account(db, user)
         await db.commit()
         store = ImageStore(settings.image_dir)
-        for device in devices:
-            store.delete_device(device.id)
-        print(f"{email} gelöscht, {len(devices)} Kamera(s) entkoppelt.")
+        for device_id in device_ids:
+            store.delete_device(device_id)
+        # Open camera connections end at their next token refresh (at most an hour).
+        print(f"{email} gelöscht, {len(device_ids)} Kamera(s) entkoppelt.")
         return 0
 
     return _run_db(work)

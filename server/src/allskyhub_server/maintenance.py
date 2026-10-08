@@ -24,6 +24,7 @@ from allskyhub_server.models import (
     PairingCode,
     Product,
     RateLimit,
+    SkySample,
     User,
     WebSession,
 )
@@ -45,6 +46,11 @@ async def purge(
     await _purge_frames(db, store, settings, now)
     await _purge_products(db, store, settings, now)
     await _purge_events(db, store, settings, now)
+    await db.execute(
+        delete(SkySample).where(
+            SkySample.created_at < now - dt.timedelta(days=settings.keep_thumb_days)
+        )
+    )
     await db.execute(
         delete(Invitation).where(
             Invitation.used_at.is_(None), Invitation.expires_at < now - INVITATION_KEEP

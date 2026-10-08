@@ -14,6 +14,7 @@
         {% if n.first and n.last %} · {{ n.first | clock }}–{{ n.last | clock }}{% endif %}
         {% if n.products %} · {{ n.products }} Produkt{{ 'e' if n.products != 1 }}{% endif %}
         {% if n.events %} · {{ n.events }} Ereignis{{ 'se' if n.events != 1 }}{% endif %}
+        {% if n.sky %} · Himmelsdaten{% endif %}
       </span>
     </a>
   </li>

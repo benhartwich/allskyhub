@@ -14,7 +14,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from allskyhub_protocol import FrameVariant
 from allskyhub_server.devices.connections import ConnectionRegistry
 from allskyhub_server.devices.images import ImageStore
-from allskyhub_server.models import EventRecord, Frame, Product
+from allskyhub_server.models import EventRecord, Frame, Product, SkySample
 
 NIGHT_ID = r"^\d{8}$"
 FRAME_NAME = r"^[A-Za-z0-9._-]{1,128}$"
@@ -33,6 +33,8 @@ class NightSummary:
     kinds: list[str] = field(default_factory=list[str])
     # Detections reported for this night (SPEC §6.4).
     events: int = 0
+    # Sky measurements (SPEC §6.3 status.sky).
+    sky: int = 0
 
 
 async def nights(db: AsyncSession, device_id: str) -> list[NightSummary]:
@@ -61,6 +63,13 @@ async def nights(db: AsyncSession, device_id: str) -> list[NightSummary]:
     )
     for night_id, count in events:
         by_night.setdefault(night_id, NightSummary(night_id)).events = count
+    sky = await db.execute(
+        select(SkySample.night_id, func.count())
+        .where(SkySample.device_id == device_id)
+        .group_by(SkySample.night_id)
+    )
+    for night_id, count in sky:
+        by_night.setdefault(night_id, NightSummary(night_id)).sky = count
     return sorted(by_night.values(), key=lambda n: n.night_id, reverse=True)
 
 
@@ -120,3 +129,12 @@ async def product_file(
     ):
         return JSONResponse({"status": "requested"}, status_code=202)
     raise HTTPException(404, "Not available")
+
+
+async def night_sky(db: AsyncSession, device_id: str, night_id: str) -> list[SkySample]:
+    rows = await db.scalars(
+        select(SkySample)
+        .where(SkySample.device_id == device_id, SkySample.night_id == night_id)
+        .order_by(SkySample.at)
+    )
+    return list(rows)

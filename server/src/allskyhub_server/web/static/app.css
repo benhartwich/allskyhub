@@ -127,3 +127,12 @@ button.secondary { background: transparent; color: var(--accent); border: 1px so
 select { width: 100%; min-height: 48px; padding: 10px 14px; border-radius: 12px; border: 1px solid var(--line);
          background: var(--surface-2); color: var(--text); font: inherit; }
 button:disabled { opacity: .5; cursor: not-allowed; }
+
+/* Sky charts */
+.sky-charts figure { margin: 0; display: grid; gap: 4px; }
+.sky-chart { width: 100%; height: 90px; background: var(--surface-2); border-radius: 8px; }
+.sky-chart polyline { fill: none; stroke-width: 2; vector-effect: non-scaling-stroke; }
+.sky-chart circle { stroke: none; }
+.chart-clouds polyline { stroke: #a3abc4; } .chart-clouds circle { fill: #a3abc4; }
+.chart-sqm polyline { stroke: var(--accent); } .chart-sqm circle { fill: var(--accent); }
+.chart-stars polyline { stroke: var(--ok); } .chart-stars circle { fill: var(--ok); }

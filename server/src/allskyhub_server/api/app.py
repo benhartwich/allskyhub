@@ -90,6 +90,8 @@ class Night(BaseModel):
     products: int = 0
     # Detections reported for this night (SPEC §6.4).
     events: int = 0
+    # Sky measurements (SPEC §6.3 status.sky).
+    sky: int = 0
 
 
 class ProductItem(BaseModel):
@@ -104,6 +106,16 @@ class ProductItem(BaseModel):
     has_full: bool
     has_thumb: bool
     pending: bool
+
+
+class SkyItem(BaseModel):
+    """One sky measurement (SPEC §6.3): cloud cover 0..1, sky brightness, stars; null where
+    the camera could not judge it (by day, at dusk)."""
+
+    at: dt.datetime
+    cloud_cover: float | None
+    sqm_mag: float | None
+    stars: int | None
 
 
 class FrameItem(BaseModel):
@@ -334,6 +346,7 @@ async def nights(db: DbSession, user: AppUser, device_id: str) -> list[Night]:
             last=n.last,
             products=n.products,
             events=n.events,
+            sky=n.sky,
         )
         for n in await archive.nights(db, device.id)
     ]
@@ -358,6 +371,20 @@ async def frames(
             has_full=f.has_full,
         )
         for f in await archive.night_frames(db, device.id, night_id)
+    ]
+
+
+@router.get("/cameras/{device_id}/nights/{night_id}/sky")
+async def night_sky(
+    db: DbSession,
+    user: AppUser,
+    device_id: str,
+    night_id: Annotated[str, Path(pattern=archive.NIGHT_ID)],
+) -> list[SkyItem]:
+    device = await _own(db, user, device_id)
+    return [
+        SkyItem(at=s.at, cloud_cover=s.cloud_cover, sqm_mag=s.sqm_mag, stars=s.stars)
+        for s in await archive.night_sky(db, device.id, night_id)
     ]
 
 

@@ -36,6 +36,7 @@ from allskyhub_protocol import (
     Products,
     RegisterRequest,
     RegisterResponse,
+    SkyMetrics,
     Status,
     TokenRequest,
     TokenResponse,
@@ -47,7 +48,7 @@ from allskyhub_server.devices import pairing
 from allskyhub_server.devices.connections import Connection, ConnectionRegistry
 from allskyhub_server.devices.events import image_rev
 from allskyhub_server.devices.images import JPEG_MAGIC, ImageStore
-from allskyhub_server.models import Device, EventRecord, Frame, Product, User
+from allskyhub_server.models import Device, EventRecord, Frame, Product, SkySample, User
 from allskyhub_server.push.notify import Notifier
 from allskyhub_server.settings import Settings
 from allskyhub_server.web.deps import DbSession, SettingsDep, client_ip
@@ -387,6 +388,8 @@ async def _handle(
         await _touch(maker, conn.device_id, profile=body.profile, agent_version=body.agent_version)
     elif isinstance(body, Status):
         await _touch(maker, conn.device_id, last_status=body.model_dump(mode="json"))
+        if body.sky is not None:
+            await _store_sky(maker, conn.device_id, body.sky)
     elif isinstance(body, FrameInfo):
         await _on_frame(body, conn, maker, settings, registry)
     elif isinstance(body, Products):
@@ -585,3 +588,24 @@ def _background(coro: Coroutine[Any, Any, None]) -> None:
     task = asyncio.create_task(coro)
     _tasks.add(task)
     task.add_done_callback(_tasks.discard)
+
+
+async def _store_sky(
+    maker: async_sessionmaker[AsyncSession], device_id: str, sky: SkyMetrics
+) -> None:
+    """SPEC §6.3 ``status.sky``: one row per measured frame (the device repeats the last
+    measurement until a new frame comes, so duplicates of ``at`` are skipped)."""
+    async with maker() as db:
+        await db.execute(
+            pg_insert(SkySample)
+            .values(
+                device_id=device_id,
+                night_id=sky.night_id,
+                at=sky.at,
+                cloud_cover=sky.cloud_cover,
+                sqm_mag=sky.sqm_mag,
+                stars=sky.stars,
+            )
+            .on_conflict_do_nothing(index_elements=["device_id", "at"])
+        )
+        await db.commit()

@@ -277,3 +277,22 @@ class PushToken(Base):
     token: Mapped[str] = mapped_column(String(4096), unique=True)
     platform: Mapped[str] = mapped_column(String(16))
     created_at: Mapped[dt.datetime] = mapped_column(_tz(), server_default=func.now())
+
+
+class SkySample(Base):
+    """One sky measurement from ``status.sky`` (SPEC §6.3): cloud cover, sky brightness, stars.
+
+    One row per measured frame (``at``); the device repeats the last one between frames."""
+
+    __tablename__ = "sky_sample"
+    __table_args__ = (UniqueConstraint("device_id", "at"),)
+
+    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid7)
+    device_id: Mapped[str] = mapped_column(ForeignKey("device.id", ondelete="CASCADE"))
+    night_id: Mapped[str] = mapped_column(String(8), index=True)
+    at: Mapped[dt.datetime] = mapped_column(_tz())
+    cloud_cover: Mapped[float | None] = mapped_column(Float)
+    sqm_mag: Mapped[float | None] = mapped_column(Float)
+    stars: Mapped[int | None] = mapped_column(Integer)
+    # Retention counts from arrival at the hub (privacy policy, like thumbnails).
+    created_at: Mapped[dt.datetime] = mapped_column(_tz(), server_default=func.now(), index=True)

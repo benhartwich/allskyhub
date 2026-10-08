@@ -13,6 +13,9 @@ class Profile:
     camera: str
     exposure: ExposureConfig
     image_circle_frac: float = 0.48  # radius relative to the short image side
+    # SQM zero point (SPEC §6.3 sky): calibrated for the ASI678MC against a dark sky, a
+    # first guess for the others until calibration (roadmap #8).
+    sqm_offset: float = 18.8
 
 
 def _limits(max_night_us: int, max_gain: float, gain_db: float) -> ExposureConfig:

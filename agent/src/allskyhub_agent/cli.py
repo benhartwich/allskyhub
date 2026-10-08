@@ -28,6 +28,7 @@ from allskyhub_agent.core.clock import Clock, SimClock, SystemClock
 from allskyhub_agent.core.exposure import AutoExposure
 from allskyhub_agent.core.sun import sun_elevation
 from allskyhub_agent.detect.events import DetectionWorker, EventStore
+from allskyhub_agent.detect.sky import SkyConfig, SkyMeter
 from allskyhub_agent.discovery import Announcer
 from allskyhub_agent.hub.identity import DEFAULT_KEY_PATH, DeviceIdentity
 from allskyhub_agent.hub.pairing import PairingState
@@ -180,6 +181,8 @@ def main(argv: list[str] | None = None) -> int:
     profile_hint = "sim" if args.sim else (args.profile or load_settings().camera)
     # Detections (SPEC §6.4); the night folders do not depend on the time zone.
     event_store = EventStore(store)
+    # Sky condition for status (SPEC §6.3); configured for the profile once it is known.
+    sky_meter: SkyMeter | None = None
     identity: DeviceIdentity | None = None
     profile_id = {"auto": "zwo-asi678mc"}.get(profile_hint, profile_hint)
     if hub_url:
@@ -201,6 +204,7 @@ def main(argv: list[str] | None = None) -> int:
                 uptime_s=system.uptime_s(),
                 time_trusted=system.time_trusted(),
                 settings=device_settings() if settings_path else None,
+                sky=sky_meter.latest if sky_meter is not None else None,
             )
 
         def device_settings() -> DeviceSettings:
@@ -349,11 +353,13 @@ def main(argv: list[str] | None = None) -> int:
             shutdown()
             return 1
 
+    sky_meter = SkyMeter(SkyConfig(sqm_offset=profile.sqm_offset), profile.image_circle_frac)
     detect = DetectionWorker(
         store,
         on_event=hub.notify_event if hub is not None else None,
         mask_radius_frac=profile.image_circle_frac,
         events=event_store,
+        sky=sky_meter,
     )
     detect.start()
 

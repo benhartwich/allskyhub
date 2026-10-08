@@ -51,6 +51,18 @@ class DeviceSettings(BaseModel):
     night_delay_s: float = Field(ge=0)
 
 
+class SkyMetrics(BaseModel):
+    """Sky condition measured on the newest frame, reported in `status` (SPEC §6.3)."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    at: AwareDatetime  # captured_at of the measured frame
+    night_id: str = Field(pattern=r"^\d{8}$")  # SPEC §4.5
+    cloud_cover: float | None = Field(default=None, ge=0, le=1)
+    sqm_mag: float | None = None  # mag/arcsec², approximate until calibrated
+    stars: int | None = Field(default=None, ge=0)
+
+
 class Status(_Body):
     """Periodic device status (SPEC §6.3)."""
 
@@ -66,6 +78,7 @@ class Status(_Body):
     # SPEC §4.4: whether the system clock is NTP-synchronized (no RTC on a Pi).
     time_trusted: bool
     settings: DeviceSettings | None = None
+    sky: SkyMetrics | None = None
 
 
 class FrameInfo(_Body):

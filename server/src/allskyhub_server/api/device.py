@@ -41,10 +41,11 @@ from allskyhub_protocol import (
     parse_envelope,
 )
 from allskyhub_server.auth import ratelimit
+from allskyhub_server.auth.accounts import DEFAULT_EVENT_KEEP_DAYS
 from allskyhub_server.devices import pairing
 from allskyhub_server.devices.connections import Connection, ConnectionRegistry
 from allskyhub_server.devices.images import JPEG_MAGIC, ImageStore
-from allskyhub_server.models import Device, EventRecord, Frame, Product
+from allskyhub_server.models import Device, EventRecord, Frame, Product, User
 from allskyhub_server.settings import Settings
 from allskyhub_server.web.deps import DbSession, SettingsDep, client_ip
 
@@ -506,7 +507,8 @@ async def _on_event(
     registry: ConnectionRegistry,
 ) -> None:
     """SPEC §6.4: upsert by the device's stable id (events are resent after a reconnect);
-    fetch the thumbnail right away, the full picture when someone opens it."""
+    fetch the thumbnail right away, the full picture when someone opens it (or right away
+    for owners who keep events longer than the default)."""
     values = {
         "night_id": body.night_id,
         "kind": body.kind.value,
@@ -517,16 +519,28 @@ async def _on_event(
         "data": dict(body.data),
     }
     async with maker() as db:
+        keep_days = await db.scalar(
+            select(User.event_keep_days)
+            .join(Device, Device.owner_id == User.id)
+            .where(Device.id == conn.device_id)
+        )
         await db.execute(
             pg_insert(EventRecord)
             .values(device_id=conn.device_id, event_id=body.id, **values)
             .on_conflict_do_update(index_elements=["device_id", "event_id"], set_=values)
         )
-        has_thumb = await db.scalar(
-            select(EventRecord.has_thumb).where(
-                EventRecord.device_id == conn.device_id, EventRecord.event_id == body.id
+        stored = (
+            await db.execute(
+                select(EventRecord.has_thumb, EventRecord.has_full).where(
+                    EventRecord.device_id == conn.device_id, EventRecord.event_id == body.id
+                )
             )
-        )
+        ).one()
         await db.commit()
-    if body.has_image and not has_thumb:
+    if not body.has_image:
+        return
+    if not stored.has_thumb:
         await registry.request_event(conn.device_id, body.night_id, body.id, FrameVariant.THUMB)
+    # Owners who keep events longer keep them in full: fetch the picture while it exists.
+    if (keep_days or DEFAULT_EVENT_KEEP_DAYS) > DEFAULT_EVENT_KEEP_DAYS and not stored.has_full:
+        await registry.request_event(conn.device_id, body.night_id, body.id, FrameVariant.FULL)

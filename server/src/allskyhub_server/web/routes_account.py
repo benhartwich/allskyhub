@@ -40,9 +40,37 @@ async def finish_deletion(request: Request, device_ids: list[str]) -> None:
         await registry.close(device_id, CloseCode.UNPAIRED)
 
 
+def _page(
+    request: Request, session: CurrentSession, status_code: int = 200, **context: object
+) -> Response:
+    return render(
+        request,
+        "account.html",
+        {"keep_choices": accounts.EVENT_KEEP_CHOICES, **context},
+        session=session,
+        status_code=status_code,
+    )
+
+
 @router.get("/account")
 async def account(request: Request, session: CurrentSession) -> Response:
-    return render(request, "account.html", session=session)
+    return _page(request, session)
+
+
+@router.post("/account/events")
+async def event_retention(
+    request: Request,
+    db: DbSession,
+    session: CurrentSession,
+    keep_days: Annotated[int, Form()],
+) -> Response:
+    """How long this account's detections are kept (privacy policy)."""
+    try:
+        accounts.set_event_keep_days(session.user, keep_days)
+    except accounts.AccountError as exc:
+        return _page(request, session, 400, error=exc.message)
+    await db.commit()
+    return _page(request, session, notice="Gespeichert.")
 
 
 @router.post("/account/password")
@@ -63,15 +91,10 @@ async def change_password(
     except accounts.AccountError as exc:
         # change_password checks everything before it changes anything; no rollback needed
         # (it would expire the session's user, which the page still shows).
-        return render(
-            request, "account.html", {"error": exc.message}, session=session, status_code=400
-        )
+        return _page(request, session, 400, error=exc.message)
     await db.commit()
-    return render(
-        request,
-        "account.html",
-        {"notice": "Passwort geändert. Andere Geräte und die App sind abgemeldet."},
-        session=session,
+    return _page(
+        request, session, notice="Passwort geändert. Andere Geräte und die App sind abgemeldet."
     )
 
 
@@ -86,12 +109,8 @@ async def delete_account(
 ) -> Response:
     await _limit(request, session.user.id)
     if not confirm or not await verify_secret_async(session.user.password_hash, current):
-        return render(
-            request,
-            "account.html",
-            {"error": "Bitte das Passwort eingeben und das Löschen bestätigen."},
-            session=session,
-            status_code=400,
+        return _page(
+            request, session, 400, error="Bitte das Passwort eingeben und das Löschen bestätigen."
         )
     device_ids = await accounts.delete_account(db, session.user)
     await db.commit()

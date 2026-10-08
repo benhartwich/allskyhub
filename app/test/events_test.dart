@@ -195,4 +195,92 @@ void main() {
       expect(find.byKey(const Key('confirm')), findsOneWidget);
     },
   );
+
+  Map<String, Object?> flashJson(
+    int minute,
+    double area, {
+    String storm = 'storm-20261008T213012Z',
+  }) => {
+    'id': 'lightning-20261008T21${30 + minute}12Z',
+    'night_id': '20261008',
+    'kind': 'lightning',
+    'start': '2026-10-08T21:${30 + minute}:12Z',
+    'end': '2026-10-08T21:${30 + minute}:12Z',
+    'confidence': 0.9,
+    'has_image': true,
+    'has_thumb': true,
+    'has_full': false,
+    'data': {
+      'area_frac': area,
+      'peak': 0.4,
+      'storm_flashes': minute + 1,
+      'storm': storm,
+    },
+  };
+
+  test('flashes of one storm become one group; other events stay', () {
+    final events = [
+      SkyEvent.fromJson(flashJson(20, 0.1)),
+      SkyEvent.fromJson(
+        meteorJson('meteor-20261008T214512Z', '2026-10-08T21:45:12Z'),
+      ),
+      SkyEvent.fromJson(flashJson(10, 0.6)),
+      SkyEvent.fromJson(flashJson(0, 0.3)),
+      SkyEvent.fromJson(flashJson(5, 0.2, storm: 'kaputt')),
+    ];
+    final items = groupStorms(events);
+    expect(items.length, 3);
+    final storm = items.first as StormGroup;
+    expect(storm.flashes.length, 3);
+    expect(storm.cover.data['area_frac'], 0.6);
+    expect(storm.start, DateTime.utc(2026, 10, 8, 21, 30, 12));
+    expect(items.last, isA<SkyEvent>()); // a malformed key is not grouped
+    final rows = {for (final (l, v) in eventRows(events.first)) l: v};
+    expect(rows['Erhellter Himmel'], '10 %');
+    expect(rows.containsKey('storm'), isFalse);
+  });
+
+  testWidgets('a storm is one list entry and opens its flashes', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(400, 1600);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    final client = HubClient(
+      baseUrl: 'https://hub.example',
+      token: 'tok',
+      httpClient: MockClient((request) async {
+        if (request.url.path.endsWith('/events')) {
+          final first = request.url.queryParameters['before'] == null;
+          return http.Response(
+            jsonEncode(
+              first
+                  ? [flashJson(20, 0.1), flashJson(10, 0.6), flashJson(0, 0.3)]
+                  : [],
+            ),
+            200,
+          );
+        }
+        return http.Response('', 404);
+      }),
+    );
+    await tester.pumpWidget(
+      MaterialApp(
+        home: EventsScreen(client: client, camera: Camera.fromJson(cameraJson)),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('Gewitter'), findsOneWidget);
+    expect(find.textContaining('3 Blitze'), findsOneWidget);
+    await tester.tap(find.text('Gewitter'));
+    await tester.pumpAndSettle();
+    expect(
+      find.byKey(const ValueKey('lightning-20261008T213012Z')),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(const ValueKey('lightning-20261008T215012Z')),
+      findsOneWidget,
+    );
+  });
 }

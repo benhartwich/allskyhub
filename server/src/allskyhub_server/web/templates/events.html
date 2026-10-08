@@ -11,8 +11,12 @@
 <ul class="card list">
   {% for e in events %}
   <li class="event-row">
-    {% include "_event_thumb.html" %}
+    {% include "_item_thumb.html" %}
+    {% if e.is_storm is defined %}
+    <span class="muted">{{ e.start | localtime }} – {{ e.end | clock }}</span>
+    {% else %}
     <span class="muted">{{ e.start | localtime }} · {{ (e.confidence * 100) | round | int }} %{% if e.label == "false_positive" %} · aussortiert{% elif e.label == "confirmed" %} · bestätigt{% endif %}</span>
+    {% endif %}
   </li>
   {% endfor %}
 </ul>

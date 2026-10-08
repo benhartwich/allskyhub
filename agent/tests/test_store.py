@@ -42,3 +42,21 @@ def test_cleanup_removes_old_nights_only(tmp_path: Path) -> None:
         "20261006",
         "keep-me",
     ]
+
+
+def test_ensure_free_removes_oldest_nights_but_never_the_current(tmp_path: Path) -> None:
+    store = ImageStore(tmp_path, TZ)
+    for nid in ("20261001", "20261002", "20261003", "20261006"):
+        (tmp_path / "images" / nid).mkdir(parents=True)
+    state = {"free": 5}  # percent free; each removed night frees 3 %
+
+    def usage(_: Path) -> tuple[int, int]:
+        left = len(list((tmp_path / "images").iterdir()))
+        return 100, state["free"] + 3 * (4 - left)
+
+    removed = store.ensure_free(datetime(2026, 10, 6, 20, 0, tzinfo=UTC), 10.0, usage)
+    assert removed == ["20261001", "20261002"]  # 5 % -> 8 % -> 11 %
+    state["free"] = 0
+    removed = store.ensure_free(datetime(2026, 10, 6, 20, 0, tzinfo=UTC), 50.0, usage)
+    assert removed == ["20261003"]  # stops at the current night
+    assert (tmp_path / "images" / "20261006").is_dir()

@@ -20,12 +20,14 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from starlette.websockets import WebSocketDisconnect, WebSocketState
 
 from allskyhub_protocol import (
+    EVENT_ID_PATTERN,
     PRODUCT_NAMES,
     Ack,
     ChallengeRequest,
     ChallengeResponse,
     CloseCode,
     ErrorReply,
+    Event,
     FrameInfo,
     FrameVariant,
     Hello,
@@ -42,7 +44,7 @@ from allskyhub_server.auth import ratelimit
 from allskyhub_server.devices import pairing
 from allskyhub_server.devices.connections import Connection, ConnectionRegistry
 from allskyhub_server.devices.images import JPEG_MAGIC, ImageStore
-from allskyhub_server.models import Device, Frame, Product
+from allskyhub_server.models import Device, EventRecord, Frame, Product
 from allskyhub_server.settings import Settings
 from allskyhub_server.web.deps import DbSession, SettingsDep, client_ip
 
@@ -143,6 +145,22 @@ async def _device_from_bearer(request: Request, db: AsyncSession) -> pairing.Tok
     return info
 
 
+async def _read_jpeg(request: Request, settings: Settings) -> bytes:
+    """The body as a JPEG of at most ``max_image_mb``: 413 above it, 400 if not a JPEG."""
+    limit = settings.max_image_mb * 1024 * 1024
+    declared = request.headers.get("content-length")
+    if declared is not None and declared.isdigit() and int(declared) > limit:
+        raise HTTPException(413, "Image too large")
+    data = bytearray()
+    async for chunk in request.stream():
+        data.extend(chunk)
+        if len(data) > limit:
+            raise HTTPException(413, "Image too large")
+    if not data.startswith(JPEG_MAGIC):
+        raise HTTPException(400, "Not a JPEG image")
+    return bytes(data)
+
+
 @router.put("/frames/{night_id}/{name}", status_code=204)
 async def upload_frame(
     request: Request,
@@ -159,21 +177,11 @@ async def upload_frame(
     # be retried within the window.
     if not registry.is_requested(info.device_id, night_id, name, variant):
         raise HTTPException(404, "Upload was not requested")
-    limit = settings.max_image_mb * 1024 * 1024
-    declared = request.headers.get("content-length")
-    if declared is not None and declared.isdigit() and int(declared) > limit:
-        raise HTTPException(413, "Image too large")
-    data = bytearray()
-    async for chunk in request.stream():
-        data.extend(chunk)
-        if len(data) > limit:
-            raise HTTPException(413, "Image too large")
-    if not data.startswith(JPEG_MAGIC):
-        raise HTTPException(400, "Not a JPEG image")
+    data = await _read_jpeg(request, settings)
     if not registry.take_upload(info.device_id, night_id, name, variant):
         raise HTTPException(404, "Upload was not requested")  # taken by a parallel upload
     store: ImageStore = request.app.state.images
-    await asyncio.to_thread(store.save_frame, info.device_id, night_id, name, variant, bytes(data))
+    await asyncio.to_thread(store.save_frame, info.device_id, night_id, name, variant, data)
     full = variant is FrameVariant.FULL
     await db.execute(
         update(Frame)
@@ -184,6 +192,34 @@ async def upload_frame(
         update(Device)
         .where(Device.id == info.device_id)
         .values({"latest_image_at": _now()} if full else {"latest_thumb_at": _now()})
+    )
+    await db.commit()
+    return Response(status_code=204)
+
+
+@router.put("/events/{night_id}/{event_id}", status_code=204)
+async def upload_event(
+    request: Request,
+    db: DbSession,
+    settings: SettingsDep,
+    night_id: Annotated[str, Path(pattern=NIGHT_ID)],
+    event_id: Annotated[str, Path(pattern=EVENT_ID_PATTERN)],
+    variant: Annotated[FrameVariant, Query()] = FrameVariant.FULL,
+) -> Response:
+    """SPEC §6.5, §6.6: the picture of a requested event, like a frame."""
+    info = await _device_from_bearer(request, db)
+    registry: ConnectionRegistry = request.app.state.connections
+    if not registry.is_requested(info.device_id, night_id, event_id, variant, "event"):
+        raise HTTPException(404, "Upload was not requested")
+    data = await _read_jpeg(request, settings)
+    if not registry.take_upload(info.device_id, night_id, event_id, variant, "event"):
+        raise HTTPException(404, "Upload was not requested")
+    store: ImageStore = request.app.state.images
+    await asyncio.to_thread(store.save_event, info.device_id, night_id, event_id, variant, data)
+    await db.execute(
+        update(EventRecord)
+        .where(EventRecord.device_id == info.device_id, EventRecord.event_id == event_id)
+        .values({"has_full": True} if variant is FrameVariant.FULL else {"has_thumb": True})
     )
     await db.commit()
     return Response(status_code=204)
@@ -347,6 +383,8 @@ async def _handle(
         await _on_frame(body, conn, maker, settings, registry)
     elif isinstance(body, Products):
         await _on_products(body, conn, maker, registry)
+    elif isinstance(body, Event):
+        await _on_event(body, conn, maker, registry)
     elif isinstance(body, Ack | ErrorReply):
         if isinstance(body, ErrorReply):
             log.info(
@@ -459,3 +497,36 @@ async def _on_products(
         await db.commit()
     for name, variant in wanted:
         await registry.request_product(conn.device_id, body.night_id, name, variant)
+
+
+async def _on_event(
+    body: Event,
+    conn: Connection,
+    maker: async_sessionmaker[AsyncSession],
+    registry: ConnectionRegistry,
+) -> None:
+    """SPEC §6.4: upsert by the device's stable id (events are resent after a reconnect);
+    fetch the thumbnail right away, the full picture when someone opens it."""
+    values = {
+        "night_id": body.night_id,
+        "kind": body.kind.value,
+        "start": body.start,
+        "end": body.end,
+        "confidence": body.confidence,
+        "has_image": body.has_image,
+        "data": dict(body.data),
+    }
+    async with maker() as db:
+        await db.execute(
+            pg_insert(EventRecord)
+            .values(device_id=conn.device_id, event_id=body.id, **values)
+            .on_conflict_do_update(index_elements=["device_id", "event_id"], set_=values)
+        )
+        has_thumb = await db.scalar(
+            select(EventRecord.has_thumb).where(
+                EventRecord.device_id == conn.device_id, EventRecord.event_id == body.id
+            )
+        )
+        await db.commit()
+    if body.has_image and not has_thumb:
+        await registry.request_event(conn.device_id, body.night_id, body.id, FrameVariant.THUMB)

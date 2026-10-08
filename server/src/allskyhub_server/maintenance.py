@@ -16,6 +16,7 @@ from allskyhub_server.models import (
     AppToken,
     DeviceNonce,
     DeviceToken,
+    EventRecord,
     Frame,
     Invitation,
     PairingCode,
@@ -40,6 +41,7 @@ async def purge(
     now = now or dt.datetime.now(dt.UTC)
     await _purge_frames(db, store, settings, now)
     await _purge_products(db, store, settings, now)
+    await _purge_events(db, store, settings, now)
     await db.execute(
         delete(Invitation).where(
             Invitation.used_at.is_(None), Invitation.expires_at < now - INVITATION_KEEP
@@ -132,6 +134,42 @@ async def _purge_products(
         for variant in FrameVariant:
             await asyncio.to_thread(store.delete_product, device_id, night_id, name, variant)
     await db.execute(delete(Product).where(Product.created_at < thumb_cutoff))
+
+
+async def _purge_events(
+    db: AsyncSession, store: ImageStore, settings: Settings, now: dt.datetime
+) -> None:
+    """Events like frames: the full picture after ``keep_full_days``, the event with its
+    thumbnail after ``keep_thumb_days`` (from the first report)."""
+    full_cutoff = now - dt.timedelta(days=settings.keep_full_days)
+    thumb_cutoff = now - dt.timedelta(days=settings.keep_thumb_days)
+    old_full = (
+        await db.execute(
+            select(EventRecord.device_id, EventRecord.night_id, EventRecord.event_id).where(
+                EventRecord.has_full.is_(True), EventRecord.created_at < full_cutoff
+            )
+        )
+    ).all()
+    for device_id, night_id, event_id in old_full:
+        await asyncio.to_thread(
+            store.delete_event, device_id, night_id, event_id, FrameVariant.FULL
+        )
+    await db.execute(
+        update(EventRecord)
+        .where(EventRecord.has_full.is_(True), EventRecord.created_at < full_cutoff)
+        .values(has_full=False)
+    )
+    old = (
+        await db.execute(
+            select(EventRecord.device_id, EventRecord.night_id, EventRecord.event_id).where(
+                EventRecord.created_at < thumb_cutoff
+            )
+        )
+    ).all()
+    for device_id, night_id, event_id in old:
+        for variant in FrameVariant:
+            await asyncio.to_thread(store.delete_event, device_id, night_id, event_id, variant)
+    await db.execute(delete(EventRecord).where(EventRecord.created_at < thumb_cutoff))
 
 
 async def run_forever(

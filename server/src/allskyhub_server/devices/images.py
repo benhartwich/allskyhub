@@ -65,6 +65,37 @@ class ImageStore:
             except OSError:
                 break
 
+    def event_path(
+        self, device_id: str, night_id: str, event_id: str, variant: FrameVariant
+    ) -> Path:
+        """``event_id`` matches EVENT_ID_PATTERN (no path separators)."""
+        return self.root / device_id / night_id / "events" / variant.value / f"{event_id}.jpg"
+
+    def save_event(
+        self, device_id: str, night_id: str, event_id: str, variant: FrameVariant, data: bytes
+    ) -> None:
+        target = self.event_path(device_id, night_id, event_id, variant)
+        target.parent.mkdir(parents=True, exist_ok=True)
+        fd, tmp = tempfile.mkstemp(dir=target.parent, suffix=".part")
+        try:
+            with os.fdopen(fd, "wb") as fh:
+                fh.write(data)
+            Path(tmp).replace(target)
+        except BaseException:
+            Path(tmp).unlink(missing_ok=True)
+            raise
+
+    def delete_event(
+        self, device_id: str, night_id: str, event_id: str, variant: FrameVariant
+    ) -> None:
+        path = self.event_path(device_id, night_id, event_id, variant)
+        path.unlink(missing_ok=True)
+        for directory in (path.parent, path.parent.parent, path.parent.parent.parent):
+            try:
+                directory.rmdir()
+            except OSError:
+                break
+
     def delete_frame(self, device_id: str, night_id: str, name: str, variant: FrameVariant) -> None:
         path = self.frame_path(device_id, night_id, name, variant)
         path.unlink(missing_ok=True)

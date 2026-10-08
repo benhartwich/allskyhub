@@ -10,19 +10,19 @@ from __future__ import annotations
 import datetime as dt
 from typing import Annotated, Any
 
-from fastapi import APIRouter, Depends, HTTPException, Path, Request
+from fastapi import APIRouter, Depends, HTTPException, Path, Query, Request
 from fastapi.responses import FileResponse, JSONResponse, Response
 from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import func, select
 
-from allskyhub_protocol import CloseCode, FrameVariant
+from allskyhub_protocol import EVENT_ID_PATTERN, CloseCode, FrameVariant
 from allskyhub_server.auth import accounts, app_tokens, ratelimit
 from allskyhub_server.auth.passwords import verify_secret_async
 from allskyhub_server.auth.tokens import hash_token
-from allskyhub_server.devices import pairing, public, queries
+from allskyhub_server.devices import events, pairing, public, queries
 from allskyhub_server.devices.connections import ConnectionRegistry
 from allskyhub_server.devices.images import ImageStore
-from allskyhub_server.models import Device, Frame, Product, User
+from allskyhub_server.models import Device, EventRecord, Frame, Product, User
 from allskyhub_server.web.deps import DbSession, SettingsDep, client_ip
 from allskyhub_server.web.routes_account import finish_deletion
 
@@ -97,6 +97,37 @@ class FrameItem(BaseModel):
     gain: float
     sun_elevation: float
     has_full: bool
+
+
+class EventItem(BaseModel):
+    """A detection (SPEC §6.4). ``data`` keys per kind, e.g. for meteors ``length_px``,
+    ``peak``, ``frames``, ``direction_deg``, ``shower``."""
+
+    id: str
+    night_id: str
+    kind: str
+    start: dt.datetime
+    end: dt.datetime
+    confidence: float
+    has_image: bool
+    has_thumb: bool
+    has_full: bool
+    data: dict[str, Any]
+
+
+def _event(e: EventRecord) -> EventItem:
+    return EventItem(
+        id=e.event_id,
+        night_id=e.night_id,
+        kind=e.kind,
+        start=e.start,
+        end=e.end,
+        confidence=e.confidence,
+        has_image=e.has_image,
+        has_thumb=e.has_thumb,
+        has_full=e.has_full,
+        data=e.data,
+    )
 
 
 class Camera(BaseModel):
@@ -409,6 +440,49 @@ async def product_file(
     ):
         return JSONResponse({"status": "requested"}, status_code=202)
     raise HTTPException(404, "Not available")
+
+
+@router.get("/cameras/{device_id}/events")
+async def camera_events(
+    db: DbSession,
+    user: AppUser,
+    device_id: str,
+    before: dt.datetime | None = None,
+    limit: Annotated[int, Query(ge=1, le=200)] = 50,
+) -> list[EventItem]:
+    """Newest detections across nights; page with ``before`` (the last item's ``start``)."""
+    device = await _own(db, user, device_id)
+    rows = await events.events(db, device.id, before=before, limit=limit)
+    return [_event(e) for e in rows]
+
+
+@router.get("/cameras/{device_id}/nights/{night_id}/events")
+async def night_events(
+    db: DbSession,
+    user: AppUser,
+    device_id: str,
+    night_id: Annotated[str, Path(pattern=NIGHT_ID)],
+) -> list[EventItem]:
+    device = await _own(db, user, device_id)
+    rows = await events.events(db, device.id, night_id=night_id, limit=1000)
+    return [_event(e) for e in rows]
+
+
+@router.get("/cameras/{device_id}/events/{night_id}/{event_id}/image", response_model=None)
+async def event_image(
+    request: Request,
+    db: DbSession,
+    user: AppUser,
+    device_id: str,
+    night_id: Annotated[str, Path(pattern=NIGHT_ID)],
+    event_id: Annotated[str, Path(pattern=EVENT_ID_PATTERN)],
+    variant: FrameVariant = FrameVariant.FULL,
+) -> Response:
+    """The event's picture, or 202 while the hub fetches the full one from the camera."""
+    device = await _own(db, user, device_id)
+    return await events.event_file(
+        db, request.app.state.images, _registry(request), device.id, night_id, event_id, variant
+    )
 
 
 async def _limit_account(request: Request, user: User) -> None:

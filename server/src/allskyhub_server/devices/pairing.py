@@ -31,7 +31,15 @@ from allskyhub_protocol import (
     signing_payload,
 )
 from allskyhub_server.auth.tokens import hash_token, new_token
-from allskyhub_server.models import Device, DeviceNonce, DeviceToken, Frame, PairingCode, Product
+from allskyhub_server.models import (
+    Device,
+    DeviceNonce,
+    DeviceToken,
+    EventRecord,
+    Frame,
+    PairingCode,
+    Product,
+)
 
 NONCE_TTL = dt.timedelta(minutes=5)
 CODE_TTL = dt.timedelta(minutes=15)
@@ -210,6 +218,7 @@ async def unpair(db: AsyncSession, device: Device) -> None:
     # The archive belongs to the pairing: a later owner must not see it (privacy policy).
     await db.execute(delete(Frame).where(Frame.device_id == device.id))
     await db.execute(delete(Product).where(Product.device_id == device.id))
+    await db.execute(delete(EventRecord).where(EventRecord.device_id == device.id))
     device.latest_image_at = None
     device.latest_thumb_at = None
     device.last_frame = None

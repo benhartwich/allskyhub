@@ -108,7 +108,17 @@ class _EventsScreenState extends State<EventsScreen> {
   final _events = <SkyEvent>[];
   bool _loading = false;
   bool _done = false;
+  bool _showAll = false;
   String? _error;
+
+  void _toggleAll() {
+    setState(() {
+      _showAll = !_showAll;
+      _events.clear();
+      _done = false;
+    });
+    _more();
+  }
 
   @override
   void initState() {
@@ -124,6 +134,7 @@ class _EventsScreenState extends State<EventsScreen> {
         widget.camera.id,
         before: _events.isEmpty ? null : _events.last.start,
         limit: _page,
+        hideFalse: !_showAll,
       );
       setState(() {
         _events.addAll(next);
@@ -140,7 +151,19 @@ class _EventsScreenState extends State<EventsScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: Text('Ereignisse · ${widget.camera.name}')),
+      appBar: AppBar(
+        title: Text('Ereignisse · ${widget.camera.name}'),
+        actions: [
+          IconButton(
+            key: const Key('show-all'),
+            tooltip: _showAll
+                ? 'Aussortierte ausblenden'
+                : 'Aussortierte zeigen',
+            icon: Icon(_showAll ? Icons.filter_alt_off : Icons.filter_alt),
+            onPressed: _toggleAll,
+          ),
+        ],
+      ),
       body: _events.isEmpty && !_loading
           ? Center(
               child: Padding(
@@ -179,7 +202,12 @@ class _EventsScreenState extends State<EventsScreen> {
                     ),
                     title: Text(eventTitles[event.kind] ?? event.kind),
                     subtitle: Text(
-                      '${eventTime(event.start)} · ${(event.confidence * 100).round()} %',
+                      '${eventTime(event.start)} · ${(event.confidence * 100).round()} %'
+                      '${event.label == 'false_positive'
+                          ? ' · aussortiert'
+                          : event.label == 'confirmed'
+                          ? ' · bestätigt'
+                          : ''}',
                     ),
                     onTap: () =>
                         _open(context, widget.client, widget.camera.id, event),
@@ -277,6 +305,78 @@ class _EventScreenState extends State<EventScreen> {
   bool _full = false;
   bool _cancelled = false;
   String? _note;
+  late String? _label = widget.event.label;
+  bool _saving = false;
+
+  Future<void> _setLabel(String? label) async {
+    setState(() => _saving = true);
+    try {
+      final updated = await widget.client.labelEvent(
+        widget.cameraId,
+        widget.event,
+        label,
+      );
+      if (mounted) setState(() => _label = updated.label);
+    } on Exception {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Die Markierung konnte nicht gespeichert werden.'),
+          ),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _saving = false);
+    }
+  }
+
+  Widget _labelCard(String title) => Padding(
+    padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
+    child: _label == null
+        ? Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text(
+                'Stimmt die Erkennung? Deine Antwort hilft, sie zu verbessern.',
+              ),
+              const SizedBox(height: 8),
+              Wrap(
+                spacing: 8,
+                children: [
+                  FilledButton(
+                    key: const Key('confirm'),
+                    onPressed: _saving ? null : () => _setLabel('confirmed'),
+                    child: const Text('Echt'),
+                  ),
+                  OutlinedButton(
+                    key: const Key('false-positive'),
+                    onPressed: _saving
+                        ? null
+                        : () => _setLabel('false_positive'),
+                    child: Text('Kein $title'),
+                  ),
+                ],
+              ),
+            ],
+          )
+        : Row(
+            children: [
+              Expanded(
+                child: Text(
+                  _label == 'false_positive'
+                      ? 'Als „kein $title“ markiert.'
+                      : 'Als echt bestätigt.',
+                  style: const TextStyle(fontWeight: FontWeight.w600),
+                ),
+              ),
+              TextButton(
+                key: const Key('clear-label'),
+                onPressed: _saving ? null : () => _setLabel(null),
+                child: const Text('Markierung entfernen'),
+              ),
+            ],
+          ),
+  );
 
   @override
   void initState() {
@@ -360,6 +460,7 @@ class _EventScreenState extends State<EventScreen> {
               padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
               child: Text(_note!, style: theme.textTheme.bodySmall),
             ),
+          _labelCard(eventTitles[event.kind] ?? event.kind),
           Padding(
             padding: const EdgeInsets.all(16),
             child: Column(

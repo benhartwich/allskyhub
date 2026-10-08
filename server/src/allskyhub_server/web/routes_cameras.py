@@ -102,7 +102,7 @@ async def camera(
         {
             "device": device,
             "online": _registry(request).is_online(device.id),
-            "events": await events.events(db, device.id, limit=6),
+            "events": await events.events(db, device.id, limit=6, hide_false=True),
             "event_titles": EVENT_TITLES,
         },
         session=session,

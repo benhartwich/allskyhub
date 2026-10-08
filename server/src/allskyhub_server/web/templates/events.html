@@ -2,19 +2,23 @@
 {% block title %}Ereignisse · {{ device.name }} · allskyhub{% endblock %}
 {% block content %}
 <a class="back" href="/cameras/{{ device.id }}">← {{ device.name }}</a>
-<h1>Ereignisse</h1>
+<div class="page-head">
+  <h1>Ereignisse</h1>
+  <a href="/cameras/{{ device.id }}/events.json" class="muted">Export (JSON)</a>
+</div>
+<p class="muted">{% if show_all %}Alle Ereignisse, auch aussortierte. <a href="?">Aussortierte ausblenden</a>{% else %}Als „kein Meteor“ markierte sind ausgeblendet. <a href="?all=true">Alle zeigen</a>{% endif %}</p>
 {% if events %}
 <ul class="card list">
   {% for e in events %}
   <li class="event-row">
     {% include "_event_thumb.html" %}
-    <span class="muted">{{ e.start | localtime }} · {{ (e.confidence * 100) | round | int }} %</span>
+    <span class="muted">{{ e.start | localtime }} · {{ (e.confidence * 100) | round | int }} %{% if e.label == "false_positive" %} · aussortiert{% elif e.label == "confirmed" %} · bestätigt{% endif %}</span>
   </li>
   {% endfor %}
 </ul>
 <p class="row-links">
-  {% if page > 1 %}<a href="?page={{ page - 1 }}">← Neuere</a>{% endif %}
-  {% if more %}<a href="?page={{ page + 1 }}">Ältere →</a>{% endif %}
+  {% if page > 1 %}<a href="?page={{ page - 1 }}{{ '&all=true' if show_all }}">← Neuere</a>{% endif %}
+  {% if more %}<a href="?page={{ page + 1 }}{{ '&all=true' if show_all }}">Ältere →</a>{% endif %}
 </p>
 {% else %}
 <div class="card empty"><p class="muted">Noch keine Ereignisse. Erkennt die Kamera einen Meteor, erscheint er hier.</p></div>

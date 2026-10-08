@@ -30,6 +30,7 @@ from allskyhub_agent.detect.meteor import (
     to_gray,
 )
 from allskyhub_agent.detect.sky import SkyMeter
+from allskyhub_agent.process.skymask import SkyMask
 from allskyhub_agent.store.images import THUMB_WIDTH, ImageStore
 from allskyhub_protocol import Event, EventKind, FrameInfo, Mode, event_id
 
@@ -252,6 +253,7 @@ class DetectionWorker:
         lightning_cfg: LightningConfig | None = None,
         sky: SkyMeter | None = None,
         aurora_cfg: AuroraConfig | None = None,
+        sky_mask: SkyMask | None = None,
     ) -> None:
         self._store = store
         self.events = events or EventStore(store)
@@ -260,6 +262,8 @@ class DetectionWorker:
         self._lightning = LightningDetector(lightning_cfg, mask, mask_radius_frac)
         self._sky = sky
         self._aurora = AuroraDetector(aurora_cfg, mask_radius_frac or 0.48)
+        self._sky_mask = sky_mask
+        self._mask_version = -1
         self._q: queue.Queue[_Job | None] = queue.Queue(maxsize=4)
         self._dropped = 0
         self._thread = threading.Thread(target=self._run, name="detect", daemon=True)
@@ -319,6 +323,14 @@ class DetectionWorker:
         if job.frame.mode is not Mode.NIGHT:
             self._emit(self._meteor.flush())
         rgb = np.asarray(job.image, dtype=np.uint8)
+        if self._sky_mask is not None and self._sky_mask.version != self._mask_version:
+            learned = self._sky_mask.get(rgb.shape[0], rgb.shape[1])
+            if learned is not None:
+                self._meteor.set_mask(learned)
+                self._lightning.set_mask(learned)
+                if self._sky is not None:
+                    self._sky.set_mask(learned)
+            self._mask_version = self._sky_mask.version
         cloud = self._sky.measure(job.frame, rgb).cloud_cover if self._sky is not None else None
         gray = to_gray(rgb)
         self._emit(self._meteor.feed(job.frame, gray, job.path))

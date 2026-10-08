@@ -118,6 +118,16 @@ in a row (the first night's map alone until then). The map is rebuilt every nigh
 in `<data>/calibration/hotpixels.npz`, built from raw frames, and every frame is stored
 with the mapped pixels and their 3×3 neighbourhood replaced by the local median.
 
+### 4.7 Sky mask
+
+The agent learns which part of the frame is sky: in the median of a night's frames (sun
+≤ −12°, one per 10 min, at least 12 over 2 h) the glowing sky is brighter than trees,
+roofs and the corners outside the lens; Otsu's threshold and the largest bright region,
+with holes filled, give the mask. A mask covering less than 20 % or more than 97 % of
+the frame is not used. It is relearned every night, kept in
+`<data>/calibration/skymask.png`, and used for metering (§4.3), the detections and the
+sky values in `status` (§6.3); until there is one, the profile's image circle is used.
+
 ## 5. Products (M4)
 
 ### 5.1 Frame index

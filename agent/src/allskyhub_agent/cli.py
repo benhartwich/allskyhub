@@ -34,6 +34,7 @@ from allskyhub_agent.hub.identity import DEFAULT_KEY_PATH, DeviceIdentity
 from allskyhub_agent.hub.pairing import PairingState
 from allskyhub_agent.live import LiveState
 from allskyhub_agent.process.hotpixels import HotPixels
+from allskyhub_agent.process.skymask import SkyMask
 from allskyhub_agent.products.build import NightProducts, build_night, night_products
 from allskyhub_agent.products.worker import ProductWorker
 from allskyhub_agent.profiles import Profile, get_profile
@@ -355,12 +356,14 @@ def main(argv: list[str] | None = None) -> int:
             return 1
 
     sky_meter = SkyMeter(SkyConfig(sqm_offset=profile.sqm_offset), profile.image_circle_frac)
+    sky_mask = SkyMask(Path(args.data) / "calibration" / "skymask.png")
     detect = DetectionWorker(
         store,
         on_event=hub.notify_event if hub is not None else None,
         mask_radius_frac=profile.image_circle_frac,
         events=event_store,
         sky=sky_meter,
+        sky_mask=sky_mask,
     )
     detect.start()
 
@@ -380,6 +383,7 @@ def main(argv: list[str] | None = None) -> int:
         local_tz=tz,
         analyzers=[detect.on_frame],
         hot_pixels=HotPixels(Path(args.data) / "calibration" / "hotpixels.npz"),
+        sky_mask=sky_mask,
     )
 
     def products_done(result: NightProducts) -> None:

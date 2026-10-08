@@ -85,6 +85,10 @@ class LightningDetector:
         self._flashes: deque[float] = deque(maxlen=1000)
         self._storm_start: datetime | None = None
 
+    def set_mask(self, mask: Mask) -> None:
+        """Use the learned sky mask (SPEC §4.7) instead of the image circle."""
+        self._mask = mask
+
     def reset(self) -> None:
         self._prev = None
         self._pending = None

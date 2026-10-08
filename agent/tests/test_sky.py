@@ -97,3 +97,21 @@ def test_meter_keeps_latest_and_status_carries_it() -> None:
     s = Status(mode=Mode.NIGHT, exposure_us=1, gain=0, mean=0.1, uptime_s=1,
                time_trusted=True, sky=m)  # fmt: skip
     assert Status.model_validate_json(s.model_dump_json()).sky == m
+
+
+def test_learned_mask_keeps_trees_out_of_cloud_cover() -> None:
+    rgb = starry(800)
+    rgb[240:, 320:] = 5  # a tree in the lower right: no stars, not cloud
+    meter = SkyMeter()
+    with_tree = meter.measure(frame(-30), rgb).cloud_cover
+    assert with_tree is not None
+    assert with_tree > 0.15
+    sky = np.ones((H, W), dtype=np.bool_)
+    sky[240:, 320:] = False
+    meter.set_mask(sky)
+    without = meter.measure(frame(-30), rgb).cloud_cover
+    clear = SkyMeter().measure(frame(-30), starry(800)).cloud_cover
+    assert without is not None
+    assert clear is not None
+    assert without < with_tree - 0.15
+    assert abs(without - clear) < 0.1  # as if the tree were not there

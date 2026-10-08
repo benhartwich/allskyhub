@@ -91,3 +91,16 @@ async def test_replaced_picture_is_fetched_again(
     page = (await client.get(f"/cameras/{dev.device_id}/events/{NIGHT}/{AURORA}")).text
     assert "v=2" in page
     assert "läuft noch" in page
+
+
+def test_nlc_rows() -> None:
+    row = EventRecord(
+        kind="nlc", confidence=0.6, start=START, end=START + dt.timedelta(minutes=30),
+        data={"peak_index": 25, "blue": 142.0, "frames": 9, "direction_deg": 300.0,
+              "ongoing": False, "image_rev": 2, "azimuth_deg": 341.0, "altitude_deg": 18.0},
+    )  # fmt: skip
+    rows = dict(event_rows(row))
+    assert rows["Blauanteil"] == "142"
+    assert rows["Stärke"] == "25 %"
+    assert rows["Himmelsrichtung"] == "341° (N)"
+    assert "Status" not in rows  # closed episode

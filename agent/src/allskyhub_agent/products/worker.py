@@ -35,9 +35,13 @@ class ProductWorker:
         cfg: ProductConfig | None = None,
         on_done: Callable[[NightProducts], None] | None = None,
         keep_days: int | None = 14,
+        min_free_pct: float | None = 10.0,
+        free_check_s: float = 600.0,
     ) -> None:
         self._store = store
         self._keep_days = keep_days
+        self._min_free_pct = min_free_pct
+        self._free_check_s = free_check_s
         self._cfg = cfg or ProductConfig()
         self._on_done = on_done
         self._q: queue.Queue[str | None] = queue.Queue()
@@ -58,7 +62,11 @@ class ProductWorker:
 
     def _run(self) -> None:
         while True:
-            night = self._q.get()
+            try:
+                night = self._q.get(timeout=self._free_check_s)
+            except queue.Empty:
+                self._check_free()  # every few minutes, so a full card never stops capture
+                continue
             if night is None:
                 return
             try:
@@ -76,6 +84,18 @@ class ProductWorker:
                         log.info("removed old nights %s", removed)
                 except OSError:
                     log.exception("cleanup failed")
+            self._check_free()
+
+    def _check_free(self) -> None:
+        if self._min_free_pct is None:
+            return
+        try:
+            removed = self._store.ensure_free(datetime.now(UTC), self._min_free_pct)
+        except OSError:
+            log.exception("free-space check failed")
+            return
+        if removed:
+            log.warning("disk almost full: removed nights %s", removed)
 
     def stop(self, timeout: float = 5.0) -> None:
         self._q.put(None)

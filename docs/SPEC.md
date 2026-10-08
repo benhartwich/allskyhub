@@ -106,7 +106,7 @@ the hub treats frames from a device with `time_trusted: false` as possibly misda
 Frames are stored as JPEG under `<data>/images/<night-id>/` with a thumbnail. The
 *night id* is the date of the evening the night started: frames before local noon
 belong to the previous day's id, so a whole night lands in one folder. Retention is
-by days (default 14) and, from M1, by free disk space (keep at least 10 %).
+by days (default 14, after the night products) and by free disk space: every 10 minutes the oldest nights are removed until at least 10 % of the disk is free; the current night is never removed.
 
 ## 5. Products (M4)
 

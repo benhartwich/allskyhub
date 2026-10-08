@@ -434,6 +434,7 @@ def main(argv: list[str] | None = None) -> int:
             location=lambda: (here.lat, here.lon),
             sky_mask=sky_mask.get,
         ),
+        latitude=lambda: here.lat,
     )
     detect.start()
 

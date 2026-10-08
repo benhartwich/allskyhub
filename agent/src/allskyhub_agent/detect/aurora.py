@@ -19,6 +19,7 @@ An aurora lasts minutes to hours: the detector groups candidate frames into an e
 from __future__ import annotations
 
 import math
+from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -26,6 +27,7 @@ import cv2
 import numpy as np
 import numpy.typing as npt
 
+from allskyhub_agent.calib.solve import Solution, sky_band
 from allskyhub_agent.detect.episodes import EpisodeTracker, EpisodeUpdate
 from allskyhub_protocol import FrameInfo
 
@@ -51,6 +53,10 @@ class AuroraConfig:
     confirm_frames: int = 2  # candidates in a row before an episode opens
     gap_s: float = 1200.0  # an episode closes after this long without a candidate
     resend_s: float = 300.0  # an open episode is resent at most this often
+    # With an orientation (SPEC §4.8): the low sky toward the pole, as in the module.
+    pole_alt_lo_deg: float = 2.0
+    pole_alt_hi_deg: float = 36.0
+    pole_az_half_deg: float = 70.0
 
 
 @dataclass(frozen=True)
@@ -145,10 +151,21 @@ AuroraUpdate = EpisodeUpdate[AuroraScore]
 class AuroraDetector:
     """Feed every stored frame; returns the episode updates to send."""
 
-    def __init__(self, cfg: AuroraConfig | None = None, radius_frac: float = 0.48) -> None:
+    def __init__(
+        self,
+        cfg: AuroraConfig | None = None,
+        radius_frac: float = 0.48,
+        orientation: Callable[[], Solution | None] | None = None,
+        latitude: Callable[[], float | None] | None = None,
+        sky_mask: Callable[[int, int], Mask | None] | None = None,
+    ) -> None:
         self._cfg = cfg or AuroraConfig()
         self._radius = radius_frac
+        self._orientation = orientation
+        self._latitude = latitude
+        self._sky_mask = sky_mask
         self._band: Mask | None = None
+        self._band_key: tuple[object, ...] | None = None
         self._episodes: EpisodeTracker[AuroraScore] = EpisodeTracker(
             self._cfg.confirm_frames, self._cfg.gap_s, self._cfg.resend_s
         )
@@ -170,10 +187,29 @@ class AuroraDetector:
         if cloud_cover is not None and cloud_cover > cfg.cloud_max:
             return out  # overcast says nothing; the gap closes the episode
         h, w = rgb.shape[:2]
-        if self._band is None or self._band.shape != (h, w):
-            self._band = ring_mask(h, w, self._radius, cfg)
-        s = score(rgb, self._band, cfg)
+        s = score(rgb, self._band_for(h, w), cfg)
         if s is None or not s.candidate:
             self._episodes.miss()
             return out
         return out + self._episodes.hit(frame, image_path, s)
+
+    def _band_for(self, h: int, w: int) -> Mask:
+        """The polar sector with an orientation, else the whole low ring."""
+        cfg = self._cfg
+        sol = self._orientation() if self._orientation is not None else None
+        lat = self._latitude() if self._latitude is not None else None
+        sky = self._sky_mask(h, w) if self._sky_mask is not None else None
+        if sol is not None and sol.width and (w, h) != (sol.width, sol.height):
+            sol = None
+        key = (h, w, sol, lat is not None and lat < 0, id(sky))
+        if self._band is None or key != self._band_key:
+            if sol is not None and lat is not None:
+                pole = 180.0 if lat < 0 else 0.0
+                band = sky_band(sol, cfg.pole_alt_lo_deg, cfg.pole_alt_hi_deg, pole,
+                                cfg.pole_az_half_deg, h, w)  # fmt: skip
+                if sky is not None:
+                    band &= sky
+            else:
+                band = ring_mask(h, w, self._radius, cfg)
+            self._band, self._band_key = band, key
+        return self._band

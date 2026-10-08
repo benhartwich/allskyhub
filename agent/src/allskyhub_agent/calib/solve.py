@@ -514,3 +514,20 @@ def solve(
         tilt_north=round(p[6], 3), stars=n, rms_px=round(rms_px, 2), rms_deg=round(rms_deg, 3),
         width=w, height=h,
     )  # fmt: skip
+
+
+def sky_band(
+    sol: Solution, alt_lo: float, alt_hi: float, az_center: float, az_half: float, h: int, w: int
+) -> npt.NDArray[np.bool_]:
+    """Pixels of the sky between two altitudes within `az_half` of an azimuth."""
+    azs = np.linspace(az_center - az_half, az_center + az_half, 121)
+    lo_x, lo_y = sol.project(np.full(azs.shape, alt_lo), azs)
+    hi_x, hi_y = sol.project(np.full(azs.shape, alt_hi), azs[::-1])
+    poly = np.empty((2 * azs.size, 2))
+    poly[: azs.size, 0], poly[: azs.size, 1] = lo_x, lo_y
+    poly[azs.size :, 0], poly[azs.size :, 1] = hi_x, hi_y
+    poly = poly[np.isfinite(poly).all(axis=1)]
+    m = np.zeros((h, w), np.uint8)
+    if len(poly) >= 3:
+        cv2.fillPoly(m, [np.rint(poly).astype(np.int32)], 1)
+    return m > 0

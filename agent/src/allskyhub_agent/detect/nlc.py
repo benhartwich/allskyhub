@@ -26,7 +26,7 @@ import cv2
 import numpy as np
 import numpy.typing as npt
 
-from allskyhub_agent.calib.solve import Solution
+from allskyhub_agent.calib.solve import Solution, sky_band
 from allskyhub_agent.core.sun import sun_position
 from allskyhub_agent.detect.episodes import EpisodeTracker, EpisodeUpdate
 from allskyhub_protocol import FrameInfo
@@ -72,17 +72,7 @@ NlcUpdate = EpisodeUpdate[NlcScore]
 
 def band_mask(sol: Solution, sun_az: float, h: int, w: int, cfg: NlcConfig) -> Mask:
     """The low sky toward the sun: altitude alt_lo..alt_hi, azimuth sun ± az_half."""
-    azs = np.linspace(sun_az - cfg.az_half_deg, sun_az + cfg.az_half_deg, 121)
-    lo_x, lo_y = sol.project(np.full(azs.shape, cfg.alt_lo_deg), azs)
-    hi_x, hi_y = sol.project(np.full(azs.shape, cfg.alt_hi_deg), azs[::-1])
-    poly = np.empty((2 * azs.size, 2))
-    poly[: azs.size, 0], poly[: azs.size, 1] = lo_x, lo_y
-    poly[azs.size :, 0], poly[azs.size :, 1] = hi_x, hi_y
-    poly = poly[np.isfinite(poly).all(axis=1)]
-    m = np.zeros((h, w), np.uint8)
-    if len(poly) >= 3:
-        cv2.fillPoly(m, [np.rint(poly).astype(np.int32)], 1)
-    return m > 0
+    return sky_band(sol, cfg.alt_lo_deg, cfg.alt_hi_deg, sun_az, cfg.az_half_deg, h, w)
 
 
 def score(rgb: npt.NDArray[np.uint8], band: Mask, cfg: NlcConfig) -> NlcScore | None:

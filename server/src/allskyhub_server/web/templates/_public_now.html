@@ -1,0 +1,12 @@
+{%- set fr = device.last_frame or {} -%}
+<figure class="live">
+  {% if device.latest_image_at %}
+  <img src="/sky/{{ slug }}/latest.jpg?t={{ device.latest_image_at.timestamp() | int }}" alt="Aktuelles Himmelsbild von {{ device.name }}">
+  <figcaption class="muted">
+    Aufgenommen {{ device.latest_image_at | age }}{% if fr.mode is defined %} · {{ 'Nacht' if fr.mode == 'night' else 'Tag' }}{% endif %}{% if fr.sun_elevation is defined %} · Sonne {{ '%.1f' | format(fr.sun_elevation) }}°{% endif %}
+  </figcaption>
+  {% else %}
+  <div class="sky-ph" aria-hidden="true"></div>
+  <figcaption class="muted">Noch kein Bild.</figcaption>
+  {% endif %}
+</figure>

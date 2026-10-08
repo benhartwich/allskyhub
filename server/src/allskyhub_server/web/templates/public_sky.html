@@ -1,0 +1,22 @@
+{% extends "base.html" %}
+{% block title %}{{ device.name }} · Himmel live · allskyhub{% endblock %}
+{% block content %}
+<h1>{{ device.name }}</h1>
+<div hx-get="/sky/{{ slug }}/now" hx-trigger="every 60s" hx-swap="innerHTML">
+  {% include "_public_now.html" %}
+</div>
+{% if products %}
+<section class="card">
+  <h2>Letzte Nacht</h2>
+  <div class="public-products">
+    {% for product in products %}
+    <a href="/sky/{{ slug }}/products/{{ night_id }}/{{ product.name }}?full={{ 'true' if product.has_full else 'false' }}">
+      <img src="/sky/{{ slug }}/products/{{ night_id }}/{{ product.name }}" alt="{{ 'Keogramm' if product.kind == 'keogram' else 'Sternspuren' }} der Nacht" loading="lazy">
+      <span class="muted">{{ 'Keogramm' if product.kind == 'keogram' else 'Sternspuren' }}</span>
+    </a>
+    {% endfor %}
+  </div>
+</section>
+{% endif %}
+<p class="muted">Eine Allsky-Kamera mit <a href="/">allskyhub</a>.</p>
+{% endblock %}

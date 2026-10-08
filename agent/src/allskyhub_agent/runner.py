@@ -17,6 +17,7 @@ from allskyhub_agent.core.metering import Mask, circle_mask, mean_brightness
 from allskyhub_agent.core.sun import sun_elevation
 from allskyhub_agent.live import LiveState
 from allskyhub_agent.process.hotpixels import HotPixels
+from allskyhub_agent.process.skymask import SkyMask
 from allskyhub_agent.store.images import ImageStore, night_id
 from allskyhub_protocol import FrameInfo, Mode
 
@@ -54,6 +55,7 @@ class Runner:
         analyzers: list[Callable[[FrameInfo, Image], None]] | None = None,
         local_tz: tzinfo = UTC,
         hot_pixels: HotPixels | None = None,
+        sky_mask: SkyMask | None = None,
     ) -> None:
         self._cam = camera
         self._ae = auto_exposure
@@ -72,6 +74,7 @@ class Runner:
         self._stop = threading.Event()
         self._tz = local_tz
         self._hot = hot_pixels
+        self._sky_mask = sky_mask
 
     @property
     def mode(self) -> Mode | None:
@@ -99,6 +102,8 @@ class Runner:
             frame.image, self._mask_for(frame.image.shape[0], frame.image.shape[1])
         )
         image = frame.image
+        if self._sky_mask is not None and not focus:
+            self._sky_mask.observe(start, night_id(start, self._tz), elevation, image)
         if self._hot is not None:
             # SPEC §4.6: the map learns from raw frames, every frame gets the correction.
             if not focus:
@@ -134,6 +139,10 @@ class Runner:
 
     def _mask_for(self, height: int, width: int) -> Mask | None:
         """Image-circle mask for the frame size, built once (SPEC §4.3: metering in the mask)."""
+        if self._sky_mask is not None:
+            learned = self._sky_mask.get(height, width)
+            if learned is not None:
+                return learned
         if self._mask_frac is None:
             return None
         if self._mask is None or self._mask.shape != (height, width):

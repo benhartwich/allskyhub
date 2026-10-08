@@ -28,7 +28,7 @@ postkasten.cloud). Changes to `packages/protocol` and `docs/SPEC.md` have one ow
 | 5 | ~~Lightning, sky quality and night cloud cover (`status.sky`), aurora~~ done; NLC moved to #8 | agent | ports of the existing Allsky modules; NLC needs the sunward band, i.e. the image orientation from #8, and the module only found false alarms at 48° N without it; lightning v1 detects only, a short "storm exposure" comes later; day cloud cover needs a method that works without an IR cut filter |
 | 6 | Push notifications (FCM) for events | hub | hub side done (off until a Firebase service account is configured); app side needs the Firebase project (Benjamin) |
 | 7 | Signed agent updates with rollback (M5 part 2) | agent | like myboxi's updater |
-| 8 | Hot pixels without darks (done), sky mask, plate-solve alignment; then NLC (sunward band), aurora pole sector, compass azimuths | agent | |
+| 8 | Hot pixels without darks, sky mask (both done), plate-solve alignment; then NLC (sunward band), aurora pole sector, compass azimuths | agent | |
 | 9 | ~~Public sky page per camera~~ | hub | done: opt-in, random link, web + app API |
 | 10 | ~~Self-service account: change password, delete account~~ | hub | done: web UI, app API and app |
 | 11 | Hub backups: database dump and image archive, restore tested | hub | |

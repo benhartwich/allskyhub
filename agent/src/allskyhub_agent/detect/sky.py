@@ -107,6 +107,7 @@ class SkyMeter:
         self._cfg = cfg or SkyConfig()
         self._radius = radius_frac
         self._masks: dict[tuple[int, int], tuple[Mask, Mask]] = {}
+        self._learned: Mask | None = None
         self._lock = threading.Lock()
         self._latest: SkyMetrics | None = None
 
@@ -115,12 +116,19 @@ class SkyMeter:
         with self._lock:
             return self._latest
 
+    def set_mask(self, mask: Mask) -> None:
+        """Use the learned sky mask (SPEC §4.7): trees and roofs are not cloud."""
+        self._learned = mask
+        self._masks = {}
+
     def _mask(self, h: int, w: int) -> tuple[Mask, Mask]:
         if (h, w) not in self._masks:
-            self._masks[(h, w)] = (
-                circle_mask(h, w, self._radius),
-                circle_mask(h, w, self._radius * self._cfg.inner_frac),
-            )
+            inner = circle_mask(h, w, self._radius * self._cfg.inner_frac)
+            learned = self._learned
+            if learned is not None and learned.shape == (h, w):
+                self._masks[(h, w)] = (learned, learned & inner)
+            else:
+                self._masks[(h, w)] = (circle_mask(h, w, self._radius), inner)
         return self._masks[(h, w)]
 
     def measure(self, frame: FrameInfo, image: npt.NDArray[np.uint8]) -> SkyMetrics:

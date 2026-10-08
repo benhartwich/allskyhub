@@ -309,6 +309,10 @@ class MeteorDetector:
         self._pending: _Pending | None = None
         self._hotspots: deque[tuple[float, float, float]] = deque(maxlen=2000)
 
+    def set_mask(self, mask: Mask) -> None:
+        """Use the learned sky mask (SPEC §4.7) instead of the image circle."""
+        self._mask = mask
+
     def reset(self) -> None:
         """Forget the previous frame (mode change, camera restart)."""
         self._prev_gray = None

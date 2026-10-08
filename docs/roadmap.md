@@ -34,7 +34,7 @@ postkasten.cloud). Changes to `packages/protocol` and `docs/SPEC.md` have one ow
 | 11 | Hub backups: database dump and image archive, restore tested | hub | |
 | 12 | Hub monitoring: health check, disk space alert, camera offline notice | hub | camera offline also as push (#6) |
 | 13 | ~~Web UI: gallery and night products like in the app~~ | hub | done |
-| 14 | App: "Standort ändern" and camera settings via `set_settings` | hub | after #2 |
+| 14 | ~~App: "Standort ändern" and camera settings via `set_settings`~~ | hub | done |
 
 ## Needs Benjamin / hardware
 

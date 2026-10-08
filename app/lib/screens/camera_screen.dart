@@ -3,6 +3,8 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 
 import '../api/hub_client.dart';
+import '../platform/location.dart';
+import 'camera_settings_screen.dart';
 import 'camera_status.dart';
 
 /// Live view: polls the latest image with `live=true` every few seconds, so the hub asks
@@ -87,6 +89,19 @@ class _CameraScreenState extends State<CameraScreen> {
       appBar: AppBar(
         title: Text(_camera.name),
         actions: [
+          IconButton(
+            tooltip: 'Einstellungen',
+            icon: const Icon(Icons.settings_outlined),
+            onPressed: () => Navigator.of(context).push(
+              MaterialPageRoute<void>(
+                builder: (_) => CameraSettingsScreen(
+                  client: widget.client,
+                  camera: _camera,
+                  locationSource: PlatformLocationSource(),
+                ),
+              ),
+            ),
+          ),
           IconButton(
             tooltip: 'Entfernen',
             icon: const Icon(Icons.delete_outline),

@@ -35,6 +35,7 @@ class FakeEventHub {
   final int fullAfter;
   int fullRequests = 0;
   final pages = <Map<String, String>>[];
+  final labels = <String?>[];
 
   HubClient get client => HubClient(
     baseUrl: 'https://hub.example',
@@ -55,6 +56,18 @@ class FakeEventHub {
                   ]
                 : <Object>[],
           ),
+          200,
+        );
+      }
+      if (path.endsWith('/label')) {
+        final label =
+            (jsonDecode(request.body) as Map<String, dynamic>)['label'];
+        labels.add(label as String?);
+        return http.Response(
+          jsonEncode({
+            ...meteorJson('meteor-20261008T214512Z', '2026-10-08T21:45:12Z'),
+            'label': label,
+          }),
           200,
         );
       }
@@ -148,4 +161,38 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.textContaining('Noch keine Ereignisse'), findsOneWidget);
   });
+
+  testWidgets(
+    'label: kein Meteor, then clear; list hides false positives by default',
+    (tester) async {
+      tester.view.physicalSize = const Size(400, 2000);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+      final hub = FakeEventHub(fullAfter: 0);
+      final client = hub.client;
+      await tester.pumpWidget(
+        MaterialApp(
+          home: EventsScreen(
+            client: client,
+            camera: Camera.fromJson(cameraJson),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(hub.pages.first['hide_false'], 'true');
+      await tester.tap(find.byKey(const Key('show-all')));
+      await tester.pumpAndSettle();
+      expect(hub.pages.last.containsKey('hide_false'), isFalse);
+
+      await tester.tap(find.text('Meteor'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('false-positive')));
+      await tester.pumpAndSettle();
+      expect(find.text('Als „kein Meteor“ markiert.'), findsOneWidget);
+      await tester.tap(find.byKey(const Key('clear-label')));
+      await tester.pumpAndSettle();
+      expect(hub.labels, ['false_positive', null]);
+      expect(find.byKey(const Key('confirm')), findsOneWidget);
+    },
+  );
 }

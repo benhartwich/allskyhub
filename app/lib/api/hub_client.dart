@@ -185,6 +185,7 @@ class SkyEvent {
     required this.hasThumb,
     required this.hasFull,
     this.data = const {},
+    this.label,
   });
 
   factory SkyEvent.fromJson(Map<String, dynamic> json) => SkyEvent(
@@ -198,6 +199,7 @@ class SkyEvent {
     hasThumb: json['has_thumb'] as bool,
     hasFull: json['has_full'] as bool,
     data: (json['data'] as Map<String, dynamic>?) ?? const {},
+    label: json['label'] as String?,
   );
 
   final String id;
@@ -212,6 +214,9 @@ class SkyEvent {
   final bool hasThumb;
   final bool hasFull;
   final Map<String, dynamic> data;
+
+  /// The owner's verdict: "confirmed", "false_positive" or null.
+  final String? label;
 }
 
 class HubClient {
@@ -376,9 +381,11 @@ class HubClient {
     String cameraId, {
     DateTime? before,
     int limit = 50,
+    bool hideFalse = false,
   }) async {
     final query = {
       'limit': '$limit',
+      if (hideFalse) 'hide_false': 'true',
       if (before != null) 'before': before.toUtc().toIso8601String(),
     };
     final uri = _uri('/cameras/$cameraId/events', query);
@@ -398,6 +405,20 @@ class HubClient {
         '/cameras/$cameraId/events/${event.nightId}/${event.id}/image',
         thumb ? {'variant': 'thumb'} : null,
       );
+
+  /// The owner's verdict: "confirmed", "false_positive" ("kein Meteor") or null to clear.
+  Future<SkyEvent> labelEvent(
+    String cameraId,
+    SkyEvent event,
+    String? label,
+  ) async => SkyEvent.fromJson(
+    await _send(
+          'PUT',
+          '/cameras/$cameraId/events/${event.nightId}/${event.id}/label',
+          body: {'label': label},
+        )
+        as Map<String, dynamic>,
+  );
 
   Future<bool> ensureEventImage(String cameraId, SkyEvent event) =>
       _ensure(eventImageUrl(cameraId, event));

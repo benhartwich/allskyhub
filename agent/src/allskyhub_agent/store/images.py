@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import shutil
+from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta, tzinfo
 from pathlib import Path
@@ -14,6 +15,14 @@ from allskyhub_agent.adapters.camera import Image
 from allskyhub_protocol import FrameInfo
 
 THUMB_WIDTH = 400
+
+
+def _disk_usage(path: Path) -> tuple[int, int]:
+    """(total, free) bytes of the file system that holds `path`."""
+    u = shutil.disk_usage(path)
+    return u.total, u.free
+
+
 INDEX_NAME = "frames.jsonl"
 
 
@@ -97,6 +106,32 @@ class ImageStore:
         folder = self._images / night
         path = (folder / "thumbnails" / name) if thumbnail else (folder / name)
         return path if path.is_file() else None
+
+    def ensure_free(
+        self,
+        now: datetime,
+        min_free_pct: float = 10.0,
+        usage: Callable[[Path], tuple[int, int]] | None = None,
+    ) -> list[str]:
+        """Delete the oldest nights until at least `min_free_pct` of the disk is free
+        (SPEC §4.5). The current night is never deleted. Returns the removed night ids."""
+        measure = usage or _disk_usage
+        current = night_id(now, self._tz)
+        removed: list[str] = []
+        if not self._images.is_dir():
+            return removed
+        nights = sorted(
+            d
+            for d in self._images.iterdir()
+            if d.is_dir() and len(d.name) == 8 and d.name.isdigit()
+        )
+        for d in nights:
+            total, free = measure(self._images)
+            if total <= 0 or 100.0 * free / total >= min_free_pct or d.name >= current:
+                break
+            shutil.rmtree(d)
+            removed.append(d.name)
+        return removed
 
     def cleanup(self, now: datetime, keep_days: int) -> list[str]:
         """Delete night folders older than `keep_days`; returns the removed night ids."""

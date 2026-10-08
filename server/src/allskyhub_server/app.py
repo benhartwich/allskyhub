@@ -23,6 +23,8 @@ from allskyhub_server.api import device as device_api
 from allskyhub_server.db import create_engine, create_sessionmaker
 from allskyhub_server.devices.connections import ConnectionRegistry
 from allskyhub_server.devices.images import ImageStore
+from allskyhub_server.push.fcm import Sender
+from allskyhub_server.push.notify import Notifier
 from allskyhub_server.settings import Settings, get_settings
 from allskyhub_server.web import (
     routes_account,
@@ -151,12 +153,24 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         cleanup = asyncio.create_task(
             maintenance.run_forever(app.state.sessionmaker, app.state.images, settings)
         )
+        sender = (
+            Sender(settings.fcm_service_account_file)
+            if settings.fcm_service_account_file is not None
+            else None
+        )
+        app.state.notifier = Notifier(app.state.sessionmaker, sender)
+        tasks = [cleanup]
+        if sender is not None:
+            tasks.append(
+                asyncio.create_task(app.state.notifier.run_offline_checks(app.state.connections))
+            )
         try:
             yield
         finally:
-            cleanup.cancel()
-            with contextlib.suppress(asyncio.CancelledError):
-                await cleanup
+            for task in tasks:
+                task.cancel()
+                with contextlib.suppress(asyncio.CancelledError):
+                    await task
             await engine.dispose()
 
     app = FastAPI(

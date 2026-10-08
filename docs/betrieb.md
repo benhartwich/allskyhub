@@ -107,3 +107,19 @@ gunzip -c allskyhub-latest.sql.gz | sudo -u allskyhub-server env $(xargs < /etc/
   sh -c 'psql "$ALLSKYHUB_SERVER_DATABASE_URL"'
 systemctl start allskyhub-server.socket
 ```
+
+## Push-Benachrichtigungen (Firebase)
+
+Aus, solange `ALLSKYHUB_SERVER_FCM_SERVICE_ACCOUNT_FILE` nicht gesetzt ist; dann geht nichts an
+Google, und die Datenschutzerklärung erwähnt Firebase nicht. Zum Einschalten im
+Firebase-Projekt ein Dienstkonto-Schlüssel (JSON) erzeugen und ablegen:
+
+```bash
+install -o root -g allskyhub-server -m 0640 firebase-sa.json /etc/allskyhub-server/firebase-sa.json
+echo ALLSKYHUB_SERVER_FCM_SERVICE_ACCOUNT_FILE=/etc/allskyhub-server/firebase-sa.json \
+  >> /etc/allskyhub-server/allskyhub-server.env
+systemctl restart allskyhub-server.service
+```
+
+Jede Person schaltet Benachrichtigungen selbst ein (App oder Seite „Konto“): neue Ereignisse
+(höchstens alle 10 Minuten pro Kamera) und Kameras, die seit 30 Minuten offline sind.

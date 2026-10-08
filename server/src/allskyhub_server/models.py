@@ -55,6 +55,9 @@ class User(Base):
     # How long detections are kept (privacy policy): 30 (default), 90 or 365 days. Above 30
     # the hub also keeps each event's full picture for that long.
     event_keep_days: Mapped[int] = mapped_column(Integer, default=30, server_default="30")
+    # Push notifications (roadmap #6), each off until the user switches it on.
+    notify_events: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
+    notify_offline: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
     created_at: Mapped[dt.datetime] = mapped_column(_tz(), server_default=func.now())
 
 
@@ -109,6 +112,8 @@ class Device(Base):
     # When the latest full image and thumbnail were stored (SPEC §6.5).
     latest_image_at: Mapped[dt.datetime | None] = mapped_column(_tz())
     latest_thumb_at: Mapped[dt.datetime | None] = mapped_column(_tz())
+    # When an "offline" push was sent for the current outage (roadmap #6); cleared on reconnect.
+    offline_notified_at: Mapped[dt.datetime | None] = mapped_column(_tz())
     # Opt-in public sky page (/sky/<slug>): a random slug, never the device id; switching the
     # page off drops it, so old links stop working.
     public_slug: Mapped[str | None] = mapped_column(String(32), unique=True)
@@ -258,3 +263,17 @@ class EventRecord(Base):
     labelled_at: Mapped[dt.datetime | None] = mapped_column(_tz())
     # Retention counts from the first report (privacy policy).
     created_at: Mapped[dt.datetime] = mapped_column(_tz(), server_default=func.now(), index=True)
+
+
+class PushToken(Base):
+    """An app installation that receives push notifications (FCM registration token)."""
+
+    __tablename__ = "push_token"
+
+    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid7)
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("user_account.id", ondelete="CASCADE"), index=True
+    )
+    token: Mapped[str] = mapped_column(String(4096), unique=True)
+    platform: Mapped[str] = mapped_column(String(16))
+    created_at: Mapped[dt.datetime] = mapped_column(_tz(), server_default=func.now())

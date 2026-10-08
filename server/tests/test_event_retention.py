@@ -42,11 +42,10 @@ async def test_setting_in_web_and_app(app: FastAPI, client: httpx.AsyncClient) -
         json={"email": await owner_email(app, dev.device_id), "password": PASSWORD},
     )
     auth = {"Authorization": f"Bearer {r.json()['access_token']}"}
-    assert (await client.get("/api/v1/account/settings", headers=auth)).json() == {
-        "event_keep_days": 365
-    }
+    got = (await client.get("/api/v1/account/settings", headers=auth)).json()
+    assert got["event_keep_days"] == 365
     ok = await client.put("/api/v1/account/settings", json={"event_keep_days": 90}, headers=auth)
-    assert ok.json() == {"event_keep_days": 90}
+    assert ok.json()["event_keep_days"] == 90
     bad = await client.put("/api/v1/account/settings", json={"event_keep_days": 7}, headers=auth)
     assert bad.status_code == 400
 

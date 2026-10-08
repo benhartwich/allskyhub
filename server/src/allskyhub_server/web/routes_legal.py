@@ -18,4 +18,9 @@ async def imprint(request: Request, session: OptionalSession) -> Response:
 
 @router.get("/datenschutz")
 async def privacy(request: Request, session: OptionalSession) -> Response:
-    return render(request, "datenschutz.html", session=session)
+    return render(
+        request,
+        "datenschutz.html",
+        {"push_available": request.app.state.notifier.enabled},
+        session=session,
+    )

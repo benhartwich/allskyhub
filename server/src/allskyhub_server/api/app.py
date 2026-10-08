@@ -13,6 +13,8 @@ from typing import Annotated, Any, Literal
 from fastapi import APIRouter, Depends, HTTPException, Path, Query, Request
 from fastapi.responses import FileResponse, Response
 from pydantic import BaseModel, ConfigDict, Field
+from sqlalchemy import delete
+from sqlalchemy.dialects.postgresql import insert as pg_insert
 
 from allskyhub_protocol import EVENT_ID_PATTERN, CloseCode, FrameVariant, SetSettingsArgs
 from allskyhub_server.auth import accounts, app_tokens, ratelimit
@@ -22,7 +24,7 @@ from allskyhub_server.devices import archive, events, pairing, public, queries
 from allskyhub_server.devices import settings as settings_mod
 from allskyhub_server.devices.connections import ConnectionRegistry
 from allskyhub_server.devices.images import ImageStore
-from allskyhub_server.models import Device, EventRecord, User
+from allskyhub_server.models import Device, EventRecord, PushToken, User
 from allskyhub_server.web.deps import DbSession, SettingsDep, client_ip
 from allskyhub_server.web.routes_account import finish_deletion
 
@@ -51,9 +53,19 @@ class PasswordChange(_In):
 
 
 class AccountSettings(BaseModel):
-    """Per-account settings (privacy policy): days to keep detections, one of 30, 90, 365."""
+    """Per-account settings: days to keep detections (30, 90, 365) and push notifications
+    (roadmap #6). Fields left out of a PUT stay as they are."""
 
-    event_keep_days: int
+    event_keep_days: int | None = None
+    notify_events: bool | None = None
+    notify_offline: bool | None = None
+    # Read only: the hub can send push notifications at all.
+    push_available: bool | None = None
+
+
+class PushTokenRequest(_In):
+    token: str = Field(min_length=10, max_length=4096)
+    platform: Literal["android", "ios"]
 
 
 class AccountDelete(_In):
@@ -491,19 +503,59 @@ async def _limit_account(request: Request, user: User) -> None:
     await _limit(request, f"account:{user.id}", ratelimit.LOGIN_PER_ACCOUNT)
 
 
+def _account_settings(request: Request, user: User) -> AccountSettings:
+    return AccountSettings(
+        event_keep_days=user.event_keep_days,
+        notify_events=user.notify_events,
+        notify_offline=user.notify_offline,
+        push_available=request.app.state.notifier.enabled,
+    )
+
+
 @router.get("/account/settings")
-async def get_settings(user: AppUser) -> AccountSettings:
-    return AccountSettings(event_keep_days=user.event_keep_days)
+async def get_settings(request: Request, user: AppUser) -> AccountSettings:
+    return _account_settings(request, user)
 
 
 @router.put("/account/settings")
-async def put_settings(body: AccountSettings, db: DbSession, user: AppUser) -> AccountSettings:
+async def put_settings(
+    request: Request, body: AccountSettings, db: DbSession, user: AppUser
+) -> AccountSettings:
     try:
-        accounts.set_event_keep_days(user, body.event_keep_days)
+        if body.event_keep_days is not None:
+            accounts.set_event_keep_days(user, body.event_keep_days)
     except accounts.AccountError as exc:
         raise HTTPException(400, exc.message) from None
+    if body.notify_events is not None:
+        user.notify_events = body.notify_events
+    if body.notify_offline is not None:
+        user.notify_offline = body.notify_offline
     await db.commit()
-    return AccountSettings(event_keep_days=user.event_keep_days)
+    return _account_settings(request, user)
+
+
+@router.post("/push/tokens", status_code=204)
+async def register_push_token(body: PushTokenRequest, db: DbSession, user: AppUser) -> Response:
+    """The app's FCM registration token (roadmap #6); a token moves to the current user."""
+    await db.execute(
+        pg_insert(PushToken)
+        .values(user_id=user.id, token=body.token, platform=body.platform)
+        .on_conflict_do_update(
+            index_elements=["token"], set_={"user_id": user.id, "platform": body.platform}
+        )
+    )
+    await db.commit()
+    return Response(status_code=204)
+
+
+@router.post("/push/tokens/delete", status_code=204)
+async def delete_push_token(body: PushTokenRequest, db: DbSession, user: AppUser) -> Response:
+    """On sign-out: this installation stops receiving notifications for this account."""
+    await db.execute(
+        delete(PushToken).where(PushToken.token == body.token, PushToken.user_id == user.id)
+    )
+    await db.commit()
+    return Response(status_code=204)
 
 
 @router.post("/account/password", status_code=204)

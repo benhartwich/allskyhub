@@ -46,7 +46,11 @@ def _page(
     return render(
         request,
         "account.html",
-        {"keep_choices": accounts.EVENT_KEEP_CHOICES, **context},
+        {
+            "keep_choices": accounts.EVENT_KEEP_CHOICES,
+            "push_available": request.app.state.notifier.enabled,
+            **context,
+        },
         session=session,
         status_code=status_code,
     )
@@ -118,3 +122,18 @@ async def delete_account(
     response = RedirectResponse("/", status_code=303)
     response.delete_cookie(settings.session_cookie_name, path="/")
     return response
+
+
+@router.post("/account/notifications")
+async def notifications(
+    request: Request,
+    db: DbSession,
+    session: CurrentSession,
+    notify_events: Annotated[bool, Form()] = False,
+    notify_offline: Annotated[bool, Form()] = False,
+) -> Response:
+    """Push notifications in the app (roadmap #6), each off until switched on."""
+    session.user.notify_events = notify_events
+    session.user.notify_offline = notify_offline
+    await db.commit()
+    return _page(request, session, notice="Gespeichert.")

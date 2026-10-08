@@ -18,6 +18,8 @@ dependencies = [
   "python-multipart>=0.0.20",
   # Ed25519 signature checks of devices (SPEC §6.2).
   "cryptography>=44",
+  # Push notifications through Firebase Cloud Messaging (HTTP v1), roadmap #6.
+  "httpx>=0.28",
 ]
 
 [tool.uv.sources]

@@ -16,6 +16,16 @@
   <button type="submit">Speichern</button>
 </form>
 
+{% if push_available %}
+<form method="post" action="/account/notifications" class="card stack">
+  <h2>Benachrichtigungen in der App</h2>
+  <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+  <label class="check"><input type="checkbox" name="notify_events" value="true" {% if user.notify_events %}checked{% endif %}> Bei neuen Ereignissen (z. B. Meteor), höchstens alle 10 Minuten pro Kamera</label>
+  <label class="check"><input type="checkbox" name="notify_offline" value="true" {% if user.notify_offline %}checked{% endif %}> Wenn eine Kamera seit 30 Minuten offline ist</label>
+  <button type="submit">Speichern</button>
+</form>
+{% endif %}
+
 <form method="post" action="/account/password" class="card stack">
   <h2>Passwort ändern</h2>
   <input type="hidden" name="csrf_token" value="{{ csrf_token }}">

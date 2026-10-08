@@ -33,6 +33,7 @@ from allskyhub_agent.discovery import Announcer
 from allskyhub_agent.hub.identity import DEFAULT_KEY_PATH, DeviceIdentity
 from allskyhub_agent.hub.pairing import PairingState
 from allskyhub_agent.live import LiveState
+from allskyhub_agent.process.hotpixels import HotPixels
 from allskyhub_agent.products.build import NightProducts, build_night, night_products
 from allskyhub_agent.products.worker import ProductWorker
 from allskyhub_agent.profiles import Profile, get_profile
@@ -378,6 +379,7 @@ def main(argv: list[str] | None = None) -> int:
         live=live,
         local_tz=tz,
         analyzers=[detect.on_frame],
+        hot_pixels=HotPixels(Path(args.data) / "calibration" / "hotpixels.npz"),
     )
 
     def products_done(result: NightProducts) -> None:

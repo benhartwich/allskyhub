@@ -108,6 +108,16 @@ Frames are stored as JPEG under `<data>/images/<night-id>/` with a thumbnail. Th
 belong to the previous day's id, so a whole night lands in one folder. Retention is
 by days (default 14, after the night products) and by free disk space: every 10 minutes the oldest nights are removed until at least 10 % of the disk is free; the current night is never removed.
 
+### 4.6 Hot pixels
+
+No dark frames: they need the lens covered. The agent finds hot pixels itself in the
+minimum of the night's frames (sun ≤ −12°, one frame per 10 min, at least 12 frames over
+2 h): stars and clouds have moved on, a hot pixel is a spot of at most 4 px that is much
+brighter than its surroundings. A pixel is corrected only if it was found in two nights
+in a row (the first night's map alone until then). The map is rebuilt every night, kept
+in `<data>/calibration/hotpixels.npz`, built from raw frames, and every frame is stored
+with the mapped pixels and their 3×3 neighbourhood replaced by the local median.
+
 ## 5. Products (M4)
 
 ### 5.1 Frame index

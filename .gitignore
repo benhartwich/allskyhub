@@ -11,6 +11,8 @@ build/
 # Local config and data
 .env
 *.env
+# The image's configuration files are part of the build, not local secrets.
+!image/files/**/*.env
 /var/
 /data/
 

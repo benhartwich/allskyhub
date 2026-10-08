@@ -315,4 +315,21 @@ void main() {
     final client = HubClient(baseUrl: 'https://hub.example');
     expect(client.eventImageUrl('cam', aurora).query, 'v=3');
   });
+
+  test('calibrated camera: direction on the sky', () {
+    expect([0, 46, 135, 270, 359].map(compassPoint), [
+      'N',
+      'NO',
+      'SO',
+      'W',
+      'N',
+    ]);
+    final event = SkyEvent.fromJson({
+      ...meteorJson('meteor-20261008T214512Z', '2026-10-08T21:45:12Z'),
+      'data': {'length_px': 300, 'azimuth_deg': 132.4, 'altitude_deg': 41.7},
+    });
+    final rows = {for (final (l, v) in eventRows(event)) l: v};
+    expect(rows['Himmelsrichtung'], '132° (SO)');
+    expect(rows['Höhe über dem Horizont'], '42°');
+  });
 }

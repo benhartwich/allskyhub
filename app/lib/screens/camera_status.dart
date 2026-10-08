@@ -85,6 +85,20 @@ List<StatusRow> statusRows({
       ),
     );
   }
+  final orientation = status['orientation'];
+  if (orientation is Map<String, dynamic> && orientation['north_deg'] is num) {
+    final north = (orientation['north_deg'] as num).round() % 360;
+    final stars = orientation['stars'];
+    final rms = orientation['rms_deg'];
+    rows.add(
+      StatusRow(
+        'Ausrichtung',
+        'Norden bei $north°'
+            '${stars is int ? ' · $stars Sterne' : ''}'
+            '${rms is num ? ' · ±${rms.toStringAsFixed(1).replaceAll('.', ',')}°' : ''}',
+      ),
+    );
+  }
   if (status['time_trusted'] == false) {
     rows.add(const StatusRow('Uhrzeit', 'nicht synchronisiert', warning: true));
   }

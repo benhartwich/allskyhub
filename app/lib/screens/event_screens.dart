@@ -24,6 +24,12 @@ const _axes = [
   'diagonal, oben links – unten rechts',
 ];
 
+const _compassPoints = ['N', 'NO', 'O', 'SO', 'S', 'SW', 'W', 'NW'];
+
+/// Azimuth (0 = north, clockwise) as one of eight German compass points.
+String compassPoint(num azimuth) =>
+    _compassPoints[((azimuth % 360) / 45).round() % 8];
+
 String _two(int n) => n.toString().padLeft(2, '0');
 
 String eventTime(DateTime t) {
@@ -83,6 +89,18 @@ List<(String, String)> eventRows(SkyEvent event) {
     if (data.remove('ongoing') == true) rows.add(('Status', 'läuft noch'));
   }
   data.remove('image_rev');
+  // With a calibrated camera (SPEC §4.8) the agent adds the real direction on the sky.
+  final azimuth = data.remove('azimuth_deg');
+  if (azimuth is num) {
+    rows.add((
+      'Himmelsrichtung',
+      '${azimuth.round() % 360}° (${compassPoint(azimuth)})',
+    ));
+  }
+  final altitude = data.remove('altitude_deg');
+  if (altitude is num) {
+    rows.add(('Höhe über dem Horizont', '${altitude.round()}°'));
+  }
   for (final entry in data.entries) {
     if (entry.value != null) rows.add((entry.key, '${entry.value}'));
   }

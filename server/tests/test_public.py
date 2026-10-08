@@ -81,7 +81,10 @@ async def test_public_page_is_opt_in_and_shows_only_public_things(
     assert "Sternwarte Nord" in anon.text
     assert "Sonne -30.2°" in anon.text
     assert device_id not in anon.text  # no device id, no status internals
-    assert "cpu" not in anon.text.lower()
+    # Status internals must not leak. Check the values and field names, not short words:
+    # the page carries a random CSRF token that can contain any letters.
+    for leak in ("cpu_temp_c", "disk_free_pct", "55 °C", "Prozessor", "Speicher frei"):
+        assert leak not in anon.text
     img = await new_client.get(f"/sky/{slug}/latest.jpg")
     assert img.content == JPEG
     assert img.headers["cache-control"] == "public, max-age=60"

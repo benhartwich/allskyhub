@@ -1,0 +1,4 @@
+<a class="event-thumb" href="/cameras/{{ device.id }}/events/{{ e.night_id }}/{{ e.event_id }}">
+  {% if e.has_thumb %}<img src="/cameras/{{ device.id }}/events/{{ e.night_id }}/{{ e.event_id }}/image?variant=thumb" alt="" loading="lazy">{% else %}<div class="sky-ph" aria-hidden="true"></div>{% endif %}
+  <span>{{ event_titles[e.kind] or e.kind }} · {{ e.start | clock }}</span>
+</a>

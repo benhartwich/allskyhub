@@ -116,3 +116,10 @@ button.secondary { background: transparent; color: var(--accent); border: 1px so
 .list.card { display: block; padding: 4px 18px; }
 .list > li { padding: 12px 0; border-bottom: 1px solid var(--line); }
 .list > li:last-child { border-bottom: 0; }
+
+/* Events */
+.event-strip { display: grid; grid-template-columns: repeat(auto-fill, minmax(110px, 1fr)); gap: 8px; }
+.event-thumb { display: grid; gap: 4px; text-decoration: none; color: var(--text); font-size: 13px; }
+.event-thumb img, .event-thumb .sky-ph { width: 100%; aspect-ratio: 1; object-fit: cover; border-radius: 8px; }
+.event-row { display: grid; grid-template-columns: 110px 1fr; gap: 12px; align-items: center; }
+.row-links { display: flex; justify-content: space-between; }

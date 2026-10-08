@@ -99,8 +99,48 @@ List<StatusRow> statusRows({
       ),
     );
   }
+  final update = status['update'];
+  if (update is Map<String, dynamic>) {
+    final line = updateLine(update);
+    if (line != null) {
+      rows.add(StatusRow('Software', line.$1, warning: line.$2));
+    }
+  }
   if (status['time_trusted'] == false) {
     rows.add(const StatusRow('Uhrzeit', 'nicht synchronisiert', warning: true));
   }
   return rows;
+}
+
+const _updateStates = {
+  'up_to_date': 'aktuell',
+  'downloading': 'Update {v} wird geladen',
+  'waiting': 'Update {v} geladen, wird tagsüber installiert',
+  'installing': 'Update {v} wird installiert',
+  'installed': 'Update {v} installiert',
+  'rolled_back': 'Update {v} zurückgerollt',
+  'failed': 'Update {v} fehlgeschlagen',
+};
+
+const _updateCodes = {
+  'unhealthy': 'die neue Version lief nicht sauber',
+  'checksum': 'Prüfsumme falsch',
+  'download': 'Download fehlgeschlagen',
+  'bad_bundle': 'Paket beschädigt',
+  'bad_signature': 'Signatur ungültig',
+  'bad_manifest': 'Update-Beschreibung ungültig',
+  'no_space': 'zu wenig Speicher',
+};
+
+/// Roadmap #7 `status.update`: German text and whether it is a warning.
+(String, bool)? updateLine(Map<String, dynamic> update) {
+  final state = update['state'];
+  final template = state is String ? _updateStates[state] : null;
+  if (template == null) return null;
+  var text = template.replaceAll('{v}', '${update['version'] ?? ''}');
+  final code = update['code'];
+  if (code is String && code.isNotEmpty) {
+    text += ' (${_updateCodes[code] ?? code})';
+  }
+  return (text, state == 'rolled_back' || state == 'failed');
 }

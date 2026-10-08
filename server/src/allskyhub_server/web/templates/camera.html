@@ -45,7 +45,7 @@
   <h2>Gerät</h2>
   <dl class="facts">
     <dt>Profil</dt><dd>{{ device.profile }}</dd>
-    <dt>Agent</dt><dd>{{ device.agent_version }}</dd>
+    <dt>Software</dt><dd>{{ device.agent_version }}{% if update %} · <span class="{{ 'warn' if update[1] }}">{{ update[0] }}</span>{% endif %}</dd>
     <dt>Gekoppelt</dt><dd>{{ device.paired_at | localtime }}</dd>
     <dt>Ausrichtung</dt><dd>{{ orientation or "noch nicht kalibriert (braucht eine klare Nacht)" }}</dd>
     <dt>Geräte-ID</dt><dd><code>{{ device.id }}</code></dd>

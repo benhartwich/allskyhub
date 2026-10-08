@@ -14,7 +14,7 @@ from allskyhub_server.auth.sessions import SessionInfo
 from allskyhub_server.devices import events, pairing, public, queries
 from allskyhub_server.devices import settings as camera_settings
 from allskyhub_server.devices.connections import ConnectionRegistry
-from allskyhub_server.devices.event_text import EVENT_TITLES, orientation_line
+from allskyhub_server.devices.event_text import EVENT_TITLES, orientation_line, update_line
 from allskyhub_server.devices.images import ImageStore
 from allskyhub_server.models import Device
 from allskyhub_server.web.deps import (
@@ -111,6 +111,7 @@ async def camera(
             "camera_choices": camera_settings.CAMERA_CHOICES,
             "settings": settings_values(device),
             "orientation": orientation_line(device.last_status),
+            "update": update_line(device.last_status),
             "settings_reported": bool((device.last_status or {}).get("settings")),
         },
         session=session,
@@ -253,6 +254,7 @@ async def change_settings(
             "camera_choices": camera_settings.CAMERA_CHOICES,
             "settings": settings_values(device, form),
             "orientation": orientation_line(device.last_status),
+            "update": update_line(device.last_status),
             "settings_reported": bool((device.last_status or {}).get("settings")),
             "error": error,
             "notice": notice,

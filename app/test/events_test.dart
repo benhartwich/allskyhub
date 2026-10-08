@@ -332,4 +332,15 @@ void main() {
     expect(rows['Himmelsrichtung'], '132° (SO)');
     expect(rows['Höhe über dem Horizont'], '42°');
   });
+
+  test('NLC: blue share', () {
+    final event = SkyEvent.fromJson({
+      ...meteorJson('nlc-20261008T190000Z', '2026-10-08T19:00:00Z'),
+      'kind': 'nlc',
+      'data': {'peak_index': 25, 'blue': 142.0, 'frames': 9},
+    });
+    final rows = {for (final (l, v) in eventRows(event)) l: v};
+    expect(rows['Blauanteil'], '142');
+    expect(rows['Stärke'], '25 %');
+  });
 }

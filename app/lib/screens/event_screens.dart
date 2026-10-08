@@ -78,7 +78,9 @@ List<(String, String)> eventRows(SkyEvent event) {
     final index = data.remove('peak_index');
     if (index is num) rows.add(('Stärke', '${index.round()} %'));
     final green = data.remove('green');
-    if (green is num) rows.add(('Grünanteil', green.toStringAsFixed(1)));
+    if (green is num) rows.add(('Grünanteil', green.toStringAsFixed(0)));
+    final blue = data.remove('blue');
+    if (blue is num) rows.add(('Blauanteil', blue.toStringAsFixed(0)));
     final frames = data.remove('frames');
     if (frames is num) rows.add(('Bilder', '${frames.round()}'));
     // Image-relative (0 = up), not a compass bearing: no N/E/S/W without calibration.

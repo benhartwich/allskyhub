@@ -89,6 +89,8 @@ def event_rows(event: EventRecord) -> list[tuple[str, str]]:
             rows.append(("Stärke", f"{round(index)} %"))
         if isinstance(green := data.pop("green", None), int | float):
             rows.append(("Grünanteil", f"{green:.0f}".replace(".", ",")))
+        if isinstance(blue := data.pop("blue", None), int | float):
+            rows.append(("Blauanteil", f"{blue:.0f}".replace(".", ",")))
         if isinstance(frames := data.pop("frames", None), int | float):
             rows.append(("Bilder", str(round(frames))))
         if isinstance(direction := data.pop("direction_deg", None), int | float):

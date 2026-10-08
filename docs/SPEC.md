@@ -284,14 +284,15 @@ base64url-encoded without padding.
 | `meteor` | `length_px` (int, track length), `peak` (0..1, peak brightness of the track), `frames` (int, frames it appears in), `direction_deg` (0..360 in the image, 0 = up, clockwise, or null), `shower` (name of an active shower, e.g. `Perseids`, or null) |
 | `lightning` | `area_frac` (0..1, part of the sky that lit up), `peak` (0..1, mean brightening of the lit area), `storm_flashes` (int, flashes in the last 30 min including this one), `storm` (string, `storm-` + UTC start of the storm like an event id; the same for all flashes of a storm, a gap of more than 30 min starts a new one) |
 | `aurora` | one event per episode (below): `peak_index` (0..100, % of the low horizon ring that is aurora-green in the best frame), `green` (mean green over red of those pixels, 8 bit), `frames` (int, candidate frames so far), `direction_deg` (0..360 in the image, 0 = up, clockwise, of the green's centroid; not a compass bearing), `ongoing` (bool), `image_rev` |
+| `nlc` | one episode (below), only with an orientation (§4.8), sun −16° to −9°, in the low sky (12–45°) toward the sun: `peak_index` (0..100, % of that band that is NLC-blue and structured, best frame), `blue` (mean blue over red of those pixels, 8 bit), `frames`, `direction_deg`, `ongoing`, `image_rev` |
 
-`meteor`, `lightning` and `aurora` also carry `azimuth_deg` (0..360, compass, 0 = north,
+`meteor`, `lightning`, `aurora` and `nlc` also carry `azimuth_deg` (0..360, compass, 0 = north,
 90 = east) and `altitude_deg` (degrees above the horizon) of their position in the sky:
-the meteor's midpoint, the centroid of the lit area, the centroid of the green. The
+the meteor's midpoint, the centroid of the lit area, of the green or of the blue. The
 agent computes them with the orientation (§4.8) valid when it saves the event, so they
 stay right after a later re-solve; both are null while the camera has no orientation.
 
-Some phenomena last minutes to hours (`aurora`). They are one **episode** event: it is
+Some phenomena last minutes to hours (`aurora`, `nlc`). They are one **episode** event: it is
 sent when the episode opens and sent again with the same id while it grows (at most
 every few minutes) and once more when it ends, with `ongoing` false. `start` stays,
 `end`, `confidence` and `data` change.

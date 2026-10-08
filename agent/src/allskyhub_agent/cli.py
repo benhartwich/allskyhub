@@ -29,6 +29,7 @@ from allskyhub_agent.core.clock import Clock, SimClock, SystemClock
 from allskyhub_agent.core.exposure import AutoExposure
 from allskyhub_agent.core.sun import sun_elevation
 from allskyhub_agent.detect.events import DetectionWorker, EventStore
+from allskyhub_agent.detect.nlc import NlcDetector
 from allskyhub_agent.detect.sky import SkyConfig, SkyMeter
 from allskyhub_agent.discovery import Announcer
 from allskyhub_agent.hub.identity import DEFAULT_KEY_PATH, DeviceIdentity
@@ -377,6 +378,11 @@ def main(argv: list[str] | None = None) -> int:
         sky=sky_meter,
         sky_mask=sky_mask,
         orienter=orienter,
+        nlc=NlcDetector(
+            orientation=lambda: orienter.solution,
+            location=lambda: (here.lat, here.lon),
+            sky_mask=sky_mask.get,
+        ),
     )
     detect.start()
 

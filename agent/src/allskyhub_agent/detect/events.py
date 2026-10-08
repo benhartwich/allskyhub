@@ -13,6 +13,7 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import UTC, timedelta
 from pathlib import Path
+from typing import Any
 
 import numpy as np
 from PIL import Image as PILImage
@@ -23,6 +24,7 @@ from allskyhub_agent.calib.orientation import Orienter
 from allskyhub_agent.calib.solve import Solution
 from allskyhub_agent.core.metering import Mask
 from allskyhub_agent.detect.aurora import AuroraConfig, AuroraDetector, AuroraUpdate
+from allskyhub_agent.detect.episodes import EpisodeUpdate
 from allskyhub_agent.detect.lightning import LightningConfig, LightningDetector, LightningHit
 from allskyhub_agent.detect.meteor import (
     MeteorConfig,
@@ -31,6 +33,7 @@ from allskyhub_agent.detect.meteor import (
     active_shower,
     to_gray,
 )
+from allskyhub_agent.detect.nlc import NlcDetector, NlcUpdate
 from allskyhub_agent.detect.sky import SkyMeter
 from allskyhub_agent.process.skymask import SkyMask
 from allskyhub_agent.store.images import THUMB_WIDTH, ImageStore
@@ -178,16 +181,36 @@ class EventStore:
         return event
 
     def save_aurora(self, update: AuroraUpdate) -> Event:
-        """Store or update an aurora episode (SPEC §6.4): same id, picture replaced when a
-        better frame comes, with `image_rev` counting the pictures."""
+        """Store or update an aurora episode (SPEC §6.4)."""
+        b = update.episode.best
+        return self._save_episode(EventKind.AURORA, update, {"green": b.green},
+                                  b.direction_deg, b.x, b.y)  # fmt: skip
+
+    def save_nlc(self, update: NlcUpdate) -> Event:
+        """Store or update an NLC episode (SPEC §6.4)."""
+        b = update.episode.best
+        return self._save_episode(EventKind.NLC, update, {"blue": b.blue},
+                                  b.direction_deg, b.x, b.y)  # fmt: skip
+
+    def _save_episode(
+        self,
+        kind: EventKind,
+        update: EpisodeUpdate[Any],
+        extra: dict[str, float],
+        direction: float | None,
+        x: float | None,
+        y: float | None,
+    ) -> Event:
+        """Same id while the episode grows, picture replaced when a better frame comes,
+        with `image_rev` counting the pictures."""
         ep = update.episode
         f = ep.start
         with self._lock:
             if ep.event_id is None:
-                ep.event_id = self._new_id(EventKind.AURORA, f)
+                ep.event_id = self._new_id(kind, f)
                 # An episode left open by an agent restart has ended.
                 for old in self.night_events(f.night_id):
-                    if old.kind is EventKind.AURORA and old.data.get("ongoing") is True:
+                    if old.kind is kind and old.data.get("ongoing") is True:
                         self._append(
                             old.model_copy(update={"data": {**old.data, "ongoing": False}})
                         )
@@ -195,22 +218,23 @@ class EventStore:
             fresh = update.picture_changed or ep.image_rev == 0
             if fresh and self._save_full(ep.best_path, f.night_id, eid):
                 ep.image_rev += 1
+            index = float(ep.best.index)
             event = Event(
                 id=eid,
                 night_id=f.night_id,
-                kind=EventKind.AURORA,
+                kind=kind,
                 start=f.captured_at,
                 end=ep.end,
-                confidence=round(min(1.0, 0.5 + ep.best.index / 10.0), 2),
+                confidence=round(min(1.0, 0.5 + index / 10.0), 2),
                 has_image=ep.image_rev > 0,
                 data={
-                    "peak_index": ep.best.index,
-                    "green": ep.best.green,
+                    "peak_index": index,
+                    **extra,
                     "frames": ep.frames,
-                    "direction_deg": ep.best.direction_deg,
+                    "direction_deg": direction,
                     "ongoing": ep.ongoing,
                     "image_rev": ep.image_rev,
-                    **self._position(ep.best_frame, ep.best.x, ep.best.y),
+                    **self._position(ep.best_frame, x, y),
                 },
             )
             self._append(event)
@@ -284,6 +308,7 @@ class DetectionWorker:
         aurora_cfg: AuroraConfig | None = None,
         sky_mask: SkyMask | None = None,
         orienter: Orienter | None = None,
+        nlc: NlcDetector | None = None,
     ) -> None:
         self._store = store
         self.events = events or EventStore(store)
@@ -294,6 +319,7 @@ class DetectionWorker:
         self._aurora = AuroraDetector(aurora_cfg, mask_radius_frac or 0.48)
         self._sky_mask = sky_mask
         self._orienter = orienter
+        self._nlc = nlc
         self._mask_version = -1
         self._q: queue.Queue[_Job | None] = queue.Queue(maxsize=4)
         self._dropped = 0
@@ -346,6 +372,14 @@ class DetectionWorker:
             if self._on_event is not None:
                 self._on_event(event)
 
+    def _emit_nlc(self, updates: list[NlcUpdate]) -> None:
+        for u in updates:
+            event = self.events.save_nlc(u)
+            log.info("nlc %s: index %.1f %%, %d frame(s)", event.id, u.episode.best.index,
+                     u.episode.frames)  # fmt: skip
+            if self._on_event is not None:
+                self._on_event(event)
+
     def process_frame(self, frame: FrameInfo, image: Image) -> None:
         """Run the detectors on one frame in the calling thread (tests, replays)."""
         self.process(_Job(frame, image, self._store.night_dir(frame.night_id) / frame.name))
@@ -370,6 +404,8 @@ class DetectionWorker:
         self._emit(self._meteor.feed(job.frame, gray, job.path))
         self._emit_lightning(self._lightning.feed(job.frame, gray, job.path))
         self._emit_aurora(self._aurora.feed(job.frame, rgb, job.path, cloud))
+        if self._nlc is not None:
+            self._emit_nlc(self._nlc.feed(job.frame, rgb, job.path))
 
     def _run(self) -> None:
         while True:
@@ -378,6 +414,8 @@ class DetectionWorker:
                 self._emit(self._meteor.flush())
                 self._lightning.flush()
                 self._emit_aurora(self._aurora.flush())
+                if self._nlc is not None:
+                    self._emit_nlc(self._nlc.flush())
                 return
             try:
                 self.process(job)

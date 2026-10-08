@@ -61,6 +61,8 @@ class SkyMask:
         self._load()
 
     def _load(self) -> None:
+        if not self._path.is_file():
+            return
         img = cv2.imread(str(self._path), cv2.IMREAD_GRAYSCALE)
         if img is not None:
             self._set(np.asarray(img, dtype=np.uint8) > 127)

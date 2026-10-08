@@ -19,14 +19,14 @@ An aurora lasts minutes to hours: the detector groups candidate frames into an e
 from __future__ import annotations
 
 import math
-from dataclasses import dataclass, field, replace
-from datetime import datetime, timedelta
+from dataclasses import dataclass
 from pathlib import Path
 
 import cv2
 import numpy as np
 import numpy.typing as npt
 
+from allskyhub_agent.detect.episodes import EpisodeTracker, EpisodeUpdate
 from allskyhub_protocol import FrameInfo
 
 Mask = npt.NDArray[np.bool_]
@@ -139,26 +139,7 @@ def score(rgb: npt.NDArray[np.uint8], band: Mask, cfg: AuroraConfig) -> AuroraSc
     return AuroraScore(round(index, 2), green, len(big), direction, round(fx, 1), round(fy, 1))
 
 
-@dataclass
-class Episode:
-    """An aurora episode; `seq` makes its event id unique (SPEC §6.4)."""
-
-    start: FrameInfo
-    end: datetime
-    frames: int
-    best: AuroraScore
-    best_frame: FrameInfo
-    best_path: Path
-    ongoing: bool = True
-    last_sent: float = field(default=-math.inf)
-    event_id: str | None = None  # set by the event store on the first save
-    image_rev: int = 0  # SPEC §6.4: incremented whenever the picture is replaced
-
-
-@dataclass(frozen=True)
-class AuroraUpdate:
-    episode: Episode
-    picture_changed: bool  # the best frame is a new one
+AuroraUpdate = EpisodeUpdate[AuroraScore]
 
 
 class AuroraDetector:
@@ -168,19 +149,12 @@ class AuroraDetector:
         self._cfg = cfg or AuroraConfig()
         self._radius = radius_frac
         self._band: Mask | None = None
-        self._run: list[tuple[FrameInfo, Path, AuroraScore]] = []  # candidates before opening
-        self._episode: Episode | None = None
-        self._last_candidate: float | None = None
-
-    def _close(self) -> list[AuroraUpdate]:
-        ep, self._episode = self._episode, None
-        self._run = []
-        if ep is None:
-            return []
-        return [AuroraUpdate(replace(ep, ongoing=False), picture_changed=False)]
+        self._episodes: EpisodeTracker[AuroraScore] = EpisodeTracker(
+            self._cfg.confirm_frames, self._cfg.gap_s, self._cfg.resend_s
+        )
 
     def flush(self) -> list[AuroraUpdate]:
-        return self._close()
+        return self._episodes.close()
 
     def feed(
         self,
@@ -190,13 +164,9 @@ class AuroraDetector:
         cloud_cover: float | None = None,
     ) -> list[AuroraUpdate]:
         cfg = self._cfg
-        t = frame.captured_at.timestamp()
-        out: list[AuroraUpdate] = []
-        if self._last_candidate is not None and t - self._last_candidate > cfg.gap_s:
-            out += self._close()
-            self._last_candidate = None
+        out = self._episodes.tick(frame)
         if frame.sun_elevation > cfg.sun_max_deg or rgb.ndim != 3:
-            return out + self._close()
+            return out + self._episodes.close()
         if cloud_cover is not None and cloud_cover > cfg.cloud_max:
             return out  # overcast says nothing; the gap closes the episode
         h, w = rgb.shape[:2]
@@ -204,28 +174,6 @@ class AuroraDetector:
             self._band = ring_mask(h, w, self._radius, cfg)
         s = score(rgb, self._band, cfg)
         if s is None or not s.candidate:
-            self._run = []
+            self._episodes.miss()
             return out
-        self._last_candidate = t
-        end = frame.captured_at + timedelta(microseconds=frame.exposure_us)
-        ep = self._episode
-        if ep is None:
-            self._run.append((frame, image_path, s))
-            if len(self._run) < cfg.confirm_frames:
-                return out
-            first = self._run[0][0]
-            bf, bp, bs = max(self._run, key=lambda c: c[2].index)
-            ep = Episode(first, end, len(self._run), bs, bf, bp)
-            self._episode = ep
-            self._run = []
-            ep.last_sent = t
-            return [*out, AuroraUpdate(ep, picture_changed=True)]
-        ep.end = end
-        ep.frames += 1
-        better = s.index > ep.best.index
-        if better:
-            ep.best, ep.best_frame, ep.best_path = s, frame, image_path
-        if t - ep.last_sent >= cfg.resend_s:
-            ep.last_sent = t
-            out.append(AuroraUpdate(ep, picture_changed=better))
-        return out
+        return out + self._episodes.hit(frame, image_path, s)

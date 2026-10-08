@@ -153,3 +153,19 @@ def test_event_ids_and_upload_event_args() -> None:
     assert a.variant.value == "full"
     with pytest.raises(ValidationError):
         UploadEventArgs.model_validate({"night_id": "20261006", "event_id": "../../etc"})
+
+
+def test_set_settings_args() -> None:
+    from allskyhub_protocol import SetSettingsArgs
+
+    a = SetSettingsArgs.model_validate({"latitude": 48.1, "longitude": 14.4, "night_delay_s": 5})
+    assert (a.latitude, a.night_delay_s, a.camera) == (48.1, 5, None)
+    for bad in (
+        {"latitude": 48.1},
+        {"timezone": "Nowhere/Town"},
+        {"camera": "nikon"},
+        {"day_delay_s": -1},
+        {"unknown": 1},
+    ):
+        with pytest.raises(ValidationError):
+            SetSettingsArgs.model_validate(bad)

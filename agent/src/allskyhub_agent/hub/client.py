@@ -49,6 +49,7 @@ from allskyhub_protocol import (
     Purpose,
     RegisterRequest,
     RegisterResponse,
+    SetSettingsArgs,
     Status,
     TokenRequest,
     TokenResponse,
@@ -60,7 +61,7 @@ from allskyhub_protocol import (
 
 log = logging.getLogger(__name__)
 
-CAPABILITIES = ["upload_frame", "upload_product", "upload_event", "focus_mode"]
+CAPABILITIES = ["upload_frame", "upload_product", "upload_event", "focus_mode", "set_settings"]
 
 
 @dataclass(frozen=True)
@@ -130,6 +131,7 @@ class HubSession:
         monotonic: Callable[[], float] = time.monotonic,
         latest_products: Callable[[], Products | None] | None = None,
         events: EventSource | None = None,
+        on_set_settings: Callable[[SetSettingsArgs], None] | None = None,
     ) -> None:
         self._cfg = cfg
         self._id = identity
@@ -145,6 +147,7 @@ class HubSession:
         self._frames: asyncio.Queue[FrameInfo] | None = None
         self._latest_products = latest_products
         self._events_src = events
+        self._on_set_settings = on_set_settings
         # Events wait here until the writer sends them (SPEC §6.4).
         self._events: list[Event] = []
         # Products wait here until the writer sends them; a newer night replaces an older one.
@@ -353,6 +356,17 @@ class HubSession:
     async def _command(self, ref: str, cmd: Command, token: str) -> Ack | ErrorReply:
         if cmd.name is CommandName.UPLOAD_FRAME:
             return await self._upload(ref, cmd, token)
+        if cmd.name is CommandName.SET_SETTINGS and self._on_set_settings is not None:
+            try:
+                args = SetSettingsArgs.model_validate(cmd.args)
+            except ValidationError as exc:
+                fields = sorted(
+                    {".".join(str(p) for p in e["loc"]) or "args" for e in exc.errors()}
+                )
+                return ErrorReply(ref=ref, code=ErrorCode.INVALID_ARGS, message=", ".join(fields))
+            # SPEC §6.5: store, ack; the capture restarts with the new settings afterwards.
+            await asyncio.to_thread(self._on_set_settings, args)
+            return Ack(ref=ref)
         if cmd.name is CommandName.UPLOAD_EVENT:
             return await self._upload_event(ref, cmd, token)
         if cmd.name is CommandName.FOCUS_MODE:

@@ -42,6 +42,7 @@ from allskyhub_protocol import (
     Mode,
     Products,
     Purpose,
+    SetSettingsArgs,
     Status,
     b64url_decode,
     device_id_from_public_key,
@@ -471,3 +472,44 @@ def test_events_resent_after_connect_and_pictures_uploaded(tmp_path: Path) -> No
         (f"/device/v1/events/{night}/{eid}", "thumb", b"\xff\xd8thumb"),
         (f"/device/v1/events/{night}/{eid}", "full", b"\xff\xd8meteor"),
     ]
+
+
+def test_set_settings_command(tmp_path: Path) -> None:
+    """SPEC §6.5: invalid args change nothing; valid ones are handed over, then ack."""
+    store, _, _ = _store_with_frame(tmp_path)
+    identity = DeviceIdentity.load_or_create(tmp_path / "device.key")
+    hub = FakeHub(register_unpaired=0, close_code=1000)
+    hub.commands = [
+        Command(name=CommandName.SET_SETTINGS, args={"latitude": 48.0}),
+        Command(
+            name=CommandName.SET_SETTINGS,
+            args={"latitude": 48.0, "longitude": 14.0, "night_delay_s": 5},
+        ),
+    ]
+    got: list[SetSettingsArgs] = []
+
+    async def scenario() -> None:
+        async with serve(hub.ws_handler, "127.0.0.1", 0) as server:
+            port = server.sockets[0].getsockname()[1]
+            cfg = HubConfig(hub_url=f"http://127.0.0.1:{port}")
+            pairing = PairingState(identity.device_id, cfg.hub_url, "sim", "0.1.0")
+            async with httpx.AsyncClient(
+                transport=httpx.MockTransport(hub.handle), base_url=cfg.hub_url
+            ) as http:
+                session = HubSession(
+                    cfg, identity, pairing, store, LiveState(), "sim", "0.1.0",
+                    lambda: None, http, on_set_settings=got.append,
+                )  # fmt: skip
+                stop = asyncio.Event()
+                task = asyncio.create_task(session.run(stop))
+                await asyncio.wait_for(hub.done.wait(), 10)
+                stop.set()
+                await asyncio.wait_for(task, 10)
+
+    asyncio.run(scenario())
+    first, second = hub.reply_order
+    assert isinstance(first, ErrorReply)
+    assert first.code == "invalid_args"
+    assert isinstance(second, Ack)
+    assert len(got) == 1
+    assert (got[0].latitude, got[0].longitude, got[0].night_delay_s) == (48.0, 14.0, 5)

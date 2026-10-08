@@ -165,3 +165,25 @@ def test_runner_survives_camera_errors(tmp_path: Path) -> None:
     # Waited 5 s, then 10 s, before the camera came back.
     assert (clock.now() - start).total_seconds() >= 15
     assert list((tmp_path / "images").iterdir())
+
+
+def test_runner_stop_ends_run(tmp_path: Path) -> None:
+    clock = SimClock(datetime(2026, 10, 6, 21, 0, tzinfo=UTC))
+    cam = FlakyCamera()
+    cam.calls = 2  # no failures
+    runner = Runner(
+        camera=cam,
+        auto_exposure=AutoExposure(get_profile("sim").exposure),
+        store=ImageStore(tmp_path, ZoneInfo("Europe/Vienna")),
+        clock=clock,
+        location=Location(48.14, 14.39),
+        profile="sim",
+    )
+    seen: list[object] = []
+
+    def on_frame(info: object) -> None:
+        seen.append(info)
+        if len(seen) == 3:
+            runner.stop()
+
+    assert runner.run(None, on_frame=on_frame) == 3

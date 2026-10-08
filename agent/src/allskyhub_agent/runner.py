@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import threading
 from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import UTC, tzinfo
@@ -66,6 +67,7 @@ class Runner:
         self._live = live
         # Called with every stored frame and its pixels, e.g. the detection worker.
         self._analyzers = analyzers or []
+        self._stop = threading.Event()
         self._tz = local_tz
 
     @property
@@ -129,6 +131,10 @@ class Runner:
             self._mask = circle_mask(height, width, self._mask_frac)
         return self._mask
 
+    def stop(self) -> None:
+        """End `run()` after the current frame (e.g. to apply new settings)."""
+        self._stop.set()
+
     def delay(self) -> float:
         if self.focus_mode:
             return 0.0
@@ -144,7 +150,7 @@ class Runner:
         """
         n = 0
         failures = 0
-        while frames is None or n < frames:
+        while (frames is None or n < frames) and not self._stop.is_set():
             try:
                 info = self.step()
             except (CameraError, OSError) as exc:

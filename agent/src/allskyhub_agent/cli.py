@@ -44,7 +44,7 @@ from allskyhub_agent.setup.setup_file import DEFAULT_PATH as SETUP_FILE_PATH
 from allskyhub_agent.setup.setup_file import apply_once as apply_setup_file
 from allskyhub_agent.store.images import ImageStore
 from allskyhub_agent.web.server import WebServer
-from allskyhub_protocol import FrameInfo, Status
+from allskyhub_protocol import DeviceSettings, FrameInfo, SetSettingsArgs, Status
 
 log = logging.getLogger(__name__)
 
@@ -76,8 +76,8 @@ def _parser() -> argparse.ArgumentParser:
     run.add_argument("--frames", type=int, default=None, help="stop after N frames")
     run.add_argument("--data", type=Path, required=True, help="data directory")
     run.add_argument("--start", default=None, help="simulation start time, ISO 8601 with zone")
-    run.add_argument("--day-delay", type=float, default=30.0)
-    run.add_argument("--night-delay", type=float, default=0.0)
+    run.add_argument("--day-delay", type=float, default=None, help="seconds (else settings, 30)")
+    run.add_argument("--night-delay", type=float, default=None, help="seconds (else settings, 0)")
     run.add_argument("--hub", default=None, help="hub URL, e.g. https://allskyhub.org (SPEC §6)")
     run.add_argument("--key", type=Path, default=DEFAULT_KEY_PATH, help="device key file")
     run.add_argument(
@@ -142,6 +142,7 @@ def main(argv: list[str] | None = None) -> int:
     hub: HubManager | None = None
     setup: SetupController | None = None
     stop_bg = threading.Event()
+    restart_requested = threading.Event()
 
     # Product mode (SPEC §7.1-7.3): the agent manages the network and keeps hub URL,
     # location, time zone and camera choice in its settings file.
@@ -199,10 +200,45 @@ def main(argv: list[str] | None = None) -> int:
                 disk_free_pct=system.disk_free_pct(args.data),
                 uptime_s=system.uptime_s(),
                 time_trusted=system.time_trusted(),
+                settings=device_settings() if settings_path else None,
             )
 
+        def device_settings() -> DeviceSettings:
+            cur = load_settings()
+            return DeviceSettings(
+                latitude=cur.latitude,
+                longitude=cur.longitude,
+                timezone=cur.timezone,
+                camera=cur.camera,
+                day_delay_s=cur.day_delay_s,
+                night_delay_s=cur.night_delay_s,
+            )
+
+        def set_settings(a: SetSettingsArgs) -> None:
+            """SPEC §6.5: store, then restart the capture with the new settings."""
+            update_settings(
+                latitude=a.latitude,
+                longitude=a.longitude,
+                timezone=a.timezone,
+                camera=a.camera,
+                day_delay_s=a.day_delay_s,
+                night_delay_s=a.night_delay_s,
+            )
+            log.info("new settings from the hub; restarting the capture")
+            # Give the ack a moment to leave, then end run(): the service manager starts
+            # the agent again, which reads the new settings.
+            threading.Timer(2.0, restart_requested.set).start()
+
         hub = HubManager(
-            identity, pairing, store, live, profile_id, status, settings_path, events=event_store
+            identity,
+            pairing,
+            store,
+            live,
+            profile_id,
+            status,
+            settings_path,
+            events=event_store,
+            on_set_settings=set_settings if settings_path else None,
         )
         hub.start(hub_url)
         print(f"device {identity.device_id}, hub {hub_url}")
@@ -328,7 +364,10 @@ def main(argv: list[str] | None = None) -> int:
         clock=clock,
         location=loc,
         profile=profile.id,
-        loop=LoopConfig(args.day_delay, args.night_delay),
+        loop=LoopConfig(
+            args.day_delay if args.day_delay is not None else load_settings().day_delay_s,
+            args.night_delay if args.night_delay is not None else load_settings().night_delay_s,
+        ),
         mask_radius_frac=profile.image_circle_frac,
         live=live,
         local_tz=tz,
@@ -354,6 +393,11 @@ def main(argv: list[str] | None = None) -> int:
             f"exp {f.exposure_us / 1000:10.3f} ms  gain {f.gain:5.1f}  mean {f.mean:.3f}  {f.name}"
         )
 
+    def watch_restart() -> None:
+        restart_requested.wait()
+        runner.stop()
+
+    threading.Thread(target=watch_restart, name="restart", daemon=True).start()
     try:
         runner.run(args.frames, on_frame=show)
     except KeyboardInterrupt:

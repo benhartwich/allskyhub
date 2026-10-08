@@ -343,3 +343,12 @@ def test_setup_network_with_location(tmp_path: Path) -> None:
         assert info["timezone"] == "Europe/Vienna"
     finally:
         web.stop()
+
+
+def test_settings_delays(tmp_path: Path) -> None:
+    p = tmp_path / "s.json"
+    s = AgentSettings().with_updates(day_delay_s=60, night_delay_s=5)
+    s.save(p)
+    back = AgentSettings.load(p)
+    assert (back.day_delay_s, back.night_delay_s) == (60.0, 5.0)
+    assert back.with_updates(night_delay_s=-3) == back

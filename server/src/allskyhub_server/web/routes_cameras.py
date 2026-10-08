@@ -10,8 +10,9 @@ from fastapi.responses import FileResponse, RedirectResponse, Response
 from allskyhub_protocol import CloseCode, FrameVariant
 from allskyhub_server.auth import ratelimit
 from allskyhub_server.auth.sessions import SessionInfo
-from allskyhub_server.devices import pairing, public, queries
+from allskyhub_server.devices import events, pairing, public, queries
 from allskyhub_server.devices.connections import ConnectionRegistry
+from allskyhub_server.devices.event_text import EVENT_TITLES
 from allskyhub_server.devices.images import ImageStore
 from allskyhub_server.models import Device
 from allskyhub_server.web.deps import (
@@ -98,7 +99,12 @@ async def camera(
     return render(
         request,
         "camera.html",
-        {"device": device, "online": _registry(request).is_online(device.id)},
+        {
+            "device": device,
+            "online": _registry(request).is_online(device.id),
+            "events": await events.events(db, device.id, limit=6),
+            "event_titles": EVENT_TITLES,
+        },
         session=session,
     )
 

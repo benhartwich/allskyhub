@@ -1,0 +1,13 @@
+{% extends "base.html" %}
+{% block title %}{{ event_titles[event.kind] or event.kind }} · {{ device.name }} · allskyhub{% endblock %}
+{% block content %}
+<a class="back" href="/cameras/{{ device.id }}/nights/{{ event.night_id }}">← {{ event.night_id | night_title }}</a>
+<h1>{{ event_titles[event.kind] or event.kind }}</h1>
+<p class="muted">{{ event.start | localtime }}</p>
+<div id="event">{% include "_event_view.html" %}</div>
+<div class="card">
+  <dl class="facts">
+    {% for label, value in rows %}<dt>{{ label }}</dt><dd>{{ value }}</dd>{% endfor %}
+  </dl>
+</div>
+{% endblock %}

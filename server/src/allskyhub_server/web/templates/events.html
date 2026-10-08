@@ -1,0 +1,22 @@
+{% extends "base.html" %}
+{% block title %}Ereignisse · {{ device.name }} · allskyhub{% endblock %}
+{% block content %}
+<a class="back" href="/cameras/{{ device.id }}">← {{ device.name }}</a>
+<h1>Ereignisse</h1>
+{% if events %}
+<ul class="card list">
+  {% for e in events %}
+  <li class="event-row">
+    {% include "_event_thumb.html" %}
+    <span class="muted">{{ e.start | localtime }} · {{ (e.confidence * 100) | round | int }} %</span>
+  </li>
+  {% endfor %}
+</ul>
+<p class="row-links">
+  {% if page > 1 %}<a href="?page={{ page - 1 }}">← Neuere</a>{% endif %}
+  {% if more %}<a href="?page={{ page + 1 }}">Ältere →</a>{% endif %}
+</p>
+{% else %}
+<div class="card empty"><p class="muted">Noch keine Ereignisse. Erkennt die Kamera einen Meteor, erscheint er hier.</p></div>
+{% endif %}
+{% endblock %}

@@ -9,6 +9,14 @@
 <div hx-get="/cameras/{{ device.id }}/live" hx-trigger="load, every 5s" hx-swap="innerHTML">
   {% include "_live.html" %}
 </div>
+{% if events %}
+<section class="card">
+  <div class="page-head"><h2>Letzte Ereignisse</h2><a href="/cameras/{{ device.id }}/events">Alle</a></div>
+  <div class="event-strip">
+    {% for e in events %}{% include "_event_thumb.html" %}{% endfor %}
+  </div>
+</section>
+{% endif %}
 <div class="card">
   <h2>Gerät</h2>
   <dl class="facts">

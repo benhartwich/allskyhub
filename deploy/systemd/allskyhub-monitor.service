@@ -1,0 +1,16 @@
+[Unit]
+Description=allskyhub hub: health checks with ntfy alerts (roadmap #12)
+After=network-online.target
+
+[Service]
+Type=oneshot
+User=allskyhub-server
+Group=allskyhub-server
+EnvironmentFile=/etc/allskyhub-server/allskyhub-server.env
+EnvironmentFile=-/etc/allskyhub-server/monitor.env
+ExecStart=/opt/allskyhub-server/deploy/monitor/allskyhub-monitor.sh
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+ReadWritePaths=/var/lib/allskyhub-server

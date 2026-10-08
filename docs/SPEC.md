@@ -345,7 +345,7 @@ Endpoints, only reachable from the setup network:
 | `GET /api/wifi/networks` | → `[{ssid, signal, secure}]`, strongest first, hidden networks left out |
 | `POST /api/setup/network` | `{ssid, password?, country, hub_url?, latitude?, longitude?, timezone?}` → `202 {will_join: ssid}` |
 
-- `country` is the ISO 3166 code for the radio rules; `hub_url` overrides the configured
+- `country` is the ISO 3166 code for the radio rules (set by a root helper of the image before joining); `hub_url` overrides the configured
   hub (default `https://allskyhub.org`).
 - `latitude` and `longitude` (degrees, both or neither) and `timezone` (IANA name, e.g.
   `Europe/Vienna`) come from the phone. The camera needs the location for day and night

@@ -7,8 +7,10 @@ to manage NetworkManager (set up by the Pi image, M5). `SimNetwork` is for tests
 from __future__ import annotations
 
 import os
+import re
 import subprocess
 import tempfile
+import time
 from dataclasses import dataclass
 from enum import StrEnum
 from pathlib import Path
@@ -88,9 +90,19 @@ def parse_scan(output: str) -> list[WifiNetwork]:
 
 
 class NmcliNetwork:
-    def __init__(self, ifname: str = "wlan0", nmcli: str = "nmcli") -> None:
+    def __init__(
+        self,
+        ifname: str = "wlan0",
+        nmcli: str = "nmcli",
+        country_file: Path | None = None,
+        country_wait_s: float = 3.0,
+    ) -> None:
         self._if = ifname
         self._nmcli = nmcli
+        # The agent runs without root: it writes the Wi-Fi country here and a root path
+        # unit of the image applies it (SPEC §7.1).
+        self._country_file = country_file
+        self._country_wait_s = country_wait_s
 
     def _run(self, *args: str, check: bool = True) -> subprocess.CompletedProcess[str]:
         return subprocess.run(  # noqa: S603 - fixed binary, no shell
@@ -140,6 +152,21 @@ class NmcliNetwork:
         )
         return parse_scan(res.stdout)
 
+    def set_country(self, country: str) -> None:
+        """Hand the Wi-Fi country (ISO 3166, two letters) to the image's root helper."""
+        country = country.upper()
+        if self._country_file is None or not re.fullmatch(r"[A-Z]{2}", country):
+            return
+        try:
+            if self._country_file.read_text().strip() == country:
+                return
+        except OSError:
+            pass
+        tmp = self._country_file.with_suffix(".tmp")
+        tmp.write_text(country + "\n")
+        tmp.replace(self._country_file)
+        time.sleep(self._country_wait_s)  # the path unit applies it before we join
+
     def start_hotspot(self, ssid: str) -> None:
         self._run("con", "delete", SETUP_CONNECTION, check=False)
         self._run(
@@ -161,7 +188,7 @@ class NmcliNetwork:
         The password never appears on a command line: it goes through a 0600 temp file to
         `nmcli con up ... passwd-file`, and NetworkManager stores it with the connection.
         """
-        subprocess.run(["iw", "reg", "set", country], capture_output=True, check=False)  # noqa: S603, S607
+        self.set_country(country)
         self.stop_hotspot()
         self._run("con", "delete", WIFI_CONNECTION, check=False)
         args = ["con", "add", "type", "wifi", "ifname", self._if, "con-name", WIFI_CONNECTION]

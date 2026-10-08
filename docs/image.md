@@ -39,6 +39,7 @@ pairing and the hub all behave as with a real camera.
 | `allskyhub-firstboot` | once: host name `allskyhub`, Wi-Fi country so the radio is on |
 | `allskyhub-setupfile` | hands the setup file to the agent and removes it from the boot partition |
 | `allskyhub-agent` | the camera agent (user `allskyhub`), web UI on port 8080 |
+| `allskyhub-wifi-country.path` | applies the Wi-Fi country the agent got from the app (root helper) |
 | `nftables` | in setup mode `http://10.42.0.1/` reaches port 8080 |
 
 The agent's state is in `/var/lib/allskyhub-agent`: device key, settings, images.
@@ -46,5 +47,3 @@ The agent's state is in `/var/lib/allskyhub-agent`: device key, settings, images
 ## Not yet in the image
 
 - Signed updates with rollback (SPEC §8).
-- Setting the Wi-Fi radio country from the app's `country`. The agent runs without root;
-  first boot sets `AT` until this is done.

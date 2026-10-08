@@ -123,3 +123,29 @@ systemctl restart allskyhub-server.service
 
 Jede Person schaltet Benachrichtigungen selbst ein (App oder Seite „Konto“): neue Ereignisse
 (höchstens alle 10 Minuten pro Kamera) und Kameras, die seit 30 Minuten offline sind.
+
+## Überwachung
+
+`allskyhub-monitor.timer` prüft alle 5 Minuten (`deploy/monitor/allskyhub-monitor.sh`):
+`https://allskyhub.org/healthz` über nginx und TLS, freien Platz unter
+`/var/lib/allskyhub-server` (mindestens 10 %), die Restlaufzeit des TLS-Zertifikats (mindestens
+14 Tage) und das Alter des Datenbank-Dumps (höchstens 26 Stunden). Gemeldet wird nur, wenn eine
+Prüfung von ok auf fehlerhaft wechselt oder zurück.
+
+```bash
+cp deploy/systemd/allskyhub-monitor.* /etc/systemd/system/
+systemctl daemon-reload && systemctl enable --now allskyhub-monitor.timer
+```
+
+Ohne Konfiguration stehen die Meldungen nur im Journal (`journalctl -u allskyhub-monitor`).
+Für Push aufs Handy ein ntfy-Topic eintragen:
+
+```bash
+cat > /etc/allskyhub-server/monitor.env <<'ENV'
+ALLSKYHUB_MONITOR_NTFY_URL=https://ntfy.example.org/mein-topic
+# ALLSKYHUB_MONITOR_NTFY_TOKEN=tk_...   (falls das Topic geschützt ist)
+ENV
+chown root:allskyhub-server /etc/allskyhub-server/monitor.env && chmod 0640 /etc/allskyhub-server/monitor.env
+```
+
+Ein Ausfall des ganzen Servers fällt so nicht auf; dafür braucht es eine Prüfung von außen.

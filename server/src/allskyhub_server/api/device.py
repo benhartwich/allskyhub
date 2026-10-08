@@ -45,6 +45,7 @@ from allskyhub_server.auth import ratelimit
 from allskyhub_server.auth.accounts import DEFAULT_EVENT_KEEP_DAYS
 from allskyhub_server.devices import pairing
 from allskyhub_server.devices.connections import Connection, ConnectionRegistry
+from allskyhub_server.devices.events import image_rev
 from allskyhub_server.devices.images import JPEG_MAGIC, ImageStore
 from allskyhub_server.models import Device, EventRecord, Frame, Product, User
 from allskyhub_server.push.notify import Notifier
@@ -313,6 +314,7 @@ async def device_ws(websocket: WebSocket) -> None:
     settings: Settings = app.state.settings
     registry: ConnectionRegistry = app.state.connections
     notifier: Notifier = app.state.notifier
+    store: ImageStore = app.state.images
 
     token_value = _bearer(websocket.headers)
     async with maker() as db:
@@ -346,7 +348,7 @@ async def device_ws(websocket: WebSocket) -> None:
     try:
         while True:
             raw = await websocket.receive_text()
-            await _handle(raw, conn, maker, settings, registry, notifier)
+            await _handle(raw, conn, maker, settings, registry, notifier, store)
     except WebSocketDisconnect:
         pass
     finally:
@@ -370,6 +372,7 @@ async def _handle(
     settings: Settings,
     registry: ConnectionRegistry,
     notifier: Notifier,
+    store: ImageStore,
 ) -> None:
     try:
         env = parse_envelope(raw)
@@ -389,7 +392,7 @@ async def _handle(
     elif isinstance(body, Products):
         await _on_products(body, conn, maker, registry)
     elif isinstance(body, Event):
-        await _on_event(body, conn, maker, registry, notifier)
+        await _on_event(body, conn, maker, registry, notifier, store)
     elif isinstance(body, Ack | ErrorReply):
         registry.resolve(conn.device_id, body)
         if isinstance(body, ErrorReply):
@@ -511,6 +514,7 @@ async def _on_event(
     maker: async_sessionmaker[AsyncSession],
     registry: ConnectionRegistry,
     notifier: Notifier,
+    store: ImageStore,
 ) -> None:
     """SPEC §6.4: upsert by the device's stable id (events are resent after a reconnect);
     fetch the thumbnail right away, the full picture when someone opens it (or right away
@@ -530,18 +534,21 @@ async def _on_event(
             .join(Device, Device.owner_id == User.id)
             .where(Device.id == conn.device_id)
         )
-        is_new = (
-            await db.scalar(
-                select(EventRecord.id).where(
-                    EventRecord.device_id == conn.device_id, EventRecord.event_id == body.id
-                )
+        previous = await db.scalar(
+            select(EventRecord.data).where(
+                EventRecord.device_id == conn.device_id, EventRecord.event_id == body.id
             )
-            is None
         )
+        is_new = previous is None
+        # SPEC §6.4 image_rev: a higher revision means the device replaced the picture.
+        replaced = not is_new and image_rev(body.data) > image_rev(previous or {})
+        update_values: dict[str, Any] = dict(values)
+        if replaced:
+            update_values |= {"has_thumb": False, "has_full": False}
         await db.execute(
             pg_insert(EventRecord)
             .values(device_id=conn.device_id, event_id=body.id, **values)
-            .on_conflict_do_update(index_elements=["device_id", "event_id"], set_=values)
+            .on_conflict_do_update(index_elements=["device_id", "event_id"], set_=update_values)
         )
         stored = (
             await db.execute(
@@ -551,6 +558,12 @@ async def _on_event(
             )
         ).one()
         await db.commit()
+    if replaced:
+        # Never serve (or let browsers cache) the old picture under the new revision.
+        for variant in FrameVariant:
+            await asyncio.to_thread(
+                store.delete_event, conn.device_id, body.night_id, body.id, variant
+            )
     if is_new:
         # Roadmap #6; in its own task so a slow push service never delays the device.
         _background(notifier.event(conn.device_id, body.id))
@@ -558,7 +571,8 @@ async def _on_event(
         return
     if not stored.has_thumb:
         await registry.request_event(conn.device_id, body.night_id, body.id, FrameVariant.THUMB)
-    # Owners who keep events longer keep them in full: fetch the picture while it exists.
+    # Owners who keep events longer keep them in full: fetch the picture while it exists
+    # (again when it was replaced, so the kept picture is the final one).
     if (keep_days or DEFAULT_EVENT_KEEP_DAYS) > DEFAULT_EVENT_KEEP_DAYS and not stored.has_full:
         await registry.request_event(conn.device_id, body.night_id, body.id, FrameVariant.FULL)
 

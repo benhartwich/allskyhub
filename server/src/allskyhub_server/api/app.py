@@ -135,6 +135,8 @@ class EventItem(BaseModel):
     data: dict[str, Any]
     # The owner's verdict: "confirmed", "false_positive" or None.
     label: str | None = None
+    # SPEC §6.4: revision of the picture; put it into image URLs (``v``) so caches renew.
+    image_rev: int = 1
 
 
 class LabelRequest(_In):
@@ -154,6 +156,7 @@ def _event(e: EventRecord) -> EventItem:
         has_full=e.has_full,
         data=e.data,
         label=e.label,
+        image_rev=events.image_rev(e.data),
     )
 
 

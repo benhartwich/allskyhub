@@ -5,6 +5,7 @@ from __future__ import annotations
 import datetime as dt
 import re
 from dataclasses import dataclass, field
+from typing import Any
 
 from fastapi import HTTPException
 from fastapi.responses import FileResponse, JSONResponse, Response
@@ -54,6 +55,12 @@ class Storm:
             return float(value) if isinstance(value, int | float) else 0.0
 
         return max(self.flashes, key=area)
+
+
+def image_rev(data: dict[str, Any]) -> int:
+    """SPEC §6.4: revision of a replaceable picture (1 if the device does not say)."""
+    rev = data.get("image_rev")
+    return rev if isinstance(rev, int) and not isinstance(rev, bool) else 1
 
 
 def storm_key(event: EventRecord) -> str | None:

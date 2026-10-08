@@ -186,6 +186,7 @@ class SkyEvent {
     required this.hasFull,
     this.data = const {},
     this.label,
+    this.imageRev = 1,
   });
 
   factory SkyEvent.fromJson(Map<String, dynamic> json) => SkyEvent(
@@ -200,6 +201,7 @@ class SkyEvent {
     hasFull: json['has_full'] as bool,
     data: (json['data'] as Map<String, dynamic>?) ?? const {},
     label: json['label'] as String?,
+    imageRev: (json['image_rev'] as int?) ?? 1,
   );
 
   final String id;
@@ -217,6 +219,12 @@ class SkyEvent {
 
   /// The owner's verdict: "confirmed", "false_positive" or null.
   final String? label;
+
+  /// SPEC §6.4: revision of a replaceable picture (a growing aurora); part of image URLs.
+  final int imageRev;
+
+  /// An episode (aurora, NLC) that is still going on.
+  bool get ongoing => data['ongoing'] == true;
 }
 
 class HubClient {
@@ -408,10 +416,10 @@ class HubClient {
   }
 
   Uri eventImageUrl(String cameraId, SkyEvent event, {bool thumb = false}) =>
-      _uri(
-        '/cameras/$cameraId/events/${event.nightId}/${event.id}/image',
-        thumb ? {'variant': 'thumb'} : null,
-      );
+      _uri('/cameras/$cameraId/events/${event.nightId}/${event.id}/image', {
+        if (thumb) 'variant': 'thumb',
+        'v': '${event.imageRev}',
+      });
 
   /// The owner's verdict: "confirmed", "false_positive" ("kein Meteor") or null to clear.
   Future<SkyEvent> labelEvent(

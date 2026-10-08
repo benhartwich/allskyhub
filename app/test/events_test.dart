@@ -71,7 +71,8 @@ class FakeEventHub {
           200,
         );
       }
-      if (path.endsWith('/image') && request.url.queryParameters.isEmpty) {
+      if (path.endsWith('/image') &&
+          request.url.queryParameters['variant'] == null) {
         fullRequests++;
         return fullRequests > fullAfter
             ? http.Response('jpeg', 200)
@@ -112,7 +113,7 @@ void main() {
     expect(hub.pages.last['before'], '2026-10-08T21:45:12.000Z');
     expect(
       client.eventImageUrl('cam', first.single, thumb: true).toString(),
-      'https://hub.example/api/v1/cameras/cam/events/20261008/meteor-20261008T214512Z/image?variant=thumb',
+      'https://hub.example/api/v1/cameras/cam/events/20261008/meteor-20261008T214512Z/image?variant=thumb&v=1',
     );
   });
 
@@ -282,5 +283,36 @@ void main() {
       find.byKey(const ValueKey('lightning-20261008T215012Z')),
       findsOneWidget,
     );
+  });
+
+  test('aurora: German rows, image revision in the URL', () {
+    final aurora = SkyEvent.fromJson({
+      'id': 'aurora-20261008T220000Z',
+      'night_id': '20261008',
+      'kind': 'aurora',
+      'start': '2026-10-08T22:00:00Z',
+      'end': '2026-10-08T22:12:00Z',
+      'confidence': 0.7,
+      'has_image': true,
+      'has_thumb': true,
+      'has_full': false,
+      'image_rev': 3,
+      'data': {
+        'peak_index': 30,
+        'green': 1.8,
+        'frames': 14,
+        'direction_deg': 40.0,
+        'ongoing': true,
+        'image_rev': 3,
+      },
+    });
+    final rows = {for (final (l, v) in eventRows(aurora)) l: v};
+    expect(rows['Stärke'], '30 %');
+    expect(rows['Bildrichtung'], '40°');
+    expect(rows['Status'], 'läuft noch');
+    expect(rows.containsKey('image_rev'), isFalse);
+    expect(aurora.ongoing, isTrue);
+    final client = HubClient(baseUrl: 'https://hub.example');
+    expect(client.eventImageUrl('cam', aurora).query, 'v=3');
   });
 }

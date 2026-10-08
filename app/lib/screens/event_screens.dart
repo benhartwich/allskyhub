@@ -68,6 +68,21 @@ List<(String, String)> eventRows(SkyEvent event) {
     if (flashes is num) rows.add(('Blitze in 30 Min.', '${flashes.round()}'));
     data.remove('storm');
   }
+  if (event.kind == 'aurora' || event.kind == 'nlc') {
+    final index = data.remove('peak_index');
+    if (index is num) rows.add(('Stärke', '${index.round()} %'));
+    final green = data.remove('green');
+    if (green is num) rows.add(('Grünanteil', green.toStringAsFixed(1)));
+    final frames = data.remove('frames');
+    if (frames is num) rows.add(('Bilder', '${frames.round()}'));
+    // Image-relative (0 = up), not a compass bearing: no N/E/S/W without calibration.
+    final direction = data.remove('direction_deg');
+    if (direction is num) {
+      rows.add(('Bildrichtung', '${direction.round() % 360}°'));
+    }
+    if (data.remove('ongoing') == true) rows.add(('Status', 'läuft noch'));
+  }
+  data.remove('image_rev');
   for (final entry in data.entries) {
     if (entry.value != null) rows.add((entry.key, '${entry.value}'));
   }
@@ -301,6 +316,7 @@ class _EventsScreenState extends State<EventsScreen> {
                     title: Text(eventTitles[event.kind] ?? event.kind),
                     subtitle: Text(
                       '${eventTime(event.start)} · ${(event.confidence * 100).round()} %'
+                      '${event.ongoing ? ' · läuft noch' : ''}'
                       '${event.label == 'false_positive'
                           ? ' · aussortiert'
                           : event.label == 'confirmed'

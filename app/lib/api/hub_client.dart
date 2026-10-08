@@ -69,6 +69,7 @@ class Night {
     this.first,
     this.last,
     this.products = 0,
+    this.events = 0,
   });
 
   factory Night.fromJson(Map<String, dynamic> json) => Night(
@@ -79,6 +80,7 @@ class Night {
         : DateTime.parse(json['first'] as String),
     last: json['last'] == null ? null : DateTime.parse(json['last'] as String),
     products: (json['products'] as int?) ?? 0,
+    events: (json['events'] as int?) ?? 0,
   );
 
   /// `YYYYMMDD`: the evening the night started (SPEC §4.5).
@@ -91,6 +93,9 @@ class Night {
 
   /// Night products (keogram, startrails, timelapse) announced for this night.
   final int products;
+
+  /// Detections (SPEC §6.4) reported for this night.
+  final int events;
 
   DateTime get evening => DateTime(
     int.parse(nightId.substring(0, 4)),
@@ -167,6 +172,48 @@ class FrameItem {
   final bool hasFull;
 }
 
+/// A detection reported by the camera (SPEC §6.4).
+class SkyEvent {
+  SkyEvent({
+    required this.id,
+    required this.nightId,
+    required this.kind,
+    required this.start,
+    required this.end,
+    required this.confidence,
+    required this.hasImage,
+    required this.hasThumb,
+    required this.hasFull,
+    this.data = const {},
+  });
+
+  factory SkyEvent.fromJson(Map<String, dynamic> json) => SkyEvent(
+    id: json['id'] as String,
+    nightId: json['night_id'] as String,
+    kind: json['kind'] as String,
+    start: DateTime.parse(json['start'] as String),
+    end: DateTime.parse(json['end'] as String),
+    confidence: (json['confidence'] as num).toDouble(),
+    hasImage: json['has_image'] as bool,
+    hasThumb: json['has_thumb'] as bool,
+    hasFull: json['has_full'] as bool,
+    data: (json['data'] as Map<String, dynamic>?) ?? const {},
+  );
+
+  final String id;
+  final String nightId;
+
+  /// meteor, lightning, aurora, nlc, satellite, clouds, sky_quality
+  final String kind;
+  final DateTime start;
+  final DateTime end;
+  final double confidence;
+  final bool hasImage;
+  final bool hasThumb;
+  final bool hasFull;
+  final Map<String, dynamic> data;
+}
+
 class HubClient {
   HubClient({required this.baseUrl, http.Client? httpClient, this.token})
     : _http = httpClient ?? http.Client();
@@ -181,8 +228,11 @@ class HubClient {
   Uri _uri(String path, [Map<String, String>? query]) =>
       Uri.parse(baseUrl).replace(path: '/api/v1$path', queryParameters: query);
 
-  Future<dynamic> _send(String method, String path, {Object? body}) async {
-    final request = http.Request(method, _uri(path))
+  Future<dynamic> _send(String method, String path, {Object? body}) =>
+      _sendUri(method, _uri(path), body: body);
+
+  Future<dynamic> _sendUri(String method, Uri uri, {Object? body}) async {
+    final request = http.Request(method, uri)
       ..headers.addAll(authHeaders)
       ..headers['Accept'] = 'application/json';
     if (body != null) {
@@ -295,13 +345,13 @@ class HubClient {
 
   /// Make sure the hub has the full product: true when it is there, false while the hub
   /// fetches it from the camera (202). Never downloads the file itself.
-  Future<bool> ensureProduct(
-    String cameraId,
-    String nightId,
-    String name,
-  ) async {
-    final request = http.Request('GET', productUrl(cameraId, nightId, name))
-      ..headers.addAll(authHeaders);
+  Future<bool> ensureProduct(String cameraId, String nightId, String name) =>
+      _ensure(productUrl(cameraId, nightId, name));
+
+  /// Make sure the hub has a file it fetches from the camera on demand: true when it is
+  /// there, false while the hub fetches it (202). Never downloads the file itself.
+  Future<bool> _ensure(Uri url) async {
+    final request = http.Request('GET', url)..headers.addAll(authHeaders);
     final response = await _http.send(request);
     // Only the status matters; drop the body (it may be a long video).
     unawaited(response.stream.listen(null).cancel());
@@ -309,6 +359,37 @@ class HubClient {
     if (response.statusCode == 202) return false;
     throw HubException(response.statusCode, response.reasonPhrase ?? 'error');
   }
+
+  /// Newest detections across nights; page with [before] (the last item's start).
+  Future<List<SkyEvent>> events(
+    String cameraId, {
+    DateTime? before,
+    int limit = 50,
+  }) async {
+    final query = {
+      'limit': '$limit',
+      if (before != null) 'before': before.toUtc().toIso8601String(),
+    };
+    final uri = _uri('/cameras/$cameraId/events', query);
+    final json = await _sendUri('GET', uri) as List<dynamic>;
+    return [for (final e in json) SkyEvent.fromJson(e as Map<String, dynamic>)];
+  }
+
+  Future<List<SkyEvent>> nightEvents(String cameraId, String nightId) async {
+    final json =
+        await _send('GET', '/cameras/$cameraId/nights/$nightId/events')
+            as List<dynamic>;
+    return [for (final e in json) SkyEvent.fromJson(e as Map<String, dynamic>)];
+  }
+
+  Uri eventImageUrl(String cameraId, SkyEvent event, {bool thumb = false}) =>
+      _uri(
+        '/cameras/$cameraId/events/${event.nightId}/${event.id}/image',
+        thumb ? {'variant': 'thumb'} : null,
+      );
+
+  Future<bool> ensureEventImage(String cameraId, SkyEvent event) =>
+      _ensure(eventImageUrl(cameraId, event));
 
   Uri frameUrl(
     String cameraId,

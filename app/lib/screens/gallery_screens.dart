@@ -3,6 +3,7 @@
 import 'package:flutter/material.dart';
 
 import '../api/hub_client.dart';
+import 'event_screens.dart';
 import 'product_screens.dart';
 
 const _weekdays = ['Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa', 'So'];
@@ -27,6 +28,8 @@ String nightSubtitle(Night night) {
     if (first != null && last != null) '${clock(first)}–${clock(last)}',
     if (night.products > 0)
       '${night.products} Produkt${night.products == 1 ? '' : 'e'}',
+    if (night.events > 0)
+      '${night.events} Ereignis${night.events == 1 ? '' : 'se'}',
   ].join(' · ');
 }
 
@@ -133,6 +136,9 @@ class _NightScreenState extends State<NightScreen> {
     widget.camera.id,
     widget.night.nightId,
   );
+  late final Future<List<SkyEvent>> _events = widget.night.events == 0
+      ? Future.value(const <SkyEvent>[])
+      : widget.client.nightEvents(widget.camera.id, widget.night.nightId);
   late final Future<List<Product>> _products = widget.night.products == 0
       ? Future.value(const <Product>[])
       : widget.client.products(widget.camera.id, widget.night.nightId);
@@ -164,6 +170,20 @@ class _NightScreenState extends State<NightScreen> {
                       cameraId: widget.camera.id,
                       nightId: widget.night.nightId,
                       products: products,
+                    );
+                  },
+                ),
+              ),
+              SliverToBoxAdapter(
+                child: FutureBuilder<List<SkyEvent>>(
+                  future: _events,
+                  builder: (context, snapshot) {
+                    final events = snapshot.data ?? const <SkyEvent>[];
+                    if (events.isEmpty) return const SizedBox.shrink();
+                    return EventStrip(
+                      client: widget.client,
+                      cameraId: widget.camera.id,
+                      events: events,
                     );
                   },
                 ),

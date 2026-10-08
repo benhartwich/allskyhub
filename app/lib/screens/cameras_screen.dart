@@ -7,6 +7,7 @@ import '../platform/location.dart';
 import '../platform/wifi_binding.dart';
 import 'account_screen.dart';
 import 'camera_screen.dart';
+import 'event_screens.dart';
 import 'gallery_screens.dart';
 import 'onboarding_screen.dart';
 import 'pair_screen.dart';
@@ -211,15 +212,30 @@ class _CameraCard extends StatelessWidget {
               alignment: Alignment.centerLeft,
               child: Padding(
                 padding: const EdgeInsets.fromLTRB(8, 0, 8, 8),
-                child: TextButton.icon(
-                  icon: const Icon(Icons.photo_library_outlined),
-                  label: const Text('Galerie'),
-                  onPressed: () => Navigator.of(context).push(
-                    MaterialPageRoute<void>(
-                      builder: (_) =>
-                          NightsScreen(client: client, camera: camera),
+                child: Wrap(
+                  spacing: 8,
+                  children: [
+                    TextButton.icon(
+                      icon: const Icon(Icons.photo_library_outlined),
+                      label: const Text('Galerie'),
+                      onPressed: () => Navigator.of(context).push(
+                        MaterialPageRoute<void>(
+                          builder: (_) =>
+                              NightsScreen(client: client, camera: camera),
+                        ),
+                      ),
                     ),
-                  ),
+                    TextButton.icon(
+                      icon: const Icon(Icons.auto_awesome),
+                      label: const Text('Ereignisse'),
+                      onPressed: () => Navigator.of(context).push(
+                        MaterialPageRoute<void>(
+                          builder: (_) =>
+                              EventsScreen(client: client, camera: camera),
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
               ),
             ),

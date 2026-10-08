@@ -35,6 +35,8 @@ from allskyhub_protocol import (
     CommandName,
     Envelope,
     ErrorReply,
+    Event,
+    EventKind,
     FrameInfo,
     Hello,
     Mode,
@@ -146,7 +148,10 @@ class FakeHub:
             return httpx.Response(
                 200, json={"access_token": f"tok{self.tokens}", "expires_in": 3600}
             )
-        if path.startswith(("/device/v1/frames/", "/device/v1/products/")) and req.method == "PUT":
+        if (
+            path.startswith(("/device/v1/frames/", "/device/v1/products/", "/device/v1/events/"))
+            and req.method == "PUT"
+        ):
             assert req.headers["Authorization"].startswith("Bearer tok")
             self.uploads.append((path, req.url.params["variant"], req.content))
             self.upload_headers.append(dict(req.headers))
@@ -398,3 +403,71 @@ def test_products_announced_and_uploaded_streamed(tmp_path: Path) -> None:
     (_, _, body), headers = by_variant["thumb"]
     assert body == b"\xff\xd8thumb"
     assert headers["content-type"] == "image/jpeg"
+
+
+class _Events:
+    def __init__(self, events: list[Event], pics: dict[tuple[str, bool], Path]) -> None:
+        self.events = events
+        self.pics = pics
+
+    def current_events(self) -> list[Event]:
+        return self.events
+
+    def image_path(self, night: str, eid: str, thumbnail: bool) -> Path | None:
+        return self.pics.get((eid, thumbnail))
+
+
+def test_events_resent_after_connect_and_pictures_uploaded(tmp_path: Path) -> None:
+    """SPEC §6.4/§6.5/§6.7: the current night's events after connect; upload_event."""
+    store, night, _ = _store_with_frame(tmp_path)
+    eid = "meteor-20261006T200005Z"
+    ev = Event(
+        id=eid, night_id=night, kind=EventKind.METEOR, start=TS, end=TS, confidence=0.7,
+        has_image=True, data={"length_px": 120},
+    )  # fmt: skip
+    pic = tmp_path / "pic.jpg"
+    pic.write_bytes(b"\xff\xd8meteor")
+    thumb = tmp_path / "thumb.jpg"
+    thumb.write_bytes(b"\xff\xd8thumb")
+    events = _Events([ev], {(eid, False): pic, (eid, True): thumb})
+    identity = DeviceIdentity.load_or_create(tmp_path / "device.key")
+    hub = FakeHub(register_unpaired=0, close_code=1000)
+    hub.commands = [
+        Command(
+            name=CommandName.UPLOAD_EVENT,
+            args={"night_id": night, "event_id": eid, "variant": "thumb"},
+        ),
+        Command(name=CommandName.UPLOAD_EVENT, args={"night_id": night, "event_id": eid}),
+        Command(
+            name=CommandName.UPLOAD_EVENT,
+            args={"night_id": night, "event_id": "meteor-20261006T000000Z"},
+        ),
+    ]
+
+    async def scenario() -> None:
+        async with serve(hub.ws_handler, "127.0.0.1", 0) as server:
+            port = server.sockets[0].getsockname()[1]
+            cfg = HubConfig(hub_url=f"http://127.0.0.1:{port}")
+            pairing = PairingState(identity.device_id, cfg.hub_url, "sim", "0.1.0")
+            async with httpx.AsyncClient(
+                transport=httpx.MockTransport(hub.handle), base_url=cfg.hub_url
+            ) as http:
+                session = HubSession(
+                    cfg, identity, pairing, store, LiveState(), "sim", "0.1.0",
+                    lambda: None, http, events=events,
+                )  # fmt: skip
+                stop = asyncio.Event()
+                task = asyncio.create_task(session.run(stop))
+                await asyncio.wait_for(hub.done.wait(), 10)
+                stop.set()
+                await asyncio.wait_for(task, 10)
+
+    asyncio.run(scenario())
+    sent = [e.body for e in hub.received if isinstance(e.body, Event)]
+    assert sent == [ev]
+    kinds = [(r.TYPE, getattr(r, "code", None)) if r else None for r in hub.reply_order]
+    assert kinds == [("ack", None), ("ack", None), ("error", "not_found")]
+    assert hub.uploads == [
+        (f"/device/v1/events/{night}/{eid}", "thumb", b"\xff\xd8thumb"),
+        (f"/device/v1/events/{night}/{eid}", "full", b"\xff\xd8meteor"),
+    ]

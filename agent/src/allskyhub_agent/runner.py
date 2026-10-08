@@ -7,7 +7,7 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import UTC, tzinfo
 
-from allskyhub_agent.adapters.camera import Camera, CameraError, CaptureRequest
+from allskyhub_agent.adapters.camera import Camera, CameraError, CaptureRequest, Image
 from allskyhub_agent.core.clock import Clock
 from allskyhub_agent.core.daynight import DayNightConfig, next_mode
 from allskyhub_agent.core.exposure import AutoExposure, Exposure
@@ -49,6 +49,7 @@ class Runner:
         loop: LoopConfig | None = None,
         mask_radius_frac: float | None = None,
         live: LiveState | None = None,
+        analyzers: list[Callable[[FrameInfo, Image], None]] | None = None,
         local_tz: tzinfo = UTC,
     ) -> None:
         self._cam = camera
@@ -63,6 +64,8 @@ class Runner:
         self._mask: Mask | None = None
         self._mode: Mode | None = None
         self._live = live
+        # Called with every stored frame and its pixels, e.g. the detection worker.
+        self._analyzers = analyzers or []
         self._tz = local_tz
 
     @property
@@ -113,6 +116,9 @@ class Runner:
             self._store.append_index(info)
         if self._live is not None:
             self._live.publish(info, frame.image, sharpness(frame.image))
+        if not focus:
+            for analyze in self._analyzers:
+                analyze(info, frame.image)
         return info
 
     def _mask_for(self, height: int, width: int) -> Mask | None:

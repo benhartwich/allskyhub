@@ -16,6 +16,7 @@ from collections.abc import AsyncIterator, Callable
 from contextlib import AbstractAsyncContextManager
 from dataclasses import dataclass
 from datetime import UTC, datetime
+from pathlib import Path
 from typing import Any, Protocol
 
 import httpx
@@ -40,6 +41,7 @@ from allskyhub_protocol import (
     Envelope,
     ErrorCode,
     ErrorReply,
+    Event,
     FrameInfo,
     FrameVariant,
     Hello,
@@ -50,6 +52,7 @@ from allskyhub_protocol import (
     Status,
     TokenRequest,
     TokenResponse,
+    UploadEventArgs,
     UploadFrameArgs,
     UploadProductArgs,
     parse_envelope,
@@ -57,7 +60,7 @@ from allskyhub_protocol import (
 
 log = logging.getLogger(__name__)
 
-CAPABILITIES = ["upload_frame", "upload_product", "focus_mode"]
+CAPABILITIES = ["upload_frame", "upload_product", "upload_event", "focus_mode"]
 
 
 @dataclass(frozen=True)
@@ -101,6 +104,14 @@ def _now() -> datetime:
     return datetime.now(UTC)
 
 
+class EventSource(Protocol):
+    """Where the session gets events and their pictures (the detection worker's store)."""
+
+    def current_events(self) -> list[Event]: ...
+
+    def image_path(self, night: str, eid: str, thumbnail: bool) -> Path | None: ...
+
+
 class HubSession:
     """The connection logic; `HubClient` runs it in a thread."""
 
@@ -118,6 +129,7 @@ class HubSession:
         connect: Connector = default_connector,
         monotonic: Callable[[], float] = time.monotonic,
         latest_products: Callable[[], Products | None] | None = None,
+        events: EventSource | None = None,
     ) -> None:
         self._cfg = cfg
         self._id = identity
@@ -132,6 +144,9 @@ class HubSession:
         self._monotonic = monotonic
         self._frames: asyncio.Queue[FrameInfo] | None = None
         self._latest_products = latest_products
+        self._events_src = events
+        # Events wait here until the writer sends them (SPEC §6.4).
+        self._events: list[Event] = []
         # Products wait here until the writer sends them; a newer night replaces an older one.
         self._products: Products | None = None
         self._uploads: set[asyncio.Task[None]] = set()
@@ -152,6 +167,11 @@ class HubSession:
         """Announce a night's products on the open connection (SPEC §6.3)."""
         if self._frames is not None:
             self._products = products
+
+    def offer_event(self, event: Event) -> None:
+        """Send a detection on the open connection; after a reconnect it is resent anyway."""
+        if self._frames is not None:
+            self._events.append(event)
 
     # --- main loop ---------------------------------------------------------------------
     async def run(self, stop: asyncio.Event) -> None:
@@ -241,6 +261,9 @@ class HubSession:
                 if self._latest_products is not None:
                     # SPEC §6.7: the newest night's products after every (re)connect.
                     self._products = await asyncio.to_thread(self._latest_products)
+                if self._events_src is not None:
+                    # SPEC §6.4/§6.7: the current night's events again; the hub upserts.
+                    self._events = await asyncio.to_thread(self._events_src.current_events)
                 tasks: list[asyncio.Task[Any]] = [
                     asyncio.create_task(self._reader(ws, token)),
                     asyncio.create_task(self._writer(ws)),
@@ -268,12 +291,15 @@ class HubSession:
         finally:
             self._frames = None
             self._products = None
+            self._events = []
             for task in self._uploads:
                 task.cancel()
             self._pairing.set_connected(False)
 
     async def _send(
-        self, ws: WebSocketLike, body: Hello | Status | FrameInfo | Products | Ack | ErrorReply
+        self,
+        ws: WebSocketLike,
+        body: Hello | Status | FrameInfo | Products | Event | Ack | ErrorReply,
     ) -> None:
         await ws.send(Envelope.wrap(body, ts=_now()).model_dump_json())
 
@@ -287,6 +313,9 @@ class HubSession:
             products, self._products = self._products, None
             if products is not None:
                 await self._send(ws, products)
+            events, self._events = self._events, []
+            for event in events:
+                await self._send(ws, event)
             if now >= next_status:
                 status = self._status()
                 if status is not None:
@@ -324,6 +353,8 @@ class HubSession:
     async def _command(self, ref: str, cmd: Command, token: str) -> Ack | ErrorReply:
         if cmd.name is CommandName.UPLOAD_FRAME:
             return await self._upload(ref, cmd, token)
+        if cmd.name is CommandName.UPLOAD_EVENT:
+            return await self._upload_event(ref, cmd, token)
         if cmd.name is CommandName.FOCUS_MODE:
             on = cmd.args.get("on")
             if not isinstance(on, bool):
@@ -347,6 +378,35 @@ class HubSession:
         try:
             r = await self._http.put(
                 f"/device/v1/frames/{args.night_id}/{args.name}",
+                params={"variant": args.variant.value},
+                content=data,
+                headers={"Authorization": f"Bearer {token}", "Content-Type": "image/jpeg"},
+            )
+        except httpx.HTTPError as exc:
+            return ErrorReply(ref=ref, code=ErrorCode.FAILED, message=str(exc)[:200])
+        if r.is_success:
+            return Ack(ref=ref)
+        return ErrorReply(ref=ref, code=ErrorCode.FAILED, message=f"HTTP {r.status_code}")
+
+    async def _upload_event(self, ref: str, cmd: Command, token: str) -> Ack | ErrorReply:
+        """SPEC §6.5: PUT the event's picture, then ack."""
+        try:
+            args = UploadEventArgs.model_validate(cmd.args)
+        except ValidationError:
+            return ErrorReply(ref=ref, code=ErrorCode.INVALID_ARGS)
+        path = (
+            self._events_src.image_path(
+                args.night_id, args.event_id, thumbnail=args.variant is FrameVariant.THUMB
+            )
+            if self._events_src is not None
+            else None
+        )
+        if path is None:
+            return ErrorReply(ref=ref, code=ErrorCode.NOT_FOUND)
+        data = await asyncio.to_thread(path.read_bytes)
+        try:
+            r = await self._http.put(
+                f"/device/v1/events/{args.night_id}/{args.event_id}",
                 params={"variant": args.variant.value},
                 content=data,
                 headers={"Authorization": f"Bearer {token}", "Content-Type": "image/jpeg"},
@@ -438,6 +498,13 @@ class HubClient:
         if loop is not None and session is not None and not loop.is_closed():
             with contextlib.suppress(RuntimeError):
                 loop.call_soon_threadsafe(session.offer_products, products)
+
+    def notify_event(self, event: Event) -> None:
+        """Never blocks; safe to call from the detection worker."""
+        loop, session = self._loop, self._session
+        if loop is not None and session is not None and not loop.is_closed():
+            with contextlib.suppress(RuntimeError):
+                loop.call_soon_threadsafe(session.offer_event, event)
 
     def stop(self, timeout: float = 5.0) -> None:
         loop, stop = self._loop, self._stop

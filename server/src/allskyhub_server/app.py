@@ -29,6 +29,7 @@ from allskyhub_server.web import (
     routes_auth,
     routes_cameras,
     routes_legal,
+    routes_public,
 )
 from allskyhub_server.web.deps import LoginRequiredError
 from allskyhub_server.web.render import render
@@ -176,6 +177,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(routes_account.router)
     app.include_router(routes_cameras.router)
     app.include_router(routes_legal.router)
+    app.include_router(routes_public.router)
     app.include_router(device_api.router)
     app.include_router(app_api.router)
 

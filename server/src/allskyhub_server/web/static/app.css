@@ -97,3 +97,10 @@ button.danger { background: transparent; color: var(--danger); border: 1px solid
 .legal p + p { margin-top: 8px; }
 label.check { display: flex; align-items: center; gap: 10px; font-weight: 600; }
 label.check input { width: 22px; min-height: 22px; }
+
+/* Public sky page */
+.public-products { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 12px; }
+.public-products a { display: grid; gap: 6px; text-decoration: none; }
+.public-products img { width: 100%; border-radius: 10px; background: #000; }
+.code-link { font-family: ui-monospace, monospace; overflow-wrap: anywhere; }
+button.secondary { background: transparent; color: var(--accent); border: 1px solid var(--accent); }

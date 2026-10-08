@@ -10,7 +10,7 @@ from fastapi.responses import FileResponse, RedirectResponse, Response
 from allskyhub_protocol import CloseCode, FrameVariant
 from allskyhub_server.auth import ratelimit
 from allskyhub_server.auth.sessions import SessionInfo
-from allskyhub_server.devices import pairing, queries
+from allskyhub_server.devices import pairing, public, queries
 from allskyhub_server.devices.connections import ConnectionRegistry
 from allskyhub_server.devices.images import ImageStore
 from allskyhub_server.models import Device
@@ -144,3 +144,21 @@ async def remove(
     store.delete_device(device.id)
     await _registry(request).close(device.id, CloseCode.UNPAIRED)
     return RedirectResponse("/", status_code=303)
+
+
+@router.post("/cameras/{device_id}/public")
+async def set_public(
+    request: Request,
+    db: DbSession,
+    session: CurrentSession,
+    device_id: str,
+    enabled: Annotated[bool, Form()],
+) -> Response:
+    """Opt-in public sky page (roadmap #9)."""
+    device = await _own_device(db, session, device_id)
+    if enabled:
+        public.enable(device)
+    else:
+        public.disable(device)
+    await db.commit()
+    return RedirectResponse(f"/cameras/{device.id}", status_code=303)

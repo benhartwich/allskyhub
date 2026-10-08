@@ -19,7 +19,7 @@ from allskyhub_protocol import CloseCode, FrameVariant
 from allskyhub_server.auth import accounts, app_tokens, ratelimit
 from allskyhub_server.auth.passwords import verify_secret_async
 from allskyhub_server.auth.tokens import hash_token
-from allskyhub_server.devices import pairing, queries
+from allskyhub_server.devices import pairing, public, queries
 from allskyhub_server.devices.connections import ConnectionRegistry
 from allskyhub_server.devices.images import ImageStore
 from allskyhub_server.models import Device, Frame, Product, User
@@ -52,6 +52,10 @@ class PasswordChange(_In):
 
 class AccountDelete(_In):
     password: str = Field(max_length=1024)
+
+
+class PublicRequest(_In):
+    enabled: bool
 
 
 class ClaimRequest(_In):
@@ -107,6 +111,8 @@ class Camera(BaseModel):
     # Latest `status` and `frame` bodies as the camera sent them (SPEC §6.3).
     status: dict[str, Any] | None
     frame: dict[str, Any] | None
+    # Opt-in public sky page (roadmap #9), or None.
+    public_url: str | None = None
 
 
 def _bearer(request: Request) -> str:
@@ -131,7 +137,7 @@ def _registry(request: Request) -> ConnectionRegistry:
     return registry
 
 
-def _camera(device: Device, registry: ConnectionRegistry) -> Camera:
+def _camera(device: Device, registry: ConnectionRegistry, base_url: str) -> Camera:
     return Camera(
         id=device.id,
         name=device.name,
@@ -143,6 +149,9 @@ def _camera(device: Device, registry: ConnectionRegistry) -> Camera:
         latest_image_at=device.latest_image_at,
         status=device.last_status,
         frame=device.last_frame,
+        public_url=(
+            f"{base_url.rstrip('/')}/sky/{device.public_slug}" if device.public_slug else None
+        ),
     )
 
 
@@ -180,7 +189,10 @@ async def logout(request: Request, db: DbSession, user: AppUser) -> Response:
 @router.get("/cameras")
 async def cameras(request: Request, db: DbSession, user: AppUser) -> list[Camera]:
     registry = _registry(request)
-    return [_camera(d, registry) for d in await queries.owned(db, user.id)]
+    return [
+        _camera(d, registry, request.app.state.settings.base_url)
+        for d in await queries.owned(db, user.id)
+    ]
 
 
 @router.post("/cameras/claim")
@@ -200,7 +212,7 @@ async def claim(
         await db.rollback()
         raise HTTPException(400, str(exc)) from None
     await db.commit()
-    return _camera(device, _registry(request))
+    return _camera(device, _registry(request), request.app.state.settings.base_url)
 
 
 async def _own(db: DbSession, user: User, device_id: str) -> Device:
@@ -212,7 +224,8 @@ async def _own(db: DbSession, user: User, device_id: str) -> Device:
 
 @router.get("/cameras/{device_id}")
 async def camera(request: Request, db: DbSession, user: AppUser, device_id: str) -> Camera:
-    return _camera(await _own(db, user, device_id), _registry(request))
+    device = await _own(db, user, device_id)
+    return _camera(device, _registry(request), request.app.state.settings.base_url)
 
 
 @router.get("/cameras/{device_id}/image/{variant}.jpg")
@@ -431,3 +444,17 @@ async def delete_account(
     await db.commit()
     await finish_deletion(request, device_ids)
     return Response(status_code=204)
+
+
+@router.put("/cameras/{device_id}/public")
+async def set_public(
+    request: Request, body: PublicRequest, db: DbSession, user: AppUser, device_id: str
+) -> Camera:
+    """Opt-in public sky page (roadmap #9); switching off invalidates the link."""
+    device = await _own(db, user, device_id)
+    if body.enabled:
+        public.enable(device)
+    else:
+        public.disable(device)
+    await db.commit()
+    return _camera(device, _registry(request), request.app.state.settings.base_url)

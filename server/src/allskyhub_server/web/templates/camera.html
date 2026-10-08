@@ -15,6 +15,27 @@
     <dt>Geräte-ID</dt><dd><code>{{ device.id }}</code></dd>
   </dl>
 </div>
+<div class="card">
+  <h2>Öffentliche Seite</h2>
+  {% if device.public_slug %}
+  {% set url = request.base_url ~ "sky/" ~ device.public_slug %}
+  <p>Jeder mit diesem Link sieht Name, neuestes Bild und die Nachtprodukte deiner Kamera:</p>
+  <p><a href="/sky/{{ device.public_slug }}" class="code-link">{{ url }}</a></p>
+  <form method="post" action="/cameras/{{ device.id }}/public">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <input type="hidden" name="enabled" value="false">
+    <button type="submit" class="secondary">Öffentliche Seite ausschalten</button>
+  </form>
+  <p class="muted">Ausschalten macht den Link sofort ungültig; beim Wiedereinschalten gibt es einen neuen.</p>
+  {% else %}
+  <p class="muted">Teile den Himmel über deiner Kamera mit anderen: eine Seite mit Name, neuestem Bild und Keogramm. Standort und Gerätedaten bleiben privat.</p>
+  <form method="post" action="/cameras/{{ device.id }}/public">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <input type="hidden" name="enabled" value="true">
+    <button type="submit">Öffentliche Seite einschalten</button>
+  </form>
+  {% endif %}
+</div>
 <form method="post" action="/cameras/{{ device.id }}/remove" class="card danger">
   <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
   <p class="muted">Entfernen trennt die Kamera von deinem Konto. Sie zeigt danach einen neuen Kopplungscode.</p>

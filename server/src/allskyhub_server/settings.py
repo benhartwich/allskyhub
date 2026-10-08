@@ -31,6 +31,9 @@ class Settings(BaseSettings):
     keep_thumb_days: int = Field(default=30, ge=1)
     # Night products (SPEC §6.5): a long 1080p timelapse can reach a few hundred MB.
     max_product_mb: int = Field(default=512, ge=1)
+    # Push (roadmap #6): the Firebase service account JSON. Unset: push is off, nothing is
+    # sent to Google and the privacy policy does not mention it.
+    fcm_service_account_file: Path | None = None
     max_image_mb: int = Field(default=25, ge=1)
 
     session_cookie_name: str = "allskyhub_session"
@@ -56,6 +59,10 @@ class Settings(BaseSettings):
     @property
     def is_dev(self) -> bool:
         return self.env == "dev"
+
+    @property
+    def push_enabled(self) -> bool:
+        return self.fcm_service_account_file is not None
 
     @property
     def image_dir(self) -> Path:

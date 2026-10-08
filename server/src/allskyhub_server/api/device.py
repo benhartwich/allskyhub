@@ -9,6 +9,7 @@ import logging
 import os
 import pathlib
 import tempfile
+from collections.abc import Coroutine
 from typing import Annotated, Any
 
 from fastapi import APIRouter, HTTPException, Path, Query, Request, WebSocket
@@ -46,6 +47,7 @@ from allskyhub_server.devices import pairing
 from allskyhub_server.devices.connections import Connection, ConnectionRegistry
 from allskyhub_server.devices.images import JPEG_MAGIC, ImageStore
 from allskyhub_server.models import Device, EventRecord, Frame, Product, User
+from allskyhub_server.push.notify import Notifier
 from allskyhub_server.settings import Settings
 from allskyhub_server.web.deps import DbSession, SettingsDep, client_ip
 
@@ -310,6 +312,7 @@ async def device_ws(websocket: WebSocket) -> None:
     maker: async_sessionmaker[AsyncSession] = app.state.sessionmaker
     settings: Settings = app.state.settings
     registry: ConnectionRegistry = app.state.connections
+    notifier: Notifier = app.state.notifier
 
     token_value = _bearer(websocket.headers)
     async with maker() as db:
@@ -332,7 +335,7 @@ async def device_ws(websocket: WebSocket) -> None:
     old = await registry.attach(conn)
     if old is not None:
         await old.close(CloseCode.REPLACED)
-    await _touch(maker, info.device_id)
+    await _touch(maker, info.device_id, offline_notified_at=None)  # a new outage may notify
     log.info("device connected", extra={"device_id": info.device_id})
 
     async def expire() -> None:
@@ -343,7 +346,7 @@ async def device_ws(websocket: WebSocket) -> None:
     try:
         while True:
             raw = await websocket.receive_text()
-            await _handle(raw, conn, maker, settings, registry)
+            await _handle(raw, conn, maker, settings, registry, notifier)
     except WebSocketDisconnect:
         pass
     finally:
@@ -366,6 +369,7 @@ async def _handle(
     maker: async_sessionmaker[AsyncSession],
     settings: Settings,
     registry: ConnectionRegistry,
+    notifier: Notifier,
 ) -> None:
     try:
         env = parse_envelope(raw)
@@ -385,7 +389,7 @@ async def _handle(
     elif isinstance(body, Products):
         await _on_products(body, conn, maker, registry)
     elif isinstance(body, Event):
-        await _on_event(body, conn, maker, registry)
+        await _on_event(body, conn, maker, registry, notifier)
     elif isinstance(body, Ack | ErrorReply):
         registry.resolve(conn.device_id, body)
         if isinstance(body, ErrorReply):
@@ -506,6 +510,7 @@ async def _on_event(
     conn: Connection,
     maker: async_sessionmaker[AsyncSession],
     registry: ConnectionRegistry,
+    notifier: Notifier,
 ) -> None:
     """SPEC §6.4: upsert by the device's stable id (events are resent after a reconnect);
     fetch the thumbnail right away, the full picture when someone opens it (or right away
@@ -525,6 +530,14 @@ async def _on_event(
             .join(Device, Device.owner_id == User.id)
             .where(Device.id == conn.device_id)
         )
+        is_new = (
+            await db.scalar(
+                select(EventRecord.id).where(
+                    EventRecord.device_id == conn.device_id, EventRecord.event_id == body.id
+                )
+            )
+            is None
+        )
         await db.execute(
             pg_insert(EventRecord)
             .values(device_id=conn.device_id, event_id=body.id, **values)
@@ -538,6 +551,9 @@ async def _on_event(
             )
         ).one()
         await db.commit()
+    if is_new:
+        # Roadmap #6; in its own task so a slow push service never delays the device.
+        _background(notifier.event(conn.device_id, body.id))
     if not body.has_image:
         return
     if not stored.has_thumb:
@@ -545,3 +561,13 @@ async def _on_event(
     # Owners who keep events longer keep them in full: fetch the picture while it exists.
     if (keep_days or DEFAULT_EVENT_KEEP_DAYS) > DEFAULT_EVENT_KEEP_DAYS and not stored.has_full:
         await registry.request_event(conn.device_id, body.night_id, body.id, FrameVariant.FULL)
+
+
+_tasks: set[asyncio.Task[None]] = set()
+
+
+def _background(coro: Coroutine[Any, Any, None]) -> None:
+    """Fire and forget, keeping a reference until done (asyncio drops unreferenced tasks)."""
+    task = asyncio.create_task(coro)
+    _tasks.add(task)
+    task.add_done_callback(_tasks.discard)

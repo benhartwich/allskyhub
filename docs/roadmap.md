@@ -26,7 +26,7 @@ postkasten.cloud). Changes to `packages/protocol` and `docs/SPEC.md` have one ow
 | 3 | ~~Free-space retention (keep ≥ 10 % free)~~ done | agent | |
 | 4 | ~~Wi-Fi country from the app~~ done | agent | root path unit in the image |
 | 5 | Lightning, aurora, NLC, sky quality, cloud detections | agent | ports of the existing Allsky modules |
-| 6 | Push notifications (FCM) for events | hub | Android first |
+| 6 | Push notifications (FCM) for events | hub | hub side done (off until a Firebase service account is configured); app side needs the Firebase project (Benjamin) |
 | 7 | Signed agent updates with rollback (M5 part 2) | agent | like myboxi's updater |
 | 8 | Dark frames, sky mask, plate-solve alignment | agent | |
 | 9 | ~~Public sky page per camera~~ | hub | done: opt-in, random link, web + app API |

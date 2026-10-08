@@ -81,3 +81,29 @@ ash delete-user name@example.org --yes # Konto löschen, Kameras entkoppeln, Bil
 Den Link schickst du selbst weiter (der Hub versendet keine E-Mails). Eine neue Einladung an
 dieselbe Adresse macht die vorige ungültig. Abgelaufene Einladungen, Sitzungen und Tokens räumt
 der Hub alle 6 Stunden auf.
+
+## Sicherung
+
+Die Datenbank wird jede Nacht um 03:15 gedumpt (`deploy/backup/allskyhub-db-backup.sh`,
+`allskyhub-db-backup.timer`): `/var/lib/allskyhub-server/backup/allskyhub-JJJJ-MM-TT.sql.gz`,
+7 Tage, dazu `allskyhub-latest.sql.gz`.
+
+```bash
+cp deploy/systemd/allskyhub-db-backup.* /etc/systemd/system/
+systemctl daemon-reload && systemctl enable --now allskyhub-db-backup.timer
+systemctl start allskyhub-db-backup.service   # einmal sofort, Ergebnis im Journal
+```
+
+Damit die Sicherung den Server verlässt, muss das externe rsync `/var/lib/allskyhub-server/`
+(Dumps und Bildarchiv) mitnehmen; `/etc/allskyhub-server/` liegt unter `/etc`.
+
+Wiederherstellen in eine leere Datenbank, als Rolle des Hubs (sonst gehören die Tabellen
+`postgres` und der Hub kann sie nicht lesen):
+
+```bash
+systemctl stop allskyhub-server.service allskyhub-server.socket
+sudo -u postgres dropdb allskyhub && sudo -u postgres createdb -O allskyhub_server allskyhub
+gunzip -c allskyhub-latest.sql.gz | sudo -u allskyhub-server env $(xargs < /etc/allskyhub-server/allskyhub-server.env) \
+  sh -c 'psql "$ALLSKYHUB_SERVER_DATABASE_URL"'
+systemctl start allskyhub-server.socket
+```

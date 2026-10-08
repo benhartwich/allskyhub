@@ -1,0 +1,16 @@
+[Unit]
+Description=allskyhub hub: daily PostgreSQL dump for the external backup
+After=postgresql.service
+
+[Service]
+Type=oneshot
+User=allskyhub-server
+Group=allskyhub-server
+EnvironmentFile=/etc/allskyhub-server/allskyhub-server.env
+ExecStart=/opt/allskyhub-server/deploy/backup/allskyhub-db-backup.sh
+UMask=0027
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+ReadWritePaths=/var/lib/allskyhub-server

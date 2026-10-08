@@ -6,7 +6,7 @@ body model; `Envelope.wrap()` builds one from a body, `parse_envelope()` reads o
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import UTC, datetime
 from enum import StrEnum
 from typing import Any, ClassVar, Literal, cast
 from uuid import uuid4
@@ -82,15 +82,21 @@ class EventKind(StrEnum):
     SKY_QUALITY = "sky_quality"
 
 
+EVENT_ID_PATTERN = r"^[a-z]+-\d{8}T\d{6}Z(-\d+)?$"
+
+
 class Event(_Body):
     """A detection (SPEC §6.4)."""
 
     TYPE: ClassVar[str] = "event"
+    # Stable per device: kind and UTC start, "-2" etc. for a second one in the same second.
+    id: str = Field(pattern=EVENT_ID_PATTERN)
+    night_id: str = Field(pattern=r"^\d{8}$")
     kind: EventKind
     start: AwareDatetime
     end: AwareDatetime
     confidence: float = Field(ge=0, le=1)
-    image: str | None = None
+    has_image: bool = False
     data: dict[str, float | int | str | bool | None] = Field(
         default_factory=dict[str, float | int | str | bool | None]
     )
@@ -99,7 +105,16 @@ class Event(_Body):
     def _end_after_start(self) -> Event:
         if self.end < self.start:
             raise ValueError("end is before start")
+        if not self.id.startswith(self.kind.value.replace("_", "") + "-"):
+            raise ValueError("id must start with the kind")
         return self
+
+
+def event_id(kind: EventKind, start: datetime, seq: int = 1) -> str:
+    """SPEC §6.4: e.g. "meteor-20261008T214512Z", "-2" for a second one in that second."""
+    stamp = start.astimezone(UTC).strftime("%Y%m%dT%H%M%SZ")
+    base = f"{kind.value.replace('_', '')}-{stamp}"
+    return base if seq <= 1 else f"{base}-{seq}"
 
 
 class ProductKind(StrEnum):
@@ -153,6 +168,7 @@ class CommandName(StrEnum):
     UPDATE = "update"
     UPLOAD_FRAME = "upload_frame"
     UPLOAD_PRODUCT = "upload_product"
+    UPLOAD_EVENT = "upload_event"
 
 
 class Command(_Body):

@@ -65,7 +65,14 @@ def test_naive_timestamp_rejected() -> None:
 
 def test_event_end_before_start_rejected() -> None:
     with pytest.raises(ValidationError):
-        Event(kind=EventKind.METEOR, start=TS, end=TS - timedelta(seconds=1), confidence=0.9)
+        Event(
+            id="meteor-20261006T213000Z",
+            night_id="20261006",
+            kind=EventKind.METEOR,
+            start=TS,
+            end=TS - timedelta(seconds=1),
+            confidence=0.9,
+        )
 
 
 def test_extra_fields_rejected() -> None:
@@ -121,3 +128,28 @@ def test_upload_product_args() -> None:
     assert a.variant is FrameVariant.FULL
     with pytest.raises(ValidationError):
         UploadProductArgs.model_validate({"night_id": "20261006", "name": "../etc/passwd"})
+
+
+def test_event_ids_and_upload_event_args() -> None:
+    from allskyhub_protocol import UploadEventArgs, event_id
+
+    assert event_id(EventKind.METEOR, TS) == "meteor-20261006T213000Z"
+    assert event_id(EventKind.SKY_QUALITY, TS, seq=2) == "skyquality-20261006T213000Z-2"
+    ev = Event(
+        id=event_id(EventKind.METEOR, TS),
+        night_id="20261006",
+        kind=EventKind.METEOR,
+        start=TS,
+        end=TS + timedelta(seconds=2),
+        confidence=0.8,
+        has_image=True,
+        data={"length_px": 120, "peak": 0.9, "frames": 2, "direction_deg": 45.0, "shower": None},
+    )
+    assert parse_envelope(Envelope.wrap(ev, ts=TS).model_dump_json()).body == ev
+    with pytest.raises(ValidationError):  # id of another kind
+        Event(id="lightning-20261006T213000Z", night_id="20261006", kind=EventKind.METEOR,
+              start=TS, end=TS, confidence=0.5)  # fmt: skip
+    a = UploadEventArgs.model_validate({"night_id": "20261006", "event_id": ev.id})
+    assert a.variant.value == "full"
+    with pytest.raises(ValidationError):
+        UploadEventArgs.model_validate({"night_id": "20261006", "event_id": "../../etc"})

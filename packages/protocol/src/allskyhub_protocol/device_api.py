@@ -139,6 +139,14 @@ class UploadProductArgs(_Model):
     variant: FrameVariant = FrameVariant.FULL
 
 
+class UploadEventArgs(_Model):
+    """`args` of the `upload_event` command (SPEC §6.5)."""
+
+    night_id: str = Field(pattern=r"^\d{8}$")
+    event_id: str = Field(pattern=r"^[a-z]+-\d{8}T\d{6}Z(-\d+)?$")
+    variant: FrameVariant = FrameVariant.FULL
+
+
 class ErrorCode(StrEnum):
     """`code` of an `error` reply to a command (SPEC §6.5)."""
 

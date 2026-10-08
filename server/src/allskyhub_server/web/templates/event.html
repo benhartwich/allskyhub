@@ -3,7 +3,7 @@
 {% block content %}
 <a class="back" href="/cameras/{{ device.id }}/nights/{{ event.night_id }}">← {{ event.night_id | night_title }}</a>
 <h1>{{ event_titles[event.kind] or event.kind }}</h1>
-<p class="muted">{{ event.start | localtime }}</p>
+<p class="muted">{{ event.start | localtime }}{% if (event.data or {}).get("ongoing") %} · <strong>läuft noch</strong>{% endif %}</p>
 <div id="event">{% include "_event_view.html" %}</div>
 <form method="post" action="/cameras/{{ device.id }}/events/{{ event.night_id }}/{{ event.event_id }}/label" class="card label-form">
   <input type="hidden" name="csrf_token" value="{{ csrf_token }}">

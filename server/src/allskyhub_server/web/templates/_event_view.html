@@ -1,12 +1,13 @@
 {%- set image = "/cameras/" ~ device.id ~ "/events/" ~ event.night_id ~ "/" ~ event.event_id ~ "/image" -%}
+{%- set rev = (event.data or {}).get("image_rev", 1) -%}
 {% if state == "ready" %}
-  <a href="{{ image }}"><img class="product-image" src="{{ image }}" alt=""></a>
+  <a href="{{ image }}?v={{ rev }}"><img class="product-image" src="{{ image }}?v={{ rev }}" alt=""></a>
 {% elif state == "fetching" %}
   <div hx-get="/cameras/{{ device.id }}/events/{{ event.night_id }}/{{ event.event_id }}/state" hx-trigger="every 3s" hx-target="#event" hx-swap="innerHTML">
-    {% if event.has_thumb %}<img class="product-image" src="{{ image }}?variant=thumb" alt="">{% endif %}
+    {% if event.has_thumb %}<img class="product-image" src="{{ image }}?variant=thumb&v={{ rev }}" alt="">{% endif %}
     <p class="muted">Vollbild wird von der Kamera geholt …</p>
   </div>
 {% elif state == "offline" %}
-  {% if event.has_thumb %}<img class="product-image" src="{{ image }}?variant=thumb" alt="">{% endif %}
+  {% if event.has_thumb %}<img class="product-image" src="{{ image }}?variant=thumb&v={{ rev }}" alt="">{% endif %}
   <p class="muted">Das Vollbild kommt, sobald die Kamera wieder verbunden ist.</p>
 {% endif %}

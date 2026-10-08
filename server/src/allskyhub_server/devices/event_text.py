@@ -51,5 +51,18 @@ def event_rows(event: EventRecord) -> list[tuple[str, str]]:
         if isinstance(flashes := data.pop("storm_flashes", None), int | float):
             rows.append(("Blitze in 30 Min.", str(round(flashes))))
         data.pop("storm", None)  # shown as the storm the flash belongs to
+    if event.kind in ("aurora", "nlc"):
+        if isinstance(index := data.pop("peak_index", None), int | float):
+            rows.append(("Stärke", f"{round(index)} %"))
+        if isinstance(green := data.pop("green", None), int | float):
+            rows.append(("Grünanteil", f"{green:.0f}".replace(".", ",")))
+        if isinstance(frames := data.pop("frames", None), int | float):
+            rows.append(("Bilder", str(round(frames))))
+        if isinstance(direction := data.pop("direction_deg", None), int | float):
+            # Image-relative (0 = up), not a compass bearing: no N/E/S/W without calibration.
+            rows.append(("Bildrichtung", f"{round(direction) % 360}°"))
+        if data.pop("ongoing", None) is True:
+            rows.append(("Status", "läuft noch"))
+    data.pop("image_rev", None)
     rows.extend((key, str(value)) for key, value in data.items() if value is not None)
     return rows

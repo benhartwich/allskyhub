@@ -28,6 +28,7 @@ from allskyhub_agent.detect.meteor import (
     active_shower,
     to_gray,
 )
+from allskyhub_agent.detect.sky import SkyMeter
 from allskyhub_agent.store.images import THUMB_WIDTH, ImageStore
 from allskyhub_protocol import Event, EventKind, FrameInfo, Mode, event_id
 
@@ -205,12 +206,14 @@ class DetectionWorker:
         mask_radius_frac: float | None = None,
         events: EventStore | None = None,
         lightning_cfg: LightningConfig | None = None,
+        sky: SkyMeter | None = None,
     ) -> None:
         self._store = store
         self.events = events or EventStore(store)
         self._on_event = on_event
         self._meteor = MeteorDetector(cfg, mask, mask_radius_frac)
         self._lightning = LightningDetector(lightning_cfg, mask, mask_radius_frac)
+        self._sky = sky
         self._q: queue.Queue[_Job | None] = queue.Queue(maxsize=4)
         self._dropped = 0
         self._thread = threading.Thread(target=self._run, name="detect", daemon=True)
@@ -256,7 +259,10 @@ class DetectionWorker:
     def process(self, job: _Job) -> None:
         if job.frame.mode is not Mode.NIGHT:
             self._emit(self._meteor.flush())
-        gray = to_gray(np.asarray(job.image, dtype=np.uint8))
+        rgb = np.asarray(job.image, dtype=np.uint8)
+        if self._sky is not None:
+            self._sky.measure(job.frame, rgb)
+        gray = to_gray(rgb)
         self._emit(self._meteor.feed(job.frame, gray, job.path))
         self._emit_lightning(self._lightning.feed(job.frame, gray, job.path))
 

@@ -209,7 +209,14 @@ base64url-encoded without padding.
 - `hello`: device id, profile, agent version, capabilities.
 - `status`: mode, last exposure/gain/mean, temperatures, disk, uptime, `time_trusted`
   (§4.4), and `settings` (`{latitude, longitude, timezone, camera, day_delay_s,
-  night_delay_s}`, location null until known) for the app's settings screen.
+  night_delay_s}`, location null until known) for the app's settings screen, and
+  `sky` (null until the first frame is measured): `{at, night_id, cloud_cover, sqm_mag,
+  stars}` measured on the newest frame. `at` is that frame's `captured_at` and
+  `night_id` its night (§4.5); status repeats the last `sky` until a new frame is
+  measured, so the hub keeps one sample per `at`. `cloud_cover` (0..1) comes from the
+  stars visible in the upper sky at night (sun ≤ −12°), else null. `sqm_mag` (mag/arcsec², approximate until calibrated) is the
+  sky background normalised by exposure and gain, only at astronomical night (sun ≤
+  −18°), else null. `stars` is the number of stars detected at night, else null.
 - `frame`: frame metadata (§4.4); the image itself goes over HTTPS when the hub asks
   for it (§6.5, `upload_frame`).
 - `event`: a detection (§6.4).

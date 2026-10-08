@@ -137,7 +137,7 @@ async def test_legal_pages_are_public(client: httpx.AsyncClient) -> None:
     assert "nach 7 Tagen" in privacy.text  # settings.keep_full_days
     assert "nach 30 Tagen" in privacy.text  # settings.keep_thumb_days
     assert "Entwurf" not in privacy.text
-    assert "TODO" not in privacy.text + imprint.text
+    assert 'class="todo"' not in privacy.text + imprint.text  # not a word: tokens are random
     home = await client.get("/")
     assert 'href="/impressum"' in home.text
     assert 'href="/datenschutz"' in home.text

@@ -21,7 +21,7 @@ postkasten.cloud). Changes to `packages/protocol` and `docs/SPEC.md` have one ow
 
 | # | Item | Owner | Notes |
 |---|---|---|---|
-| 1 | Meteor detection → `event` (meteor) with image | agent | port of allsky_meteordetect; hub/app show events (hub) |
+| 1 | ~~Meteor detection → `event` (meteor) with image~~ done (v1) | agent | aircraft/satellite great-circle filter and star veto need the fisheye calibration (#8) |
 | 2 | `set_settings` command: location, time zone, camera, delays | agent + hub | app "Standort ändern" |
 | 3 | Free-space retention (keep ≥ 10 % free) | agent | SPEC §4.5 says "from M1" |
 | 4 | Wi-Fi country from the app | agent | root helper unit started via polkit |

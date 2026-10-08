@@ -11,14 +11,14 @@ import httpx
 
 from allskyhub_agent import __version__
 from allskyhub_agent.discovery import Announcer
-from allskyhub_agent.hub.client import HubClient, HubConfig, HubSession
+from allskyhub_agent.hub.client import EventSource, HubClient, HubConfig, HubSession
 from allskyhub_agent.hub.identity import DeviceIdentity
 from allskyhub_agent.hub.pairing import PairingState
 from allskyhub_agent.live import LiveState
 from allskyhub_agent.products.build import newest_products
 from allskyhub_agent.settings import AgentSettings
 from allskyhub_agent.store.images import ImageStore
-from allskyhub_protocol import FrameInfo, Products, Status
+from allskyhub_protocol import Event, FrameInfo, Products, Status
 
 log = logging.getLogger(__name__)
 
@@ -35,6 +35,7 @@ class HubManager:
         profile: str,
         status: Callable[[], Status | None],
         settings_path: Path | None,
+        events: EventSource | None = None,
     ) -> None:
         self._identity = identity
         self._pairing = pairing
@@ -43,6 +44,7 @@ class HubManager:
         self._profile = profile
         self._status = status
         self._settings_path = settings_path
+        self._events = events
         self._lock = threading.Lock()
         self._client: HubClient | None = None
 
@@ -61,6 +63,7 @@ class HubManager:
                 self._status,
                 http,
                 latest_products=lambda: newest_products(self._store),
+                events=self._events,
             )
 
         client = HubClient(make_session, cfg)
@@ -82,6 +85,12 @@ class HubManager:
             client = self._client
         if client is not None:
             client.notify_frame(info)
+
+    def notify_event(self, event: Event) -> None:
+        with self._lock:
+            client = self._client
+        if client is not None:
+            client.notify_event(event)
 
     def notify_products(self, products: Products) -> None:
         with self._lock:

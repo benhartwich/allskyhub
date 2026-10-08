@@ -10,6 +10,7 @@ dependencies = [
   "httpx>=0.27",
   "ifaddr>=0.2",
   "numpy>=1.24",
+  "opencv-python-headless>=4.8",
   "pillow>=9.4",
   "websockets>=13",
   "zeroconf>=0.132",

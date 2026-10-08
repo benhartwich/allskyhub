@@ -27,6 +27,7 @@ from allskyhub_agent.adapters.zwo import ZwoCamera
 from allskyhub_agent.core.clock import Clock, SimClock, SystemClock
 from allskyhub_agent.core.exposure import AutoExposure
 from allskyhub_agent.core.sun import sun_elevation
+from allskyhub_agent.detect.events import DetectionWorker, EventStore
 from allskyhub_agent.discovery import Announcer
 from allskyhub_agent.hub.identity import DEFAULT_KEY_PATH, DeviceIdentity
 from allskyhub_agent.hub.pairing import PairingState
@@ -176,6 +177,8 @@ def main(argv: list[str] | None = None) -> int:
         hub_url = hub_url or load_settings().hub_url
 
     profile_hint = "sim" if args.sim else (args.profile or load_settings().camera)
+    # Detections (SPEC §6.4); the night folders do not depend on the time zone.
+    event_store = EventStore(store)
     identity: DeviceIdentity | None = None
     profile_id = {"auto": "zwo-asi678mc"}.get(profile_hint, profile_hint)
     if hub_url:
@@ -198,7 +201,9 @@ def main(argv: list[str] | None = None) -> int:
                 time_trusted=system.time_trusted(),
             )
 
-        hub = HubManager(identity, pairing, store, live, profile_id, status, settings_path)
+        hub = HubManager(
+            identity, pairing, store, live, profile_id, status, settings_path, events=event_store
+        )
         hub.start(hub_url)
         print(f"device {identity.device_id}, hub {hub_url}")
         if network is not None:
@@ -308,6 +313,14 @@ def main(argv: list[str] | None = None) -> int:
             shutdown()
             return 1
 
+    detect = DetectionWorker(
+        store,
+        on_event=hub.notify_event if hub is not None else None,
+        mask_radius_frac=profile.image_circle_frac,
+        events=event_store,
+    )
+    detect.start()
+
     runner = Runner(
         camera=camera,
         auto_exposure=AutoExposure(profile.exposure),
@@ -319,6 +332,7 @@ def main(argv: list[str] | None = None) -> int:
         mask_radius_frac=profile.image_circle_frac,
         live=live,
         local_tz=tz,
+        analyzers=[detect.on_frame],
     )
 
     def products_done(result: NightProducts) -> None:
@@ -347,6 +361,7 @@ def main(argv: list[str] | None = None) -> int:
     finally:
         camera.close()
         products.stop()
+        detect.stop()
         shutdown()
     return 0
 

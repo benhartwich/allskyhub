@@ -532,6 +532,8 @@ async def _on_event(
         "data": dict(body.data),
     }
     async with maker() as db:
+        if not await _still_paired(db, conn.device_id):
+            return
         keep_days = await db.scalar(
             select(User.event_keep_days)
             .join(Device, Device.owner_id == User.id)
@@ -596,6 +598,8 @@ async def _store_sky(
     """SPEC §6.3 ``status.sky``: one row per measured frame (the device repeats the last
     measurement until a new frame comes, so duplicates of ``at`` are skipped)."""
     async with maker() as db:
+        if not await _still_paired(db, device_id):
+            return
         await db.execute(
             pg_insert(SkySample)
             .values(
@@ -609,3 +613,13 @@ async def _store_sky(
             .on_conflict_do_nothing(index_elements=["device_id", "at"])
         )
         await db.commit()
+
+
+async def _still_paired(db: AsyncSession, device_id: str) -> bool:
+    """Data that arrives after the camera was removed is dropped: a later owner must never see
+    it. The row lock makes a concurrent unpairing wait for this transaction (or this one see
+    its result)."""
+    owner = await db.scalar(
+        select(Device.owner_id).where(Device.id == device_id).with_for_update(read=True)
+    )
+    return owner is not None

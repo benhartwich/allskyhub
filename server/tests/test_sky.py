@@ -76,7 +76,14 @@ async def test_unpairing_removes_sky_samples(
     token = await paired_token(client, dev)
     async with device_ws(live_app, token) as ws:
         await send(ws, status(10, 0.5, None, 10))
-        await asyncio.sleep(0.2)
+        # Wait until the hub stored it (a fixed sleep raced on a slow CI runner).
+        for _ in range(100):
+            async with app.state.sessionmaker() as db:
+                if await db.scalar(select(func.count()).select_from(SkySample)):
+                    break
+            await asyncio.sleep(0.05)
+        else:
+            raise AssertionError("sky sample was not stored")
     await client.post(
         f"/cameras/{dev.device_id}/remove", data={"csrf_token": await home_csrf(client)}
     )
@@ -96,3 +103,26 @@ def test_chart_gaps_and_scales() -> None:
     assert svg.count("<circle") == 1  # after the gap a single point, not joined
     assert result[0].latest == "80"
     assert charts([]) == []
+
+
+async def test_data_after_removal_is_dropped(
+    app: FastAPI, client: httpx.AsyncClient, live_app: str
+) -> None:
+    """A status or event the hub reads after the camera was removed must not be stored."""
+    from allskyhub_server.models import Device, EventRecord
+    from tests.test_events import meteor
+
+    dev = FakeDevice()
+    token = await paired_token(client, dev)
+    async with device_ws(live_app, token) as ws:
+        async with app.state.sessionmaker() as db:  # removed while the socket is still open
+            from sqlalchemy import update
+
+            await db.execute(update(Device).where(Device.id == dev.device_id).values(owner_id=None))
+            await db.commit()
+        await send(ws, status(20, 0.3, None, 5))
+        await send(ws, meteor())
+        await asyncio.sleep(0.3)
+    async with app.state.sessionmaker() as db:
+        assert await db.scalar(select(func.count()).select_from(SkySample)) == 0
+        assert await db.scalar(select(func.count()).select_from(EventRecord)) == 0

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import dataclasses
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from zoneinfo import ZoneInfo
@@ -148,3 +149,21 @@ def test_restart_closes_an_open_episode(tmp_path: Path) -> None:
     events = [e for e in EventStore(store).night_events("20261008") if e.kind is EventKind.AURORA]
     assert len(events) == 2
     assert [e.data["ongoing"] for e in events] == [False, True]
+
+
+def test_with_an_orientation_only_the_polar_sector_counts() -> None:
+    from allskyhub_agent.calib.solve import Solution
+
+    sol = Solution(cx=W / 2, cy=H / 2, a1=230.0, a3=0.0, rot=0.0, flip=1.0, tilt_east=0.0,
+                   tilt_north=0.0, stars=30, rms_px=1.0, rms_deg=0.1,
+                   width=W, height=H)  # fmt: skip
+    east = [(frame(i), sky(i, GREEN)) for i in range(3)]  # the rays are right of the centre
+    north_up = AuroraDetector(CFG, orientation=lambda: sol, latitude=lambda: 48.1)
+    assert [u for f, img in east for u in north_up.feed(f, img, Path(f"/{f.name}"))] == []
+    # The same rays with north to the right of the image: now they are toward the pole.
+    sol_e = dataclasses.replace(sol, rot=90.0)
+    north_right = AuroraDetector(CFG, orientation=lambda: sol_e, latitude=lambda: 48.1)
+    assert [u for f, img in east for u in north_right.feed(f, img, Path(f"/{f.name}"))]
+    # Southern hemisphere: the pole is south, opposite.
+    south = AuroraDetector(CFG, orientation=lambda: sol_e, latitude=lambda: -45.0)
+    assert [u for f, img in east for u in south.feed(f, img, Path(f"/{f.name}"))] == []

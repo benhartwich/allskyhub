@@ -309,6 +309,7 @@ class DetectionWorker:
         sky_mask: SkyMask | None = None,
         orienter: Orienter | None = None,
         nlc: NlcDetector | None = None,
+        latitude: Callable[[], float | None] | None = None,
     ) -> None:
         self._store = store
         self.events = events or EventStore(store)
@@ -316,7 +317,13 @@ class DetectionWorker:
         self._meteor = MeteorDetector(cfg, mask, mask_radius_frac)
         self._lightning = LightningDetector(lightning_cfg, mask, mask_radius_frac)
         self._sky = sky
-        self._aurora = AuroraDetector(aurora_cfg, mask_radius_frac or 0.48)
+        self._aurora = AuroraDetector(
+            aurora_cfg,
+            mask_radius_frac or 0.48,
+            orientation=(lambda: orienter.solution) if orienter is not None else None,
+            latitude=latitude,
+            sky_mask=sky_mask.get if sky_mask is not None else None,
+        )
         self._sky_mask = sky_mask
         self._orienter = orienter
         self._nlc = nlc

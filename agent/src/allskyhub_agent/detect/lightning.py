@@ -41,6 +41,8 @@ class LightningConfig:
 class Flash:
     area_frac: float  # 0..1 of the sky
     peak: float  # 0..1, mean brightening of the lit area
+    x: float = 0.0  # centroid of the lit area in the frame
+    y: float = 0.0
 
 
 @dataclass(frozen=True)
@@ -105,7 +107,14 @@ class LightningDetector:
         if area < cfg.min_area_frac:
             return None
         peak = float(diff[lit].mean()) / 255.0
-        return Flash(area_frac=round(area, 4), peak=round(min(1.0, peak), 3)), lit
+        ys, xs = np.nonzero(lit)
+        flash = Flash(
+            area_frac=round(area, 4),
+            peak=round(min(1.0, peak), 3),
+            x=round(float(xs.mean()), 1),
+            y=round(float(ys.mean()), 1),
+        )
+        return flash, lit
 
     def feed(self, frame: FrameInfo, gray: Gray, image_path: Path) -> list[LightningHit]:
         cfg = self._cfg

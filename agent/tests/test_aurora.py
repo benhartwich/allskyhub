@@ -127,7 +127,7 @@ def test_aurora_events_upsert_by_id(tmp_path: Path) -> None:
     assert first.data["image_rev"] == 1
     assert first.data["ongoing"] is True
     assert set(first.data) == {"peak_index", "green", "frames", "direction_deg", "ongoing",
-                               "image_rev"}  # fmt: skip
+                               "image_rev", "azimuth_deg", "altitude_deg"}  # fmt: skip
     events = EventStore(store)
     stored_events = [e for e in events.night_events(first.night_id) if e.kind is EventKind.AURORA]
     assert [e.id for e in stored_events] == [first.id]  # one entry, the last update

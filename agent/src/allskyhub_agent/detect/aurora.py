@@ -59,6 +59,8 @@ class AuroraScore:
     green: float  # mean green over red of the aurora pixels, 8 bit
     blobs: int
     direction_deg: float | None  # in the image, 0 = up, clockwise
+    x: float | None = None  # centroid of the aurora pixels in the frame
+    y: float | None = None
 
     @property
     def candidate(self) -> bool:
@@ -129,10 +131,12 @@ def score(rgb: npt.NDArray[np.uint8], band: Mask, cfg: AuroraConfig) -> AuroraSc
         return AuroraScore(round(index, 2), 0.0, 0, None)
     m = cv2.moments(kept.astype(np.uint8), binaryImage=True)
     # Centroid back in the full frame, as a direction from the image centre.
-    cx = x0 + float(m["m10"]) / float(m["m00"]) / scale - rgb.shape[1] / 2.0
-    cy = y0 + float(m["m01"]) / float(m["m00"]) / scale - rgb.shape[0] / 2.0
+    fx = x0 + float(m["m10"]) / float(m["m00"]) / scale
+    fy = y0 + float(m["m01"]) / float(m["m00"]) / scale
+    cx, cy = fx - rgb.shape[1] / 2.0, fy - rgb.shape[0] / 2.0
     direction = round(math.degrees(math.atan2(cx, -cy)) % 360.0, 1)
-    return AuroraScore(round(index, 2), round(float(gor[kept].mean()), 1), len(big), direction)
+    green = round(float(gor[kept].mean()), 1)
+    return AuroraScore(round(index, 2), green, len(big), direction, round(fx, 1), round(fy, 1))
 
 
 @dataclass

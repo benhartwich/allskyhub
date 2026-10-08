@@ -62,6 +62,8 @@ class Solution:
     stars: int
     rms_px: float
     rms_deg: float
+    width: int = 0  # the size of the frame it was solved on; 0: unknown (older file)
+    height: int = 0
 
     @property
     def params(self) -> list[float]:
@@ -72,6 +74,14 @@ class Solution:
 
     def unproject(self, x: F, y: F) -> tuple[F, F]:
         return unproject(x, y, self.params, self.flip)
+
+    def position(self, x: float, y: float, width: int, height: int) -> tuple[float, float] | None:
+        """(azimuth, altitude) in degrees of a pixel in a frame of this size, rounded;
+        None if the frame has another size than the solved one."""
+        if self.width and (width, height) != (self.width, self.height):
+            return None
+        alt, az = self.unproject(np.array([x]), np.array([y]))
+        return round(float(az[0]) % 360.0, 1), round(float(alt[0]), 1)
 
 
 # --- sky ------------------------------------------------------------------------------
@@ -502,4 +512,5 @@ def solve(
         cx=round(p[0], 2), cy=round(p[1], 2), a1=round(p[2], 3), a3=round(p[3], 3),
         rot=round(p[4] % 360.0, 3), flip=flip, tilt_east=round(p[5], 3),
         tilt_north=round(p[6], 3), stars=n, rms_px=round(rms_px, 2), rms_deg=round(rms_deg, 3),
+        width=w, height=h,
     )  # fmt: skip

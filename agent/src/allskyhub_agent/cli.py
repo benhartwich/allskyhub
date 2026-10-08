@@ -183,7 +183,9 @@ def main(argv: list[str] | None = None) -> int:
 
     profile_hint = "sim" if args.sim else (args.profile or load_settings().camera)
     # Detections (SPEC §6.4); the night folders do not depend on the time zone.
-    event_store = EventStore(store)
+    event_store = EventStore(
+        store, orientation=lambda: orienter.solution if orienter is not None else None
+    )
     # Sky condition for status (SPEC §6.3); configured for the profile once it is known.
     sky_meter: SkyMeter | None = None
     # Plate-solved image orientation (SPEC §4.8), created with the detection worker.

@@ -131,3 +131,41 @@ def test_orienter_gives_up_after_tries(tmp_path: Path, monkeypatch: pytest.Monke
         o.join(5)
     assert started == 2
     assert o.latest is None
+
+
+def test_position_of_a_pixel() -> None:
+    sol = Solution(cx=TRUE[0], cy=TRUE[1], a1=TRUE[2], a3=TRUE[3], rot=TRUE[4], flip=FLIP,
+                   tilt_east=0.0, tilt_north=0.0, stars=30, rms_px=1.0, rms_deg=0.1,
+                   width=W, height=H)  # fmt: skip
+    x, y = project(np.array([42.0]), np.array([132.0]), TRUE, FLIP)
+    pos = sol.position(float(x[0]), float(y[0]), W, H)
+    assert pos == (132.0, 42.0)
+    assert sol.position(float(x[0]), float(y[0]), 2 * W, 2 * H) is None  # another frame size
+    az, alt = sol.position(TRUE[0], TRUE[1] - 300, W, H) or (0.0, 0.0)
+    assert alt > 30
+    assert az == pytest.approx(TRUE[4], abs=1)  # up in the image: (north_deg - 0) mirrored
+
+
+def test_meteor_event_gets_its_sky_position(tmp_path: Path) -> None:
+    from zoneinfo import ZoneInfo
+
+    from allskyhub_agent.detect.events import EventStore
+    from allskyhub_agent.detect.meteor import MeteorConfig, MeteorHit, find_streaks
+    from allskyhub_agent.store.images import ImageStore
+
+    store = ImageStore(tmp_path, ZoneInfo("UTC"))
+    sol = Solution(cx=W / 2, cy=H / 2, a1=500.0, a3=0.0, rot=0.0, flip=1.0, tilt_east=0.0,
+                   tilt_north=0.0, stars=30, rms_px=1.0, rms_deg=0.1,
+                   width=W, height=H)  # fmt: skip
+    events = EventStore(store, orientation=lambda: sol)
+    gray = np.zeros((H, W), np.uint8)
+    cv2.line(gray, (W // 2 + 200, H // 2 - 60), (W // 2 + 300, H // 2 + 60), 255, 2)
+    rgb = np.empty((H, W, 3), dtype=np.uint8)
+    rgb[:, :, :] = gray[:, :, None]
+    stored = store.save(rgb, AT)
+    f = frame(0).model_copy(update={"name": stored.name, "night_id": stored.night_id})
+    s = find_streaks(gray, MeteorConfig())[0]
+    ev = events.save_meteor(MeteorHit(f, store.night_dir(f.night_id) / f.name, s))
+    # 250 px right of the centre with r = 500 t: zenith angle 45°, east (not mirrored).
+    assert ev.data["azimuth_deg"] == pytest.approx(90, abs=2)
+    assert ev.data["altitude_deg"] == pytest.approx(45, abs=2)

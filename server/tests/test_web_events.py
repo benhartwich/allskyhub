@@ -11,7 +11,7 @@ from fastapi import FastAPI
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from allskyhub_protocol import CommandName, FrameVariant, UploadEventArgs
-from allskyhub_server.devices.event_text import event_rows
+from allskyhub_server.devices.event_text import event_rows, meteor_summary, shower_text
 from allskyhub_server.devices.images import ImageStore
 from allskyhub_server.models import EventRecord
 from tests.fake_device import FakeDevice
@@ -28,7 +28,7 @@ def record(device_id: str) -> EventRecord:
         device_id=device_id, event_id=EVENT, night_id=NIGHT, kind="meteor", start=START,
         end=START + dt.timedelta(seconds=1.5), confidence=0.87, has_image=True, has_thumb=True,
         data={"length_px": 412, "peak": 0.93, "frames": 3, "direction_deg": 135.0,
-              "shower": "Orioniden", "extra": 7},
+              "shower": "Orionids", "shower_match": "radiant", "extra": 7},
     )  # fmt: skip
 
 
@@ -44,6 +44,37 @@ def test_event_rows_in_german() -> None:
         "Meteorstrom": "Orioniden",
         "extra": "7",
     }
+
+
+@pytest.mark.parametrize(
+    ("data", "text"),
+    [
+        ({"shower": "Perseids", "shower_match": "radiant"}, "Perseiden"),
+        ({"shower": None, "shower_match": "radiant"}, "sporadisch"),
+        ({"shower": "Perseids", "shower_match": "date"}, "vielleicht Perseiden (nur nach Datum)"),
+        ({"shower": "Perseids"}, "vielleicht Perseiden (nur nach Datum)"),  # older agents
+        ({"shower": None, "shower_match": None}, None),
+        ({"shower": None}, None),
+        ({"shower": "Bootids", "shower_match": "radiant"}, "Bootids"),
+    ],
+)
+def test_shower_text(data: dict[str, object], text: str | None) -> None:
+    """SPEC §6.4 shower_match."""
+    assert shower_text(data) == text
+
+
+def test_meteor_summary() -> None:
+    def meteor(data: dict[str, object], kind: str = "meteor") -> EventRecord:
+        return EventRecord(kind=kind, data=data)
+
+    assert meteor_summary([meteor({}, "lightning")]) is None
+    assert meteor_summary([meteor({"shower": "Perseids"})]) == "1 Meteor"
+    radiant: dict[str, object] = {"shower": "Perseids", "shower_match": "radiant"}
+    sporadic: dict[str, object] = {"shower": None, "shower_match": "radiant"}
+    assert (
+        meteor_summary([meteor(radiant), meteor(radiant), meteor(sporadic), meteor({})])
+        == "4 Meteore: 2 Perseiden, 1 sporadisch, 1 ohne Radiant"
+    )
 
 
 async def test_web_events(
@@ -66,7 +97,9 @@ async def test_web_events(
     assert "Letzte Ereignisse" in camera
     assert f'href="{detail}"' in camera
     assert f'href="{detail}"' in (await client.get(f"{base}/events")).text
-    assert f'href="{detail}"' in (await client.get(f"{base}/nights/{NIGHT}")).text
+    night = (await client.get(f"{base}/nights/{NIGHT}")).text
+    assert f'href="{detail}"' in night
+    assert "1 Meteor: 1 Orioniden" in night
     image = await client.get(f"{detail}/image", params={"variant": "thumb"})
     assert image.content == JPEG
 

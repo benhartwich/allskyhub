@@ -133,7 +133,7 @@ class FrameItem(BaseModel):
 
 class EventItem(BaseModel):
     """A detection (SPEC §6.4). ``data`` keys per kind, e.g. for meteors ``length_px``,
-    ``peak``, ``frames``, ``direction_deg``, ``shower``."""
+    ``peak``, ``frames``, ``direction_deg``, ``shower``, ``shower_match``."""
 
     id: str
     night_id: str

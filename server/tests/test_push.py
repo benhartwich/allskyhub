@@ -127,7 +127,10 @@ async def test_event_notifications(
                     "end": later.end + dt.timedelta(minutes=5)}
         )  # fmt: skip
         await send(ws, later)
-        await asyncio.sleep(0.3)
+        for _ in range(100):  # a fixed sleep raced on a loaded machine
+            if fake_push.sent:
+                break
+            await asyncio.sleep(0.05)
         assert len(fake_push.sent) == 1
         tokens, message = fake_push.sent[0]
         assert tokens == ["fcm-token-abcdef"]

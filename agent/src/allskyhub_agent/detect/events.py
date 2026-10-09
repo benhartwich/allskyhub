@@ -30,7 +30,9 @@ from allskyhub_agent.detect.meteor import (
     MeteorConfig,
     MeteorDetector,
     MeteorHit,
+    Streak,
     active_shower,
+    match_shower,
     to_gray,
 )
 from allskyhub_agent.detect.nlc import NlcDetector, NlcUpdate
@@ -48,12 +50,30 @@ FULL_MAX_PX = 1920  # a lightning picture is the whole frame, at most this wide
 
 class EventStore:
     def __init__(
-        self, store: ImageStore, orientation: Callable[[], Solution | None] | None = None
+        self,
+        store: ImageStore,
+        orientation: Callable[[], Solution | None] | None = None,
+        location: Callable[[], tuple[float, float] | None] | None = None,
     ) -> None:
         self._store = store
         self._lock = threading.Lock()
         # SPEC §4.8: the orientation valid when an event is saved gives its sky position.
         self._orientation = orientation
+        self._location = location
+
+    def _shower(self, f: FrameInfo, s: Streak) -> dict[str, str | None]:
+        """`shower` and `shower_match` (SPEC §6.4): by the radiant once the camera is
+        oriented, else by the date alone."""
+        sol = self._orientation() if self._orientation is not None else None
+        loc = self._location() if self._location is not None else None
+        size = self._frame_size(f) if sol is not None and loc is not None else None
+        if sol is not None and loc is not None and size is not None:
+            e1, e2 = sol.position(*s.p1, *size), sol.position(*s.p2, *size)
+            if e1 is not None and e2 is not None:
+                mid = f.captured_at + timedelta(microseconds=f.exposure_us // 2)
+                return {"shower": match_shower(e1, e2, mid, *loc), "shower_match": "radiant"}
+        name = active_shower(f.captured_at.date())
+        return {"shower": name, "shower_match": "date" if name else None}
 
     def _position(
         self, frame: FrameInfo, x: float | None, y: float | None
@@ -148,7 +168,7 @@ class EventStore:
                     "peak": round(s.peak, 3),
                     "frames": 1,
                     "direction_deg": s.direction_deg,
-                    "shower": active_shower(f.captured_at.date()),
+                    **self._shower(f, s),
                     **self._position(f, s.cx, s.cy),
                 },
             )

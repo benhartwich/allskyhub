@@ -286,7 +286,7 @@ base64url-encoded without padding.
 
 | kind | keys |
 |---|---|
-| `meteor` | `length_px` (int, track length), `peak` (0..1, peak brightness of the track), `frames` (int, frames it appears in), `direction_deg` (0..360 in the image, 0 = up, clockwise, or null), `shower` (name of an active shower, e.g. `Perseids`, or null) |
+| `meteor` | `length_px` (int, track length), `peak` (0..1, peak brightness of the track), `frames` (int, frames it appears in), `direction_deg` (0..360 in the image, 0 = up, clockwise, or null), `shower` (name of a shower, e.g. `Perseids`, or null), `shower_match` (how `shower` was found, below) |
 | `lightning` | `area_frac` (0..1, part of the sky that lit up), `peak` (0..1, mean brightening of the lit area), `storm_flashes` (int, flashes in the last 30 min including this one), `storm` (string, `storm-` + UTC start of the storm like an event id; the same for all flashes of a storm, a gap of more than 30 min starts a new one) |
 | `aurora` | one event per episode (below): `peak_index` (0..100, % of the searched band that is aurora-green in the best frame; the band is the low sky (2–36°) within 70° of the pole's azimuth once the camera has an orientation (§4.8), else the whole low ring of the image circle), `green` (mean green over red of those pixels, 8 bit), `frames` (int, candidate frames so far), `direction_deg` (0..360 in the image, 0 = up, clockwise, of the green's centroid; not a compass bearing), `ongoing` (bool), `image_rev` |
 | `nlc` | one episode (below), only with an orientation (§4.8), sun −16° to −9°, in the low sky (12–45°) toward the sun: `peak_index` (0..100, % of that band that is NLC-blue and structured, best frame), `blue` (mean blue over red of those pixels, 8 bit), `frames`, `direction_deg`, `ongoing`, `image_rev` |
@@ -296,6 +296,18 @@ base64url-encoded without padding.
 the meteor's midpoint, the centroid of the lit area, of the green or of the blue. The
 agent computes them with the orientation (§4.8) valid when it saves the event, so they
 stay right after a later re-solve; both are null while the camera has no orientation.
+
+A meteor's `shower` depends on `shower_match`:
+
+- `radiant`: the camera has an orientation (§4.8). `shower` is the active shower whose
+  radiant (drifting daily from its peak position) is above −5° altitude and lies within 6°
+  of the meteor's path, extended along its great circle beyond either end; a meteor never
+  crosses its radiant. If several fit, the closest wins. `shower` null means sporadic.
+- `date`: no orientation. `shower` is the strongest shower active on that date, which the
+  meteor may or may not belong to.
+- null: no orientation and no shower active; `shower` is null too.
+
+Events without `shower_match` (agents before this rule) are treated like `date`.
 
 Some phenomena last minutes to hours (`aurora`, `nlc`). They are one **episode** event: it is
 sent when the episode opens and sent again with the same id while it grows (at most

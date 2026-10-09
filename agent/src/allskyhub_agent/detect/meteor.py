@@ -17,21 +17,22 @@ from __future__ import annotations
 import math
 from collections import deque
 from dataclasses import dataclass
-from datetime import date
+from datetime import date, datetime
 from pathlib import Path
 
 import cv2
 import numpy as np
 import numpy.typing as npt
 
+from allskyhub_agent.calib.solve import alt_az, sidereal_deg
 from allskyhub_agent.core.metering import circle_mask
 from allskyhub_protocol import FrameInfo, Mode
 
 Gray = npt.NDArray[np.uint8]
 Mask = npt.NDArray[np.bool_]
 
-# Major annual showers: name, start (month, day), end (month, day), peak ZHR. Date-based
-# context only; geometric radiant matching needs a calibrated fisheye (roadmap #8).
+# Major annual showers: name, start (month, day), end (month, day), peak ZHR. Without an
+# orientation the date is all there is; with one the radiant decides (`match_shower`).
 SHOWERS: tuple[tuple[str, tuple[int, int], tuple[int, int], int], ...] = (
     ("Quadrantids", (12, 28), (1, 12), 110),
     ("Lyrids", (4, 16), (4, 25), 18),
@@ -45,14 +46,99 @@ SHOWERS: tuple[tuple[str, tuple[int, int], tuple[int, int], int], ...] = (
 )
 
 
-def active_shower(day: date) -> str | None:
-    """The strongest shower active on `day`, if any."""
+# Radiant at the peak (IMO working list): peak (month, day), RA, Dec, and its daily drift
+# in RA and Dec (degrees per day).
+RADIANTS: dict[str, tuple[tuple[int, int], float, float, float, float]] = {
+    "Quadrantids": ((1, 4), 230.0, 49.0, 0.8, -0.2),
+    "Lyrids": ((4, 22), 271.0, 34.0, 1.1, 0.0),
+    "Eta Aquariids": ((5, 6), 338.0, -1.0, 0.9, 0.4),
+    "Delta Aquariids": ((7, 30), 340.0, -16.0, 0.8, 0.18),
+    "Perseids": ((8, 12), 48.0, 58.0, 1.35, 0.12),
+    "Orionids": ((10, 21), 95.0, 16.0, 0.7, 0.1),
+    "Leonids": ((11, 17), 152.0, 22.0, 0.7, -0.4),
+    "Geminids": ((12, 14), 112.0, 33.0, 1.0, -0.15),
+    "Ursids": ((12, 22), 217.0, 76.0, 0.0, 0.0),
+}
+RADIANT_TOL_DEG = 6.0  # the backward path passes the radiant this close
+RADIANT_MIN_ALT = -5.0  # a radiant just below the horizon still sends earth-grazers
+
+
+def _active(day: date) -> list[tuple[int, str]]:
     v = day.month * 100 + day.day
-    best: tuple[int, str] | None = None
+    out: list[tuple[int, str]] = []
     for name, (m1, d1), (m2, d2), zhr in SHOWERS:
         a, b = m1 * 100 + d1, m2 * 100 + d2
-        if ((a <= v <= b) if a <= b else (v >= a or v <= b)) and (best is None or zhr > best[0]):
-            best = (zhr, name)
+        if (a <= v <= b) if a <= b else (v >= a or v <= b):
+            out.append((zhr, name))
+    return out
+
+
+def active_shower(day: date) -> str | None:
+    """The strongest shower active on `day`, if any."""
+    active = _active(day)
+    return max(active)[1] if active else None
+
+
+def radiant(name: str, day: date) -> tuple[float, float]:
+    """(RA, Dec) of a shower's radiant on `day`, drifting from its peak position."""
+    (pm, pd), ra, dec, dra, ddec = RADIANTS[name]
+    days = min(
+        ((day - date(y, pm, pd)).days for y in (day.year - 1, day.year, day.year + 1)), key=abs
+    )
+    return (ra + dra * days) % 360.0, dec + ddec * days
+
+
+def _vec(az: float, alt: float) -> npt.NDArray[np.float64]:
+    a, e = math.radians(az), math.radians(alt)
+    return np.array([math.cos(e) * math.sin(a), math.cos(e) * math.cos(a), math.sin(e)])
+
+
+def _angle(a: npt.NDArray[np.float64], b: npt.NDArray[np.float64]) -> float:
+    return math.degrees(math.atan2(float(np.linalg.norm(np.cross(a, b))), float(a @ b)))
+
+
+def radiant_distance(
+    end1: tuple[float, float], end2: tuple[float, float], rad: tuple[float, float]
+) -> float | None:
+    """How far (degrees) a radiant at (az, alt) is from the meteor's path between the ends
+    (az, alt) extended along its great circle; None if the radiant lies on the trail
+    itself: a meteor moves away from its radiant and never crosses it."""
+    p1, p2, r = _vec(*end1), _vec(*end2), _vec(*rad)
+    n = np.cross(p1, p2)
+    norm = float(np.linalg.norm(n))
+    if norm < 1e-6:
+        return None
+    n = n / norm
+    off = math.degrees(math.asin(min(1.0, abs(float(n @ r)))))
+    q = r - float(n @ r) * n
+    qn = float(np.linalg.norm(q))
+    if qn < 1e-9:
+        return off  # the radiant is the circle's pole: 90 degrees off anyway
+    q = q / qn
+    if _angle(p1, q) + _angle(q, p2) - _angle(p1, p2) < 1e-3:
+        return None
+    return off
+
+
+def match_shower(
+    end1: tuple[float, float],
+    end2: tuple[float, float],
+    utc: datetime,
+    lat: float,
+    lon: float,
+) -> str | None:
+    """The active shower whose radiant the meteor's path points back to, None: sporadic.
+    `end1`, `end2` are the trail's ends as (azimuth, altitude)."""
+    lst = sidereal_deg(utc, lon)
+    best: tuple[float, str] | None = None
+    for _, name in _active(utc.date()):
+        ra, dec = radiant(name, utc.date())
+        alt, az = alt_az(np.array([ra]), np.array([dec]), lst, lat)
+        if float(alt[0]) < RADIANT_MIN_ALT:
+            continue
+        d = radiant_distance(end1, end2, (float(az[0]), float(alt[0])))
+        if d is not None and d <= RADIANT_TOL_DEG and (best is None or d < best[0]):
+            best = (d, name)
     return best[1] if best else None
 
 

@@ -24,7 +24,8 @@ Map<String, Object?> meteorJson(String id, String start) => {
     'peak': 0.93,
     'frames': 3,
     'direction_deg': 135.0,
-    'shower': 'Orioniden',
+    'shower': 'Orionids',
+    'shower_match': 'radiant',
     'extra': 7,
   },
 };
@@ -97,6 +98,58 @@ void main() {
     expect(rows['Richtung'], '135° (diagonal, oben links – unten rechts)');
     expect(rows['Meteorstrom'], 'Orioniden');
     expect(rows['extra'], '7');
+  });
+
+  test('shower by shower_match (SPEC §6.4)', () {
+    expect(
+      showerText({'shower': 'Perseids', 'shower_match': 'radiant'}),
+      'Perseiden',
+    );
+    expect(
+      showerText({'shower': null, 'shower_match': 'radiant'}),
+      'sporadisch',
+    );
+    expect(
+      showerText({'shower': 'Perseids', 'shower_match': 'date'}),
+      'vielleicht Perseiden (nur nach Datum)',
+    );
+    expect(
+      showerText({'shower': 'Perseids'}),
+      'vielleicht Perseiden (nur nach Datum)',
+    );
+    expect(showerText({'shower': null, 'shower_match': null}), isNull);
+    expect(showerText({'shower': null}), isNull);
+    expect(
+      showerText({'shower': 'Bootids', 'shower_match': 'radiant'}),
+      'Bootids',
+    );
+  });
+
+  test('meteor summary per night', () {
+    SkyEvent meteor(Map<String, dynamic> data, {String kind = 'meteor'}) =>
+        SkyEvent.fromJson({
+          ...meteorJson('meteor-20261008T214512Z', '2026-10-08T21:45:12Z'),
+          'kind': kind,
+          'data': data,
+        });
+    final radiant = {'shower': 'Perseids', 'shower_match': 'radiant'};
+    final sporadic = {'shower': null, 'shower_match': 'radiant'};
+    expect(meteorSummary([meteor({}, kind: 'lightning')]), isNull);
+    expect(
+      meteorSummary([
+        meteor({'shower': 'Perseids'}),
+      ]),
+      '1 Meteor',
+    );
+    expect(
+      meteorSummary([
+        meteor(radiant),
+        meteor(radiant),
+        meteor(sporadic),
+        meteor({}),
+      ]),
+      '4 Meteore: 2 Perseiden, 1 sporadisch, 1 ohne Radiant',
+    );
   });
 
   test('client pages events with before', () async {

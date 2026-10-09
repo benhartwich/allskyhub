@@ -27,6 +27,7 @@
 {% endif %}
 {% if events %}
 <h2>Ereignisse</h2>
+{% if meteors %}<p class="muted">{{ meteors }}</p>{% endif %}
 <div class="event-strip">
   {% for e in events %}{% include "_item_thumb.html" %}{% endfor %}
 </div>

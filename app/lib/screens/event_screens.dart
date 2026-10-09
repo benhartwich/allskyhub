@@ -24,6 +24,68 @@ const _axes = [
   'diagonal, oben links – unten rechts',
 ];
 
+// Agent shower names (SPEC §6.4, IMO) in German; unknown names pass through.
+const showerNames = {
+  'Quadrantids': 'Quadrantiden',
+  'Lyrids': 'Lyriden',
+  'Eta Aquariids': 'Eta-Aquariiden',
+  'Delta Aquariids': 'Delta-Aquariiden',
+  'Perseids': 'Perseiden',
+  'Orionids': 'Orioniden',
+  'Leonids': 'Leoniden',
+  'Geminids': 'Geminiden',
+  'Ursids': 'Ursiden',
+};
+
+String showerName(String name) => showerNames[name] ?? name;
+
+/// SPEC §6.4 `shower` by `shower_match`: a radiant match is certain, a date match (also
+/// events without `shower_match`) only a guess; null when there is nothing to say.
+String? showerText(Map<String, dynamic> data) {
+  final shower = data['shower'];
+  final match = data.containsKey('shower_match')
+      ? data['shower_match']
+      : 'date';
+  final named = shower is String && shower.isNotEmpty;
+  if (match == 'radiant') return named ? showerName(shower) : 'sporadisch';
+  if (match == 'date' && named) {
+    return 'vielleicht ${showerName(shower)} (nur nach Datum)';
+  }
+  return null;
+}
+
+/// One line per night: meteors by shower (radiant matches only), sporadic, unassigned.
+String? meteorSummary(List<SkyEvent> events) {
+  final meteors = [
+    for (final e in events)
+      if (e.kind == 'meteor') e.data,
+  ];
+  if (meteors.isEmpty) return null;
+  final showers = <String, int>{};
+  var sporadic = 0;
+  var unknown = 0;
+  for (final data in meteors) {
+    final shower = data['shower'];
+    if (data['shower_match'] != 'radiant') {
+      unknown++;
+    } else if (shower is String && shower.isNotEmpty) {
+      showers.update(showerName(shower), (n) => n + 1, ifAbsent: () => 1);
+    } else {
+      sporadic++;
+    }
+  }
+  final sorted = showers.entries.toList()
+    ..sort((a, b) => b.value.compareTo(a.value));
+  final parts = [
+    for (final e in sorted) '${e.value} ${e.key}',
+    if (sporadic > 0) '$sporadic sporadisch',
+    if (unknown > 0 && (showers.isNotEmpty || sporadic > 0))
+      '$unknown ohne Radiant',
+  ];
+  final total = '${meteors.length} Meteor${meteors.length == 1 ? '' : 'e'}';
+  return parts.isEmpty ? total : '$total: ${parts.join(', ')}';
+}
+
 const _compassPoints = ['N', 'NO', 'O', 'SO', 'S', 'SW', 'W', 'NW'];
 
 /// Azimuth (0 = north, clockwise) as one of eight German compass points.
@@ -58,10 +120,11 @@ List<(String, String)> eventRows(SkyEvent event) {
       final axis = ((direction % 180) / 45).round() % 4;
       rows.add(('Richtung', '${direction.round()}° (${_axes[axis]})'));
     }
-    final shower = data.remove('shower');
-    if (shower is String && shower.isNotEmpty) {
-      rows.add(('Meteorstrom', shower));
-    }
+    final shower = showerText(data);
+    if (shower != null) rows.add(('Meteorstrom', shower));
+    data
+      ..remove('shower')
+      ..remove('shower_match');
   }
   if (event.kind == 'lightning') {
     final area = data.remove('area_frac');

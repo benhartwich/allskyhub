@@ -192,10 +192,21 @@ class _NightScreenState extends State<NightScreen> {
                   builder: (context, snapshot) {
                     final events = snapshot.data ?? const <SkyEvent>[];
                     if (events.isEmpty) return const SizedBox.shrink();
-                    return EventStrip(
-                      client: widget.client,
-                      cameraId: widget.camera.id,
-                      events: events,
+                    final meteors = meteorSummary(events);
+                    return Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        if (meteors != null)
+                          Padding(
+                            padding: const EdgeInsets.fromLTRB(12, 8, 12, 0),
+                            child: Text(meteors, key: const Key('meteors')),
+                          ),
+                        EventStrip(
+                          client: widget.client,
+                          cameraId: widget.camera.id,
+                          events: events,
+                        ),
+                      ],
                     );
                   },
                 ),

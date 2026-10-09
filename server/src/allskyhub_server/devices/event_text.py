@@ -25,6 +25,61 @@ _AXES = (
 )
 
 
+# Agent shower names (SPEC §6.4, IMO) in German; unknown names pass through.
+SHOWER_NAMES = {
+    "Quadrantids": "Quadrantiden",
+    "Lyrids": "Lyriden",
+    "Eta Aquariids": "Eta-Aquariiden",
+    "Delta Aquariids": "Delta-Aquariiden",
+    "Perseids": "Perseiden",
+    "Orionids": "Orioniden",
+    "Leonids": "Leoniden",
+    "Geminids": "Geminiden",
+    "Ursids": "Ursiden",
+}
+
+
+def shower_name(name: str) -> str:
+    return SHOWER_NAMES.get(name, name)
+
+
+def shower_text(data: dict[str, Any]) -> str | None:
+    """SPEC §6.4 ``shower`` by ``shower_match``: a radiant match is certain, a date match
+    (also events without ``shower_match``) only a guess; None when there is nothing to say."""
+    shower = data.get("shower")
+    match = data.get("shower_match", "date")
+    if match == "radiant":
+        return shower_name(shower) if isinstance(shower, str) and shower else "sporadisch"
+    if match == "date" and isinstance(shower, str) and shower:
+        return f"vielleicht {shower_name(shower)} (nur nach Datum)"
+    return None
+
+
+def meteor_summary(events: list[EventRecord]) -> str | None:
+    """One line per night: how many meteors, by shower (radiant matches only), sporadic and
+    unassigned (SPEC §6.4 ``shower_match``)."""
+    meteors = [e.data for e in events if e.kind == "meteor"]
+    if not meteors:
+        return None
+    showers: dict[str, int] = {}
+    sporadic = unknown = 0
+    for data in meteors:
+        shower = data.get("shower")
+        if data.get("shower_match") != "radiant":
+            unknown += 1
+        elif isinstance(shower, str) and shower:
+            showers[shower_name(shower)] = showers.get(shower_name(shower), 0) + 1
+        else:
+            sporadic += 1
+    parts = [f"{n} {name}" for name, n in sorted(showers.items(), key=lambda kv: -kv[1])]
+    if sporadic:
+        parts.append(f"{sporadic} sporadisch")
+    if unknown and (showers or sporadic):
+        parts.append(f"{unknown} ohne Radiant")
+    total = f"{len(meteors)} Meteor{'' if len(meteors) == 1 else 'e'}"
+    return f"{total}: {', '.join(parts)}" if parts else total
+
+
 COMPASS = ("N", "NO", "O", "SO", "S", "SW", "W", "NW")
 
 
@@ -117,8 +172,10 @@ def event_rows(event: EventRecord) -> list[tuple[str, str]]:
         if isinstance(direction := data.pop("direction_deg", None), int | float):
             axis = round((direction % 180) / 45) % 4
             rows.append(("Richtung", f"{round(direction)}° ({_AXES[axis]})"))
-        if isinstance(shower := data.pop("shower", None), str) and shower:
+        if shower := shower_text(data):
             rows.append(("Meteorstrom", shower))
+        data.pop("shower", None)
+        data.pop("shower_match", None)
     if event.kind == "lightning":
         if isinstance(area := data.pop("area_frac", None), int | float):
             rows.append(("Erhellter Himmel", f"{round(area * 100)} %"))

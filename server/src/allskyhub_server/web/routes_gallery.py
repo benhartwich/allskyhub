@@ -10,7 +10,7 @@ from fastapi.responses import JSONResponse, RedirectResponse, Response
 from allskyhub_protocol import EVENT_ID_PATTERN, FrameVariant
 from allskyhub_server.devices import archive, events, queries, sky_chart
 from allskyhub_server.devices.connections import ConnectionRegistry
-from allskyhub_server.devices.event_text import EVENT_TITLES, event_rows
+from allskyhub_server.devices.event_text import EVENT_TITLES, event_rows, meteor_summary
 from allskyhub_server.models import Device, EventRecord
 from allskyhub_server.web.deps import CurrentSession, DbSession, csrf_protect
 from allskyhub_server.web.render import render
@@ -53,6 +53,9 @@ async def night(
     request: Request, db: DbSession, session: CurrentSession, device_id: str, night_id: NightId
 ) -> Response:
     device = await _own(db, session, device_id)
+    night_events = await events.events(
+        db, device.id, night_id=night_id, limit=2000, hide_false=True
+    )
     return render(
         request,
         "night.html",
@@ -62,9 +65,8 @@ async def night(
             "frames": await archive.night_frames(db, device.id, night_id),
             "sky_charts": sky_chart.charts(await archive.night_sky(db, device.id, night_id)),
             "products": await archive.night_products(db, device.id, night_id),
-            "events": events.collapse(
-                await events.events(db, device.id, night_id=night_id, limit=2000, hide_false=True)
-            ),
+            "events": events.collapse(night_events),
+            "meteors": meteor_summary(night_events),
             "titles": PRODUCT_TITLES,
             "event_titles": EVENT_TITLES,
         },

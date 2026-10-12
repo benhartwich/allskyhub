@@ -25,6 +25,11 @@ Routes:
     GET  /api/skymask.png?w=&h=   transparent shade over everything that is not sky
     POST /api/calibration/mask      {exclude, include} drawn areas → the new state
     POST /api/calibration/relearn   drop the learned mask → the new state
+    GET  /api/public          the public page on the hub {enabled, url, profile, online}
+                              (SPEC §6.8, roadmap L10); the last known state with
+                              online false while the hub is unreachable, else 503
+    POST /api/public          {enabled?, profile?} → the new state, 422 {detail} with the
+                              hub's sentence, 503 while the hub is unreachable
     GET  /local-login         login page (SPEC §7.4)
     GET  /local-login/start   single sign-on: nonce cookie, redirect to the hub
     GET  /local-login/callback   page that posts the assertion from the fragment
@@ -59,6 +64,7 @@ from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_valida
 
 from allskyhub_agent.adapters.network import SETUP_ADDRESS
 from allskyhub_agent.hub.pairing import PairingState
+from allskyhub_agent.hub.public import HubUnreachable, PublicPage, PublicRejected
 from allskyhub_agent.live import LiveState
 from allskyhub_agent.settings import AgentSettings, valid_timezone
 from allskyhub_agent.setup.controller import NetworkRequest, SetupController
@@ -75,6 +81,7 @@ from allskyhub_protocol import SettingSpec
 
 _MAX_BODY = 4096
 _MAX_MASK_BODY = 256 * 1024  # 30 polygons of 200 points as JSON
+_MAX_PUBLIC_BODY = 16 * 1024  # the profile's texts are at most about 3 000 characters
 _SETUP_NET = ipaddress.ip_network(f"{SETUP_ADDRESS}/24", strict=False)
 
 
@@ -167,6 +174,7 @@ def make_handler(
     settings_form: SettingsForm | None = None,
     archive: LocalArchive | None = None,
     calibration: LocalCalibration | None = None,
+    public: PublicPage | None = None,
 ) -> type[BaseHTTPRequestHandler]:
     page = _page()
     login_page = _page("login.html")
@@ -472,6 +480,8 @@ def make_handler(
                         "values": settings_form.values(),
                     },
                 )
+            elif path == "/api/public":
+                self._public(None)
             elif path == "/api/calibration":
                 if calibration is None:
                     self._text(HTTPStatus.NOT_FOUND, "no camera yet")
@@ -534,6 +544,18 @@ def make_handler(
                 self._post_focus()
             elif path in ("/api/calibration/mask", "/api/calibration/relearn"):
                 self._post_calibration(path)
+            elif path == "/api/public":
+                raw = self._read_body(_MAX_PUBLIC_BODY)
+                if raw is None:
+                    return
+                try:
+                    body: object = json.loads(raw)
+                except ValueError:
+                    body = None
+                if not isinstance(body, dict):
+                    self._json(HTTPStatus.BAD_REQUEST, {"detail": "Ungültige Eingabe."})
+                    return
+                self._public(cast(dict[str, Any], body))
             elif path == "/api/setup/network":
                 self._post_network()
             else:
@@ -559,6 +581,27 @@ def make_handler(
                 return
             # SPEC §6.5: stored; the capture restarts with the new settings in a moment.
             self._json(HTTPStatus.ACCEPTED, {"restarting": True})
+
+        def _public(self, change: dict[str, Any] | None) -> None:
+            """SPEC §6.8 through the device API; GET without `change`."""
+            unreachable = {"detail": "Der Hub ist gerade nicht erreichbar."}
+            if public is None:
+                self._json(HTTPStatus.NOT_FOUND, {"detail": "Diese Kamera hat keinen Hub."})
+                return
+            try:
+                state = public.get() if change is None else public.put(change)
+            except PublicRejected as exc:
+                self._json(HTTPStatus.UNPROCESSABLE_ENTITY, {"detail": exc.detail})
+                return
+            except HubUnreachable:
+                if change is None and public.last is not None:
+                    self._json(
+                        HTTPStatus.OK, public.last.model_dump(mode="json") | {"online": False}
+                    )
+                else:
+                    self._json(HTTPStatus.SERVICE_UNAVAILABLE, unreachable)
+                return
+            self._json(HTTPStatus.OK, state.model_dump(mode="json") | {"online": True})
 
         def _post_calibration(self, path: str) -> None:
             if calibration is None:
@@ -645,6 +688,7 @@ class WebServer:
         settings_form: SettingsForm | None = None,
         archive: LocalArchive | None = None,
         calibration: LocalCalibration | None = None,
+        public: PublicPage | None = None,
     ) -> None:
         net = ipaddress.ip_network(setup_net) if setup_net else _SETUP_NET
         handler = make_handler(
@@ -658,6 +702,7 @@ class WebServer:
             settings_form,
             archive,
             calibration,
+            public,
         )
         self._httpd = ThreadingHTTPServer((host, port), handler)
         self._httpd.daemon_threads = True

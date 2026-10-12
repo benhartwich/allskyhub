@@ -367,6 +367,10 @@ function field(spec) {
       });
       wrap.appendChild(b);
     }
+  } else if (spec.type === "bool") {
+    label.className = "check";
+    label.textContent = "";
+    label.append(input(spec, original[spec.key]), " " + text(spec.label));
   } else {
     const el = input(spec, original[spec.key]);
     el.id = "s_" + spec.key;
@@ -415,8 +419,10 @@ async function viewSettings() {
   page.innerHTML = `<h1>Einstellungen</h1><div class="card stack"><form class="form" id="settingsForm" novalidate></form>
     <div class="actions"><button type="button" id="saveBtn">Speichern</button></div>
     <p class="msg" id="settingsMsg" hidden></p></div>
-    <section class="card stack" id="calibration" hidden></section>`;
+    <section class="card stack" id="calibration" hidden></section>
+    <section class="card stack" id="public" hidden></section>`;
   viewCalibration().catch(() => {});
+  viewPublic().catch(() => {});
   let data;
   try { data = await getJSON("api/settings"); } catch {
     $("settingsForm").innerHTML = `<p class="empty">Diese Kamera speichert keine Einstellungen.</p>`;
@@ -595,6 +601,73 @@ async function viewCalibration() {
   img.src = "api/live.jpg?t=" + Date.now();
   describe();
   draw();
+}
+
+// --- Public page on the hub (L10, SPEC §6.8) --------------------------------------------
+const SECTIONS = { live: "Livebild", loop: "Loop der letzten Stunde", archive: "Archiv", events: "Ereignisse",
+  sky: "Himmel (Charts)", aurora: "Polarlicht-Lage", observatory: "Sternwarte (N.I.N.A.)" };
+const TEXTS = [["title", "Titel", 100], ["location_label", "Ort", 200], ["camera", "Kamera", 200],
+  ["lens", "Objektiv", 200], ["computer", "Rechner", 200], ["owner", "Betrieben von", 200]];
+
+async function viewPublic() {
+  const box = $("public");
+  const r = await fetch("api/public", { cache: "no-store" });
+  if (r.status === 404) return;  // no hub configured
+  box.hidden = false;
+  const say = (t, good) => { const m = $("pubMsg"); m.textContent = t; m.className = "msg " + (good ? "ok" : "error"); m.hidden = false; };
+  if (!r.ok) {
+    box.innerHTML = `<h2>Öffentliche Seite</h2><p class="muted">Der Hub ist gerade nicht erreichbar. Die öffentliche Seite liegt auf dem Hub und lässt sich nur ändern, wenn die Kamera verbunden ist.</p>`;
+    return;
+  }
+  const render = (st) => {
+    const p = st.profile;
+    const off = !st.online;
+    box.innerHTML = `
+      <h2>Öffentliche Seite</h2>
+      <p class="muted small">Eine Seite auf allskyhub.org, die jeder ohne Anmeldung sehen kann. Sie liegt auf dem Hub; Änderungen hier und dort sind dieselben.</p>
+      ${off ? `<p class="msg error">Der Hub ist gerade nicht erreichbar: zuletzt bekannter Stand, nur lesbar.</p>` : ""}
+      <div class="row">
+        ${st.enabled ? `<span class="badge ok">eingeschaltet</span> <a href="${esc(st.url)}" target="_blank" rel="noopener">${esc(st.url)}</a>`
+          : `<span class="badge">ausgeschaltet</span>`}
+      </div>
+      <div class="actions"><button type="button" class="${st.enabled ? "secondary" : ""}" id="pubToggle"${off ? " disabled" : ""}>
+        ${st.enabled ? "Ausschalten" : "Einschalten"}</button></div>
+      ${st.enabled ? `<p class="muted small">Ausschalten macht die Adresse sofort ungültig; beim erneuten Einschalten gibt es eine neue.</p>` : ""}
+      <form class="form stack" id="pubForm" novalidate>
+        <fieldset${off ? " disabled" : ""}><legend>Texte</legend>
+          ${TEXTS.map(([k, l, n]) => `<div class="field"><label for="pub_${k}">${l}</label>
+            <input id="pub_${k}" name="${k}" maxlength="${n}" value="${esc(p[k])}"></div>`).join("")}
+          <label class="check"><input type="checkbox" name="show_coordinates"${p.show_coordinates ? " checked" : ""}> Koordinaten zeigen (auf 0,1° gerundet, etwa 10 km)</label>
+          <div class="field"><label for="pub_notes">Notizen</label>
+            <textarea id="pub_notes" name="notes" maxlength="2000" rows="4">${esc(p.notes)}</textarea></div>
+        </fieldset>
+        <fieldset${off ? " disabled" : ""}><legend>Abschnitte</legend>
+          ${Object.entries(SECTIONS).map(([k, l]) => `<label class="check"><input type="checkbox" name="section_${k}"${p.sections[k] ? " checked" : ""}> ${l}</label>`).join("")}
+        </fieldset>
+      </form>
+      <div class="actions"><button type="button" id="pubSave"${off ? " disabled" : ""}>Seite speichern</button></div>
+      <p class="msg" id="pubMsg" hidden></p>`;
+    const send = async (body, done) => {
+      const res = await fetch("api/public", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+      if (res.status === 401) { location.href = "local-login"; return; }
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) { say(data.detail || "Nicht gespeichert.", false); return; }
+      render(data);
+      say(done, true);
+    };
+    $("pubToggle").onclick = () => {
+      if (st.enabled && !confirm("Öffentliche Seite ausschalten? Die Adresse wird sofort ungültig.")) return;
+      send({ enabled: !st.enabled }, st.enabled ? "Ausgeschaltet." : "Eingeschaltet.");
+    };
+    $("pubSave").onclick = () => {
+      const f = $("pubForm").elements;
+      const profile = { show_coordinates: f.show_coordinates.checked, notes: f.notes.value, sections: {} };
+      for (const [k] of TEXTS) profile[k] = f[k].value;
+      for (const k of Object.keys(SECTIONS)) profile.sections[k] = f["section_" + k].checked;
+      send({ profile }, "Gespeichert.");
+    };
+  };
+  render(await r.json());
 }
 
 // --- System -------------------------------------------------------------------------

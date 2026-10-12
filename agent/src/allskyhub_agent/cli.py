@@ -40,6 +40,7 @@ from allskyhub_agent.detect.sky import SkyConfig, SkyMeter
 from allskyhub_agent.discovery import Announcer
 from allskyhub_agent.hub.identity import DEFAULT_KEY_PATH, DeviceIdentity
 from allskyhub_agent.hub.pairing import PairingState
+from allskyhub_agent.hub.public import PublicPage
 from allskyhub_agent.importer.allsky import AllskyImporter, AllskySettings
 from allskyhub_agent.importer.backlog import BACKLOG_NAME, Backlog
 from allskyhub_agent.live import LiveState
@@ -456,6 +457,7 @@ def main(argv: list[str] | None = None) -> int:
             else None,
             archive=LocalArchive(store, event_store),
             calibration=LocalCalibration(sky_mask, calibration_dir / "orientation.json"),
+            public=PublicPage(hub_url, identity) if hub_url and identity is not None else None,
         )
         web.start()
         print(f"web UI on http://{host}:{web.port}/")

@@ -1,330 +1,61 @@
 <!doctype html>
-<html lang="en">
+<html lang="de">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>allskyhub camera</title>
-<style>
-  :root {
-    --bg: #0b0d12; --panel: #151922; --text: #e6e9ef; --muted: #8a93a6;
-    --accent: #6ea8ff; --good: #4cc38a; --line: #262c38;
-  }
-  * { box-sizing: border-box; }
-  body { margin: 0; background: var(--bg); color: var(--text);
-         font: 16px/1.4 system-ui, -apple-system, "Segoe UI", sans-serif; }
-  main { max-width: 900px; margin: 0 auto; padding: 16px; }
-  h1 { font-size: 1.1rem; margin: 0 0 12px; font-weight: 600; }
-  .panel { background: var(--panel); border: 1px solid var(--line); border-radius: 12px;
-           padding: 12px; margin-bottom: 12px; }
-  img { width: 100%; height: auto; display: block; border-radius: 8px; background: #000; }
-  .meta { display: flex; flex-wrap: wrap; gap: 6px 16px; color: var(--muted);
-          font-size: .9rem; margin-top: 8px; }
-  .meta b { color: var(--text); font-weight: 500; }
-  .row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
-  button { font: inherit; padding: 10px 16px; border-radius: 10px; border: 1px solid var(--line);
-           background: #1e2430; color: var(--text); min-height: 44px; }
-  button.primary { background: var(--accent); color: #0b0d12; border-color: var(--accent); }
-  .score { font-size: 3rem; font-weight: 700; font-variant-numeric: tabular-nums; }
-  .bar { height: 10px; background: #1e2430; border-radius: 6px; overflow: hidden; flex: 1; }
-  .bar > div { height: 100%; width: 0; background: var(--good); transition: width .3s; }
-  .hint { color: var(--muted); font-size: .9rem; margin: 8px 0 0; }
-  .form fieldset { border: 0; padding: 0; margin: 0 0 16px; }
-  .form legend { font-weight: 600; margin-bottom: 8px; }
-  .field { display: grid; gap: 4px; margin-bottom: 12px; }
-  .field label { font-size: .95rem; }
-  .field input, .field select { font: inherit; padding: 10px; border-radius: 10px;
-         border: 1px solid var(--line); background: #0f1218; color: var(--text); width: 100%; }
-  .field input[type=checkbox] { width: auto; min-height: 24px; }
-  .field .unit { color: var(--muted); }
-  .field.bad input, .field.bad select { border-color: #ff7a7a; }
-  .pair { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
-  .msg { margin: 8px 0 0; }
-  .msg.bad { color: #ff7a7a; }
-  .msg.good { color: var(--good); }
-  header { display: flex; justify-content: space-between; align-items: center; }
-  header form { margin: 0; }
-  header button { min-height: 36px; padding: 6px 12px; }
-  [hidden] { display: none !important; }
-</style>
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#04060f">
+<title>allskyhub-Kamera</title>
+<link rel="icon" href="favicon.svg" type="image/svg+xml">
+<script src="theme.js"></script>
+<link rel="stylesheet" href="static/design/tokens.css">
+<link rel="stylesheet" href="static/design/base.css">
+<link rel="stylesheet" href="app.css">
 </head>
 <body>
-<main>
-  <header>
-    <h1>allskyhub camera</h1>
-    <form method="post" action="local-login/logout" id="logout" hidden>
-      <button type="submit">Abmelden</button>
+<header class="appbar">
+  <a class="brand" href="#live"><img src="favicon.svg" width="28" height="28" alt="">allskyhub</a>
+  <nav class="appbar-end" aria-label="Hauptmenü" id="nav">
+    <a class="nav-link" href="#live" data-page="live">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="3.5"/></svg><span>Live</span></a>
+    <a class="nav-link" href="#archiv" data-page="archiv">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 9h18M8 4v5"/></svg><span>Archiv</span></a>
+    <a class="nav-link" href="#ereignisse" data-page="ereignisse">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20 20 4M14 4h6v6"/></svg><span>Ereignisse</span></a>
+    <a class="nav-link" href="#himmel" data-page="himmel">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 17l5-6 4 4 5-7 4 5"/></svg><span>Himmel</span></a>
+    <a class="nav-link" href="#einstellungen" data-page="einstellungen">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M5 5l2 2M17 17l2 2M5 19l2-2M17 7l2-2"/></svg><span>Einstellungen</span></a>
+    <a class="nav-link" href="#system" data-page="system">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="4" width="16" height="12" rx="2"/><path d="M8 20h8M12 16v4"/></svg><span>System</span></a>
+    <button type="button" class="nav-link" data-theme-toggle title="Rotlicht für die Nacht" aria-label="Rotlicht für die Nacht">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 14.5A8 8 0 0 1 9.5 4a8 8 0 1 0 10.5 10.5z"/></svg></button>
+    <form method="post" action="local-login/logout" class="inline" id="logout" hidden>
+      <button class="nav-link" title="Abmelden" aria-label="Abmelden">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 4h3a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2h-3M10 8l-4 4 4 4M6 12h10"/></svg></button>
     </form>
-  </header>
-
-  <section class="panel" id="pairPanel" hidden>
-    <div class="meta" style="margin-top:0">Pairing code for the allskyhub app</div>
-    <div class="score" id="pairCode">–</div>
-    <p class="hint" id="pairHint">Open the app and add this camera. The code renews itself
-      every few minutes.</p>
+  </nav>
+</header>
+<main>
+  <section class="card" id="pairPanel" hidden>
+    <p class="eyebrow">Kopplungscode</p>
+    <p class="code big" id="pairCode">–</p>
+    <p class="muted">Gib den Code in der App oder auf allskyhub.org ein. Er erneuert sich alle paar
+      Minuten.</p>
   </section>
-
-  <section class="panel">
-    <img id="live" alt="Latest image">
-    <div class="meta" id="meta">Waiting for the first image…</div>
-  </section>
-
-  <section class="panel">
-    <div class="row">
-      <button id="focusBtn" class="primary">Start focus mode</button>
-      <button id="resetBtn" hidden>Reset best</button>
-    </div>
-    <div id="focusPanel" hidden>
-      <div class="row" style="margin-top:12px">
-        <span class="score" id="score">–</span>
-        <div class="bar"><div id="bar"></div></div>
-      </div>
-      <div class="meta">best <b id="best">–</b></div>
-      <p class="hint">Turn the focus ring in small steps. Higher is sharper; when the number
-        drops, you went past the best point, so turn back. Tighten the lock screw and check the
-        number again.</p>
-      <img id="crop" alt="Centre of the image at full resolution" style="margin-top:8px">
-    </div>
-  </section>
-  <section class="panel" id="settingsPanel" hidden>
-    <h1>Einstellungen</h1>
-    <form class="form" id="settingsForm" novalidate></form>
-    <div class="row">
-      <button id="saveBtn" class="primary" type="button">Speichern</button>
-    </div>
-    <p class="msg" id="settingsMsg" hidden></p>
-  </section>
+  <div id="page"></div>
+  <footer class="app-foot">allskyhub-Kamera <span id="version"></span> ·
+    <a href="https://github.com/benhartwich/allskyhub">Open Source (GPL-3.0)</a></footer>
 </main>
-<script>
-const $ = (id) => document.getElementById(id);
-let lastFrames = -1;
-let focus = false;
-
-function fmtExposure(us) {
-  return us >= 1e6 ? (us / 1e6).toFixed(1) + " s" : (us / 1000).toFixed(2) + " ms";
-}
-
-function render(s) {
-  focus = s.focus_mode;
-  $("focusBtn").textContent = focus ? "Stop focus mode" : "Start focus mode";
-  $("focusPanel").hidden = !focus;
-  $("resetBtn").hidden = !focus;
-  if (s.frame) {
-    const f = s.frame;
-    const t = new Date(f.captured_at).toLocaleTimeString();
-    $("meta").innerHTML =
-      `<span><b>${t}</b></span><span>${f.mode}</span>` +
-      `<span>exposure <b>${fmtExposure(f.exposure_us)}</b></span>` +
-      `<span>gain <b>${f.gain}</b></span><span>brightness <b>${f.mean.toFixed(2)}</b></span>` +
-      (f.sensor_temp_c != null ? `<span>sensor <b>${f.sensor_temp_c.toFixed(1)} °C</b></span>` : "");
-  }
-  if (focus && s.sharpness != null) {
-    $("score").textContent = Math.round(s.sharpness);
-    $("best").textContent = s.sharpness_max != null ? Math.round(s.sharpness_max) : "–";
-    const pct = s.sharpness_max ? Math.min(100, 100 * s.sharpness / s.sharpness_max) : 0;
-    $("bar").style.width = pct + "%";
-  }
-  if (s.frames !== lastFrames) {
-    lastFrames = s.frames;
-    const q = "?n=" + s.frames;
-    $("live").src = "api/live.jpg" + q;
-    if (focus) $("crop").src = "api/crop.jpg" + q;
-  }
-}
-
-async function poll() {
-  try {
-    const r = await fetch("api/status", { cache: "no-store" });
-    if (r.ok) render(await r.json());
-  } catch (e) { /* camera restarting; try again */ }
-  setTimeout(poll, focus ? 500 : 2000);
-}
-
-async function post(action) {
-  const r = await fetch("api/focus", { method: "POST", body: action });
-  if (r.ok) render(await r.json());
-}
-
-async function pollSetup() {
-  try {
-    const r = await fetch("api/setup", { cache: "no-store" });
-    if (r.ok) {
-      const s = await r.json();
-      const show = !s.paired && s.pairing_code;
-      $("pairPanel").hidden = !show;
-      if (show) $("pairCode").textContent = s.pairing_code.slice(0, 3) + "-" + s.pairing_code.slice(3);
-      if (s.paired) return;  // nothing more to show
-    }
-  } catch (e) { /* try again */ }
-  setTimeout(pollSetup, 3000);
-}
-
-// --- settings form, built from the camera's settings schema (SPEC §6.9) -------------
-const LANG = (navigator.language || "de").toLowerCase().startsWith("en") ? "en" : "de";
-const text = (t) => (t == null ? "" : typeof t === "string" ? t : (LANG === "en" && t.en) || t.de);
-let schema = [];
-let original = {};
-
-function input(spec, value) {
-  const el = document.createElement(spec.type === "choice" ? "select" : "input");
-  el.name = spec.key;
-  if (spec.type === "choice") {
-    for (const c of spec.choices) {
-      const o = document.createElement("option");
-      o.value = c.value;
-      o.textContent = text(c.label);
-      el.appendChild(o);
-    }
-    el.value = value ?? "";
-  } else if (spec.type === "bool") {
-    el.type = "checkbox";
-    el.checked = !!value;
-  } else if (spec.type === "number" || spec.type === "int") {
-    el.type = "number";
-    el.inputMode = spec.type === "int" ? "numeric" : "decimal";
-    for (const a of ["min", "max", "step"]) if (spec[a] != null) el[a] = spec[a];
-    el.value = value ?? "";
-    if (spec.nullable) el.placeholder = "leer";
-  } else {
-    el.type = "text";
-    if (spec.max_length) el.maxLength = spec.max_length;
-    el.value = value ?? "";
-  }
-  return el;
-}
-
-function field(spec, values) {
-  const wrap = document.createElement("div");
-  wrap.className = "field";
-  wrap.dataset.key = spec.key;
-  const label = document.createElement("label");
-  label.textContent = text(spec.label) + (spec.unit ? ` (${spec.unit})` : "");
-  wrap.appendChild(label);
-  if (spec.type === "location") {
-    const pair = document.createElement("div");
-    pair.className = "pair";
-    for (const [k, ph] of [["latitude", "Breite"], ["longitude", "Länge"]]) {
-      const el = input({ key: k, type: "number", step: 0.0001, nullable: true }, values[k]);
-      el.placeholder = ph;
-      pair.appendChild(el);
-    }
-    wrap.appendChild(pair);
-    if (navigator.geolocation) {
-      const b = document.createElement("button");
-      b.type = "button";
-      b.textContent = "Standort dieses Geräts";
-      b.onclick = () => navigator.geolocation.getCurrentPosition((p) => {
-        pair.children[0].value = p.coords.latitude.toFixed(4);
-        pair.children[1].value = p.coords.longitude.toFixed(4);
-      });
-      wrap.appendChild(b);
-    }
-  } else {
-    const el = input(spec, values[spec.key]);
-    el.id = "s_" + spec.key;
-    label.htmlFor = el.id;
-    wrap.appendChild(el);
-  }
-  if (spec.help) {
-    const h = document.createElement("p");
-    h.className = "hint";
-    h.textContent = text(spec.help);
-    wrap.appendChild(h);
-  }
-  return wrap;
-}
-
-function readValue(spec, form) {
-  const el = form.elements[spec.key];
-  if (spec.type === "bool") return el.checked;
-  if (spec.type === "number" || spec.type === "int") {
-    if (el.value === "") return spec.nullable ? null : undefined;
-    return spec.type === "int" ? parseInt(el.value, 10) : parseFloat(el.value);
-  }
-  return el.value;
-}
-
-function changes() {
-  const form = $("settingsForm");
-  const out = {};
-  for (const spec of schema) {
-    if (spec.type === "location") {
-      const lat = form.elements.latitude.value, lon = form.elements.longitude.value;
-      const a = lat === "" ? null : parseFloat(lat), b = lon === "" ? null : parseFloat(lon);
-      if (a !== original.latitude || b !== original.longitude) {
-        out.latitude = a;
-        out.longitude = b;
-      }
-      continue;
-    }
-    const v = readValue(spec, form);
-    if (v !== undefined && v !== original[spec.key]) out[spec.key] = v;
-  }
-  return out;
-}
-
-function message(t, good) {
-  const m = $("settingsMsg");
-  m.textContent = t;
-  m.className = "msg " + (good ? "good" : "bad");
-  m.hidden = false;
-}
-
-async function loadSettings() {
-  const r = await fetch("api/settings", { cache: "no-store" });
-  if (!r.ok) return;  // this camera keeps no settings
-  const data = await r.json();
-  schema = data.schema;
-  original = data.values;
-  const form = $("settingsForm");
-  form.innerHTML = "";
-  const groups = new Map();
-  for (const spec of schema) {
-    const g = text(spec.group);
-    if (!groups.has(g)) {
-      const fs = document.createElement("fieldset");
-      const lg = document.createElement("legend");
-      lg.textContent = g;
-      fs.appendChild(lg);
-      groups.set(g, fs);
-      form.appendChild(fs);
-    }
-    groups.get(g).appendChild(field(spec, original));
-  }
-  $("settingsPanel").hidden = false;
-}
-
-async function saveSettings() {
-  for (const el of document.querySelectorAll(".field.bad")) el.classList.remove("bad");
-  const body = changes();
-  if (!Object.keys(body).length) { message("Nichts geändert.", true); return; }
-  const r = await fetch("api/settings", {
-    method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body),
-  });
-  if (r.ok) {
-    message("Gespeichert. Die Kamera startet die Aufnahme neu …", true);
-    setTimeout(loadSettings, 8000);
-    return;
-  }
-  const err = await r.json().catch(() => ({ fields: [] }));
-  const names = [];
-  for (const k of err.fields || []) {
-    const key = k === "latitude" || k === "longitude" ? "location" : k;
-    const wrap = document.querySelector(`.field[data-key="${key}"]`);
-    if (wrap) { wrap.classList.add("bad"); names.push(wrap.querySelector("label").textContent); }
-  }
-  message("Nicht gespeichert: " + (names.join(", ") || "ungültige Eingabe") + ".", false);
-}
-
-$("saveBtn").onclick = saveSettings;
-fetch("api/setup", { cache: "no-store" }).then((r) => r.ok && r.json()).then((s) => {
-  if (s && s.paired) $("logout").hidden = false;
-}).catch(() => {});
-loadSettings();
-
-$("focusBtn").onclick = () => post(focus ? "off" : "on");
-$("resetBtn").onclick = () => post("reset");
-poll();
-pollSetup();
-</script>
+<dialog id="lightbox" aria-label="Bild">
+  <img id="lightboxImg" alt="">
+  <div class="actions">
+    <button type="button" class="secondary" id="lbPrev" aria-label="Vorheriges Bild">‹</button>
+    <a class="button secondary" id="lbDownload" download>Herunterladen</a>
+    <button type="button" class="secondary" id="lbNext" aria-label="Nächstes Bild">›</button>
+    <button type="button" id="lbClose">Schließen</button>
+  </div>
+  <p class="muted small" id="lbCaption"></p>
+</dialog>
+<script src="app.js"></script>
 </body>
 </html>

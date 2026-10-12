@@ -336,3 +336,20 @@ def test_unpairing_locks_out_again(
     assert not auth.has_code
     pairing.set_paired()
     assert c.request("GET", "/api/status").status == 401
+
+
+def test_page_files_and_design_are_open(server: tuple[WebServer, LocalAuth, PairingState]) -> None:
+    """The login page needs its look before anyone is logged in (SPEC §7.4)."""
+    web, _, pairing = server
+    pairing.set_paired()
+    c = Client(web.port)
+    for path in (
+        "/app.css",
+        "/theme.js",
+        "/favicon.svg",
+        "/static/design/tokens.css",
+        "/static/design/fonts/space-grotesk.woff2",
+    ):
+        assert c.request("GET", path).status == 200, path
+    assert c.request("GET", "/static/design/../auth.py").status == 404
+    assert c.request("GET", "/files/20261012/x.jpg").status == 303  # stored files need a login

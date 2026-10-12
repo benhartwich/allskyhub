@@ -81,7 +81,7 @@ echo "== agent $AGENT_VERSION: source (build only), uv, ZWO SDK, system files"
 TAR_ROOT=(--owner=0 --group=0 --numeric-owner)
 RELEASE="/opt/allskyhub-agent/releases/$AGENT_VERSION"
 install -d "$MNT/tmp/allskyhub-src" "$MNT$RELEASE"
-tar -C "$ROOT" "${TAR_ROOT[@]}" -cf - pyproject.toml uv.lock packages/protocol agent \
+tar -C "$ROOT" "${TAR_ROOT[@]}" -cf - pyproject.toml uv.lock packages/protocol packages/design agent \
     server/pyproject.toml | tar -C "$MNT/tmp/allskyhub-src" -xf -
 install -m 0755 "$UV_BIN" "$MNT/usr/local/bin/uv"
 install -m 0755 "$OUT/cache/libASICamera2.so.1.39" "$MNT/usr/local/lib/libASICamera2.so.1.39"

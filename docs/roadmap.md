@@ -42,7 +42,8 @@ Benjamin, 2026-10-12: today the local UI (SPEC §7) shows only the live image an
 focus helper. It should do on the camera what the Allsky WebUI does, adapted to
 allskyhub: everything works offline on the local network, and anything that is also in
 the hub stays in step with it. The local work comes first; the Flutter app follows after
-it. Order:
+it. Order, except that L7 (camera settings) comes right after L1 because Benjamin misses
+them most:
 
 | # | Item | Owner | Notes |
 |---|---|---|---|

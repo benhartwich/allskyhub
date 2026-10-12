@@ -26,7 +26,7 @@ postkasten.cloud). Changes to `packages/protocol` and `docs/SPEC.md` have one ow
 | 3 | ~~Free-space retention (keep ≥ 10 % free)~~ done | agent | |
 | 4 | ~~Wi-Fi country from the app~~ done | agent | root path unit in the image |
 | 5 | ~~Lightning, sky quality and night cloud cover (`status.sky`), aurora~~ done; NLC done in #8 | agent | ports of the existing Allsky modules; NLC needs the sunward band, i.e. the image orientation from #8, and the module only found false alarms at 48° N without it; lightning v1 detects only, a short "storm exposure" comes later; day cloud cover needs a method that works without an IR cut filter |
-| 6 | Push notifications (FCM) for events | hub | hub side done (off until a Firebase service account is configured); app side needs the Firebase project (Benjamin) |
+| 6 | Push notifications (FCM) | hub | hub side done (events, offline, problems, aurora, summary, clear night); off until a Firebase service account is configured; the app side needs the Firebase project (Benjamin). Until then the same notices go by e-mail (#15) |
 | 7 | ~~Signed agent updates with rollback (M5 part 2)~~ done | agent | port of myboxi's updater; needs the signing keys (docs/updates.md) before cameras go out |
 | 8 | ~~Hot pixels without darks, sky mask, plate-solve orientation, event azimuths, NLC, aurora pole sector~~ (all done) | agent | |
 | 9 | ~~Public sky page per camera~~ | hub | done: opt-in, random link, web + app API |
@@ -35,9 +35,9 @@ postkasten.cloud). Changes to `packages/protocol` and `docs/SPEC.md` have one ow
 | 12 | ~~Hub monitoring: health check, disk space, certificate, backup age~~ | hub | done (ntfy topic from Benjamin); camera offline is push (#6) |
 | 13 | ~~Web UI: gallery and night products like in the app~~ | hub | done |
 | 14 | ~~App: "Standort ändern" and camera settings via `set_settings`~~ | hub | done |
-| 15 | E-mail from the hub: invitations, password reset, alerts as an alternative to push | hub | the hub sends no mail yet; invitation links are passed on by hand (`allskyhub-server invite`). Needs an SMTP account (Benjamin) |
-| 16 | Public sky page like astronomy.garden, manageable on the hub and on the camera | hub + agent | hub sections done (#this PR); constellation overlay, `GET/PUT /device/v1/public` and the camera's local UI follow (SPEC PR) |
-| 17 | Own domain for a public page (e.g. sky.example.org): the owner sets a CNAME to allskyhub.org, presses "Domain übernehmen", the hub checks DNS, gets a Let's Encrypt certificate (HTTP-01) and serves the page there | hub | needs a certificate path that does not stop nginx (today certbot standalone) and an nginx catch-all; Benjamin decides before it goes live |
+| 15 | ~~E-mail from the hub~~ done | hub | Mailcow on postkasten.cloud as no-reply@allskyhub.org: invitations, password reset, offline after 6 h, and on request all notices but single detections (problems, aurora, morning summary, clear night ahead, telescope unsafe) |
+| 16 | Public sky page like astronomy.garden, manageable on the hub and on the camera | hub + agent | done: sections, profile, `GET/PUT /device/v1/public`, loop, nights, events, sky charts, aurora, Kp, map, widget, Atom feed, lightbox. Open: constellation overlay (needs the lens model in `status.orientation`, SPEC proposal 2026-10-15) and the camera's local editor (L10) |
+| 17 | ~~Own domain for a public page~~ done | hub | CNAME check, Let's Encrypt via certbot standalone (nginx stopped for seconds, Benjamin agreed), root helper `deploy/domains/` |
 
 ## Local web portal (agent)
 
@@ -79,21 +79,38 @@ hub side. Push needs the Firebase project; until then the same messages show on 
 
 | # | Item | Owner | Notes |
 |---|---|---|---|
-| C1 | "Heute Nacht": observing window from a cloud forecast (Open-Meteo), astronomical twilight and the moon (phase, rise, set), on the camera page, public page and app; evening push | hub | own sun/moon code (Meeus, low precision), no new dependency |
-| C2 | Aurora alarm that looks: push when Kp reaches the camera's latitude threshold **and** the camera reports a clear sky | hub | Kp from #16, cloud cover from `status.sky` |
-| C3 | Morning summary per camera: meteors, clear hours, best sky brightness, the night's best picture; push, later e-mail (#15) | hub | |
-| C4 | Meteor triangulation: the same meteor seen by two oriented cameras gives its path, height and radiant | hub | needs `azimuth_deg`/`altitude_deg` of both ends from the agent (SPEC change) |
-| C5 | Map of all public cameras | hub | coordinates rounded as on the public page, only where the owner shows them |
-| C6 | Satellite passes (ISS, bright satellites) as a forecast and to drop satellite trails from meteor detections | hub | TLE from CelesTrak, SGP4 |
-| C7 | Statistics per month and year: clear nights, sky brightness, meteors per shower | hub | from `sky_sample` and `event` |
-| C8 | Timelapse over a chosen period and monthly keograms from the archive | hub | thumbnails only, ffmpeg on the hub |
-| C9 | Embeddable widget and image feed for own websites, RSS/Atom for detections | hub | per public page |
-| C10 | Share a camera with family or a club (roles: viewer, admin) | hub | |
-| C11 | Export for science: meteors for IMO/GMN, prefilled fireball reports, sky brightness for Globe at Night | hub | |
-| C12 | Maintenance hints: dew or dirt on the dome, recognised from the pictures | hub | |
-| C13 | Aurora map (NOAA OVATION) on the public page | hub | |
-| C14 | Camera monitoring with escalation: push after 30 min offline (exists), e-mail after a few hours (#15); "online but no new pictures", disk almost full, sensor or CPU too hot, clock not synchronised, camera missing; daily health line on the camera page | hub | Benjamin: what other projects do not do; the camera's own watchdog is L17 |
-| C15 | N.I.N.A. on the hub: show what the telescope is imaging (target, sequence progress, last image) next to the sky, push when the sky turns unsafe | hub | data relayed by the agent (L16); opt-in, NINA is LAN-only |
+| C1 | ~~"Heute Nacht": observing window from a cloud forecast (Open-Meteo), astronomical twilight and the moon (phase, rise, set), on the camera page, public page and app; evening push~~ done | hub | own sun/moon code (Meeus, low precision), no new dependency |
+| C2 | ~~Aurora alarm that looks: push when Kp reaches the camera's latitude threshold **and** the camera reports a clear sky~~ done | hub | Kp from #16, cloud cover from `status.sky` |
+| C3 | ~~Morning summary per camera: meteors, clear hours, best sky brightness, the night's best picture; push, later e-mail (#15)~~ done | hub | |
+| C4 | ~~Meteor triangulation: the same meteor seen by two oriented cameras gives its path, height and radiant~~ done | hub | needs `azimuth_deg`/`altitude_deg` of both ends from the agent (SPEC change) |
+| C5 | ~~Map of all public cameras~~ done | hub | coordinates rounded as on the public page, only where the owner shows them |
+| C6 | ~~Satellite passes (ISS, bright satellites) as a forecast and to drop satellite trails from meteor detections~~ done | hub | TLE from CelesTrak, SGP4 |
+| C7 | ~~Statistics per month and year: clear nights, sky brightness, meteors per shower~~ done | hub | from `sky_sample` and `event` |
+| C8 | ~~Timelapse over a chosen period and monthly keograms from the archive~~ done | hub | thumbnails only, ffmpeg on the hub |
+| C9 | ~~Embeddable widget and image feed for own websites, RSS/Atom for detections~~ done | hub | per public page |
+| C10 | ~~Share a camera with family or a club (roles: viewer, admin)~~ done | hub | |
+| C11 | ~~Export for science: meteors for IMO/GMN, prefilled fireball reports, sky brightness for Globe at Night~~ done | hub | |
+| C12 | ~~Maintenance hints: dew or dirt on the dome, recognised from the pictures~~ done | hub | |
+| C13 | ~~Aurora map (NOAA OVATION) on the public page~~ done | hub | |
+| C14 | ~~Camera monitoring with escalation: push after 30 min offline (exists), e-mail after a few hours (#15); "online but no new pictures", disk almost full, sensor or CPU too hot, clock not synchronised, camera missing; daily health line on the camera page~~ done | hub | Benjamin: what other projects do not do; the camera's own watchdog is L17 |
+| C15 | ~~N.I.N.A. on the hub: show what the telescope is imaging (target, sequence progress, last image) next to the sky, push when the sky turns unsafe~~ done (hub side; the data comes with L16) | hub | data relayed by the agent (L16); opt-in, NINA is LAN-only |
+
+## Hub, also done (October 2026)
+
+- Measurement viewer: scientific charts (uPlot) with twilight bands, sun and moon, log
+  exposure, linked zoom, CSV/PNG export, nights of a year; on the camera, night and
+  public pages.
+- Lightbox for all photos (zoom, pinch, swipe through a night).
+- Admin page `/admin`: running version, new commits and their CI, deploy by button
+  (root helper `deploy/admin/`), mail test, disk.
+- `/healthz` reports the running commit.
+
+## Hub, next
+
+| # | Item | Owner | Notes |
+|---|---|---|---|
+| H1 | Constellation lines, names and N/E/S/W over the live image on the public page | hub (+ agent: lens model in status) | waits for the SPEC change |
+| H2 | Flutter app catches up with the web: charts, lightbox, sharing, statistics, "Heute Nacht", exports, e-mail notification switches | hub | after the local work, as Benjamin ordered |
 
 ## Needs Benjamin / hardware
 

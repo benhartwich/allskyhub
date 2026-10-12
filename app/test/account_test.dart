@@ -10,6 +10,16 @@ import 'package:http/testing.dart';
 class FakeAccountHub {
   final calls = <String, Map<String, dynamic>>{};
   int keepDays = 30;
+  final notify = <String, bool>{
+    'notify_events': false,
+    'notify_offline': false,
+    'notify_aurora': false,
+    'notify_summary': false,
+    'notify_tonight': false,
+    'notify_by_mail': false,
+  };
+  bool push = false;
+  bool mail = true;
 
   HubClient get client => HubClient(
     baseUrl: 'https://hub.example',
@@ -17,12 +27,21 @@ class FakeAccountHub {
     httpClient: MockClient((request) async {
       if (request.url.path == '/api/v1/account/settings') {
         if (request.method == 'PUT') {
-          keepDays =
-              (jsonDecode(request.body)
-                      as Map<String, dynamic>)['event_keep_days']
-                  as int;
+          final body = jsonDecode(request.body) as Map<String, dynamic>;
+          keepDays = body['event_keep_days'] as int? ?? keepDays;
+          for (final key in notify.keys.toList()) {
+            if (body[key] is bool) notify[key] = body[key] as bool;
+          }
         }
-        return http.Response(jsonEncode({'event_keep_days': keepDays}), 200);
+        return http.Response(
+          jsonEncode({
+            'event_keep_days': keepDays,
+            ...notify,
+            'push_available': push,
+            'mail_available': mail,
+          }),
+          200,
+        );
       }
       final body = jsonDecode(request.body) as Map<String, dynamic>;
       calls[request.url.path] = body;
@@ -52,7 +71,7 @@ Future<void> pumpAccount(
   HubClient client,
   VoidCallback onDeleted,
 ) async {
-  tester.view.physicalSize = const Size(400, 1600);
+  tester.view.physicalSize = const Size(400, 2400);
   tester.view.devicePixelRatio = 1;
   addTearDown(tester.view.reset);
   await tester.pumpWidget(
@@ -136,5 +155,29 @@ void main() {
     await tester.pumpAndSettle();
     expect(hub.keepDays, 365);
     expect(find.text('Gespeichert.'), findsOneWidget);
+  });
+
+  testWidgets('notifications by e-mail without push', (tester) async {
+    final hub = FakeAccountHub();
+    await pumpAccount(tester, hub.client, () {});
+    await tester.pumpAndSettle();
+    expect(find.text('Benachrichtigungen'), findsOneWidget);
+    expect(find.text('Neue Ereignisse'), findsNothing); // push only
+    await tester.tap(find.byKey(const ValueKey('notify_tonight')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('notify_by_mail')));
+    await tester.pumpAndSettle();
+    expect(hub.notify['notify_tonight'], isTrue);
+    expect(hub.notify['notify_by_mail'], isTrue);
+    expect(hub.notify['notify_events'], isFalse);
+  });
+
+  testWidgets('no notification section when the hub can send nothing', (
+    tester,
+  ) async {
+    final hub = FakeAccountHub()..mail = false;
+    await pumpAccount(tester, hub.client, () {});
+    await tester.pumpAndSettle();
+    expect(find.text('Benachrichtigungen'), findsNothing);
   });
 }

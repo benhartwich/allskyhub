@@ -6,6 +6,8 @@ import '../api/hub_client.dart';
 import '../platform/location.dart';
 import 'camera_settings_screen.dart';
 import 'camera_status.dart';
+import 'measurements_screen.dart';
+import 'zoomable.dart';
 
 /// Live view: polls the latest image with `live=true` every few seconds, so the hub asks
 /// the camera for every frame while this screen is open (SPEC §6.5).
@@ -24,11 +26,23 @@ class _CameraScreenState extends State<CameraScreen> {
   late Camera _camera = widget.camera;
   Timer? _timer;
   int _tick = 0;
+  Overview? _overview;
 
   @override
   void initState() {
     super.initState();
     _timer = Timer.periodic(_interval, (_) => _refresh());
+    _loadOverview();
+  }
+
+  /// Health, "Heute Nacht" and last night; changes slowly, so once a minute.
+  Future<void> _loadOverview() async {
+    try {
+      final overview = await widget.client.overview(_camera.id);
+      if (mounted) setState(() => _overview = overview);
+    } on Object {
+      // Older hub (no or another answer) or offline: the cards stay hidden.
+    }
   }
 
   @override
@@ -45,6 +59,7 @@ class _CameraScreenState extends State<CameraScreen> {
           _camera = camera;
           _tick++;
         });
+        if (_tick % 12 == 0) _loadOverview();
       }
     } on Exception {
       // Keep showing the last state; the next tick tries again.
@@ -74,6 +89,27 @@ class _CameraScreenState extends State<CameraScreen> {
     if (ok != true) return;
     await widget.client.remove(_camera.id);
     if (mounted) Navigator.of(context).pop();
+  }
+
+  /// The live picture in full screen, to zoom into (the picture of this moment).
+  void _openFullscreen() {
+    final url = widget.client
+        .imageUrl(_camera.id, live: true, bust: _tick)
+        .toString();
+    Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => PhotoPager(
+          count: 1,
+          initial: 0,
+          title: (_) => _camera.name,
+          image: (_) => Image.network(
+            url,
+            headers: widget.client.authHeaders,
+            fit: BoxFit.contain,
+          ),
+        ),
+      ),
+    );
   }
 
   @override
@@ -124,15 +160,19 @@ class _CameraScreenState extends State<CameraScreen> {
                             : 'Noch kein Bild.',
                       ),
                     )
-                  : Image.network(
-                      widget.client
-                          .imageUrl(_camera.id, live: true, bust: _tick)
-                          .toString(),
-                      headers: widget.client.authHeaders,
-                      fit: BoxFit.contain,
-                      gaplessPlayback: true,
-                      errorBuilder: (_, _, _) =>
-                          const Center(child: Text('Bild nicht verfügbar')),
+                  : GestureDetector(
+                      key: const Key('live-image'),
+                      onTap: _openFullscreen,
+                      child: Image.network(
+                        widget.client
+                            .imageUrl(_camera.id, live: true, bust: _tick)
+                            .toString(),
+                        headers: widget.client.authHeaders,
+                        fit: BoxFit.contain,
+                        gaplessPlayback: true,
+                        errorBuilder: (_, _, _) =>
+                            const Center(child: Text('Bild nicht verfügbar')),
+                      ),
                     ),
             ),
           ),
@@ -205,7 +245,165 @@ class _CameraScreenState extends State<CameraScreen> {
               ),
             ),
           ),
+          if (_overview case final overview?) ...[
+            _HealthCard(health: overview.health),
+            if (overview.tonight case final tonight?)
+              _TonightCard(tonight: tonight),
+            if (overview.lastNight case final line?)
+              Card(
+                margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                child: ListTile(
+                  key: const Key('last-night'),
+                  title: const Text('Letzte Nacht'),
+                  subtitle: Text(line),
+                ),
+              ),
+          ],
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+            child: OutlinedButton.icon(
+              key: const Key('open-measurements'),
+              icon: const Icon(Icons.show_chart),
+              label: const Text('Messdaten'),
+              onPressed: () => Navigator.of(context).push(
+                MaterialPageRoute<void>(
+                  builder: (_) => MeasurementsScreen(
+                    client: widget.client,
+                    cameraId: _camera.id,
+                    hours: 24,
+                  ),
+                ),
+              ),
+            ),
+          ),
         ],
+      ),
+    );
+  }
+}
+
+class _HealthCard extends StatelessWidget {
+  const _HealthCard({required this.health});
+
+  final List<HealthItem> health;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Card(
+      key: const Key('health'),
+      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('Zustand', style: theme.textTheme.titleMedium),
+            const SizedBox(height: 8),
+            if (health.isEmpty)
+              const Text(
+                'Alles in Ordnung: verbunden, neue Bilder, genug Speicher, '
+                'Temperaturen und Uhr unauffällig.',
+              ),
+            for (final item in health)
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: 3),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Icon(
+                      item.level == 'error'
+                          ? Icons.error_outline
+                          : Icons.warning_amber_outlined,
+                      size: 18,
+                      color: item.level == 'error'
+                          ? theme.colorScheme.error
+                          : Colors.amber,
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(child: Text(item.text)),
+                  ],
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+String _hm(DateTime? t) {
+  if (t == null) return '–';
+  final l = t.toLocal();
+  return '${l.hour.toString().padLeft(2, '0')}:${l.minute.toString().padLeft(2, '0')}';
+}
+
+class _TonightCard extends StatelessWidget {
+  const _TonightCard({required this.tonight});
+
+  final Tonight tonight;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Card(
+      key: const Key('tonight'),
+      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('Heute Nacht', style: theme.textTheme.titleMedium),
+            const SizedBox(height: 6),
+            Text(tonight.summary),
+            if (tonight.hours.isNotEmpty) ...[
+              const SizedBox(height: 10),
+              SizedBox(
+                height: 54,
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  children: [
+                    for (final h in tonight.hours)
+                      Expanded(
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 1.5),
+                          child: Column(
+                            mainAxisAlignment: MainAxisAlignment.end,
+                            children: [
+                              Container(
+                                height: h.clouds == null
+                                    ? 4
+                                    : 6 + 30 * (100 - h.clouds!) / 100,
+                                decoration: BoxDecoration(
+                                  color: h.good
+                                      ? Colors.tealAccent.shade400
+                                      : theme.disabledColor,
+                                  borderRadius: BorderRadius.circular(3),
+                                ),
+                              ),
+                              const SizedBox(height: 3),
+                              Text(
+                                h.at.toLocal().hour.toString().padLeft(2, '0'),
+                                style: theme.textTheme.labelSmall,
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+            ],
+            const SizedBox(height: 8),
+            Text(
+              'Sonne unter ${_hm(tonight.sunset)}, auf ${_hm(tonight.sunrise)} · '
+              'dunkel ${_hm(tonight.dusk)}–${_hm(tonight.dawn)}\n'
+              'Mond: ${tonight.moonPhase}, ${(tonight.moonIllumination * 100).round()} % beleuchtet',
+              style: theme.textTheme.bodySmall,
+            ),
+          ],
+        ),
       ),
     );
   }

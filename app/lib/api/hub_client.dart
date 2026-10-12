@@ -321,16 +321,18 @@ class HubClient {
     Map<String, Object> changes,
   ) => _send('PUT', '/cameras/$cameraId/settings', body: changes);
 
-  /// Days the hub keeps this account's detections: 30, 90 or 365 (privacy policy).
-  Future<int> eventKeepDays() async =>
-      ((await _send('GET', '/account/settings')
-              as Map<String, dynamic>)['event_keep_days']
-          as int);
+  /// Retention of detections and the notifications (roadmap #6, #15, C1–C3).
+  Future<AccountSettings> accountSettings() async => AccountSettings.fromJson(
+    await _send('GET', '/account/settings') as Map<String, dynamic>,
+  );
 
-  Future<int> setEventKeepDays(int days) async =>
-      ((await _send('PUT', '/account/settings', body: {'event_keep_days': days})
-              as Map<String, dynamic>)['event_keep_days']
-          as int);
+  /// Only the given keys change (e.g. `{'event_keep_days': 90}`).
+  Future<AccountSettings> updateAccountSettings(
+    Map<String, Object> changes,
+  ) async => AccountSettings.fromJson(
+    await _send('PUT', '/account/settings', body: changes)
+        as Map<String, dynamic>,
+  );
 
   Future<void> changePassword(String current, String newPassword) => _send(
     'POST',
@@ -434,6 +436,25 @@ class HubClient {
     return [for (final e in json) SkyEvent.fromJson(e as Map<String, dynamic>)];
   }
 
+  /// Health, "Heute Nacht" and last night (roadmap C1, C3, C14) for the camera screen.
+  Future<Overview> overview(String cameraId) async => Overview.fromJson(
+    await _send('GET', '/cameras/$cameraId/overview') as Map<String, dynamic>,
+  );
+
+  /// Measurements for the charts: one night (`YYYYMMDD`), the last [hours] (24, 72,
+  /// 168, 720), or by default the newest night with sky data.
+  Future<SeriesData> series(
+    String cameraId, {
+    String? night,
+    int? hours,
+  }) async {
+    final query = {'night': ?night, if (hours != null) 'hours': '$hours'};
+    final uri = _uri('/cameras/$cameraId/series', query.isEmpty ? null : query);
+    return SeriesData.fromJson(
+      await _sendUri('GET', uri) as Map<String, dynamic>,
+    );
+  }
+
   Future<List<SkySample>> nightSky(String cameraId, String nightId) async {
     final json =
         await _send('GET', '/cameras/$cameraId/nights/$nightId/sky')
@@ -488,4 +509,147 @@ class HubClient {
         if (live) 'live': 'true',
         if (bust != null) 't': '$bust',
       });
+}
+
+/// Per-account settings from `GET /account/settings`. Notification switches the hub does
+/// not know (older hub) are missing from [notify].
+class AccountSettings {
+  AccountSettings.fromJson(Map<String, dynamic> json)
+    : keepDays = json['event_keep_days'] as int,
+      pushAvailable = json['push_available'] as bool? ?? false,
+      mailAvailable = json['mail_available'] as bool? ?? false,
+      notify = {
+        for (final key in notifyKeys)
+          if (json[key] is bool) key: json[key] as bool,
+      };
+
+  static const notifyKeys = [
+    'notify_events',
+    'notify_offline',
+    'notify_aurora',
+    'notify_summary',
+    'notify_tonight',
+    'notify_by_mail',
+  ];
+
+  final int keepDays;
+  final bool pushAvailable;
+  final bool mailAvailable;
+  final Map<String, bool> notify;
+}
+
+DateTime? _optionalDate(Object? value) =>
+    value is String ? DateTime.parse(value) : null;
+
+class HealthItem {
+  HealthItem.fromJson(Map<String, dynamic> json)
+    : level = json['level'] as String,
+      text = json['text'] as String;
+
+  final String level; // "warn" or "error"
+  final String text;
+}
+
+class TonightHour {
+  TonightHour.fromJson(Map<String, dynamic> json)
+    : at = DateTime.parse(json['at'] as String),
+      clouds = json['clouds'] as int?,
+      moonUp = json['moon_up'] as bool,
+      good = json['good'] as bool;
+
+  final DateTime at;
+  final int? clouds;
+  final bool moonUp;
+  final bool good;
+}
+
+class Tonight {
+  Tonight.fromJson(Map<String, dynamic> json)
+    : summary = json['summary'] as String,
+      sunset = _optionalDate(json['sunset']),
+      dusk = _optionalDate(json['dusk']),
+      dawn = _optionalDate(json['dawn']),
+      sunrise = _optionalDate(json['sunrise']),
+      moonrise = _optionalDate(json['moonrise']),
+      moonset = _optionalDate(json['moonset']),
+      moonIllumination = (json['moon_illumination'] as num).toDouble(),
+      moonPhase = json['moon_phase'] as String,
+      hours = [
+        for (final h in json['hours'] as List<dynamic>)
+          TonightHour.fromJson(h as Map<String, dynamic>),
+      ];
+
+  final String summary;
+  final DateTime? sunset, dusk, dawn, sunrise, moonrise, moonset;
+  final double moonIllumination;
+  final String moonPhase;
+  final List<TonightHour> hours;
+}
+
+class Overview {
+  Overview.fromJson(Map<String, dynamic> json)
+    : online = json['online'] as bool,
+      health = [
+        for (final h in json['health'] as List<dynamic>)
+          HealthItem.fromJson(h as Map<String, dynamic>),
+      ],
+      tonight = json['tonight'] == null
+          ? null
+          : Tonight.fromJson(json['tonight'] as Map<String, dynamic>),
+      lastNight =
+          (json['last_night'] as Map<String, dynamic>?)?['line'] as String?,
+      lastNightId =
+          (json['last_night'] as Map<String, dynamic>?)?['night_id'] as String?;
+
+  final bool online;
+  final List<HealthItem> health;
+  final Tonight? tonight;
+  final String? lastNight;
+  final String? lastNightId;
+}
+
+/// One table of `GET /cameras/<id>/series`: times (Unix seconds) and value columns;
+/// `null` is a gap (no measurement), never zero.
+class SeriesTable {
+  SeriesTable.fromJson(Map<String, dynamic> json)
+    : t = [for (final v in json['t'] as List<dynamic>) (v as num).toDouble()],
+      columns = {
+        for (final e in json.entries)
+          if (e.key != 't' && e.value is List)
+            e.key: [
+              for (final v in e.value as List<dynamic>) (v as num?)?.toDouble(),
+            ],
+      };
+
+  final List<double> t;
+  final Map<String, List<double?>> columns;
+}
+
+class SeriesData {
+  SeriesData.fromJson(Map<String, dynamic> json)
+    : from = (json['from'] as num).toDouble(),
+      to = (json['to'] as num).toDouble(),
+      tz = json['tz'] as String,
+      night = json['night'] as String?,
+      hours = json['hours'] as int?,
+      bucketSeconds = json['bucket_s'] as int? ?? 0,
+      sky = SeriesTable.fromJson(json['sky'] as Map<String, dynamic>),
+      status = json['status'] == null
+          ? null
+          : SeriesTable.fromJson(json['status'] as Map<String, dynamic>),
+      ephemeris = json['ephemeris'] == null
+          ? null
+          : SeriesTable.fromJson(json['ephemeris'] as Map<String, dynamic>);
+
+  final double from, to;
+  final String tz;
+  final String? night;
+  final int? hours;
+  final int bucketSeconds;
+  final SeriesTable sky;
+  final SeriesTable? status;
+  final SeriesTable? ephemeris;
+
+  double? get moonIllumination =>
+      ephemeris?.columns['moon_illumination']?.firstOrNull;
 }

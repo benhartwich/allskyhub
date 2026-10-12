@@ -4,8 +4,10 @@ import 'package:flutter/material.dart';
 
 import '../api/hub_client.dart';
 import 'event_screens.dart';
+import 'measurements_screen.dart';
 import 'product_screens.dart';
 import 'sky_charts.dart';
+import 'zoomable.dart';
 
 const _weekdays = ['Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa', 'So'];
 
@@ -182,8 +184,30 @@ class _NightScreenState extends State<NightScreen> {
               SliverToBoxAdapter(
                 child: FutureBuilder<List<SkySample>>(
                   future: _sky,
-                  builder: (context, snapshot) =>
+                  builder: (context, snapshot) => Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
                       SkyCharts(samples: snapshot.data ?? const <SkySample>[]),
+                      if (widget.night.sky > 0)
+                        Padding(
+                          padding: const EdgeInsets.fromLTRB(12, 0, 12, 8),
+                          child: TextButton.icon(
+                            key: const Key('night-measurements'),
+                            icon: const Icon(Icons.show_chart),
+                            label: const Text('Alle Messdaten dieser Nacht'),
+                            onPressed: () => Navigator.of(context).push(
+                              MaterialPageRoute<void>(
+                                builder: (_) => MeasurementsScreen(
+                                  client: widget.client,
+                                  cameraId: widget.camera.id,
+                                  night: widget.night.nightId,
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
+                    ],
+                  ),
                 ),
               ),
               SliverToBoxAdapter(
@@ -308,64 +332,31 @@ class FrameViewer extends StatefulWidget {
 }
 
 class _FrameViewerState extends State<FrameViewer> {
-  late final _pages = PageController(initialPage: widget.initial);
-  late int _index = widget.initial;
-
   @override
-  void dispose() {
-    _pages.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final frame = widget.frames[_index];
-    return Scaffold(
-      backgroundColor: Colors.black,
-      appBar: AppBar(
-        backgroundColor: Colors.black,
-        foregroundColor: Colors.white,
-        title: Text(clock(frame.capturedAt)),
-      ),
-      body: Column(
-        children: [
-          Expanded(
-            child: PageView.builder(
-              controller: _pages,
-              itemCount: widget.frames.length,
-              onPageChanged: (i) => setState(() => _index = i),
-              itemBuilder: (context, i) {
-                final f = widget.frames[i];
-                return InteractiveViewer(
-                  maxScale: 6,
-                  child: _ArchiveImage(
-                    client: widget.client,
-                    url: widget.client.frameUrl(
-                      widget.cameraId,
-                      widget.nightId,
-                      f.name,
-                      thumb: !f.hasFull,
-                    ),
-                    fit: BoxFit.contain,
-                  ),
-                );
-              },
-            ),
-          ),
-          Padding(
-            padding: const EdgeInsets.all(12),
-            child: Text(
-              '${frame.mode == 'night' ? 'Nacht' : 'Tag'} · ${exposure(frame.exposureUs)}'
-              ' · Gain ${frame.gain.round()} · Sonne ${frame.sunElevation.toStringAsFixed(1)}°'
-              '${frame.hasFull ? '' : '\nNur Vorschau: das Vollbild ist nicht mehr im Archiv.'}',
-              textAlign: TextAlign.center,
-              style: const TextStyle(color: Colors.white70),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
+  Widget build(BuildContext context) => PhotoPager(
+    count: widget.frames.length,
+    initial: widget.initial,
+    title: (i) => clock(widget.frames[i].capturedAt),
+    image: (i) {
+      final f = widget.frames[i];
+      return _ArchiveImage(
+        client: widget.client,
+        url: widget.client.frameUrl(
+          widget.cameraId,
+          widget.nightId,
+          f.name,
+          thumb: !f.hasFull,
+        ),
+        fit: BoxFit.contain,
+      );
+    },
+    caption: (i) {
+      final frame = widget.frames[i];
+      return '${frame.mode == 'night' ? 'Nacht' : 'Tag'} · ${exposure(frame.exposureUs)}'
+          ' · Gain ${frame.gain.round()} · Sonne ${frame.sunElevation.toStringAsFixed(1)}°'
+          '${frame.hasFull ? '' : '\nNur Vorschau: das Vollbild ist nicht mehr im Archiv.'}';
+    },
+  );
 }
 
 class _ArchiveImage extends StatelessWidget {

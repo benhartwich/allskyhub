@@ -1,7 +1,7 @@
 {%- set fr = device.last_frame or {} -%}
 <figure class="live">
   {% if device.latest_image_at %}
-  <img src="/sky/{{ slug }}/latest.jpg?t={{ device.latest_image_at.timestamp() | int }}" alt="Aktuelles Himmelsbild von {{ device.name }}">
+  <a href="/sky/{{ slug }}/latest.jpg?t={{ device.latest_image_at.timestamp() | int }}" title="Vollbild"><img src="/sky/{{ slug }}/latest.jpg?t={{ device.latest_image_at.timestamp() | int }}" alt="Aktuelles Himmelsbild"></a>
   <figcaption class="muted">
     Aufgenommen {{ device.latest_image_at | age }}{% if fr.mode is defined %} · {{ 'Nacht' if fr.mode == 'night' else 'Tag' }}{% endif %}{% if fr.sun_elevation is defined %} · Sonne {{ '%.1f' | format(fr.sun_elevation) }}°{% endif %}
   </figcaption>

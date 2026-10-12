@@ -8,6 +8,7 @@ The schema ``public`` of that database is dropped on every run: never point it a
 from __future__ import annotations
 
 import asyncio
+import datetime as dt
 import os
 import socket
 from collections.abc import AsyncIterator
@@ -23,6 +24,7 @@ from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
 
 from allskyhub_server.app import create_app
+from allskyhub_server.devices.space_weather import KpCache
 from allskyhub_server.models import Base
 from allskyhub_server.settings import Settings
 
@@ -89,8 +91,24 @@ async def _clean_tables(request: pytest.FixtureRequest) -> AsyncIterator[None]:
 @pytest.fixture
 async def app(settings: Settings, engine: AsyncEngine) -> AsyncIterator[FastAPI]:
     application = create_app(settings)
+    # No requests to NOAA from tests: a fixed Kp forecast for today and tomorrow.
+    application.state.kp = KpCache(httpx.AsyncClient(transport=httpx.MockTransport(_kp_answer)))
     async with application.router.lifespan_context(application):
         yield application
+
+
+def _kp_answer(request: httpx.Request) -> httpx.Response:
+    today = dt.datetime.now(dt.UTC).date()
+    rows = [
+        {"time_tag": f"{today}T00:00:00", "kp": 2.33, "observed": "observed"},
+        {"time_tag": f"{today}T03:00:00", "kp": 4.67, "observed": "estimated"},
+        {
+            "time_tag": f"{today + dt.timedelta(days=1)}T00:00:00",
+            "kp": 5.33,
+            "observed": "predicted",
+        },
+    ]
+    return httpx.Response(200, json=rows)
 
 
 @pytest.fixture

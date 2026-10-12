@@ -117,6 +117,8 @@ class Device(Base):
     # Opt-in public sky page (/sky/<slug>): a random slug, never the device id; switching the
     # page off drops it, so old links stop working.
     public_slug: Mapped[str | None] = mapped_column(String(32), unique=True)
+    # What the public page shows and its texts (devices/public.py PublicProfile); None = defaults.
+    public_profile: Mapped[dict[str, Any] | None] = mapped_column(JSONB)
 
 
 class DeviceNonce(Base):

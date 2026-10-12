@@ -179,6 +179,60 @@ async def set_public(
     return RedirectResponse(f"/cameras/{device.id}", status_code=303)
 
 
+PUBLIC_TEXTS = ("title", "location_label", "camera", "lens", "computer", "owner", "notes")
+PUBLIC_SECTIONS = {
+    "live": "Aktuelles Bild",
+    "loop": "Die letzte Stunde als Loop",
+    "events": "Meteore, Polarlicht und Blitze",
+    "sky": "Himmelsqualität (Wolken, SQM, Sterne)",
+    "aurora": "Polarlicht-Aussichten (Kp-Index)",
+    "archive": "Nachtarchiv mit Keogramm und Sternspuren",
+}
+
+
+@router.get("/cameras/{device_id}/public/edit")
+async def public_edit(
+    request: Request, db: DbSession, session: CurrentSession, device_id: str
+) -> Response:
+    device = await _own_device(db, session, device_id)
+    return render(
+        request,
+        "public_edit.html",
+        {"device": device, "profile": public.profile(device), "sections": PUBLIC_SECTIONS},
+        session=session,
+    )
+
+
+@router.post("/cameras/{device_id}/public/edit")
+async def public_save(
+    request: Request, db: DbSession, session: CurrentSession, device_id: str
+) -> Response:
+    """What the public page shows (devices/public.py PublicProfile)."""
+    device = await _own_device(db, session, device_id)
+    form = await request.form()
+    data: dict[str, Any] = {key: str(form.get(key) or "") for key in PUBLIC_TEXTS}
+    data["show_coordinates"] = form.get("show_coordinates") == "on"
+    data["sections"] = {key: form.get(f"section_{key}") == "on" for key in PUBLIC_SECTIONS}
+    try:
+        profile = public.PublicProfile.model_validate(data)
+    except ValidationError:
+        return render(
+            request,
+            "public_edit.html",
+            {
+                "device": device,
+                "profile": public.profile(device),
+                "sections": PUBLIC_SECTIONS,
+                "error": "Ein Text ist zu lang (Titel 100, Felder 200, Notizen 2000 Zeichen).",
+            },
+            session=session,
+            status_code=400,
+        )
+    device.public_profile = profile.model_dump()
+    await db.commit()
+    return RedirectResponse(f"/cameras/{device.id}", status_code=303)
+
+
 SETTING_KEYS = ("latitude", "longitude", "timezone", "camera", "day_delay_s", "night_delay_s")
 
 

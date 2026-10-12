@@ -55,8 +55,9 @@
   <h2>Öffentliche Seite</h2>
   {% if device.public_slug %}
   {% set url = request.base_url ~ "sky/" ~ device.public_slug %}
-  <p>Jeder mit diesem Link sieht Name, neuestes Bild und die Nachtprodukte deiner Kamera:</p>
+  <p>Jeder mit diesem Link sieht, was du für die Seite ausgewählt hast:</p>
   <p><a href="/sky/{{ device.public_slug }}" class="code-link">{{ url }}</a></p>
+  <p><a class="button secondary" href="/cameras/{{ device.id }}/public/edit">Seite gestalten</a></p>
   <form method="post" action="/cameras/{{ device.id }}/public">
     <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
     <input type="hidden" name="enabled" value="false">
@@ -64,7 +65,7 @@
   </form>
   <p class="muted">Ausschalten macht den Link sofort ungültig; beim Wiedereinschalten gibt es einen neuen.</p>
   {% else %}
-  <p class="muted">Teile den Himmel über deiner Kamera mit anderen: eine Seite mit Name, neuestem Bild und Keogramm. Standort und Gerätedaten bleiben privat.</p>
+  <p class="muted">Teile den Himmel über deiner Kamera mit anderen: aktuelles Bild, die letzte Stunde als Loop, Meteore, Himmelsqualität, Polarlicht-Aussichten und Nachtarchiv. Was davon zu sehen ist, legst du fest. Standort und Gerätedaten bleiben privat, solange du sie nicht freigibst.</p>
   <form method="post" action="/cameras/{{ device.id }}/public">
     <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
     <input type="hidden" name="enabled" value="true">

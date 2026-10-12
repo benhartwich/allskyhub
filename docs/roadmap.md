@@ -35,6 +35,8 @@ postkasten.cloud). Changes to `packages/protocol` and `docs/SPEC.md` have one ow
 | 12 | ~~Hub monitoring: health check, disk space, certificate, backup age~~ | hub | done (ntfy topic from Benjamin); camera offline is push (#6) |
 | 13 | ~~Web UI: gallery and night products like in the app~~ | hub | done |
 | 14 | ~~App: "Standort ändern" and camera settings via `set_settings`~~ | hub | done |
+| 15 | E-mail from the hub: invitations, password reset, alerts as an alternative to push | hub | the hub sends no mail yet; invitation links are passed on by hand (`allskyhub-server invite`). Needs an SMTP account (Benjamin) |
+| 16 | Public sky page like astronomy.garden, manageable on the hub and on the camera | hub + agent | hub sections done (#this PR); constellation overlay, `GET/PUT /device/v1/public` and the camera's local UI follow (SPEC PR) |
 
 ## Needs Benjamin / hardware
 

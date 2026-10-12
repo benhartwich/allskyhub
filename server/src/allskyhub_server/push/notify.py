@@ -201,6 +201,35 @@ class Notifier:
                         ),
                     )
 
+    async def unsafe(self, device_id: str) -> None:
+        """Roadmap C15: the camera's safety monitor turned unsafe while N.I.N.A. is
+        connected; owners with problem notices get it once per change."""
+        if self._sender is None:
+            return
+        try:
+            async with self._maker() as db:
+                row = (
+                    await db.execute(
+                        select(Device, User)
+                        .join(User, User.id == Device.owner_id)
+                        .where(Device.id == device_id, User.notify_offline.is_(True))
+                    )
+                ).one_or_none()
+                if row is None:
+                    return
+                device, user = row
+                await self._deliver(
+                    db,
+                    user.id,
+                    Message(
+                        title=f"{device.name}: Himmel unsicher",
+                        body="Wolken, Regen oder Gewitter: Das Teleskop sollte jetzt pausieren.",
+                        data={"camera": device.id},
+                    ),
+                )
+        except Exception:
+            log.exception("push: unsafe notice failed")
+
     async def aurora(self, device_id: str, kp: space_weather.KpCache) -> None:
         """Roadmap C2, after a status with a sky measurement: Kp at or above the rule of
         thumb for the camera's latitude while its own sky is clear and dark."""

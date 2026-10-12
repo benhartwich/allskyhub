@@ -95,6 +95,7 @@ class FormField:
     checked: bool = False  # for bool
     lat: str = ""  # for location
     lon: str = ""
+    is_set: bool = False  # write_only: whether the camera has a value
     choices: list[tuple[str, str]] = field(default_factory=list[tuple[str, str]])
 
 
@@ -130,7 +131,11 @@ def groups(
             help=localized(spec.help, lang) if spec.help is not None else None,
             value=submitted.get(spec.key, "") if submitted else _text(current.get(spec.key)),
         )
-        if spec.type is SettingType.LOCATION:
+        if spec.write_only:
+            # SPEC §6.9: the value is never reported, only whether there is one.
+            f.value = ""
+            f.is_set = current.get(f"{spec.key}_set") is True
+        elif spec.type is SettingType.LOCATION:
             f.lat = submitted.get("latitude", "") if submitted else _text(current.get("latitude"))
             f.lon = submitted.get("longitude", "") if submitted else _text(current.get("longitude"))
         elif spec.type is SettingType.BOOL:
@@ -172,6 +177,13 @@ def changes(
             if f"{key}__present" in form:
                 values[key] = key in form
             continue
+        if spec.write_only:
+            # Empty keeps the stored value, the delete box sends null (SPEC §6.9).
+            if f"{key}__clear" in form:
+                values[key] = None
+            elif form.get(key, "").strip():
+                values[key] = form[key].strip()
+            continue
         if key not in form:
             continue
         text = form[key].strip()
@@ -191,7 +203,8 @@ def changes(
             values[key] = text
     if unreadable:
         return {}, f"Bitte als Zahl angeben: {', '.join(unreadable)}."
-    diff = {k: v for k, v in values.items() if current.get(k) != v}
+    secret = {s.key for s in schema if s.write_only}
+    diff = {k: v for k, v in values.items() if k in secret or current.get(k) != v}
     if ("latitude" in diff) != ("longitude" in diff) and "latitude" in values:
         diff["latitude"], diff["longitude"] = values["latitude"], values["longitude"]
     bad = invalid_settings(schema, diff)

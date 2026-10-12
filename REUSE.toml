@@ -60,3 +60,8 @@ SPDX-License-Identifier = "OFL-1.1"
 path = "server/src/allskyhub_server/web/static/world-land.svg"
 SPDX-FileCopyrightText = "Natural Earth (public domain), via world-atlas (Mike Bostock)"
 SPDX-License-Identifier = "LicenseRef-NaturalEarth-PublicDomain"
+
+[[annotations]]
+path = "server/src/allskyhub_server/devices/data/constellations.json"
+SPDX-FileCopyrightText = "2015 Olaf Frohn (d3-celestial)"
+SPDX-License-Identifier = "BSD-3-Clause"

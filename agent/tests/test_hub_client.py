@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import json
 import random
 import stat
@@ -627,3 +628,46 @@ def test_hello_has_the_schema_and_set_settings_reports_bad_keys(tmp_path: Path) 
     assert (bad.code, bad.message) == ("invalid_args", "wb_r")
     assert isinstance(ok, Ack)
     assert got == [{"wb_r": None, "jpeg_quality": 95}]
+
+
+def test_unknown_command_is_answered_unsupported(tmp_path: Path) -> None:
+    """SPEC §6.1, §6.5: a command from a newer hub gets `unsupported`, not silence."""
+    store, _, _ = _store_with_frame(tmp_path)
+    identity = DeviceIdentity.load_or_create(tmp_path / "device.key")
+    hub = FakeHub(register_unpaired=0, close_code=1000)
+    replies: list[ErrorReply] = []
+
+    async def handler(ws: ServerConnection) -> None:
+        await ws.recv()  # hello
+        await ws.send(
+            '{"v":1,"type":"command","id":"cmd-1","ts":"2026-10-06T21:30:00Z",'
+            '"body":{"name":"make_coffee","args":{}}}'
+        )
+        deadline = asyncio.get_running_loop().time() + 5
+        while not replies and asyncio.get_running_loop().time() < deadline:
+            with contextlib.suppress(TimeoutError):
+                env = parse_envelope(await asyncio.wait_for(ws.recv(), 0.5))
+                if isinstance(env.body, ErrorReply):
+                    replies.append(env.body)
+        await ws.close(1000)
+        hub.done.set()
+
+    async def scenario() -> None:
+        async with serve(handler, "127.0.0.1", 0) as server:
+            port = server.sockets[0].getsockname()[1]
+            cfg = HubConfig(hub_url=f"http://127.0.0.1:{port}")
+            pairing = PairingState(identity.device_id, cfg.hub_url, "sim", "0.1.0")
+            async with httpx.AsyncClient(
+                transport=httpx.MockTransport(hub.handle), base_url=cfg.hub_url
+            ) as http:
+                session = HubSession(
+                    cfg, identity, pairing, store, LiveState(), "sim", "0.1.0", lambda: None, http
+                )
+                stop = asyncio.Event()
+                task = asyncio.create_task(session.run(stop))
+                await asyncio.wait_for(hub.done.wait(), 10)
+                stop.set()
+                await asyncio.wait_for(task, 10)
+
+    asyncio.run(scenario())
+    assert [(r.ref, r.code) for r in replies] == [("cmd-1", "unsupported")]

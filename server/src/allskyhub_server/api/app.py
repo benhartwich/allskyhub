@@ -30,6 +30,7 @@ from allskyhub_server.devices import archive, events, pairing, public, queries, 
 from allskyhub_server.devices import settings as settings_mod
 from allskyhub_server.devices.connections import ConnectionRegistry
 from allskyhub_server.devices.images import ImageStore
+from allskyhub_server.devices.queries import Role
 from allskyhub_server.models import Device, EventRecord, PushToken, User
 from allskyhub_server.web.deps import DbSession, SettingsDep, client_ip
 from allskyhub_server.web.routes_account import finish_deletion
@@ -38,7 +39,9 @@ router = APIRouter(prefix="/api/v1")
 
 
 class _In(BaseModel):
-    model_config = ConfigDict(extra="forbid")
+    # Like the device protocol (SPEC §6.1, compatible changes): a newer app may send fields
+    # this hub does not know yet; they are ignored, never refused.
+    model_config = ConfigDict(extra="ignore")
 
 
 class LoginRequest(_In):
@@ -275,7 +278,7 @@ async def cameras(request: Request, db: DbSession, user: AppUser) -> list[Camera
     registry = _registry(request)
     return [
         _camera(d, registry, request.app.state.settings.base_url)
-        for d in await queries.owned(db, user.id)
+        for d, _ in await queries.visible(db, user.id)
     ]
 
 
@@ -299,11 +302,12 @@ async def claim(
     return _camera(device, _registry(request), request.app.state.settings.base_url)
 
 
-async def _own(db: DbSession, user: User, device_id: str) -> Device:
-    device = await queries.owned_one(db, user.id, device_id)
-    if device is None:
+async def _own(db: DbSession, user: User, device_id: str, need: Role = "viewer") -> Device:
+    """Roadmap C10: shared cameras are visible too; changing needs ``need``."""
+    found = await queries.visible_one(db, user.id, device_id, need)
+    if found is None:
         raise HTTPException(404, "Not found")
-    return device
+    return found[0]
 
 
 @router.get("/cameras/{device_id}")
@@ -336,7 +340,7 @@ async def image(
 @router.delete("/cameras/{device_id}", status_code=204)
 async def remove(request: Request, db: DbSession, user: AppUser, device_id: str) -> Response:
     """SPEC §6.2 step 4."""
-    device = await _own(db, user, device_id)
+    device = await _own(db, user, device_id, "owner")
     await pairing.unpair(db, device)
     await db.commit()
     store: ImageStore = request.app.state.images
@@ -490,7 +494,7 @@ async def camera_settings(
     """SPEC §6.5 ``set_settings`` (roadmap #2): only the given keys change. Waits for the
     camera's answer; 409 offline, 400 rejected (German message), 504 no answer. The camera
     then restarts its capture and reports the new values in ``status.settings``."""
-    device = await _own(db, user, device_id)
+    device = await _own(db, user, device_id, "admin")
     schema, own = settings_form.schema_of(device)
     changes = body.model_dump(mode="json", exclude_unset=True)
     if own and (bad := invalid_settings(schema, changes)):
@@ -525,7 +529,7 @@ async def label_event(
     event_id: Annotated[str, Path(pattern=EVENT_ID_PATTERN)],
 ) -> EventItem:
     """The owner's verdict, e.g. "false_positive" for "kein Meteor"; null clears it."""
-    device = await _own(db, user, device_id)
+    device = await _own(db, user, device_id, "admin")
     event = await events.set_label(db, device.id, night_id, event_id, body.label)
     await db.commit()
     return _event(event)
@@ -649,7 +653,7 @@ async def set_public(
     request: Request, body: PublicRequest, db: DbSession, user: AppUser, device_id: str
 ) -> Camera:
     """Opt-in public sky page (roadmap #9); switching off invalidates the link."""
-    device = await _own(db, user, device_id)
+    device = await _own(db, user, device_id, "owner")
     if body.enabled:
         public.enable(device)
     else:

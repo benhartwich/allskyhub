@@ -1,0 +1,12 @@
+// The local UI's system page (roadmap L12): the agent (user "allskyhub") may reboot and
+// shut down the camera through logind, also while someone is logged in. Nothing else.
+polkit.addRule(function (action, subject) {
+    if (subject.user == "allskyhub" && (
+            action.id == "org.freedesktop.login1.reboot" ||
+            action.id == "org.freedesktop.login1.reboot-multiple-sessions" ||
+            action.id == "org.freedesktop.login1.power-off" ||
+            action.id == "org.freedesktop.login1.power-off-multiple-sessions")) {
+        return polkit.Result.YES;
+    }
+    return polkit.Result.NOT_HANDLED;
+});

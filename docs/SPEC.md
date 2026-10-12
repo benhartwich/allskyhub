@@ -607,6 +607,11 @@ Endpoints, only reachable from the setup network:
   no internet, so only the offline code works. Without a session nobody nearby can move
   the camera to another network or another hub. A camera without an offline code can be
   reached again on its old network, through Ethernet or with a setup file (§7.3).
+- **Another Wi-Fi from the normal network** (roadmap L13): where the agent manages the
+  network, the local UI can also switch the Wi-Fi without setup mode: `GET /api/network/wifi`
+  (as above) and `POST /api/network/wifi` with `{ssid, password?, country}` only, never
+  hub or location, the same checks, `202 {will_join}`, and the same fallback to setup mode
+  if joining fails. Once paired both need a local session (§7.4).
 
 ### 7.2 Discovery
 
@@ -794,6 +799,11 @@ report healthy within a timeout.
   mode. Healthy means the local `/api/status` (§7) reports the new `version`, and
   `frames` > 0 if the old one captured, within 5 min; else it switches back and skips
   that version. A power cut between switch and check is finished on the next run.
+- **Asked for in the local UI** (roadmap L14): the agent writes `now` or `rollback` into
+  `/var/lib/allskyhub-agent/update-request`; `allskyhub-updater.path` starts the updater,
+  which reads and deletes it. `now` checks at once and installs also at night;
+  `rollback` switches to the previous installed release with the same health check and
+  marks the current one as not to be installed again by itself.
 - Details and key handling: `docs/updates.md`.
 
 ## 9. Milestones

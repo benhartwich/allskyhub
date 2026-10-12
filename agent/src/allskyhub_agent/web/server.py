@@ -25,6 +25,23 @@ Routes:
     GET  /api/skymask.png?w=&h=   transparent shade over everything that is not sky
     POST /api/calibration/mask      {exclude, include} drawn areas → the new state
     POST /api/calibration/relearn   drop the learned mask → the new state
+    GET  /api/public          the public page on the hub {enabled, url, profile, online}
+                              (SPEC §6.8, roadmap L10); the last known state with
+                              online false while the hub is unreachable, else 503
+    GET  /api/network         interfaces, addresses, joined Wi-Fi, managed (roadmap L13)
+    GET  /api/network/wifi    visible Wi-Fi networks, only where the agent manages the network
+    POST /api/network/wifi    {ssid, password?, country} → 202 {will_join}; as in setup mode,
+                              a failed join opens the setup network (SPEC §7.1)
+    GET  /api/update          version, installed releases, the updater's state (roadmap L14)
+    POST /api/update/<now|rollback>   ask the root updater → 202, or 404 without one
+    GET  /api/logs?lines=N    the agent's recent log lines (roadmap L15)
+    GET  /api/support.zip     support bundle: log, versions, facts, settings, calibration
+    GET  /api/backup.json     settings and drawn sky-mask areas
+    POST /api/restore         a backup → 202 (the capture restarts), or 400 {detail, fields}
+    GET  /api/system          CPU, memory, disk, power warnings, uptime (roadmap L12)
+    POST /api/system/<action> restart (the agent), reboot, shutdown → 202, or 503 {detail}
+    POST /api/public          {enabled?, profile?} → the new state, 422 {detail} with the
+                              hub's sentence, 503 while the hub is unreachable
     GET  /local-login         login page (SPEC §7.4)
     GET  /local-login/start   single sign-on: nonce cookie, redirect to the hub
     GET  /local-login/callback   page that posts the assertion from the fragment
@@ -59,6 +76,7 @@ from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_valida
 
 from allskyhub_agent.adapters.network import SETUP_ADDRESS
 from allskyhub_agent.hub.pairing import PairingState
+from allskyhub_agent.hub.public import HubUnreachable, PublicPage, PublicRejected
 from allskyhub_agent.live import LiveState
 from allskyhub_agent.settings import AgentSettings, valid_timezone
 from allskyhub_agent.setup.controller import NetworkRequest, SetupController
@@ -71,11 +89,27 @@ from allskyhub_agent.web.auth import (
     LocalAuth,
 )
 from allskyhub_agent.web.calibration import LocalCalibration
+from allskyhub_agent.web.support import Support
 from allskyhub_protocol import SettingSpec
 
 _MAX_BODY = 4096
 _MAX_MASK_BODY = 256 * 1024  # 30 polygons of 200 points as JSON
+_MAX_PUBLIC_BODY = 16 * 1024  # the profile's texts are at most about 3 000 characters
 _SETUP_NET = ipaddress.ip_network(f"{SETUP_ADDRESS}/24", strict=False)
+
+
+def _ssid_bytes(v: str) -> str:
+    if len(v.encode()) > 32:
+        raise ValueError("ssid has more than 32 bytes")
+    return v
+
+
+def _wpa_password(v: str | None) -> str | None:
+    if v is None or v == "":
+        return None
+    if not 8 <= len(v) <= 63:
+        raise ValueError("password must have 8 to 63 characters")
+    return v
 
 
 class SetupNetworkBody(BaseModel):
@@ -100,21 +134,42 @@ class SetupNetworkBody(BaseModel):
             raise ValueError("unknown time zone")
         return v
 
-    @field_validator("ssid")
-    @classmethod
-    def _ssid_bytes(cls, v: str) -> str:
-        if len(v.encode()) > 32:
-            raise ValueError("ssid has more than 32 bytes")
-        return v
+    _ssid = field_validator("ssid")(_ssid_bytes)
+    _password = field_validator("password")(_wpa_password)
 
-    @field_validator("password")
-    @classmethod
-    def _password(cls, v: str | None) -> str | None:
-        if v is None or v == "":
-            return None
-        if not 8 <= len(v) <= 63:
-            raise ValueError("password must have 8 to 63 characters")
-        return v
+
+_NOT_MANAGED = "Das Netzwerk wird auf dieser Installation nicht von der Kamera verwaltet."
+
+
+class WifiBody(BaseModel):
+    """`POST /api/network/wifi` (roadmap L13): only the Wi-Fi, never hub or location."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    ssid: str = Field(min_length=1)
+    password: str | None = None
+    country: str = Field(pattern=r"^[A-Za-z]{2}$")
+
+    _ssid = field_validator("ssid")(_ssid_bytes)
+    _password = field_validator("password")(_wpa_password)
+
+
+@dataclass(frozen=True)
+class UpdatePage:
+    """Roadmap L14: what is installed, and asking the updater (SPEC §8)."""
+
+    facts: Callable[[], dict[str, Any]]
+    # Leaves "now" or "rollback" for the updater; False where there is no updater.
+    request: Callable[[str], bool]
+
+
+@dataclass(frozen=True)
+class SystemPage:
+    """The local UI's system page (roadmap L12)."""
+
+    facts: Callable[[], dict[str, Any]]
+    # Starts "restart", "reboot" or "shutdown"; None when under way, else a German reason.
+    action: Callable[[str], str | None]
 
 
 @dataclass(frozen=True)
@@ -131,6 +186,7 @@ def _page(name: str = "index.html") -> bytes:
     return resources.files("allskyhub_agent.web").joinpath(name).read_bytes()
 
 
+_SYSTEM_ACTION = re.compile(r"^/api/system/(restart|reboot|shutdown)$")
 _NIGHT_API = re.compile(r"^/api/nights/(\d{8})/(frames|events|sky)$")
 _FILE = re.compile(r"^/files/(\d{8})/(?:(products|events)/)?([A-Za-z0-9_.-]+)$")
 _TYPES = {".jpg": "image/jpeg", ".mp4": "video/mp4"}
@@ -167,6 +223,11 @@ def make_handler(
     settings_form: SettingsForm | None = None,
     archive: LocalArchive | None = None,
     calibration: LocalCalibration | None = None,
+    public: PublicPage | None = None,
+    system_page: SystemPage | None = None,
+    network_info: Callable[[], dict[str, Any]] | None = None,
+    update_page: UpdatePage | None = None,
+    support: Support | None = None,
 ) -> type[BaseHTTPRequestHandler]:
     page = _page()
     login_page = _page("login.html")
@@ -472,6 +533,30 @@ def make_handler(
                         "values": settings_form.values(),
                     },
                 )
+            elif path == "/api/public":
+                self._public(None)
+            elif path == "/api/network":
+                if network_info is None:
+                    self._text(HTTPStatus.NOT_FOUND, "not found")
+                    return
+                self._json(HTTPStatus.OK, network_info() | {"managed": setup is not None})
+            elif path == "/api/network/wifi":
+                if setup is None:
+                    self._json(HTTPStatus.NOT_FOUND, {"detail": _NOT_MANAGED})
+                    return
+                self._json(HTTPStatus.OK, [asdict(n) for n in setup.networks()])
+            elif path in ("/api/logs", "/api/support.zip", "/api/backup.json"):
+                self._support_get(path)
+            elif path == "/api/update":
+                if update_page is None:
+                    self._text(HTTPStatus.NOT_FOUND, "not found")
+                    return
+                self._json(HTTPStatus.OK, update_page.facts())
+            elif path == "/api/system":
+                if system_page is None:
+                    self._text(HTTPStatus.NOT_FOUND, "not found")
+                    return
+                self._json(HTTPStatus.OK, system_page.facts())
             elif path == "/api/calibration":
                 if calibration is None:
                     self._text(HTTPStatus.NOT_FOUND, "no camera yet")
@@ -534,6 +619,44 @@ def make_handler(
                 self._post_focus()
             elif path in ("/api/calibration/mask", "/api/calibration/relearn"):
                 self._post_calibration(path)
+            elif path == "/api/network/wifi":
+                self._post_wifi()
+            elif path == "/api/restore":
+                self._restore()
+            elif path in ("/api/update/now", "/api/update/rollback"):
+                if self._read_body() is None:
+                    return
+                word = path.rsplit("/", 1)[1]
+                if update_page is None or not update_page.request(word):
+                    self._json(
+                        HTTPStatus.NOT_FOUND,
+                        {"detail": "Auf dieser Installation gibt es keinen Updater."},
+                    )
+                    return
+                self._json(HTTPStatus.ACCEPTED, {"requested": word})
+            elif m := _SYSTEM_ACTION.match(path):
+                if system_page is None:
+                    self._text(HTTPStatus.NOT_FOUND, "not found")
+                    return
+                if self._read_body() is None:
+                    return
+                why = system_page.action(m[1])
+                if why is not None:
+                    self._json(HTTPStatus.SERVICE_UNAVAILABLE, {"detail": why})
+                    return
+                self._json(HTTPStatus.ACCEPTED, {"action": m[1]})
+            elif path == "/api/public":
+                raw = self._read_body(_MAX_PUBLIC_BODY)
+                if raw is None:
+                    return
+                try:
+                    body: object = json.loads(raw)
+                except ValueError:
+                    body = None
+                if not isinstance(body, dict):
+                    self._json(HTTPStatus.BAD_REQUEST, {"detail": "Ungültige Eingabe."})
+                    return
+                self._public(cast(dict[str, Any], body))
             elif path == "/api/setup/network":
                 self._post_network()
             else:
@@ -559,6 +682,27 @@ def make_handler(
                 return
             # SPEC §6.5: stored; the capture restarts with the new settings in a moment.
             self._json(HTTPStatus.ACCEPTED, {"restarting": True})
+
+        def _public(self, change: dict[str, Any] | None) -> None:
+            """SPEC §6.8 through the device API; GET without `change`."""
+            unreachable = {"detail": "Der Hub ist gerade nicht erreichbar."}
+            if public is None:
+                self._json(HTTPStatus.NOT_FOUND, {"detail": "Diese Kamera hat keinen Hub."})
+                return
+            try:
+                state = public.get() if change is None else public.put(change)
+            except PublicRejected as exc:
+                self._json(HTTPStatus.UNPROCESSABLE_ENTITY, {"detail": exc.detail})
+                return
+            except HubUnreachable:
+                if change is None and public.last is not None:
+                    self._json(
+                        HTTPStatus.OK, public.last.model_dump(mode="json") | {"online": False}
+                    )
+                else:
+                    self._json(HTTPStatus.SERVICE_UNAVAILABLE, unreachable)
+                return
+            self._json(HTTPStatus.OK, state.model_dump(mode="json") | {"online": True})
 
         def _post_calibration(self, path: str) -> None:
             if calibration is None:
@@ -594,6 +738,68 @@ def make_handler(
                 self._text(HTTPStatus.BAD_REQUEST, "expected on, off or reset")
                 return
             self._json(HTTPStatus.OK, live.status())
+
+        def _support_get(self, path: str) -> None:
+            if support is None:
+                self._text(HTTPStatus.NOT_FOUND, "not found")
+                return
+            stamp = datetime.now(UTC).strftime("%Y%m%d-%H%M%S")
+            if path == "/api/logs":
+                n = max(1, min(self._int("lines", 300), 2000))
+                self._json(HTTPStatus.OK, {"lines": support.log.lines(n)})
+            elif path == "/api/support.zip":
+                save = (
+                    (
+                        "Content-Disposition",
+                        f'attachment; filename="allskyhub-support-{stamp}.zip"',
+                    ),
+                )
+                self._send(HTTPStatus.OK, support.bundle(), "application/zip", save)
+            else:
+                save = (
+                    (
+                        "Content-Disposition",
+                        f'attachment; filename="allskyhub-backup-{stamp}.json"',
+                    ),
+                )
+                body = json.dumps(support.backup(), indent=2).encode()
+                self._send(HTTPStatus.OK, body, "application/json", save)
+
+        def _restore(self) -> None:
+            if support is None:
+                self._text(HTTPStatus.NOT_FOUND, "not found")
+                return
+            raw = self._read_body(_MAX_MASK_BODY)
+            if raw is None:
+                return
+            try:
+                body: object = json.loads(raw)
+            except ValueError:
+                body = None
+            bad = support.apply(body)
+            if bad:
+                self._json(HTTPStatus.BAD_REQUEST, {"detail": "invalid", "fields": bad})
+                return
+            self._json(HTTPStatus.ACCEPTED, {"restarting": True})
+
+        def _post_wifi(self) -> None:
+            """Roadmap L13: another Wi-Fi from the normal network, like setup mode's join
+            but never another hub or location (those stay with the settings)."""
+            if setup is None:
+                self._json(HTTPStatus.NOT_FOUND, {"detail": _NOT_MANAGED})
+                return
+            raw = self._read_body()
+            if raw is None:
+                return
+            try:
+                body = WifiBody.model_validate_json(raw)
+            except ValidationError as exc:
+                fields = sorted({".".join(str(p) for p in e["loc"]) for e in exc.errors()})
+                self._json(HTTPStatus.BAD_REQUEST, {"detail": "invalid", "fields": fields})
+                return
+            req = NetworkRequest(body.ssid, body.password, body.country.upper(), None)
+            setup.request_network(req, time.monotonic())
+            self._json(HTTPStatus.ACCEPTED, {"will_join": body.ssid})
 
         def _post_network(self) -> None:
             if setup is None or not self._from_setup_network():
@@ -645,6 +851,11 @@ class WebServer:
         settings_form: SettingsForm | None = None,
         archive: LocalArchive | None = None,
         calibration: LocalCalibration | None = None,
+        public: PublicPage | None = None,
+        system_page: SystemPage | None = None,
+        network_info: Callable[[], dict[str, Any]] | None = None,
+        update_page: UpdatePage | None = None,
+        support: Support | None = None,
     ) -> None:
         net = ipaddress.ip_network(setup_net) if setup_net else _SETUP_NET
         handler = make_handler(
@@ -658,6 +869,11 @@ class WebServer:
             settings_form,
             archive,
             calibration,
+            public,
+            system_page,
+            network_info,
+            update_page,
+            support,
         )
         self._httpd = ThreadingHTTPServer((host, port), handler)
         self._httpd.daemon_threads = True

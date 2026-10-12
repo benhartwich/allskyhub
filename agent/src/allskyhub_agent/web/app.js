@@ -55,11 +55,73 @@ document.addEventListener("keydown", (e) => {
   if (e.key === "ArrowRight") $("lbNext").click();
 });
 
+// --- Overlay (L11) ------------------------------------------------------------------
+// Drawn over the image when it is shown; the stored frames stay as the camera took them.
+// On unless this browser switched it off.
+const loadPref = (k) => { try { return localStorage.getItem("ash-ov-" + k) !== "0"; } catch { return true; } };
+const savePref = (k, on) => { try { localStorage.setItem("ash-ov-" + k, on ? "1" : "0"); } catch { /* private mode */ } };
+
+function overlaySvg(f, orientation, ov, w, h, fixedColours = false) {
+  const H = w ? 1000 * h / w : 562.5;
+  const fs = 22;  // in viewBox units: about 2 % of the width
+  const cls = fixedColours ? ' fill="#fff" stroke="rgba(0,0,0,.75)" stroke-width="4" paint-order="stroke"' : "";
+  let out = "";
+  if (ov.data && f) {
+    const at = new Date(f.captured_at);
+    const lines = [
+      at.toLocaleDateString("de-AT", { day: "2-digit", month: "2-digit", year: "numeric" }) + " " +
+        at.toLocaleTimeString("de-AT", { hour: "2-digit", minute: "2-digit", second: "2-digit" }),
+      `${fmtExposure(f.exposure_us)} · Gain ${f.gain}${f.sensor_temp_c != null ? ` · ${f.sensor_temp_c.toFixed(1)} °C` : ""}`,
+      `Sonne ${f.sun_elevation.toFixed(1)}° · ${f.mode === "night" ? "Nacht" : "Tag"}`,
+    ];
+    out += lines.map((t, i) => `<text class="ov-text" x="16" y="${16 + fs * (i + 1) * 1.25}" font-size="${fs}"${cls}>${esc(t)}</text>`).join("");
+  }
+  const o = orientation && orientation.overlay;
+  if (ov.compass && o) {
+    out += o.points.map((p) => `<text class="ov-compass" x="${(p.x * 1000).toFixed(1)}" y="${(p.y * H).toFixed(1)}" font-size="${fs * 1.6}"
+      text-anchor="middle" dominant-baseline="middle"${cls}>${p.label}</text>`).join("");
+  }
+  return out;
+}
+
+// The shown image plus the overlay as one JPEG, made in the browser.
+function saveWithOverlay(img, svgInner, f) {
+  if (!img.naturalWidth) return;
+  const w = img.naturalWidth, h = img.naturalHeight;
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${h}" viewBox="0 0 1000 ${(1000 * h / w).toFixed(1)}"
+    font-family="system-ui, sans-serif" font-weight="600">${svgInner}</svg>`;
+  const layer = new Image();
+  layer.onload = () => {
+    const c = document.createElement("canvas");
+    c.width = w; c.height = h;
+    const g = c.getContext("2d");
+    g.drawImage(img, 0, 0);
+    g.drawImage(layer, 0, 0, w, h);
+    c.toBlob((blob) => {
+      const a = document.createElement("a");
+      a.href = URL.createObjectURL(blob);
+      const stamp = f ? f.name.replace(/\.jpg$/, "") : "allsky";
+      a.download = `${stamp}-overlay.jpg`;
+      a.click();
+      setTimeout(() => URL.revokeObjectURL(a.href), 10000);
+    }, "image/jpeg", 0.92);
+  };
+  layer.src = "data:image/svg+xml;charset=utf-8," + encodeURIComponent(svg);
+}
+
 // --- Live (L3) ---------------------------------------------------------------------
 function viewLive() {
   page.innerHTML = `
     <section class="card stack">
-      <img class="live-img" id="live" alt="Aktuelles Bild">
+      <div class="live-stage">
+        <img class="live-img" id="live" alt="Aktuelles Bild">
+        <svg id="liveOverlay" class="overlay" viewBox="0 0 1000 562.5" aria-hidden="true"></svg>
+      </div>
+      <div class="row">
+        <button type="button" class="secondary small" data-ov="data" aria-pressed="false">Daten</button>
+        <button type="button" class="secondary small" data-ov="compass" aria-pressed="false">Himmelsrichtungen</button>
+        <button type="button" class="secondary small" id="ovSave">Mit Overlay speichern</button>
+      </div>
       <dl class="facts" id="facts"><dt>Bild</dt><dd>Warte auf das erste Bild …</dd></dl>
     </section>
     <section class="card stack">
@@ -87,6 +149,26 @@ function viewLive() {
     </section>`;
   let lastFrames = -1;
   let focus = false;
+  let lastFrame = null;
+  let orientation = null;
+  getJSON("api/calibration").then((c) => { orientation = c.orientation; drawOverlay(); }).catch(() => {});
+  const ov = { data: loadPref("data"), compass: loadPref("compass") };
+  for (const b of document.querySelectorAll("[data-ov]")) {
+    const key = b.dataset.ov;
+    const sync = () => { b.classList.toggle("active", ov[key]); b.setAttribute("aria-pressed", String(ov[key])); };
+    sync();
+    b.onclick = () => { ov[key] = !ov[key]; savePref(key, ov[key]); sync(); drawOverlay(); };
+  }
+  // The overlay is drawn on top, never into the stored image (L11): Benjamin, 2026-10-12.
+  const drawOverlay = () => {
+    const img = $("live"), svg = $("liveOverlay");
+    if (!img || !svg) return;
+    svg.innerHTML = overlaySvg(lastFrame, orientation, ov, img.naturalWidth, img.naturalHeight);
+    if (img.naturalWidth) svg.setAttribute("viewBox", `0 0 1000 ${(1000 * img.naturalHeight / img.naturalWidth).toFixed(1)}`);
+  };
+  $("live").addEventListener("load", drawOverlay);
+  $("ovSave").onclick = () => saveWithOverlay($("live"), overlaySvg(lastFrame, orientation, { data: true, compass: ov.compass },
+    $("live").naturalWidth, $("live").naturalHeight, true), lastFrame);
   $("live").onclick = () => lightbox([{ src: $("live").src, caption: "Aktuelles Bild" }], 0);
   const render = (s) => {
     $("version").textContent = s.version;
@@ -96,6 +178,7 @@ function viewLive() {
     $("resetBtn").hidden = !focus;
     if (s.frame) {
       const f = s.frame;
+      lastFrame = f;
       $("facts").innerHTML = `
         <dt>Aufgenommen</dt><dd>${fmtTime(f.captured_at)}</dd>
         <dt>Modus</dt><dd>${f.mode === "night" ? "Nacht" : "Tag"}</dd>
@@ -367,6 +450,10 @@ function field(spec) {
       });
       wrap.appendChild(b);
     }
+  } else if (spec.type === "bool") {
+    label.className = "check";
+    label.textContent = "";
+    label.append(input(spec, original[spec.key]), " " + text(spec.label));
   } else {
     const el = input(spec, original[spec.key]);
     el.id = "s_" + spec.key;
@@ -415,8 +502,10 @@ async function viewSettings() {
   page.innerHTML = `<h1>Einstellungen</h1><div class="card stack"><form class="form" id="settingsForm" novalidate></form>
     <div class="actions"><button type="button" id="saveBtn">Speichern</button></div>
     <p class="msg" id="settingsMsg" hidden></p></div>
-    <section class="card stack" id="calibration" hidden></section>`;
+    <section class="card stack" id="calibration" hidden></section>
+    <section class="card stack" id="public" hidden></section>`;
   viewCalibration().catch(() => {});
+  viewPublic().catch(() => {});
   let data;
   try { data = await getJSON("api/settings"); } catch {
     $("settingsForm").innerHTML = `<p class="empty">Diese Kamera speichert keine Einstellungen.</p>`;
@@ -597,14 +686,126 @@ async function viewCalibration() {
   draw();
 }
 
-// --- System -------------------------------------------------------------------------
+// --- Public page on the hub (L10, SPEC §6.8) --------------------------------------------
+const SECTIONS = { live: "Livebild", loop: "Loop der letzten Stunde", archive: "Archiv", events: "Ereignisse",
+  sky: "Himmel (Charts)", aurora: "Polarlicht-Lage", observatory: "Sternwarte (N.I.N.A.)" };
+const TEXTS = [["title", "Titel", 100], ["location_label", "Ort", 200], ["camera", "Kamera", 200],
+  ["lens", "Objektiv", 200], ["computer", "Rechner", 200], ["owner", "Betrieben von", 200]];
+
+async function viewPublic() {
+  const box = $("public");
+  const r = await fetch("api/public", { cache: "no-store" });
+  if (r.status === 404) return;  // no hub configured
+  box.hidden = false;
+  const say = (t, good) => { const m = $("pubMsg"); m.textContent = t; m.className = "msg " + (good ? "ok" : "error"); m.hidden = false; };
+  if (!r.ok) {
+    box.innerHTML = `<h2>Öffentliche Seite</h2><p class="muted">Der Hub ist gerade nicht erreichbar. Die öffentliche Seite liegt auf dem Hub und lässt sich nur ändern, wenn die Kamera verbunden ist.</p>`;
+    return;
+  }
+  const render = (st) => {
+    const p = st.profile;
+    const off = !st.online;
+    box.innerHTML = `
+      <h2>Öffentliche Seite</h2>
+      <p class="muted small">Eine Seite auf allskyhub.org, die jeder ohne Anmeldung sehen kann. Sie liegt auf dem Hub; Änderungen hier und dort sind dieselben.</p>
+      ${off ? `<p class="msg error">Der Hub ist gerade nicht erreichbar: zuletzt bekannter Stand, nur lesbar.</p>` : ""}
+      <div class="row">
+        ${st.enabled ? `<span class="badge ok">eingeschaltet</span> <a href="${esc(st.url)}" target="_blank" rel="noopener">${esc(st.url)}</a>`
+          : `<span class="badge">ausgeschaltet</span>`}
+      </div>
+      <div class="actions"><button type="button" class="${st.enabled ? "secondary" : ""}" id="pubToggle"${off ? " disabled" : ""}>
+        ${st.enabled ? "Ausschalten" : "Einschalten"}</button></div>
+      ${st.enabled ? `<p class="muted small">Ausschalten macht die Adresse sofort ungültig; beim erneuten Einschalten gibt es eine neue.</p>` : ""}
+      <form class="form stack" id="pubForm" novalidate>
+        <fieldset${off ? " disabled" : ""}><legend>Texte</legend>
+          ${TEXTS.map(([k, l, n]) => `<div class="field"><label for="pub_${k}">${l}</label>
+            <input id="pub_${k}" name="${k}" maxlength="${n}" value="${esc(p[k])}"></div>`).join("")}
+          <label class="check"><input type="checkbox" name="show_coordinates"${p.show_coordinates ? " checked" : ""}> Koordinaten zeigen (auf 0,1° gerundet, etwa 10 km)</label>
+          <div class="field"><label for="pub_notes">Notizen</label>
+            <textarea id="pub_notes" name="notes" maxlength="2000" rows="4">${esc(p.notes)}</textarea></div>
+        </fieldset>
+        <fieldset${off ? " disabled" : ""}><legend>Abschnitte</legend>
+          ${Object.entries(SECTIONS).map(([k, l]) => `<label class="check"><input type="checkbox" name="section_${k}"${p.sections[k] ? " checked" : ""}> ${l}</label>`).join("")}
+        </fieldset>
+      </form>
+      <div class="actions"><button type="button" id="pubSave"${off ? " disabled" : ""}>Seite speichern</button></div>
+      <p class="msg" id="pubMsg" hidden></p>`;
+    const send = async (body, done) => {
+      const res = await fetch("api/public", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+      if (res.status === 401) { location.href = "local-login"; return; }
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) { say(data.detail || "Nicht gespeichert.", false); return; }
+      render(data);
+      say(done, true);
+    };
+    $("pubToggle").onclick = () => {
+      if (st.enabled && !confirm("Öffentliche Seite ausschalten? Die Adresse wird sofort ungültig.")) return;
+      send({ enabled: !st.enabled }, st.enabled ? "Ausgeschaltet." : "Eingeschaltet.");
+    };
+    $("pubSave").onclick = () => {
+      const f = $("pubForm").elements;
+      const profile = { show_coordinates: f.show_coordinates.checked, notes: f.notes.value, sections: {} };
+      for (const [k] of TEXTS) profile[k] = f[k].value;
+      for (const k of Object.keys(SECTIONS)) profile.sections[k] = f["section_" + k].checked;
+      send({ profile }, "Gespeichert.");
+    };
+  };
+  render(await r.json());
+}
+
+// --- System (L12) ----------------------------------------------------------------------
+const POWER = { under_voltage: "Unterspannung jetzt", freq_capped: "Takt begrenzt", throttled: "gedrosselt",
+  temp_limit: "Temperaturgrenze erreicht", under_voltage_seen: "Unterspannung seit dem Start",
+  freq_capped_seen: "Takt war begrenzt", throttled_seen: "war gedrosselt", temp_limit_seen: "Temperaturgrenze war erreicht" };
+const fmtBytes = (b) => (b >= 1e9 ? (b / 1e9).toFixed(1) + " GB" : Math.round(b / 1e6) + " MB");
+const fmtUptime = (s) => {
+  const d = Math.floor(s / 86400), h = Math.floor((s % 86400) / 3600), m = Math.floor((s % 3600) / 60);
+  return (d ? `${d} d ` : "") + `${h} h ${m} min`;
+};
+const meter = (used, total) => `<div class="row"><div class="bar"><div style="width:${Math.min(100, 100 * used / total).toFixed(0)}%"></div></div>
+  <span class="small muted">${Math.round(100 * used / total)} %</span></div>`;
+
 async function viewSystem() {
-  page.innerHTML = `<h1>System</h1><section class="card stack"><dl class="facts" id="sys"></dl></section>`;
+  page.innerHTML = `<h1>System</h1>
+    <section class="card stack"><h2>Kamera und Hub</h2><dl class="facts" id="sys"></dl></section>
+    <section class="card stack" id="hw" hidden><h2>Rechner</h2><dl class="facts" id="hwFacts"></dl></section>
+    <section class="card stack" id="net" hidden></section>
+    <section class="card stack" id="upd" hidden></section>
+    <section class="card stack" id="support" hidden></section>
+    <section class="card stack" id="actions" hidden><h2>Neu starten</h2>
+      <p class="muted small">Die Aufnahme läuft danach von selbst weiter. Gespeicherte Bilder bleiben erhalten.</p>
+      <div class="actions">
+        <button type="button" class="secondary" data-act="restart">Kamera-Dienst neu starten</button>
+        <button type="button" class="secondary" data-act="reboot">Rechner neu starten</button>
+        <button type="button" class="danger" data-act="shutdown">Ausschalten</button>
+      </div>
+      <p class="msg" id="sysMsg" hidden></p></section>`;
+  const ASK = { restart: "Kamera-Dienst neu starten? Die Seite ist ein paar Sekunden nicht erreichbar.",
+    reboot: "Rechner neu starten? Die Kamera ist etwa eine Minute nicht erreichbar.",
+    shutdown: "Kamera ausschalten? Sie bleibt aus, bis jemand den Strom kurz trennt." };
+  const DONE = { restart: "Der Dienst startet neu …", reboot: "Der Rechner startet neu …",
+    shutdown: "Die Kamera fährt herunter. Warte 20 Sekunden, bevor du den Strom trennst." };
+  for (const b of document.querySelectorAll("[data-act]")) {
+    b.onclick = async () => {
+      const act = b.dataset.act;
+      if (!confirm(ASK[act])) return;
+      const r = await fetch("api/system/" + act, { method: "POST" });
+      if (r.status === 401) { location.href = "local-login"; return; }
+      const data = await r.json().catch(() => ({}));
+      const m = $("sysMsg");
+      m.textContent = r.ok ? DONE[act] : data.detail || "Hat nicht geklappt.";
+      m.className = "msg " + (r.ok ? "ok" : "error");
+      m.hidden = false;
+    };
+  }
+  viewNetwork().catch(() => {});
+  viewUpdates().catch(() => {});
+  viewSupport().catch(() => {});
   every(async () => {
-    const st = await getJSON("api/status").catch(() => null);
+    const [st, setup, hw] = await Promise.all([getJSON("api/status").catch(() => null),
+      getJSON("api/setup").catch(() => null), getJSON("api/system").catch(() => null)]);
     if (!st) return;
     // Without a hub (e.g. --sim on a laptop) there is no setup API.
-    const setup = await getJSON("api/setup").catch(() => null);
     const hub = setup ? `
       <dt>Gerät</dt><dd><code>${esc(setup.device_id)}</code></dd>
       <dt>Profil</dt><dd>${esc(setup.profile)}</dd>
@@ -616,7 +817,166 @@ async function viewSystem() {
       <dt>Agent</dt><dd>${esc(st.version)}</dd>${hub}
       <dt>Bilder seit Start</dt><dd>${st.frames}</dd>
       ${st.frame && st.frame.sensor_temp_c != null ? `<dt>Sensor</dt><dd>${st.frame.sensor_temp_c.toFixed(1)} °C</dd>` : ""}`;
+    if (!hw) return;
+    $("hw").hidden = false;
+    $("actions").hidden = false;
+    const power = hw.power == null ? "" : hw.power.length
+      ? `<dt>Stromversorgung</dt><dd>${hw.power.map((f) => `<span class="badge">${esc(POWER[f] || f)}</span>`).join(" ")}
+          <p class="muted small">Unterspannung macht Bilder und SD-Karte kaputt: ein Netzteil mit 5,1 V / 3 A nehmen.</p></dd>`
+      : `<dt>Stromversorgung</dt><dd><span class="badge ok">in Ordnung</span></dd>`;
+    $("hwFacts").innerHTML = `
+      ${hw.model ? `<dt>Modell</dt><dd>${esc(hw.model)}</dd>` : ""}
+      ${hw.os ? `<dt>System</dt><dd>${esc(hw.os)}</dd>` : ""}
+      <dt>Läuft seit</dt><dd>${fmtUptime(hw.uptime_s)}</dd>
+      ${hw.cpu_temp_c != null ? `<dt>CPU</dt><dd>${hw.cpu_temp_c.toFixed(1)} °C${hw.load ? ` · Last ${hw.load[0].toFixed(2)} (${hw.cpus || "?"} Kerne)` : ""}</dd>` : ""}
+      ${hw.memory ? `<dt>Arbeitsspeicher</dt><dd>${fmtBytes(hw.memory.total - hw.memory.available)} von ${fmtBytes(hw.memory.total)}
+          ${meter(hw.memory.total - hw.memory.available, hw.memory.total)}</dd>` : ""}
+      ${hw.disk ? `<dt>Speicher</dt><dd>${fmtBytes(hw.disk.free)} frei von ${fmtBytes(hw.disk.total)}
+          ${meter(hw.disk.total - hw.disk.free, hw.disk.total)}</dd>` : ""}
+      ${power}
+      <dt>Uhrzeit</dt><dd>${hw.time_trusted ? '<span class="badge ok">genau</span>' : '<span class="badge">ungenau</span>'}</dd>`;
   }, 5000);
+}
+
+// --- Log, support, backup (L15) ------------------------------------------------------------
+async function viewSupport() {
+  const box = $("support");
+  const log = await getJSON("api/logs?lines=300");
+  box.hidden = false;
+  box.innerHTML = `<h2>Protokoll und Support</h2>
+    <details><summary>Protokoll der Kamera (letzte ${log.lines.length} ${log.lines.length === 1 ? "Zeile" : "Zeilen"})</summary>
+      <pre class="log" id="logBox"></pre>
+      <div class="actions"><button type="button" class="secondary small" id="logRefresh">Aktualisieren</button></div>
+    </details>
+    <p class="muted small">Das Support-Paket enthält Protokoll, Versionen, System- und Netzwerkdaten, Einstellungen und
+      die Kalibrierung, aber keine Schlüssel, Passwörter oder Bilder. Hänge es an deine Frage an.</p>
+    <div class="actions"><a class="button secondary" href="api/support.zip" download>Support-Paket herunterladen</a></div>
+    <h3>Sicherung</h3>
+    <p class="muted small">Einstellungen und gezeichnete Maskenbereiche, zum Beispiel für eine neue SD-Karte.</p>
+    <div class="actions">
+      <a class="button secondary" href="api/backup.json" download>Sicherung herunterladen</a>
+      <label class="button secondary" for="restoreFile">Sicherung einspielen</label>
+      <input type="file" id="restoreFile" accept="application/json,.json" hidden>
+    </div>
+    <p class="msg" id="restoreMsg" hidden></p>`;
+  const show = (lines) => {
+    const pre = $("logBox");
+    pre.textContent = lines.join("\n");
+    pre.scrollTop = pre.scrollHeight;
+  };
+  show(log.lines);
+  $("logRefresh").onclick = async () => show((await getJSON("api/logs?lines=300")).lines);
+  $("restoreFile").onchange = async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    const m = $("restoreMsg");
+    const say = (t, good) => { m.textContent = t; m.className = "msg " + (good ? "ok" : "error"); m.hidden = false; };
+    if (!confirm(`Sicherung „${file.name}“ einspielen? Die jetzigen Einstellungen werden ersetzt.`)) { e.target.value = ""; return; }
+    const r = await fetch("api/restore", { method: "POST", headers: { "Content-Type": "application/json" }, body: await file.text() });
+    e.target.value = "";
+    if (r.status === 401) { location.href = "local-login"; return; }
+    if (r.ok) { say("Eingespielt. Die Kamera startet die Aufnahme neu …", true); return; }
+    const err = await r.json().catch(() => ({}));
+    say((err.fields || []).includes("backup") ? "Das ist keine Sicherung dieser Kamera-Software."
+      : "Nicht eingespielt, ungültig: " + (err.fields || []).join(", ") + ".", false);
+  };
+}
+
+// --- Updates (L14, SPEC §8) -----------------------------------------------------------------
+const UPDATE_STATES = { up_to_date: "aktuell", downloading: "lädt herunter", waiting: "wartet auf den Tag",
+  installing: "wird installiert", installed: "installiert", rolled_back: "zurückgenommen", failed: "fehlgeschlagen" };
+const UPDATE_CODES = { unhealthy: "lief nicht sauber", asked: "auf Wunsch", no_space: "zu wenig Speicher",
+  no_previous: "keine ältere Version vorhanden", bad_signature: "Signatur ungültig", checksum: "Prüfsumme falsch",
+  bad_bundle: "Paket beschädigt" };
+
+async function viewUpdates() {
+  const box = $("upd");
+  const u = await getJSON("api/update");
+  box.hidden = false;
+  const st = u.state;
+  const others = u.releases.filter((r) => r !== u.release);
+  box.innerHTML = `<h2>Updates</h2>
+    <dl class="facts">
+      <dt>Version</dt><dd>${esc(u.release || u.version)}</dd>
+      ${st ? `<dt>Zuletzt</dt><dd>${esc(UPDATE_STATES[st.state] || st.state)}${st.version ? ` · ${esc(st.version)}` : ""}${st.code ? ` (${esc(UPDATE_CODES[st.code] || st.code)})` : ""}
+        <span class="muted small">${st.at ? fmtDateTime(st.at) : ""}</span></dd>` : ""}
+      ${others.length ? `<dt>Ältere Versionen</dt><dd>${others.map((r) => `<code>${esc(r)}</code>`).join(" ")}</dd>` : ""}
+    </dl>
+    ${u.updater ? `
+      <p class="muted small">Die Kamera sucht stündlich nach Updates und installiert sie nur am Tag. Läuft eine neue Version
+        nicht sauber, geht sie von selbst zurück.</p>
+      <div class="actions">
+        <button type="button" class="secondary" data-upd="now"${u.pending ? " disabled" : ""}>Jetzt suchen und installieren</button>
+        ${others.length ? `<button type="button" class="secondary" data-upd="rollback"${u.pending ? " disabled" : ""}>Vorige Version</button>` : ""}
+      </div>
+      ${u.pending ? `<p class="msg ok">Angefragt, der Updater ist dran …</p>` : `<p class="msg" id="updMsg" hidden></p>`}`
+      : `<p class="muted small">Auf dieser Installation werden Updates von Hand eingespielt.</p>`}`;
+  for (const b of box.querySelectorAll("[data-upd]")) {
+    b.onclick = async () => {
+      const word = b.dataset.upd;
+      const ask = word === "now" ? "Jetzt nach einem Update suchen und es gleich installieren, auch nachts? Die Aufnahme pausiert dabei kurz."
+        : "Zur vorigen Version zurückgehen? Die jetzige wird dann nicht von selbst wieder installiert.";
+      if (!confirm(ask)) return;
+      const r = await fetch("api/update/" + word, { method: "POST" });
+      if (r.status === 401) { location.href = "local-login"; return; }
+      if (r.ok) { viewUpdates(); return; }
+      const m = $("updMsg");
+      m.textContent = (await r.json().catch(() => ({}))).detail || "Hat nicht geklappt.";
+      m.className = "msg error";
+      m.hidden = false;
+    };
+  }
+}
+
+// --- Network (L13) ----------------------------------------------------------------------
+async function viewNetwork() {
+  const box = $("net");
+  const n = await getJSON("api/network");
+  box.hidden = false;
+  const iface = (i) => `<dt>${i.kind === "wifi" ? "WLAN" : "LAN"} <span class="muted small">${esc(i.name)}</span></dt>
+    <dd>${i.up ? (i.addresses.length ? i.addresses.map((a) => `<code>${esc(a.split("/")[0])}</code>`).join(" ") : "verbunden, keine Adresse")
+      : '<span class="muted">nicht verbunden</span>'}${i.default ? ' <span class="badge ok">Internet</span>' : ""}</dd>`;
+  box.innerHTML = `<h2>Netzwerk</h2>
+    <dl class="facts">
+      <dt>Name im Netz</dt><dd><code>${esc(n.hostname)}.local</code></dd>
+      ${n.wifi ? `<dt>WLAN</dt><dd>${esc(n.wifi.ssid)}${n.wifi.signal != null ? ` · Signal ${n.wifi.signal} %` : ""}</dd>` : ""}
+      ${n.interfaces.map(iface).join("")}
+    </dl>
+    ${n.managed ? `
+      <form class="form stack" id="wifiForm" novalidate>
+        <fieldset><legend>Anderes WLAN</legend>
+          <div class="field"><label for="wifiSsid">Netz</label>
+            <select id="wifiSsid" name="ssid"><option value="">Suche …</option></select></div>
+          <div class="field"><label for="wifiPw">Passwort</label>
+            <input id="wifiPw" name="password" type="password" autocomplete="off" placeholder="leer bei offenem Netz"></div>
+          <div class="field"><label for="wifiCountry">Land (Funkregeln)</label>
+            <input id="wifiCountry" name="country" maxlength="2" value="${esc(n.country || "AT")}"></div>
+        </fieldset>
+      </form>
+      <p class="muted small">Klappt die Verbindung nicht, öffnet die Kamera nach 2 Minuten ihr eigenes WLAN
+        <code>allskyhub-…</code>, über das du sie mit der App wieder einrichtest.</p>
+      <div class="actions"><button type="button" id="wifiJoin">Verbinden</button></div>
+      <p class="msg" id="wifiMsg" hidden></p>`
+      : `<p class="muted small">Das Netzwerk verwaltet auf dieser Installation das Betriebssystem, nicht die Kamera.</p>`}`;
+  if (!n.managed) return;
+  const say = (t, good) => { const m = $("wifiMsg"); m.textContent = t; m.className = "msg " + (good ? "ok" : "error"); m.hidden = false; };
+  getJSON("api/network/wifi").then((nets) => {
+    $("wifiSsid").innerHTML = nets.length
+      ? nets.map((w) => `<option value="${esc(w.ssid)}"${n.wifi && w.ssid === n.wifi.ssid ? " selected" : ""}>${esc(w.ssid)} (${w.signal} %${w.secure ? ", gesichert" : ""})</option>`).join("")
+      : `<option value="">Keine Netze gefunden</option>`;
+  }).catch(() => { $("wifiSsid").innerHTML = `<option value="">Suche fehlgeschlagen</option>`; });
+  $("wifiJoin").onclick = async () => {
+    const f = $("wifiForm").elements;
+    if (!f.ssid.value) { say("Bitte ein Netz wählen.", false); return; }
+    if (!confirm(`Mit „${f.ssid.value}“ verbinden? Die Kamera ist danach nur noch in diesem Netz erreichbar.`)) return;
+    const r = await fetch("api/network/wifi", { method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ ssid: f.ssid.value, password: f.password.value || null, country: f.country.value }) });
+    if (r.status === 401) { location.href = "local-login"; return; }
+    if (r.ok) { say(`Die Kamera wechselt zu „${f.ssid.value}“. Diese Seite ist jetzt nicht mehr erreichbar.`, true); return; }
+    const err = await r.json().catch(() => ({}));
+    const names = { password: "Passwort (8 bis 63 Zeichen)", country: "Land (zwei Buchstaben)", ssid: "Netz" };
+    say("Nicht übernommen: " + ((err.fields || []).map((k) => names[k] || k).join(", ") || err.detail || "ungültig") + ".", false);
+  };
 }
 
 // --- router -------------------------------------------------------------------------

@@ -23,6 +23,7 @@ from zoneinfo import ZoneInfo
 import httpx
 
 from allskyhub_agent import __version__, settings_schema, system
+from allskyhub_agent.adapters import netinfo
 from allskyhub_agent.adapters.asi_sdk import AsiError, AsiSdk
 from allskyhub_agent.adapters.camera import Camera, CameraError
 from allskyhub_agent.adapters.libcamera import LibcameraCamera, list_cameras
@@ -40,11 +41,12 @@ from allskyhub_agent.detect.sky import SkyConfig, SkyMeter
 from allskyhub_agent.discovery import Announcer
 from allskyhub_agent.hub.identity import DEFAULT_KEY_PATH, DeviceIdentity
 from allskyhub_agent.hub.pairing import PairingState
+from allskyhub_agent.hub.public import PublicPage
 from allskyhub_agent.importer.allsky import AllskyImporter, AllskySettings
 from allskyhub_agent.importer.backlog import BACKLOG_NAME, Backlog
 from allskyhub_agent.live import LiveState
 from allskyhub_agent.process.hotpixels import HotPixels
-from allskyhub_agent.process.skymask import SkyMask
+from allskyhub_agent.process.skymask import SkyMask, parse_edits
 from allskyhub_agent.products.build import (
     NightProducts,
     ProductConfig,
@@ -62,15 +64,19 @@ from allskyhub_agent.setup.controller import NetworkRequest, SetupController
 from allskyhub_agent.setup.setup_file import DEFAULT_PATH as SETUP_FILE_PATH
 from allskyhub_agent.setup.setup_file import apply_once as apply_setup_file
 from allskyhub_agent.store.images import ImageStore
-from allskyhub_agent.update.installer import Paths, Updater
-from allskyhub_agent.update.status import update_status
+from allskyhub_agent.update.installer import Paths, Updater, read_request
+from allskyhub_agent.update.status import STATE_FILE, update_status
 from allskyhub_agent.web.archive import LocalArchive
 from allskyhub_agent.web.auth import LocalAuth
 from allskyhub_agent.web.calibration import LocalCalibration
-from allskyhub_agent.web.server import SettingsForm, WebServer
+from allskyhub_agent.web.server import SettingsForm, SystemPage, UpdatePage, WebServer
+from allskyhub_agent.web.support import RecentLog, Support
 from allskyhub_protocol import DeviceSettings, FrameInfo, SetSettingsArgs, SettingSpec, Status
 
 log = logging.getLogger(__name__)
+
+# Written by the agent, read by the root updater (roadmap L14).
+UPDATE_REQUEST = Path("/var/lib/allskyhub-agent/update-request")
 
 
 def _parser() -> argparse.ArgumentParser:
@@ -113,6 +119,8 @@ def _parser() -> argparse.ArgumentParser:
     upd.add_argument("--state", type=Path, default=Path("/var/lib/allskyhub-updater/state.json"))
     upd.add_argument("--work", type=Path, default=Path("/var/cache/allskyhub-updater"))
     upd.add_argument("--agent-status", default="http://127.0.0.1:8080/api/status")
+    upd.add_argument("--request", type=Path, default=UPDATE_REQUEST,
+                     help="request from the local UI: now or rollback (roadmap L14)")  # fmt: skip
     run = sub.add_parser("run", help="capture frames")
     run.add_argument("--frames", type=int, default=None, help="stop after N frames")
     run.add_argument("--data", type=Path, required=True, help="data directory")
@@ -200,6 +208,106 @@ def run_import(args: argparse.Namespace) -> int:
     return 0
 
 
+INSTALL_DIR = Path("/opt/allskyhub-agent")
+UPDATER_PATH_UNIT = Path("/etc/systemd/system/allskyhub-updater.path")
+
+
+def update_facts(
+    install_dir: Path = INSTALL_DIR, path_unit: Path = UPDATER_PATH_UNIT
+) -> dict[str, Any]:
+    """Roadmap L14: the running version, the installed releases and the updater's state."""
+    releases = install_dir / "releases"
+    try:
+        current: str | None = (install_dir / "current").readlink().name
+    except OSError:
+        current = None
+    try:
+        names = sorted(d.name for d in releases.iterdir() if d.is_dir())
+    except OSError:
+        names = []
+    state = update_status()
+    return {
+        "version": __version__,
+        "release": current,
+        "releases": names,
+        "state": state.model_dump(mode="json") if state is not None else None,
+        "updater": _exists(path_unit),
+        "pending": _exists(UPDATE_REQUEST),
+    }
+
+
+def _exists(path: Path) -> bool:
+    """Path.exists() raises on a directory this user may not read (other installations)."""
+    try:
+        return path.exists()
+    except OSError:
+        return False
+
+
+def request_update(word: str, path_unit: Path = UPDATER_PATH_UNIT) -> bool:
+    """Leave the request for allskyhub-updater.path; False without an updater."""
+    if not _exists(path_unit):
+        return False
+    try:
+        tmp = UPDATE_REQUEST.with_suffix(".tmp")
+        tmp.write_text(word + "\n", encoding="utf-8")
+        tmp.replace(UPDATE_REQUEST)
+    except OSError:
+        log.exception("cannot leave the update request")
+        return False
+    log.info("update %s requested in the local UI", word)
+    return True
+
+
+def wifi_country(settings_file: Path) -> str | None:
+    """The radio country the image's root helper set (SPEC §7.1), for the Wi-Fi form."""
+    try:
+        code = (settings_file.parent / "wifi-country").read_text().strip().upper()
+    except OSError:
+        return None
+    return code if len(code) == 2 and code.isalpha() else None
+
+
+def system_facts(data: Path) -> dict[str, Any]:
+    """The local UI's system page (roadmap L12)."""
+    return {
+        "model": system.model(),
+        "os": system.os_name(),
+        "uptime_s": system.uptime_s(),
+        "load": system.load_avg(),
+        "cpus": os.cpu_count(),
+        "cpu_temp_c": system.cpu_temp_c(),
+        "memory": system.memory(),
+        "disk": system.disk(data),
+        "power": system.power_flags(),
+        "time_trusted": system.time_trusted(),
+    }
+
+
+def system_action(action: str, restart: threading.Event) -> str | None:
+    """Roadmap L12. Reboot and shutdown go through logind; the image allows them to the
+    agent's user by polkit (image/files/etc/polkit-1), elsewhere they are refused."""
+    if action == "restart":
+        log.info("restart requested in the local UI")
+        threading.Timer(1.0, restart.set).start()  # let the answer leave first
+        return None
+    verb = {"reboot": "reboot", "shutdown": "poweroff"}[action]
+    try:
+        res = subprocess.run(  # noqa: S603 - fixed arguments
+            ["systemctl", "--no-ask-password", verb],  # noqa: S607 - systemctl from PATH
+            capture_output=True, text=True, timeout=20, check=False,
+        )  # fmt: skip
+    except (OSError, subprocess.SubprocessError):
+        return "Das System hat den Befehl nicht angenommen."
+    if res.returncode != 0:
+        log.warning("%s refused: %s", verb, res.stderr.strip()[-200:])
+        return (
+            "Auf dieser Installation darf die Kamera das System nicht neu starten oder ausschalten."
+        )
+    log.info("%s requested in the local UI", verb)
+    return None
+
+
 def run_update(args: argparse.Namespace) -> int:
     """One updater run (SPEC §8), started by allskyhub-updater.timer as root."""
     logging.basicConfig(level=logging.INFO, format="%(levelname)s %(name)s: %(message)s")
@@ -225,7 +333,7 @@ def run_update(args: argparse.Namespace) -> int:
             sleep=time.sleep,
             monotonic=time.monotonic,
             fallback_version=__version__,
-        ).run_once()
+        ).run_once(read_request(args.request))
     return 0
 
 
@@ -277,6 +385,8 @@ def main(argv: list[str] | None = None) -> int:
     # The running agent logs to the journal too; httpx would add a line per request.
     logging.basicConfig(level=logging.INFO, format="%(levelname)s %(name)s: %(message)s")
     logging.getLogger("httpx").setLevel(logging.WARNING)
+    recent_log = RecentLog()  # for the local UI (roadmap L15)
+    logging.getLogger().addHandler(recent_log)
 
     live = LiveState()
     store = ImageStore(args.data, tz)
@@ -438,6 +548,19 @@ def main(argv: list[str] | None = None) -> int:
             setup = SetupController(network, identity.device_id, on_joined=joined)
             threading.Thread(target=setup.run, args=(stop_bg,), name="setup", daemon=True).start()
 
+    calibration = LocalCalibration(sky_mask, calibration_dir / "orientation.json")
+
+    def restore_backup(values: dict[str, Any], edits: dict[str, Any] | None) -> list[str]:
+        """Roadmap L15: a backup's settings (only the keys this camera has) and drawn areas."""
+        known = set(settings_values())
+        bad = [] if edits is None or parse_edits(edits) is not None else ["skymask_edits"]
+        if bad:
+            return bad
+        if edits is not None:
+            calibration.set_edits(edits)
+        changes = {k: v for k, v in values.items() if k in known}
+        return change_settings(changes, "a backup") if changes else []
+
     web: WebServer | None = None
     if args.http:
         host, _, port = str(args.http).rpartition(":")
@@ -455,7 +578,34 @@ def main(argv: list[str] | None = None) -> int:
             if settings_path
             else None,
             archive=LocalArchive(store, event_store),
-            calibration=LocalCalibration(sky_mask, calibration_dir / "orientation.json"),
+            calibration=calibration,
+            public=PublicPage(hub_url, identity) if hub_url and identity is not None else None,
+            system_page=SystemPage(
+                lambda: system_facts(Path(args.data)),
+                lambda action: system_action(action, restart_requested),
+            ),
+            network_info=lambda: netinfo.summary() | {"country": wifi_country(settings_file)},
+            update_page=UpdatePage(update_facts, request_update),
+            support=Support(
+                log=recent_log,
+                facts={
+                    "version": lambda: __version__,
+                    "update": update_facts,
+                    "system": lambda: system_facts(Path(args.data)),
+                    "network": netinfo.summary,
+                    "status": live.status,
+                    "calibration": lambda: calibration.info(),
+                },
+                files={
+                    "orientation.json": calibration_dir / "orientation.json",
+                    "skymask.png": calibration_dir / "skymask.png",
+                    "skymask_edits.json": calibration_dir / "skymask_edits.json",
+                    "updater-state.json": STATE_FILE,
+                },
+                settings=settings_values,
+                mask_edits=lambda: sky_mask.edits.to_json(),
+                restore=restore_backup,
+            ),
         )
         web.start()
         print(f"web UI on http://{host}:{web.port}/")

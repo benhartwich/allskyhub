@@ -128,7 +128,7 @@ rm -rf /var/lib/apt/lists/*
 
 systemctl enable allskyhub-firstboot.service allskyhub-setupfile.service \
     allskyhub-agent.service allskyhub-wifi-country.path nftables.service \
-    allskyhub-updater.timer
+    allskyhub-updater.timer allskyhub-updater.path
 # The agent announces itself over mDNS (SPEC §7.2) with its own responder; avahi would hold
 # UDP 5353 and answer for the same host.
 systemctl mask avahi-daemon.service avahi-daemon.socket

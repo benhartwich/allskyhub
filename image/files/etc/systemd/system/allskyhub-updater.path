@@ -1,0 +1,9 @@
+[Unit]
+Description=allskyhub: run the updater when the local UI asks for it (roadmap L14, SPEC §8)
+
+[Path]
+PathExists=/var/lib/allskyhub-agent/update-request
+Unit=allskyhub-updater.service
+
+[Install]
+WantedBy=multi-user.target

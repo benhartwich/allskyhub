@@ -108,19 +108,22 @@ async def test_event_notifications(
     reg = {"token": "fcm-token-abcdef", "platform": "android"}
     assert (await client.post("/api/v1/push/tokens", json=reg, headers=auth)).status_code == 204
 
+    # Recent detections only: older ones never notify (see the end of this test).
+    fresh = dt.datetime.now(dt.UTC) - dt.timedelta(minutes=20)
+    first = meteor().model_copy(update={"start": fresh, "end": fresh + dt.timedelta(seconds=1)})
     async with device_ws(live_app, token) as ws:
-        await send(ws, meteor())  # notifications are off by default
+        await send(ws, first)  # notifications are off by default
         await asyncio.sleep(0.3)
         assert fake_push.sent == []
 
         r = await client.put("/api/v1/account/settings", json={"notify_events": True}, headers=auth)
         assert r.json()["notify_events"] is True
         assert r.json()["push_available"] is True
-        await send(ws, meteor())  # resent after a reconnect: not new, no push
+        await send(ws, first)  # resent after a reconnect: not new, no push
         await asyncio.sleep(0.3)
         assert fake_push.sent == []
 
-        later = meteor()
+        later = first
         later = later.model_copy(
             update={"id": "meteor-20261008T215012Z",
                     "start": later.start + dt.timedelta(minutes=5),
@@ -141,6 +144,16 @@ async def test_event_notifications(
         await send(ws, third)  # within 10 minutes: throttled
         await asyncio.sleep(0.3)
         assert len(fake_push.sent) == 1
+
+    # A detection from days ago (an import, a long outage) never notifies.
+    fake_push.sent.clear()
+    notifier: Notifier = app.state.notifier
+    notifier._last_event.clear()  # pyright: ignore[reportPrivateUsage]
+    async with device_ws(live_app, token) as ws:
+        old = meteor().model_copy(update={"id": "meteor-20261001T215112Z"})
+        await send(ws, old)
+        await asyncio.sleep(0.3)
+    assert fake_push.sent == []
 
     removed = await client.post("/api/v1/push/tokens/delete", json=reg, headers=auth)
     assert removed.status_code == 204

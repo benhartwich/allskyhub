@@ -282,3 +282,11 @@ table.stats th { color: var(--text-2); font-weight: 600; }
 .health-line.ok::before { background: var(--ok); box-shadow: 0 0 10px var(--ok); }
 .health-line.warn { color: var(--warn); } .health-line.warn::before { background: var(--warn); }
 .health-line.error { color: var(--danger); } .health-line.error::before { background: var(--danger); box-shadow: 0 0 10px var(--danger); }
+
+/* Camera map (roadmap C5). */
+.camera-map { padding: 8px; }
+.camera-map svg { width: 100%; height: auto; display: block; border-radius: 14px;
+                  background: radial-gradient(ellipse at 50% 40%, #0d1636, #060a1c 75%); }
+.camera-map .dot { fill: var(--aurora); stroke: #fff; stroke-width: 2; vector-effect: non-scaling-stroke; }
+.camera-map .halo { fill: rgba(79, 227, 176, .25); }
+.camera-map a:hover .dot { fill: #fff; }

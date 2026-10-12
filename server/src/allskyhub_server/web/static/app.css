@@ -60,8 +60,18 @@ a:hover { color: #a9c1ff; }
 .brand { display: flex; align-items: center; gap: 10px; min-height: 44px; color: var(--text); text-decoration: none;
          font-family: var(--display); font-weight: 700; font-size: 21px; letter-spacing: -0.4px; }
 .brand img { filter: drop-shadow(0 0 8px rgba(122, 162, 247, .7)); }
-.appbar-end { margin-left: auto; display: flex; align-items: center; gap: 8px; }
-.appbar-end a { text-decoration: none; font-weight: 600; padding: 0 8px; }
+.appbar-end { margin-left: auto; display: flex; align-items: center; gap: 6px; }
+.nav-link { display: inline-flex; align-items: center; gap: 8px; min-height: 42px; padding: 0 14px; border-radius: 999px;
+            color: var(--text-2); text-decoration: none; font-weight: 600; font-size: 15px; border: 1px solid transparent;
+            background: none; box-shadow: none; transition: color .15s, background .15s, border-color .15s; }
+.nav-link svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+.nav-link:hover { color: var(--text); background: rgba(122, 162, 247, .1); transform: none; filter: none; box-shadow: none; }
+.nav-link.active { color: var(--text); border-color: rgba(122, 162, 247, .45);
+                   background: linear-gradient(110deg, rgba(143, 227, 255, .14), rgba(180, 140, 255, .18));
+                   box-shadow: 0 0 24px -6px rgba(122, 162, 247, .6), inset 0 1px 0 rgba(255, 255, 255, .08); }
+button.nav-link { color: var(--text-2); padding: 0 11px; }
+button.nav-link:hover { color: var(--danger); background: rgba(255, 122, 147, .1); }
+@media (max-width: 30rem) { .nav-link span { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; } .nav-link { padding: 0 11px; } .appbar { padding: 8px 12px; } }
 
 .muted { color: var(--text-2); font-size: .94em; }
 .stack { display: grid; gap: 14px; }
@@ -136,6 +146,16 @@ a.card.cam:hover { transform: translateY(-4px); border-color: rgba(122, 162, 247
 .card.danger { border-style: dashed; border-color: rgba(255, 122, 147, .35); }
 button.danger { background: transparent; color: var(--danger); border: 1px solid var(--danger); box-shadow: none; }
 button.danger:hover { background: rgba(255, 122, 147, .12); color: var(--danger); }
+
+/* Camera page: on wide screens the live picture stays left, the cards scroll on the right. */
+.cam-page { display: grid; gap: 20px; }
+.cam-page > * { min-width: 0; }
+.cam-live > * + * { margin-top: 16px; }
+@media (min-width: 60rem) {
+  .cam-page { grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr); align-items: start; }
+  .cam-live { grid-column: 1; grid-row: 1 / span 20; position: sticky; top: 84px; }
+  .cam-page > :not(.cam-live) { grid-column: 2; }
+}
 
 /* Public start page */
 .hero { display: grid; gap: 22px; padding: 24px 0 12px; align-items: center; }

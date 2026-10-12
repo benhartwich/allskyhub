@@ -161,4 +161,78 @@ void main() {
     expect(find.text('Warte auf das erste Bild …'), findsOneWidget);
     await tester.pumpWidget(const SizedBox()); // stops the refresh timer
   });
+
+  testWidgets('camera screen shows health, tonight and last night', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(400, 2400);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    final camera = Camera.fromJson({...cameraJson, 'latest_image_at': null});
+    final client = HubClient(
+      baseUrl: 'https://hub.example',
+      token: 'tok',
+      httpClient: MockClient((request) async {
+        if (request.url.path.endsWith('/overview')) {
+          return http.Response(
+            jsonEncode({
+              'online': true,
+              'health': [
+                {'key': 'disk', 'level': 'warn', 'text': 'Speicher fast voll.'},
+              ],
+              'tonight': {
+                'summary': 'Klar und dunkel von 20:03 bis 03:00 Uhr.',
+                'sunset': '2026-10-12T16:19:00Z',
+                'dusk': '2026-10-12T18:03:00Z',
+                'dawn': '2026-10-13T03:35:00Z',
+                'sunrise': '2026-10-13T05:18:00Z',
+                'moonrise': null,
+                'moonset': '2026-10-12T16:33:00Z',
+                'moon_illumination': 0.05,
+                'moon_phase': 'zunehmende Sichel',
+                'best_start': '2026-10-12T18:03:00Z',
+                'best_end': '2026-10-13T01:00:00Z',
+                'hours': [
+                  {
+                    'at': '2026-10-12T18:00:00Z',
+                    'clouds': 5,
+                    'moon_up': false,
+                    'good': true,
+                  },
+                  {
+                    'at': '2026-10-12T19:00:00Z',
+                    'clouds': 80,
+                    'moon_up': false,
+                    'good': false,
+                  },
+                ],
+              },
+              'last_night': {
+                'night_id': '20261011',
+                'line': '3 Meteore, 4 h klar',
+                'meteors': 3,
+                'clear_hours': 4.0,
+                'best_sqm': 21.2,
+              },
+            }),
+            200,
+          );
+        }
+        return http.Response(jsonEncode(cameraJson), 200);
+      }),
+    );
+    await tester.pumpWidget(
+      MaterialApp(
+        home: CameraScreen(client: client, camera: camera),
+      ),
+    );
+    await tester.pumpAndSettle(const Duration(milliseconds: 100));
+    expect(find.text('Speicher fast voll.'), findsOneWidget);
+    expect(find.text('Heute Nacht'), findsOneWidget);
+    expect(find.textContaining('Klar und dunkel'), findsOneWidget);
+    expect(find.textContaining('zunehmende Sichel, 5 %'), findsOneWidget);
+    expect(find.text('3 Meteore, 4 h klar'), findsOneWidget);
+    expect(find.byKey(const Key('open-measurements')), findsOneWidget);
+    await tester.pumpWidget(const SizedBox()); // stops the refresh timer
+  });
 }

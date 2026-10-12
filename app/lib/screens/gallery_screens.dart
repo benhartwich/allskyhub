@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 
 import '../api/hub_client.dart';
 import 'event_screens.dart';
+import 'measurements_screen.dart';
 import 'product_screens.dart';
 import 'sky_charts.dart';
 import 'zoomable.dart';
@@ -183,8 +184,30 @@ class _NightScreenState extends State<NightScreen> {
               SliverToBoxAdapter(
                 child: FutureBuilder<List<SkySample>>(
                   future: _sky,
-                  builder: (context, snapshot) =>
+                  builder: (context, snapshot) => Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
                       SkyCharts(samples: snapshot.data ?? const <SkySample>[]),
+                      if (widget.night.sky > 0)
+                        Padding(
+                          padding: const EdgeInsets.fromLTRB(12, 0, 12, 8),
+                          child: TextButton.icon(
+                            key: const Key('night-measurements'),
+                            icon: const Icon(Icons.show_chart),
+                            label: const Text('Alle Messdaten dieser Nacht'),
+                            onPressed: () => Navigator.of(context).push(
+                              MaterialPageRoute<void>(
+                                builder: (_) => MeasurementsScreen(
+                                  client: widget.client,
+                                  cameraId: widget.camera.id,
+                                  night: widget.night.nightId,
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
+                    ],
+                  ),
                 ),
               ),
               SliverToBoxAdapter(

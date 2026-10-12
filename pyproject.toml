@@ -41,7 +41,7 @@ exclude = ["**/__pycache__", ".venv", "server/migrations/versions"]
 reportMissingTypeStubs = false
 
 [tool.pytest.ini_options]
-testpaths = ["packages/protocol/tests", "agent/tests", "server/tests"]
+testpaths = ["packages/protocol/tests", "packages/design/tests", "agent/tests", "server/tests"]
 addopts = "--import-mode=importlib"
 asyncio_mode = "auto"
 asyncio_default_fixture_loop_scope = "session"

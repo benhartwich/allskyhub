@@ -18,6 +18,7 @@ from allskyhub_server.devices import astro, health, night_summary, space_weather
 from allskyhub_server.devices.connections import ConnectionRegistry
 from allskyhub_server.devices.event_text import EVENT_TITLES
 from allskyhub_server.devices.events import storm_key
+from allskyhub_server.devices.tonight import ForecastCache
 from allskyhub_server.models import Device, EventRecord, PushToken, User
 from allskyhub_server.push.fcm import Message
 
@@ -50,6 +51,8 @@ class Notifier:
         self._sender = sender
         self._last_event: dict[str, dt.datetime] = {}
         self._storms_notified: set[str] = set()
+        # Set by the app: the dome hint (roadmap C12) compares with the cloud forecast.
+        self.forecast: ForecastCache | None = None
 
     @property
     def enabled(self) -> bool:
@@ -167,7 +170,8 @@ class Notifier:
                 online = registry.is_online(device.id)
                 if not online:
                     continue  # nothing new can be known; keep what was reported
-                problems = {p.key: p for p in health.check(device, online, now)}
+                found = await health.full_check(db, device, online, now, self.forecast)
+                problems = {p.key: p for p in found}
                 before = set(device.health_notified or [])
                 new = [p for k, p in problems.items() if k not in before]
                 gone = before - problems.keys()
@@ -196,6 +200,35 @@ class Notifier:
                             data={"camera": device.id},
                         ),
                     )
+
+    async def unsafe(self, device_id: str) -> None:
+        """Roadmap C15: the camera's safety monitor turned unsafe while N.I.N.A. is
+        connected; owners with problem notices get it once per change."""
+        if self._sender is None:
+            return
+        try:
+            async with self._maker() as db:
+                row = (
+                    await db.execute(
+                        select(Device, User)
+                        .join(User, User.id == Device.owner_id)
+                        .where(Device.id == device_id, User.notify_offline.is_(True))
+                    )
+                ).one_or_none()
+                if row is None:
+                    return
+                device, user = row
+                await self._deliver(
+                    db,
+                    user.id,
+                    Message(
+                        title=f"{device.name}: Himmel unsicher",
+                        body="Wolken, Regen oder Gewitter: Das Teleskop sollte jetzt pausieren.",
+                        data={"camera": device.id},
+                    ),
+                )
+        except Exception:
+            log.exception("push: unsafe notice failed")
 
     async def aurora(self, device_id: str, kp: space_weather.KpCache) -> None:
         """Roadmap C2, after a status with a sky measurement: Kp at or above the rule of

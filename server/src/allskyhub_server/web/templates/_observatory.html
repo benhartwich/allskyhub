@@ -1,0 +1,16 @@
+{# Roadmap C15: what the telescope next to the camera does (status.observatory). #}
+{% set o = observatory %}
+<div class="card observatory">
+  <div class="cam-meta"><h2>Teleskop</h2>
+    {% if o.safe is not none %}<span class="badge{{ ' ok' if o.safe }}">{{ 'sicher' if o.safe else 'unsicher' }}</span>{% endif %}
+  </div>
+  {% if not o.connected %}<p class="warn">N.I.N.A. antwortet gerade nicht{% if o.at %} (Stand {{ o.at | localtime }}){% endif %}.</p>{% endif %}
+  <dl class="facts">
+    {% if o.target %}<dt>Ziel</dt><dd>{{ o.target }}</dd>{% endif %}
+    {% if o.sequence %}<dt>Sequenz</dt><dd>{{ o.sequence.name or 'läuft' }} · {{ (o.sequence.progress * 100) | round | int }} %</dd>{% endif %}
+    {% set img = o.last_image %}
+    {% if img %}<dt>Letztes Bild</dt><dd>{% if img.at %}{{ img.at | localtime }}{% endif %}{% if img.filter %} · Filter {{ img.filter }}{% endif %}{% if img.exposure_s is not none %} · {{ img.exposure_s | round(1) }} s{% endif %}{% if img.hfr is not none %} · HFR {{ '%.2f' | format(img.hfr) | replace('.', ',') }}{% endif %}{% if img.stars is not none %} · {{ img.stars }} Sterne{% endif %}</dd>{% endif %}
+  </dl>
+  {% if o.sequence %}<div class="progress" role="progressbar" aria-valuenow="{{ (o.sequence.progress * 100) | round | int }}" aria-valuemin="0" aria-valuemax="100"><span class="p{{ ((o.sequence.progress * 20) | round | int) * 5 }}"></span></div>{% endif %}
+  <p class="muted small">Von N.I.N.A. über die Kamera; nur Angaben, keine Bilder.</p>
+</div>

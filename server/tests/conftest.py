@@ -24,6 +24,7 @@ from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
 
 from allskyhub_server.app import create_app
+from allskyhub_server.devices.satellites import TleCache
 from allskyhub_server.devices.space_weather import KpCache, OvationCache
 from allskyhub_server.devices.tonight import ForecastCache
 from allskyhub_server.models import Base
@@ -97,6 +98,8 @@ async def app(settings: Settings, engine: AsyncEngine) -> AsyncIterator[FastAPI]
     application.state.ovation = OvationCache(
         httpx.AsyncClient(transport=httpx.MockTransport(_ovation_answer))
     )
+    # Nor to CelesTrak: a fixed ISS element set (test_satellites.py).
+    application.state.tles = TleCache(httpx.AsyncClient(transport=httpx.MockTransport(_tle_answer)))
     # Nor to Open-Meteo: clear skies everywhere.
     application.state.forecast = ForecastCache(
         httpx.AsyncClient(transport=httpx.MockTransport(_forecast_answer))
@@ -124,6 +127,18 @@ def _kp_answer(request: httpx.Request) -> httpx.Response:
         },
     ]
     return httpx.Response(200, json=rows)
+
+
+ISS_TLE = (
+    "1 25544U 98067A   26285.14422154  .00005771  00000+0  11345-3 0  9992",
+    "2 25544  51.6314  81.3064 0006731 252.4466 107.5787 15.48833724589888",
+)
+
+
+def _tle_answer(request: httpx.Request) -> httpx.Response:
+    if request.url.params.get("CATNR") != "25544":
+        return httpx.Response(404)
+    return httpx.Response(200, text="ISS (ZARYA)\n" + "\n".join(ISS_TLE) + "\n")
 
 
 def _forecast_answer(request: httpx.Request) -> httpx.Response:

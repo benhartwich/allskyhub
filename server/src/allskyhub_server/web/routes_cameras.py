@@ -144,9 +144,11 @@ async def _camera_context(
     current = settings_form.current_values(device)
     return {
         "device": device,
-        "tonight": await tonight.for_device(forecast, device.last_status, now),
+        "tonight": await tonight.for_device(
+            forecast, device.last_status, now, request.app.state.tles
+        ),
         "last_night": await _last_night(db, device),
-        "health": health.check(device, online, now),
+        "health": await health.full_check(db, device, online, now, forecast),
         "online": online,
         "events": events.collapse(await events.events(db, device.id, limit=200, hide_false=True))[
             :6
@@ -158,6 +160,7 @@ async def _camera_context(
         "update": update_line(device.last_status),
         "settings_reported": bool(current),
         "role": role,
+        "observatory": public.observatory(device),
         "members": await sharing.members(db, device.id) if role == "owner" else [],
         **extra,
     }
@@ -241,6 +244,7 @@ PUBLIC_SECTIONS = {
     "sky": "Himmelsqualität (Wolken, SQM, Sterne)",
     "aurora": "Polarlicht-Aussichten (Kp-Index)",
     "archive": "Nachtarchiv mit Keogramm und Sternspuren",
+    "observatory": "Was das Teleskop gerade aufnimmt (N.I.N.A.: Ziel, Sequenz, letztes Bild)",
 }
 
 

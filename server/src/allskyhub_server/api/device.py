@@ -397,6 +397,15 @@ async def device_ws(websocket: WebSocket) -> None:
         log.info("device disconnected", extra={"device_id": info.device_id})
 
 
+async def _safe(maker: async_sessionmaker[AsyncSession], device_id: str) -> bool | None:
+    """The last reported ``status.observatory.safe`` (SPEC §6.3), or None."""
+    async with maker() as db:
+        status = await db.scalar(select(Device.last_status).where(Device.id == device_id))
+    observatory: dict[str, Any] = (status or {}).get("observatory") or {}
+    safe = observatory.get("safe")
+    return safe if isinstance(safe, bool) else None
+
+
 async def _touch(maker: async_sessionmaker[AsyncSession], device_id: str, **values: Any) -> None:
     async with maker() as db:
         await db.execute(
@@ -438,7 +447,11 @@ async def _handle(
         # task: the reply arrives on this very connection.
         _background(local_access.deliver(maker, registry, conn.device_id))
     elif isinstance(body, Status):
+        before = await _safe(maker, conn.device_id)
         await _touch(maker, conn.device_id, last_status=body.model_dump(mode="json"))
+        # Roadmap C15: tell the owner when the sky turns unsafe for the telescope.
+        if before is True and body.observatory is not None and body.observatory.safe is False:
+            _background(notifier.unsafe(conn.device_id))
         if body.sky is not None:
             await _store_sky(maker, conn.device_id, body.sky)
             _background(notifier.aurora(conn.device_id, kp))

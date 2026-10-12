@@ -25,6 +25,7 @@ from allskyhub_server.db import create_engine, create_sessionmaker
 from allskyhub_server.devices.connections import ConnectionRegistry
 from allskyhub_server.devices.images import ImageStore
 from allskyhub_server.devices.renders import Renderer
+from allskyhub_server.devices.satellites import TleCache
 from allskyhub_server.devices.space_weather import KpCache, OvationCache
 from allskyhub_server.devices.tonight import ForecastCache
 from allskyhub_server.push.fcm import Sender
@@ -165,6 +166,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             else None
         )
         app.state.notifier = Notifier(app.state.sessionmaker, sender)
+        app.state.notifier.forecast = app.state.forecast
         app.state.renderer = Renderer(app.state.sessionmaker, app.state.images, settings)
         tasks = [cleanup, asyncio.create_task(app.state.renderer.run_forever())]
         if sender is not None:
@@ -195,6 +197,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.state.ovation = OvationCache()
     app.state.hub_keys = HubKeys(settings.key_dir)
     app.state.forecast = ForecastCache()
+    app.state.tles = TleCache()
     app.add_middleware(AccessLogMiddleware)
     _install_error_handlers(app)
 

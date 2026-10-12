@@ -8,15 +8,16 @@ is below ``CLEAR_BELOW`` and the moon is down or less than ``BRIGHT_MOON`` lit.
 from __future__ import annotations
 
 import asyncio
+import dataclasses
 import datetime as dt
 import time
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any, cast
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 import httpx
 
-from allskyhub_server.devices import astro
+from allskyhub_server.devices import astro, satellites
 
 FORECAST_URL = "https://api.open-meteo.com/v1/forecast"
 MAX_AGE_S = 3600
@@ -122,6 +123,7 @@ class Tonight:
     hours: list[NightHour]  # the dark hours (dusk to dawn)
     best: tuple[dt.datetime, dt.datetime] | None  # longest good stretch
     summary: str
+    passes: list[satellites.Pass] = field(default_factory=list[satellites.Pass])
 
     def fmt(self, t: dt.datetime | None) -> str:
         """Local "HH:MM" for templates; "–" for none."""
@@ -139,7 +141,10 @@ class Tonight:
 
 
 async def for_device(
-    cache: ForecastCache, status: dict[str, Any] | None, now: dt.datetime
+    cache: ForecastCache,
+    status: dict[str, Any] | None,
+    now: dt.datetime,
+    tles: satellites.TleCache | None = None,
 ) -> Tonight | None:
     """None while the camera has not reported its location."""
     settings = cast(dict[str, Any], (status or {}).get("settings") or {})
@@ -147,7 +152,16 @@ async def for_device(
     if not isinstance(lat, int | float) or not isinstance(lon, int | float):
         return None
     zone = zone_for(settings.get("timezone"))
-    return build(now, float(lat), float(lon), zone, await cache.get(float(lat), float(lon)))
+    result = build(now, float(lat), float(lon), zone, await cache.get(float(lat), float(lon)))
+    night = result.night
+    if tles is not None and night.sunset and night.sunrise:
+        # Roadmap C6: passes still ahead tonight (computed off the event loop).
+        start = max(night.sunset, now)
+        found = await asyncio.to_thread(
+            satellites.passes, await tles.get(), float(lat), float(lon), start, night.sunrise
+        )
+        result = dataclasses.replace(result, passes=found)
+    return result
 
 
 def zone_for(name: object) -> ZoneInfo:

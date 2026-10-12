@@ -18,7 +18,7 @@ from pydantic import ValidationError
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from allskyhub_protocol import PublicProfile, PublicSections, PublicState
+from allskyhub_protocol import Observatory, PublicProfile, PublicSections, PublicState
 from allskyhub_server.models import Device, EventRecord, Frame, Product
 
 # Products shown publicly: small images only (no timelapse download for anonymous visitors).
@@ -212,3 +212,14 @@ async def newest_products(db: AsyncSession, device: Device) -> tuple[str | None,
         .order_by(Product.name)
     )
     return night_id, list(rows)
+
+
+def observatory(device: Device) -> Observatory | None:
+    """SPEC §6.3 ``status.observatory`` (roadmap C15), parsed, or None."""
+    raw = (device.last_status or {}).get("observatory")
+    if not isinstance(raw, dict):
+        return None
+    try:
+        return Observatory.model_validate(raw)
+    except ValidationError:
+        return None

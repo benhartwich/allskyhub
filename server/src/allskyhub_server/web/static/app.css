@@ -147,6 +147,8 @@ table.stats th { color: var(--text-2); font-weight: 600; }
 .settings-form fieldset { border: 0; padding: 0; margin: 0; }
 .settings-form legend { font-family: var(--display); font-weight: 600; font-size: 15px; color: var(--text-2);
                         text-transform: uppercase; letter-spacing: 1px; margin-bottom: 6px; }
+.tonight-sub { margin: 4px 0 0; font-size: 15px; font-family: var(--display); color: var(--text-2); }
+.passes > li { padding: 8px 0; font-size: 15px; }
 
 /* Red night theme for the hub's own drawings. */
 [data-theme="red"] .dome, [data-theme="red"] .camera-map svg, [data-theme="red"] .sky-chart {
@@ -156,3 +158,28 @@ table.stats th { color: var(--text-2); font-weight: 600; }
   background: var(--accent); box-shadow: none;
 }
 [data-theme="red"] .camera-map .dot { fill: var(--accent); }
+
+/* Telescope next to the camera, from N.I.N.A. (roadmap C15). Width in 5 % steps (no inline styles). */
+.progress { height: 8px; border-radius: 999px; background: var(--surface-2); overflow: hidden; }
+.progress span { display: block; height: 100%; background: linear-gradient(90deg, var(--accent), var(--accent-2)); }
+.progress .p0 { width: 0%; }
+.progress .p5 { width: 5%; }
+.progress .p10 { width: 10%; }
+.progress .p15 { width: 15%; }
+.progress .p20 { width: 20%; }
+.progress .p25 { width: 25%; }
+.progress .p30 { width: 30%; }
+.progress .p35 { width: 35%; }
+.progress .p40 { width: 40%; }
+.progress .p45 { width: 45%; }
+.progress .p50 { width: 50%; }
+.progress .p55 { width: 55%; }
+.progress .p60 { width: 60%; }
+.progress .p65 { width: 65%; }
+.progress .p70 { width: 70%; }
+.progress .p75 { width: 75%; }
+.progress .p80 { width: 80%; }
+.progress .p85 { width: 85%; }
+.progress .p90 { width: 90%; }
+.progress .p95 { width: 95%; }
+.progress .p100 { width: 100%; }

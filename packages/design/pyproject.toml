@@ -1,0 +1,11 @@
+[project]
+name = "allskyhub-design"
+version = "0.1.0"
+description = "allskyhub look: CSS tokens, base styles, font and star field, shared by hub and camera"
+license = "Apache-2.0"
+requires-python = ">=3.11"
+dependencies = []
+
+[build-system]
+requires = ["uv_build>=0.12,<0.13"]
+build-backend = "uv_build"

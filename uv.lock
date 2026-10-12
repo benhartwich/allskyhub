@@ -10,6 +10,7 @@ resolution-markers = [
 [manifest]
 members = [
     "allskyhub-agent",
+    "allskyhub-design",
     "allskyhub-protocol",
     "allskyhub-server",
 ]
@@ -68,6 +69,11 @@ requires-dist = [
 ]
 
 [[package]]
+name = "allskyhub-design"
+version = "0.1.0"
+source = { editable = "packages/design" }
+
+[[package]]
 name = "allskyhub-protocol"
 version = "0.1.0"
 source = { editable = "packages/protocol" }
@@ -84,6 +90,7 @@ version = "0.1.0"
 source = { editable = "server" }
 dependencies = [
     { name = "alembic" },
+    { name = "allskyhub-design" },
     { name = "allskyhub-protocol" },
     { name = "argon2-cffi" },
     { name = "asyncpg" },
@@ -102,6 +109,7 @@ dependencies = [
 [package.metadata]
 requires-dist = [
     { name = "alembic", specifier = ">=1.16" },
+    { name = "allskyhub-design", editable = "packages/design" },
     { name = "allskyhub-protocol", editable = "packages/protocol" },
     { name = "argon2-cffi", specifier = ">=25.1" },
     { name = "asyncpg", specifier = ">=0.30" },

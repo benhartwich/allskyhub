@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import Any, cast
 from zoneinfo import ZoneInfo
 
+import allskyhub_design
 from fastapi.templating import Jinja2Templates
 
 from allskyhub_server.devices.event_text import compass
@@ -19,9 +20,19 @@ STATIC_DIR = Path(__file__).parent / "static"
 templates = Jinja2Templates(directory=TEMPLATE_DIR)
 
 
+# The shared look (packages/design) is served under /static/design/.
+DESIGN_DIR = allskyhub_design.static_dir()
+
+
+def _static_file(path: str) -> Path:
+    if path.startswith("design/"):
+        return DESIGN_DIR / path.removeprefix("design/")
+    return STATIC_DIR / path
+
+
 @cache
 def _static_digest(path: str) -> str:
-    return hashlib.sha256((STATIC_DIR / path).read_bytes()).hexdigest()[:10]
+    return hashlib.sha256(_static_file(path).read_bytes()).hexdigest()[:10]
 
 
 def asset(path: str) -> str:

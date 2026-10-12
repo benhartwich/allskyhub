@@ -7,6 +7,9 @@
   <link rel="icon" href="{{ asset('favicon.svg') }}" type="image/svg+xml">
   <title>{% block title %}allskyhub{% endblock %}</title>
   <meta name="htmx-config" content='{"includeIndicatorStyles": false, "allowEval": false}'>
+  <script src="{{ asset('theme.js') }}"></script>
+  <link rel="stylesheet" href="{{ asset('design/tokens.css') }}">
+  <link rel="stylesheet" href="{{ asset('design/base.css') }}">
   <link rel="stylesheet" href="{{ asset('app.css') }}">
   <script src="{{ asset('htmx.min.js') }}" defer></script>
   {% block head %}{% endblock %}
@@ -15,6 +18,8 @@
   <header class="appbar">
     <a class="brand" href="/"><img src="{{ asset('favicon.svg') }}" width="28" height="28" alt="">allskyhub</a>
     <nav class="appbar-end" aria-label="Hauptmenü">
+      <button type="button" class="nav-link" data-theme-toggle title="Rotlicht für die Nacht" aria-label="Rotlicht für die Nacht">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 14.5A8 8 0 0 1 9.5 4a8 8 0 1 0 10.5 10.5z"/></svg></button>
       {% set path = request.url.path %}
       {% if user %}
       <a class="nav-link{{ ' active' if path == '/' or path.startswith('/cameras') }}" href="/"{% if path == '/' or path.startswith('/cameras') %} aria-current="page"{% endif %}>

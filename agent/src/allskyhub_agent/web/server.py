@@ -12,6 +12,13 @@ Routes:
     GET  /api/wifi/networks   visible Wi-Fi networks (setup mode only, SPEC §7.1)
     POST /api/setup/network   join a Wi-Fi network (setup mode only, SPEC §7.1)
     POST /api/focus           body "on" | "off" | "reset"
+    GET  /api/nights          nights with frame count, products and events (roadmap L4)
+    GET  /api/nights/<n>/frames?offset=&limit=   the night's frame index (SPEC §5.1)
+    GET  /api/nights/<n>/events   detections of the night (SPEC §6.4, roadmap L5)
+    GET  /api/nights/<n>/sky      sky log of the night (SPEC §5.1, roadmap L6)
+    GET  /api/loop            frames of the last hour (roadmap L3)
+    GET  /files/<n>/<image>[?thumb=1], /files/<n>/products/<name>[?thumb=1],
+         /files/<n>/events/<id>.jpg[?thumb=1]   stored files, with Range for the video
     GET  /api/settings        {schema, values} for the settings form (SPEC §6.9)
     POST /api/settings        partial JSON object → 202, or 400 {detail, fields}
     GET  /local-login         login page (SPEC §7.4)
@@ -29,16 +36,19 @@ from __future__ import annotations
 
 import ipaddress
 import json
+import re
 import threading
 import time
 from collections.abc import Callable, Mapping
 from dataclasses import asdict, dataclass
+from datetime import UTC, datetime
 from http import HTTPStatus
 from http.cookies import CookieError, SimpleCookie
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from importlib import resources
+from pathlib import Path
 from typing import Any, cast
-from urllib.parse import parse_qs, urlencode
+from urllib.parse import parse_qs, unquote, urlencode
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_validator
 
@@ -47,6 +57,7 @@ from allskyhub_agent.hub.pairing import PairingState
 from allskyhub_agent.live import LiveState
 from allskyhub_agent.settings import AgentSettings, valid_timezone
 from allskyhub_agent.setup.controller import NetworkRequest, SetupController
+from allskyhub_agent.web.archive import LocalArchive
 from allskyhub_agent.web.auth import (
     NONCE_COOKIE,
     NONCE_TTL_S,
@@ -113,6 +124,10 @@ def _page(name: str = "index.html") -> bytes:
     return resources.files("allskyhub_agent.web").joinpath(name).read_bytes()
 
 
+_NIGHT_API = re.compile(r"^/api/nights/(\d{8})/(frames|events|sky)$")
+_FILE = re.compile(r"^/files/(\d{8})/(?:(products|events)/)?([A-Za-z0-9_.-]+)$")
+_TYPES = {".jpg": "image/jpeg", ".mp4": "video/mp4"}
+_RANGE = re.compile(r"^bytes=(\d*)-(\d*)$")
 _LOOPBACK = {"127.0.0.1", "::1", "::ffff:127.0.0.1"}
 # Routes that answer without a session on a paired camera (SPEC §7.4).
 _OPEN = {
@@ -133,6 +148,7 @@ def make_handler(
     auth: LocalAuth | None = None,
     time_trusted: Callable[[], bool] = lambda: True,
     settings_form: SettingsForm | None = None,
+    archive: LocalArchive | None = None,
 ) -> type[BaseHTTPRequestHandler]:
     page = _page()
     login_page = _page("login.html")
@@ -159,6 +175,98 @@ def make_handler(
             self.send_header("Cache-Control", "no-store")
             self.end_headers()
             self.wfile.write(body)
+
+        def _query(self) -> dict[str, str]:
+            q = self.path.split("?", 1)[1] if "?" in self.path else ""
+            return {k: v[0] for k, v in parse_qs(q).items() if v}
+
+        def _int(self, name: str, default: int) -> int:
+            try:
+                return int(self._query().get(name, default))
+            except ValueError:
+                return default
+
+        def _send_file(self, path: Path | None) -> None:
+            """A stored file; one byte range if asked (browsers seek in the timelapse)."""
+            ctype = _TYPES.get(path.suffix) if path is not None else None
+            if path is None or ctype is None:
+                self._text(HTTPStatus.NOT_FOUND, "not found")
+                return
+            try:
+                f = path.open("rb")
+            except OSError:
+                self._text(HTTPStatus.NOT_FOUND, "not found")
+                return
+            with f:
+                size = path.stat().st_size
+                start, end = 0, size - 1
+                m = _RANGE.match(self.headers.get("Range", ""))
+                partial = m is not None and size > 0 and (m[1] or m[2])
+                if m is not None and partial:
+                    if m[1]:
+                        start, end = int(m[1]), int(m[2]) if m[2] else size - 1
+                    else:
+                        start = max(0, size - int(m[2]))
+                    end = min(end, size - 1)
+                    if start > end:
+                        self.send_response(HTTPStatus.REQUESTED_RANGE_NOT_SATISFIABLE)
+                        self.send_header("Content-Range", f"bytes */{size}")
+                        self.send_header("Content-Length", "0")
+                        self.end_headers()
+                        return
+                self.send_response(HTTPStatus.PARTIAL_CONTENT if partial else HTTPStatus.OK)
+                self.send_header("Content-Type", ctype)
+                self.send_header("Content-Length", str(end - start + 1))
+                self.send_header("Accept-Ranges", "bytes")
+                if partial:
+                    self.send_header("Content-Range", f"bytes {start}-{end}/{size}")
+                # Stored files never change; behind the login they are private.
+                self.send_header("Cache-Control", "private, max-age=86400")
+                self.end_headers()
+                f.seek(start)
+                remaining = end - start + 1
+                while remaining > 0:
+                    chunk = f.read(min(65536, remaining))
+                    if not chunk:
+                        break
+                    self.wfile.write(chunk)
+                    remaining -= len(chunk)
+
+        def _archive_get(self, path: str) -> bool:
+            """Archive routes (roadmap L3–L6); False if `path` is none of them."""
+            if not path.startswith(("/api/nights", "/api/loop", "/files/")):
+                return False
+            if archive is None:
+                self._text(HTTPStatus.NOT_FOUND, "not found")
+                return True
+            if path == "/api/nights":
+                self._json(HTTPStatus.OK, archive.nights())
+            elif path == "/api/loop":
+                self._json(HTTPStatus.OK, archive.loop(datetime.now(UTC)))
+            elif m := _NIGHT_API.match(path):
+                night, what = m[1], m[2]
+                if what == "frames":
+                    data: object = archive.frames(
+                        night, self._int("offset", 0), self._int("limit", 2000)
+                    )
+                elif what == "events":
+                    data = archive.events(night)
+                else:
+                    data = archive.sky(night)
+                self._json(HTTPStatus.OK, data)
+            elif m := _FILE.match(unquote(path)):
+                night, sub, name = m[1], m[2], m[3]
+                thumb = self._query().get("thumb") == "1"
+                if sub == "products":
+                    self._send_file(archive.product(night, name, thumb))
+                elif sub == "events":
+                    eid = name.removesuffix(".jpg")
+                    self._send_file(archive.event_image(night, eid, thumb))
+                else:
+                    self._send_file(archive.image(night, name, thumb))
+            else:
+                self._text(HTTPStatus.NOT_FOUND, "not found")
+            return True
 
         def _json(self, status: HTTPStatus, data: object) -> None:
             self._send(status, json.dumps(data).encode(), "application/json")
@@ -313,6 +421,8 @@ def make_handler(
                 self._send(HTTPStatus.OK, callback_page, "text/html; charset=utf-8")
             elif path == "/":
                 self._send(HTTPStatus.OK, page, "text/html; charset=utf-8")
+            elif self._archive_get(path):
+                pass
             elif path == "/api/settings":
                 if settings_form is None:
                     self._text(HTTPStatus.NOT_FOUND, "settings are not kept on this camera")
@@ -462,10 +572,11 @@ class WebServer:
         auth: LocalAuth | None = None,
         time_trusted: Callable[[], bool] = lambda: True,
         settings_form: SettingsForm | None = None,
+        archive: LocalArchive | None = None,
     ) -> None:
         net = ipaddress.ip_network(setup_net) if setup_net else _SETUP_NET
         handler = make_handler(
-            live, pairing, setup, net, settings, auth, time_trusted, settings_form
+            live, pairing, setup, net, settings, auth, time_trusted, settings_form, archive
         )
         self._httpd = ThreadingHTTPServer((host, port), handler)
         self._httpd.daemon_threads = True

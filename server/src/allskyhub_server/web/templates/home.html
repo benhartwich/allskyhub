@@ -7,7 +7,7 @@
 </div>
 {% if cameras %}
 <ul class="cams">
-  {% for device, online, problems in cameras %}
+  {% for device, online, problems, role in cameras %}
   <li>
     <a class="card cam" href="/cameras/{{ device.id }}">
       {% if device.latest_image_at %}
@@ -16,7 +16,7 @@
       <div class="sky-ph" aria-hidden="true"></div>
       {% endif %}
       <div class="cam-meta">
-        <strong>{{ device.name }}</strong>
+        <strong>{{ device.name }}{% if role != 'owner' %} <span class="badge">geteilt</span>{% endif %}</strong>
         <span class="badge {{ 'ok' if online else '' }}">{{ 'online' if online else 'offline' }}</span>
       </div>
       <span class="muted">Zuletzt gesehen {{ device.last_seen_at | age }}</span>

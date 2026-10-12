@@ -61,7 +61,7 @@ them most:
 | L9 | ✅ Night products: which ones, timelapse fps/quality, retention | agent | settings `product_keogram/startrails/timelapse`, `timelapse_fps`, `timelapse_quality` (CRF 28/23/19), `keep_days`; the import takes over Allsky's `daystokeep` |
 | L10 | ✅ Public page management (`GET/PUT /device/v1/public`) | agent + hub | read-only (last known state) when the hub is unreachable |
 | L11 | Overlay: on/off and fields (time, exposure, temperature, stars/constellations) | agent | simple version of the Allsky overlay editor |
-| L12 | System: CPU temperature/load, RAM, disk, uptime, camera, hub connection; restart agent, reboot, shut down | agent | Allsky "System"; needs a narrow root path (polkit) like the Wi-Fi country |
+| L12 | ✅ System: CPU temperature/load, RAM, disk, uptime, camera, hub connection; restart agent, reboot, shut down | agent | Allsky "System"; reboot/power-off via logind, allowed to the agent's user by `image/files/etc/polkit-1/rules.d/51-allskyhub-power.rules`; Pi power warnings from `vcgencmd get_throttled` |
 | L13 | Network: Wi-Fi status and change, LAN info | agent | setup-mode code exists; off with `--network none` |
 | L14 | Updates: version, channel, check/install, rollback | agent | updater from #7 |
 | L15 | Logs and support: agent journal, download a support bundle; backup/restore of settings | agent | Allsky "Support" |

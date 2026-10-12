@@ -68,7 +68,7 @@ from allskyhub_agent.update.status import update_status
 from allskyhub_agent.web.archive import LocalArchive
 from allskyhub_agent.web.auth import LocalAuth
 from allskyhub_agent.web.calibration import LocalCalibration
-from allskyhub_agent.web.server import SettingsForm, WebServer
+from allskyhub_agent.web.server import SettingsForm, SystemPage, WebServer
 from allskyhub_protocol import DeviceSettings, FrameInfo, SetSettingsArgs, SettingSpec, Status
 
 log = logging.getLogger(__name__)
@@ -199,6 +199,46 @@ def run_import(args: argparse.Namespace) -> int:
     # SPEC §6.7: the running agent announces these nights to the hub, one per second.
     Backlog(data / BACKLOG_NAME).add(sorted(r.nights), owner)
     return 0
+
+
+def system_facts(data: Path) -> dict[str, Any]:
+    """The local UI's system page (roadmap L12)."""
+    return {
+        "model": system.model(),
+        "os": system.os_name(),
+        "uptime_s": system.uptime_s(),
+        "load": system.load_avg(),
+        "cpus": os.cpu_count(),
+        "cpu_temp_c": system.cpu_temp_c(),
+        "memory": system.memory(),
+        "disk": system.disk(data),
+        "power": system.power_flags(),
+        "time_trusted": system.time_trusted(),
+    }
+
+
+def system_action(action: str, restart: threading.Event) -> str | None:
+    """Roadmap L12. Reboot and shutdown go through logind; the image allows them to the
+    agent's user by polkit (image/files/etc/polkit-1), elsewhere they are refused."""
+    if action == "restart":
+        log.info("restart requested in the local UI")
+        threading.Timer(1.0, restart.set).start()  # let the answer leave first
+        return None
+    verb = {"reboot": "reboot", "shutdown": "poweroff"}[action]
+    try:
+        res = subprocess.run(  # noqa: S603 - fixed arguments
+            ["systemctl", "--no-ask-password", verb],  # noqa: S607 - systemctl from PATH
+            capture_output=True, text=True, timeout=20, check=False,
+        )  # fmt: skip
+    except (OSError, subprocess.SubprocessError):
+        return "Das System hat den Befehl nicht angenommen."
+    if res.returncode != 0:
+        log.warning("%s refused: %s", verb, res.stderr.strip()[-200:])
+        return (
+            "Auf dieser Installation darf die Kamera das System nicht neu starten oder ausschalten."
+        )
+    log.info("%s requested in the local UI", verb)
+    return None
 
 
 def run_update(args: argparse.Namespace) -> int:
@@ -458,6 +498,10 @@ def main(argv: list[str] | None = None) -> int:
             archive=LocalArchive(store, event_store),
             calibration=LocalCalibration(sky_mask, calibration_dir / "orientation.json"),
             public=PublicPage(hub_url, identity) if hub_url and identity is not None else None,
+            system_page=SystemPage(
+                lambda: system_facts(Path(args.data)),
+                lambda action: system_action(action, restart_requested),
+            ),
         )
         web.start()
         print(f"web UI on http://{host}:{web.port}/")

@@ -28,6 +28,8 @@ Routes:
     GET  /api/public          the public page on the hub {enabled, url, profile, online}
                               (SPEC §6.8, roadmap L10); the last known state with
                               online false while the hub is unreachable, else 503
+    GET  /api/system          CPU, memory, disk, power warnings, uptime (roadmap L12)
+    POST /api/system/<action> restart (the agent), reboot, shutdown → 202, or 503 {detail}
     POST /api/public          {enabled?, profile?} → the new state, 422 {detail} with the
                               hub's sentence, 503 while the hub is unreachable
     GET  /local-login         login page (SPEC §7.4)
@@ -125,6 +127,15 @@ class SetupNetworkBody(BaseModel):
 
 
 @dataclass(frozen=True)
+class SystemPage:
+    """The local UI's system page (roadmap L12)."""
+
+    facts: Callable[[], dict[str, Any]]
+    # Starts "restart", "reboot" or "shutdown"; None when under way, else a German reason.
+    action: Callable[[str], str | None]
+
+
+@dataclass(frozen=True)
 class SettingsForm:
     """What the local settings form needs (SPEC §6.9, roadmap L7)."""
 
@@ -138,6 +149,7 @@ def _page(name: str = "index.html") -> bytes:
     return resources.files("allskyhub_agent.web").joinpath(name).read_bytes()
 
 
+_SYSTEM_ACTION = re.compile(r"^/api/system/(restart|reboot|shutdown)$")
 _NIGHT_API = re.compile(r"^/api/nights/(\d{8})/(frames|events|sky)$")
 _FILE = re.compile(r"^/files/(\d{8})/(?:(products|events)/)?([A-Za-z0-9_.-]+)$")
 _TYPES = {".jpg": "image/jpeg", ".mp4": "video/mp4"}
@@ -175,6 +187,7 @@ def make_handler(
     archive: LocalArchive | None = None,
     calibration: LocalCalibration | None = None,
     public: PublicPage | None = None,
+    system_page: SystemPage | None = None,
 ) -> type[BaseHTTPRequestHandler]:
     page = _page()
     login_page = _page("login.html")
@@ -482,6 +495,11 @@ def make_handler(
                 )
             elif path == "/api/public":
                 self._public(None)
+            elif path == "/api/system":
+                if system_page is None:
+                    self._text(HTTPStatus.NOT_FOUND, "not found")
+                    return
+                self._json(HTTPStatus.OK, system_page.facts())
             elif path == "/api/calibration":
                 if calibration is None:
                     self._text(HTTPStatus.NOT_FOUND, "no camera yet")
@@ -544,6 +562,17 @@ def make_handler(
                 self._post_focus()
             elif path in ("/api/calibration/mask", "/api/calibration/relearn"):
                 self._post_calibration(path)
+            elif m := _SYSTEM_ACTION.match(path):
+                if system_page is None:
+                    self._text(HTTPStatus.NOT_FOUND, "not found")
+                    return
+                if self._read_body() is None:
+                    return
+                why = system_page.action(m[1])
+                if why is not None:
+                    self._json(HTTPStatus.SERVICE_UNAVAILABLE, {"detail": why})
+                    return
+                self._json(HTTPStatus.ACCEPTED, {"action": m[1]})
             elif path == "/api/public":
                 raw = self._read_body(_MAX_PUBLIC_BODY)
                 if raw is None:
@@ -689,6 +718,7 @@ class WebServer:
         archive: LocalArchive | None = None,
         calibration: LocalCalibration | None = None,
         public: PublicPage | None = None,
+        system_page: SystemPage | None = None,
     ) -> None:
         net = ipaddress.ip_network(setup_net) if setup_net else _SETUP_NET
         handler = make_handler(
@@ -703,6 +733,7 @@ class WebServer:
             archive,
             calibration,
             public,
+            system_page,
         )
         self._httpd = ThreadingHTTPServer((host, port), handler)
         self._httpd.daemon_threads = True

@@ -670,14 +670,53 @@ async function viewPublic() {
   render(await r.json());
 }
 
-// --- System -------------------------------------------------------------------------
+// --- System (L12) ----------------------------------------------------------------------
+const POWER = { under_voltage: "Unterspannung jetzt", freq_capped: "Takt begrenzt", throttled: "gedrosselt",
+  temp_limit: "Temperaturgrenze erreicht", under_voltage_seen: "Unterspannung seit dem Start",
+  freq_capped_seen: "Takt war begrenzt", throttled_seen: "war gedrosselt", temp_limit_seen: "Temperaturgrenze war erreicht" };
+const fmtBytes = (b) => (b >= 1e9 ? (b / 1e9).toFixed(1) + " GB" : Math.round(b / 1e6) + " MB");
+const fmtUptime = (s) => {
+  const d = Math.floor(s / 86400), h = Math.floor((s % 86400) / 3600), m = Math.floor((s % 3600) / 60);
+  return (d ? `${d} d ` : "") + `${h} h ${m} min`;
+};
+const meter = (used, total) => `<div class="row"><div class="bar"><div style="width:${Math.min(100, 100 * used / total).toFixed(0)}%"></div></div>
+  <span class="small muted">${Math.round(100 * used / total)} %</span></div>`;
+
 async function viewSystem() {
-  page.innerHTML = `<h1>System</h1><section class="card stack"><dl class="facts" id="sys"></dl></section>`;
+  page.innerHTML = `<h1>System</h1>
+    <section class="card stack"><h2>Kamera und Hub</h2><dl class="facts" id="sys"></dl></section>
+    <section class="card stack" id="hw" hidden><h2>Rechner</h2><dl class="facts" id="hwFacts"></dl></section>
+    <section class="card stack" id="actions" hidden><h2>Neu starten</h2>
+      <p class="muted small">Die Aufnahme läuft danach von selbst weiter. Gespeicherte Bilder bleiben erhalten.</p>
+      <div class="actions">
+        <button type="button" class="secondary" data-act="restart">Kamera-Dienst neu starten</button>
+        <button type="button" class="secondary" data-act="reboot">Rechner neu starten</button>
+        <button type="button" class="danger" data-act="shutdown">Ausschalten</button>
+      </div>
+      <p class="msg" id="sysMsg" hidden></p></section>`;
+  const ASK = { restart: "Kamera-Dienst neu starten? Die Seite ist ein paar Sekunden nicht erreichbar.",
+    reboot: "Rechner neu starten? Die Kamera ist etwa eine Minute nicht erreichbar.",
+    shutdown: "Kamera ausschalten? Sie bleibt aus, bis jemand den Strom kurz trennt." };
+  const DONE = { restart: "Der Dienst startet neu …", reboot: "Der Rechner startet neu …",
+    shutdown: "Die Kamera fährt herunter. Warte 20 Sekunden, bevor du den Strom trennst." };
+  for (const b of document.querySelectorAll("[data-act]")) {
+    b.onclick = async () => {
+      const act = b.dataset.act;
+      if (!confirm(ASK[act])) return;
+      const r = await fetch("api/system/" + act, { method: "POST" });
+      if (r.status === 401) { location.href = "local-login"; return; }
+      const data = await r.json().catch(() => ({}));
+      const m = $("sysMsg");
+      m.textContent = r.ok ? DONE[act] : data.detail || "Hat nicht geklappt.";
+      m.className = "msg " + (r.ok ? "ok" : "error");
+      m.hidden = false;
+    };
+  }
   every(async () => {
-    const st = await getJSON("api/status").catch(() => null);
+    const [st, setup, hw] = await Promise.all([getJSON("api/status").catch(() => null),
+      getJSON("api/setup").catch(() => null), getJSON("api/system").catch(() => null)]);
     if (!st) return;
     // Without a hub (e.g. --sim on a laptop) there is no setup API.
-    const setup = await getJSON("api/setup").catch(() => null);
     const hub = setup ? `
       <dt>Gerät</dt><dd><code>${esc(setup.device_id)}</code></dd>
       <dt>Profil</dt><dd>${esc(setup.profile)}</dd>
@@ -689,6 +728,24 @@ async function viewSystem() {
       <dt>Agent</dt><dd>${esc(st.version)}</dd>${hub}
       <dt>Bilder seit Start</dt><dd>${st.frames}</dd>
       ${st.frame && st.frame.sensor_temp_c != null ? `<dt>Sensor</dt><dd>${st.frame.sensor_temp_c.toFixed(1)} °C</dd>` : ""}`;
+    if (!hw) return;
+    $("hw").hidden = false;
+    $("actions").hidden = false;
+    const power = hw.power == null ? "" : hw.power.length
+      ? `<dt>Stromversorgung</dt><dd>${hw.power.map((f) => `<span class="badge">${esc(POWER[f] || f)}</span>`).join(" ")}
+          <p class="muted small">Unterspannung macht Bilder und SD-Karte kaputt: ein Netzteil mit 5,1 V / 3 A nehmen.</p></dd>`
+      : `<dt>Stromversorgung</dt><dd><span class="badge ok">in Ordnung</span></dd>`;
+    $("hwFacts").innerHTML = `
+      ${hw.model ? `<dt>Modell</dt><dd>${esc(hw.model)}</dd>` : ""}
+      ${hw.os ? `<dt>System</dt><dd>${esc(hw.os)}</dd>` : ""}
+      <dt>Läuft seit</dt><dd>${fmtUptime(hw.uptime_s)}</dd>
+      ${hw.cpu_temp_c != null ? `<dt>CPU</dt><dd>${hw.cpu_temp_c.toFixed(1)} °C${hw.load ? ` · Last ${hw.load[0].toFixed(2)} (${hw.cpus || "?"} Kerne)` : ""}</dd>` : ""}
+      ${hw.memory ? `<dt>Arbeitsspeicher</dt><dd>${fmtBytes(hw.memory.total - hw.memory.available)} von ${fmtBytes(hw.memory.total)}
+          ${meter(hw.memory.total - hw.memory.available, hw.memory.total)}</dd>` : ""}
+      ${hw.disk ? `<dt>Speicher</dt><dd>${fmtBytes(hw.disk.free)} frei von ${fmtBytes(hw.disk.total)}
+          ${meter(hw.disk.total - hw.disk.free, hw.disk.total)}</dd>` : ""}
+      ${power}
+      <dt>Uhrzeit</dt><dd>${hw.time_trusted ? '<span class="badge ok">genau</span>' : '<span class="badge">ungenau</span>'}</dd>`;
   }, 5000);
 }
 

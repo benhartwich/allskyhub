@@ -165,7 +165,149 @@ def test_set_settings_args() -> None:
         {"timezone": "Nowhere/Town"},
         {"camera": "nikon"},
         {"day_delay_s": -1},
-        {"unknown": 1},
+        {"unknown": {"not": "a scalar"}},
     ):
         with pytest.raises(ValidationError):
             SetSettingsArgs.model_validate(bad)
+
+
+SCHEMA_JSON = [
+    {"key": "location", "type": "location", "label": "Standort", "group": "Standort"},
+    {"key": "timezone", "type": "string", "label": "Zeitzone", "group": "Standort"},
+    {
+        "key": "night_delay_s",
+        "type": "number",
+        "label": "Pause nachts",
+        "group": "Aufnahme",
+        "unit": "s",
+        "min": 0,
+        "max": 3600,
+    },
+    {
+        "key": "max_gain",
+        "type": "int",
+        "label": "Höchster Gain",
+        "group": "Aufnahme",
+        "min": 0,
+        "max": 600,
+        "step": 1,
+    },
+    {
+        "key": "flip",
+        "type": "choice",
+        "label": "Spiegeln",
+        "group": "Bild",
+        "choices": [{"value": "none", "label": "Nein"}, {"value": "h", "label": "Horizontal"}],
+    },
+    {
+        "key": "overlay",
+        "type": "bool",
+        "label": {"de": "Einblendung", "en": "Overlay"},
+        "group": {"de": "Bild", "en": "Image"},
+        "help": {"de": "Text im Bild"},
+    },
+    {
+        "key": "title",
+        "type": "string",
+        "label": "Titel",
+        "group": "Bild",
+        "max_length": 5,
+        "nullable": True,
+    },
+]
+
+
+def test_settings_schema_in_hello_and_checks() -> None:
+    """SPEC §6.9: one schema, the same checks for hub and device."""
+    from allskyhub_protocol import Hello, SetSettingsArgs, SettingSpec, invalid_settings
+
+    hello = Hello.model_validate(
+        {
+            "device_id": "a" * 26,
+            "profile": "sim",
+            "agent_version": "1",
+            "settings_schema": SCHEMA_JSON,
+        }
+    )
+    schema = hello.settings_schema
+    assert [s.key for s in schema][:2] == ["location", "timezone"]
+    good = {
+        "latitude": 48.1,
+        "longitude": 14.4,
+        "max_gain": 300,
+        "flip": "h",
+        "overlay": True,
+        "title": None,
+    }
+    assert invalid_settings(schema, good) == []
+    assert SetSettingsArgs.model_validate(good).model_extra == {
+        "max_gain": 300,
+        "flip": "h",
+        "overlay": True,
+        "title": None,
+    }
+    bad = {
+        "latitude": 48.1,
+        "max_gain": 2.5,
+        "flip": "v",
+        "overlay": 1,
+        "title": "zu lang",
+        "night_delay_s": 4000,
+        "nope": 1,
+    }
+    assert invalid_settings(schema, bad) == [
+        "flip",
+        "latitude",
+        "max_gain",
+        "night_delay_s",
+        "nope",
+        "overlay",
+        "title",
+    ]
+    assert (
+        Hello.model_validate(
+            {"device_id": "a" * 26, "profile": "p", "agent_version": "1"}
+        ).settings_schema
+        == []
+    )
+    for broken in (
+        {"key": "x", "type": "choice", "label": "X", "group": "G"},
+        {"key": "x", "type": "bool", "label": "X", "group": "G", "min": 1},
+        {"key": "x", "type": "location", "label": "X", "group": "G"},
+        {"key": "X", "type": "bool", "label": "X", "group": "G"},
+    ):
+        with pytest.raises(ValidationError):
+            SettingSpec.model_validate(broken)
+
+
+def test_settings_schema_texts_problems_and_numbers() -> None:
+    """SPEC §6.9: German or German + English texts, unusable schemas, NaN and infinity."""
+    from allskyhub_protocol import Hello, SettingSpec, invalid_settings, localized, schema_problems
+
+    hello = Hello.model_validate(
+        {
+            "device_id": "a" * 26,
+            "profile": "sim",
+            "agent_version": "1",
+            "settings_schema": SCHEMA_JSON,
+        }
+    )
+    overlay = next(s for s in hello.settings_schema if s.key == "overlay")
+    assert localized(overlay.label, "en") == "Overlay"
+    assert localized(overlay.label) == "Einblendung"
+    assert overlay.help is not None
+    assert localized(overlay.help, "en") == "Text im Bild"  # falls back to German
+    assert schema_problems(hello.settings_schema) == []
+    dup = [*hello.settings_schema, hello.settings_schema[1]]
+    lat = SettingSpec.model_validate(
+        {"key": "latitude", "type": "number", "label": "Breite", "group": "Standort"}
+    )
+    assert schema_problems([*dup, lat]) == [
+        "duplicate key timezone",
+        "latitude is part of location",
+    ]
+    for v in (float("nan"), float("inf")):
+        assert invalid_settings(hello.settings_schema, {"night_delay_s": v}) == ["night_delay_s"]
+        assert invalid_settings(hello.settings_schema, {"latitude": v, "longitude": 1.0}) == [
+            "latitude"
+        ]

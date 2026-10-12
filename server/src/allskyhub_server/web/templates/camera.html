@@ -11,6 +11,7 @@
   {% include "_live.html" %}
 </div>
 {% if tonight %}{% include "_tonight.html" %}{% endif %}
+{% if last_night %}{% include "_last_night.html" %}{% endif %}
 {% if events %}
 <section class="card">
   <div class="page-head"><h2>Letzte Ereignisse</h2><a href="/cameras/{{ device.id }}/events">Alle</a></div>

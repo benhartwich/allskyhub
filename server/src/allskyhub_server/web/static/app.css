@@ -250,3 +250,7 @@ button:disabled { opacity: .45; cursor: not-allowed; transform: none; filter: no
 .night-bars .good .bar { background: linear-gradient(180deg, var(--aurora), rgba(79, 227, 176, .35));
                          box-shadow: 0 0 14px -4px rgba(79, 227, 176, .8); }
 .small { font-size: 13px; }
+
+/* "Letzte Nacht" (roadmap C3): the night's best picture. */
+.best-shot { display: grid; gap: 6px; color: var(--text); text-decoration: none; font-size: 14px; }
+.best-shot img { width: 100%; border-radius: 12px; background: #000; box-shadow: 0 0 0 1px var(--line); }

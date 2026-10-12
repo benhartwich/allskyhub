@@ -12,7 +12,7 @@ from pydantic import ValidationError
 from allskyhub_protocol import CloseCode, FrameVariant, SetSettingsArgs
 from allskyhub_server.auth import ratelimit
 from allskyhub_server.auth.sessions import SessionInfo
-from allskyhub_server.devices import events, pairing, public, queries, tonight
+from allskyhub_server.devices import events, night_summary, pairing, public, queries, tonight
 from allskyhub_server.devices import settings as camera_settings
 from allskyhub_server.devices.connections import ConnectionRegistry
 from allskyhub_server.devices.event_text import EVENT_TITLES, orientation_line, update_line
@@ -109,6 +109,7 @@ async def camera(
             "tonight": await tonight.for_device(
                 forecast, device.last_status, dt.datetime.now(dt.UTC)
             ),
+            "last_night": await _last_night(db, device),
             "online": _registry(request).is_online(device.id),
             "events": events.collapse(
                 await events.events(db, device.id, limit=200, hide_false=True)
@@ -122,6 +123,15 @@ async def camera(
         },
         session=session,
     )
+
+
+async def _last_night(db: DbSession, device: Device) -> night_summary.NightSummary | None:
+    """Roadmap C3: the night that ended this morning, if anything is known about it."""
+    settings: dict[str, Any] = (device.last_status or {}).get("settings") or {}
+    zone = tonight.zone_for(settings.get("timezone"))
+    night_id = night_summary.last_night_id(dt.datetime.now(dt.UTC), zone)
+    summary = await night_summary.summarize(db, device.id, night_id)
+    return None if summary.empty else summary
 
 
 @router.get("/cameras/{device_id}/live")

@@ -1,0 +1,12 @@
+{# Roadmap C3: summary of the night that ended this morning. #}
+<div class="card">
+  <div class="cam-meta"><h2>Letzte Nacht</h2><a href="/cameras/{{ device.id }}/nights/{{ last_night.night_id }}">{{ last_night.night_id | night_title }}</a></div>
+  {% if last_night.best %}
+  {% set b = last_night.best %}
+  <a class="best-shot" href="/cameras/{{ device.id }}/events/{{ b.night_id }}/{{ b.event_id }}">
+    <img src="/cameras/{{ device.id }}/events/{{ b.night_id }}/{{ b.event_id }}/image?variant=thumb&v={{ (b.data or {}).get('image_rev', 1) }}" alt="{{ event_titles[b.kind] or b.kind }}">
+    <span>{{ event_titles[b.kind] or b.kind }} · {{ b.start | clock }}</span>
+  </a>
+  {% endif %}
+  <p>{{ last_night.line() }}</p>
+</div>

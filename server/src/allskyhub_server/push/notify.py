@@ -1,4 +1,5 @@
-"""When to notify whom (roadmap #6): new detections and cameras that went offline.
+"""When to notify whom (roadmap #6, C2, C3): new detections, cameras that went offline,
+aurora while the camera's sky is clear, and the morning summary of a night.
 
 Off unless ``fcm_service_account_file`` is set, and per user only what they switched on.
 """
@@ -8,11 +9,12 @@ from __future__ import annotations
 import asyncio
 import datetime as dt
 import logging
-from typing import Protocol
+from typing import Any, Protocol, cast
 
 from sqlalchemy import delete, select, update
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
+from allskyhub_server.devices import astro, night_summary, space_weather, tonight
 from allskyhub_server.devices.connections import ConnectionRegistry
 from allskyhub_server.devices.event_text import EVENT_TITLES
 from allskyhub_server.devices.events import storm_key
@@ -25,6 +27,13 @@ log = logging.getLogger(__name__)
 EVENT_QUIET = dt.timedelta(minutes=10)
 OFFLINE_AFTER = dt.timedelta(minutes=30)
 OFFLINE_CHECK = dt.timedelta(minutes=5)
+# Roadmap C2: at most one aurora alarm per camera in this time; the sky measurement must
+# be this fresh (status repeats the last one, SPEC §6.3).
+AURORA_QUIET = dt.timedelta(hours=6)
+SKY_FRESH = dt.timedelta(minutes=20)
+CLEAR_BELOW = 0.3
+# Roadmap C3: the summary goes out this long after sunrise, and not after local noon.
+SUMMARY_AFTER_SUNRISE = dt.timedelta(minutes=30)
 
 
 class PushSender(Protocol):
@@ -137,12 +146,113 @@ class Notifier:
                     ),
                 )
 
+    async def aurora(self, device_id: str, kp: space_weather.KpCache) -> None:
+        """Roadmap C2, after a status with a sky measurement: Kp at or above the rule of
+        thumb for the camera's latitude while its own sky is clear and dark."""
+        if self._sender is None:
+            return
+        now = _now()
+        try:
+            async with self._maker() as db:
+                row = (
+                    await db.execute(
+                        select(Device, User)
+                        .join(User, User.id == Device.owner_id)
+                        .where(Device.id == device_id, User.notify_aurora.is_(True))
+                    )
+                ).one_or_none()
+                if row is None:
+                    return
+                device, user = row
+                status: dict[str, Any] = device.last_status or {}
+                sky = cast(dict[str, Any], status.get("sky") or {})
+                settings = cast(dict[str, Any], status.get("settings") or {})
+                cloud, lat = sky.get("cloud_cover"), settings.get("latitude")
+                if not isinstance(cloud, int | float) or cloud >= CLEAR_BELOW:
+                    return
+                if not isinstance(lat, int | float):
+                    return
+                try:
+                    measured = dt.datetime.fromisoformat(str(sky.get("at")))
+                except ValueError:
+                    return
+                if now - measured > SKY_FRESH or (device.last_frame or {}).get("mode") != "night":
+                    return
+                if device.aurora_notified_at and now - device.aurora_notified_at < AURORA_QUIET:
+                    return
+                forecast = await kp.get()
+                need = space_weather.needed_kp(float(lat))
+                if forecast is None or forecast.now is None or forecast.now < need:
+                    return
+                device.aurora_notified_at = now
+                await db.commit()
+                kp_text = f"{forecast.now:.1f}".replace(".", ",")
+                await self._deliver(
+                    db,
+                    user.id,
+                    Message(
+                        title=f"Polarlicht möglich über {device.name}",
+                        body=f"Kp {kp_text} (hier ab etwa {need:.0f}) und der Himmel ist klar.",
+                        data={"camera": device.id},
+                    ),
+                )
+        except Exception:
+            log.exception("push: aurora alarm failed")
+
+    async def check_morning(self, now: dt.datetime | None = None) -> None:
+        """Roadmap C3, one pass: send each camera's summary of the night once, in the
+        morning after sunrise at the camera."""
+        if self._sender is None:
+            return
+        now = now or _now()
+        async with self._maker() as db:
+            rows = (
+                await db.execute(
+                    select(Device, User)
+                    .join(User, User.id == Device.owner_id)
+                    .where(User.notify_summary.is_(True))
+                )
+            ).all()
+            for device, user in rows:
+                settings = cast(dict[str, Any], (device.last_status or {}).get("settings") or {})
+                lat, lon = settings.get("latitude"), settings.get("longitude")
+                if not isinstance(lat, int | float) or not isinstance(lon, int | float):
+                    continue
+                zone = tonight.zone_for(settings.get("timezone"))
+                night_id = night_summary.last_night_id(now, zone)
+                if device.summary_night == night_id:
+                    continue
+                evening = dt.datetime.strptime(night_id, "%Y%m%d").replace(hour=12, tzinfo=zone)
+                sunrise = astro.night_after(evening.astimezone(dt.UTC), lat, lon).sunrise
+                local = now.astimezone(zone)
+                if sunrise is None or now < sunrise + SUMMARY_AFTER_SUNRISE:
+                    continue
+                device.summary_night = night_id
+                await db.commit()
+                if local.hour >= 12:
+                    continue  # too late to be news (hub was down in the morning)
+                summary = await night_summary.summarize(db, device.id, night_id)
+                if summary.empty:
+                    continue
+                data = {"camera": device.id, "night": night_id}
+                if summary.best is not None:
+                    data["event"] = summary.best.event_id
+                await self._deliver(
+                    db,
+                    user.id,
+                    Message(title=f"Die Nacht über {device.name}", body=summary.line(), data=data),
+                )
+
     async def run_offline_checks(self, registry: ConnectionRegistry) -> None:
         while True:
             try:
                 await self.check_offline(registry)
             except Exception:
                 log.exception("push: offline check failed")
+            try:
+                await self.check_morning()
+            except Exception:
+                log.exception("push: morning summary failed")
             await asyncio.sleep(OFFLINE_CHECK.total_seconds())
 
 

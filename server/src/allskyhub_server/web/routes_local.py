@@ -22,6 +22,15 @@ from allskyhub_server.web.render import render
 router = APIRouter(dependencies=[Depends(csrf_protect)])
 
 _NONCE = re.compile(r"^[A-Za-z0-9_-]{16,128}$")
+# The usual policy (app.py), with the camera's origin as a form-action target.
+CONFIRM_CSP = (
+    "default-src 'self'; img-src 'self' data:; style-src 'self'; script-src 'self'; "
+    "frame-ancestors 'none'; base-uri 'self'; form-action 'self' {origin}"
+)
+# Only plain origins go into the CSP header (no spaces, quotes or semicolons).
+_CSP_ORIGIN = re.compile(
+    r"^https?://[A-Za-z0-9.\-]+(?::\d{1,5})?$|^https?://\[[0-9a-fA-F:.]+\](?::\d{1,5})?$"
+)
 _tasks: set[asyncio.Task[Any]] = set()
 
 
@@ -76,12 +85,18 @@ async def local_login_ask(
     device = await _own(db, session, device_id)
     return_ = request.query_params.get("return", "")
     base = _check(return_, nonce)
-    return render(
+    origin = _origin(base)
+    response = render(
         request,
         "local_login.html",
-        {"device": device, "base": base, "origin": _origin(base), "nonce": nonce},
+        {"device": device, "base": base, "origin": origin, "nonce": nonce},
         session=session,
     )
+    # The form posts here and is redirected to the camera; browsers check that redirect
+    # against form-action, so this one page also allows the camera's origin.
+    if _CSP_ORIGIN.fullmatch(origin):
+        response.headers["content-security-policy"] = CONFIRM_CSP.format(origin=origin)
+    return response
 
 
 @router.post("/cameras/{device_id}/local-login")

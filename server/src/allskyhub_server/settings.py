@@ -68,6 +68,11 @@ class Settings(BaseSettings):
     def image_dir(self) -> Path:
         return self.data_dir / "images"
 
+    @property
+    def key_dir(self) -> Path:
+        """The hub's Ed25519 keys for local logins (SPEC §6.2 step 6, §7.4)."""
+        return self.data_dir / "keys"
+
 
 @lru_cache(maxsize=1)
 def get_settings() -> Settings:

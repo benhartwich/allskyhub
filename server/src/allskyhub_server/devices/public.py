@@ -14,10 +14,11 @@ import datetime as dt
 import secrets
 from typing import Any
 
-from pydantic import BaseModel, ConfigDict, Field, ValidationError
+from pydantic import ValidationError
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from allskyhub_protocol import PublicProfile, PublicSections, PublicState
 from allskyhub_server.models import Device, EventRecord, Frame, Product
 
 # Products shown publicly: small images only (no timelapse download for anonymous visitors).
@@ -30,41 +31,53 @@ LOOP_WINDOW = dt.timedelta(hours=1)
 LOOP_MAX_FRAMES = 90
 
 
-class PublicSections(BaseModel):
-    """Which parts of the public page are shown."""
-
-    model_config = ConfigDict(extra="forbid")
-
-    live: bool = True
-    loop: bool = True
-    archive: bool = True
-    events: bool = True
-    sky: bool = True
-    aurora: bool = True
-
-
-class PublicProfile(BaseModel):
-    """What the owner writes about the camera; empty strings are not shown."""
-
-    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
-
-    title: str = Field(default="", max_length=100)
-    location_label: str = Field(default="", max_length=200)
-    show_coordinates: bool = False
-    camera: str = Field(default="", max_length=200)
-    lens: str = Field(default="", max_length=200)
-    computer: str = Field(default="", max_length=200)
-    owner: str = Field(default="", max_length=200)
-    notes: str = Field(default="", max_length=2000)
-    sections: PublicSections = Field(default_factory=PublicSections)
-
-
 def profile(device: Device) -> PublicProfile:
     """The stored profile, or the defaults when none (or an outdated one) is stored."""
     try:
         return PublicProfile.model_validate(device.public_profile or {})
     except ValidationError:
         return PublicProfile()
+
+
+__all__ = ["PublicProfile", "PublicSections"]
+
+# German names of the profile fields for 422 answers (SPEC §6.8).
+FIELD_NAMES = {
+    "title": "Titel",
+    "location_label": "Ort",
+    "show_coordinates": "Koordinaten zeigen",
+    "camera": "Kamera",
+    "lens": "Objektiv",
+    "computer": "Rechner",
+    "owner": "Betrieben von",
+    "notes": "Notizen",
+    "sections": "Abschnitte",
+    "enabled": "Öffentliche Seite",
+}
+
+
+def describe_error(exc: ValidationError) -> str:
+    """One German sentence for the local UI, which shows it as it is (SPEC §6.8)."""
+    parts: list[str] = []
+    for err in exc.errors():
+        loc = [str(x) for x in err["loc"] if str(x) not in ("profile", "body")]
+        name = FIELD_NAMES.get(loc[0], loc[0]) if loc else "Eingabe"
+        if len(loc) > 1 and loc[0] == "sections":
+            name = f"Abschnitt {loc[1]}"
+        kind = err["type"]
+        if kind == "string_too_long":
+            limit = (err.get("ctx") or {}).get("max_length")
+            parts.append(f"{name} ist zu lang (höchstens {limit} Zeichen)")
+        elif kind == "extra_forbidden":
+            parts.append(f"{name} gibt es nicht")
+        else:
+            parts.append(f"{name} ist ungültig")
+    return "; ".join(dict.fromkeys(parts)) + "."
+
+
+def state(device: Device, base_url: str) -> PublicState:
+    url = f"{base_url.rstrip('/')}/sky/{device.public_slug}" if device.public_slug else None
+    return PublicState(enabled=device.public_slug is not None, url=url, profile=profile(device))
 
 
 def title(device: Device) -> str:

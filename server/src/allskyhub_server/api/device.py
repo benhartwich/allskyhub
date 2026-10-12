@@ -34,6 +34,8 @@ from allskyhub_protocol import (
     Hello,
     ProductKind,
     Products,
+    PublicState,
+    PublicUpdate,
     RegisterRequest,
     RegisterResponse,
     SkyMetrics,
@@ -44,7 +46,8 @@ from allskyhub_protocol import (
 )
 from allskyhub_server.auth import ratelimit
 from allskyhub_server.auth.accounts import DEFAULT_EVENT_KEEP_DAYS
-from allskyhub_server.devices import pairing
+from allskyhub_server.auth.hub_keys import HubKeys
+from allskyhub_server.devices import local_access, pairing, public
 from allskyhub_server.devices.connections import Connection, ConnectionRegistry
 from allskyhub_server.devices.events import image_rev
 from allskyhub_server.devices.images import JPEG_MAGIC, ImageStore
@@ -131,7 +134,41 @@ async def token(
         await db.commit()
         raise HTTPException(403, str(exc)) from None
     await db.commit()
-    return TokenResponse(access_token=issued.token, expires_in=issued.expires_in)
+    keys: HubKeys = request.app.state.hub_keys
+    return TokenResponse(
+        access_token=issued.token, expires_in=issued.expires_in, hub_keys=keys.public()
+    )
+
+
+@router.get("/public")
+async def public_get(request: Request, db: DbSession, settings: SettingsDep) -> PublicState:
+    """SPEC §6.8: the camera's public page, for its local UI."""
+    info = await _device_from_bearer(request, db)
+    device = await db.get(Device, info.device_id)
+    if device is None:
+        raise HTTPException(401, "Invalid token")
+    return public.state(device, settings.base_url)
+
+
+@router.put("/public")
+async def public_put(request: Request, db: DbSession, settings: SettingsDep) -> PublicState:
+    """SPEC §6.8: switch the page and/or replace the profile; 422 with a German sentence."""
+    info = await _device_from_bearer(request, db)
+    device = await db.get(Device, info.device_id)
+    if device is None:
+        raise HTTPException(401, "Invalid token")
+    try:
+        body = PublicUpdate.model_validate_json(await request.body())
+    except ValidationError as exc:
+        raise HTTPException(422, public.describe_error(exc)) from None
+    if body.profile is not None:
+        device.public_profile = body.profile.model_dump()
+    if body.enabled is True:
+        public.enable(device)
+    elif body.enabled is False:
+        public.disable(device)
+    await db.commit()
+    return public.state(device, settings.base_url)
 
 
 def _bearer(headers: Any) -> str | None:
@@ -386,6 +423,9 @@ async def _handle(
             await conn.close(CloseCode.REAUTH)
             return
         await _touch(maker, conn.device_id, profile=body.profile, agent_version=body.agent_version)
+        # SPEC §6.5 local_access: resend an unacknowledged verifier after every hello. In a
+        # task: the reply arrives on this very connection.
+        _background(local_access.deliver(maker, registry, conn.device_id))
     elif isinstance(body, Status):
         await _touch(maker, conn.device_id, last_status=body.model_dump(mode="json"))
         if body.sky is not None:
@@ -582,10 +622,10 @@ async def _on_event(
         await registry.request_event(conn.device_id, body.night_id, body.id, FrameVariant.FULL)
 
 
-_tasks: set[asyncio.Task[None]] = set()
+_tasks: set[asyncio.Task[Any]] = set()
 
 
-def _background(coro: Coroutine[Any, Any, None]) -> None:
+def _background(coro: Coroutine[Any, Any, Any]) -> None:
     """Fire and forget, keeping a reference until done (asyncio drops unreferenced tasks)."""
     task = asyncio.create_task(coro)
     _tasks.add(task)

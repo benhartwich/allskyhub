@@ -226,6 +226,10 @@ async def unpair(db: AsyncSession, device: Device) -> None:
     device.last_frame = None
     device.last_status = None
     device.public_slug = None  # a new owner decides again
+    # SPEC §7.4: the camera drops its local access itself when it learns it is unpaired.
+    device.local_access_verifier = None
+    device.local_access_pending = False
+    device.local_access_set_at = None
     await db.flush()
 
 

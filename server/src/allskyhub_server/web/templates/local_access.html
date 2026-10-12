@@ -1,0 +1,13 @@
+{% extends "base.html" %}
+{% block title %}Offline-Code · {{ device.name }}{% endblock %}
+{% block content %}
+<a class="back" href="/cameras/{{ device.id }}">← {{ device.name }}</a>
+<h1>Offline-Code</h1>
+<div class="card stack">
+  <p>Mit diesem Code meldest du dich an der lokalen Seite der Kamera an, wenn der Hub nicht erreichbar ist:</p>
+  <p class="code">{{ code }}</p>
+  <p class="warn">Er wird nur jetzt angezeigt. Schreib ihn dir auf; ein neuer Code ersetzt ihn.</p>
+  <p class="muted">{% if online %}Die Kamera bekommt ihn sofort.{% else %}Die Kamera ist offline und bekommt ihn, sobald sie sich wieder verbindet.{% endif %} Er hat nichts mit deinem Passwort zu tun.</p>
+  <p><a class="button" href="/cameras/{{ device.id }}">Fertig</a></p>
+</div>
+{% endblock %}

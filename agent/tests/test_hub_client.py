@@ -671,3 +671,49 @@ def test_unknown_command_is_answered_unsupported(tmp_path: Path) -> None:
 
     asyncio.run(scenario())
     assert [(r.ref, r.code) for r in replies] == [("cmd-1", "unsupported")]
+
+
+def test_imported_nights_are_announced_once(tmp_path: Path) -> None:
+    """SPEC §6.7: an imported night's products and events go out, then it leaves the backlog."""
+    from allskyhub_agent.detect.events import EventStore
+    from allskyhub_agent.importer.backlog import Backlog
+    from allskyhub_agent.products.build import night_products
+
+    store, _, _ = _store_with_frame(tmp_path)
+    old = "20260901"
+    store.night_dir(old).mkdir(parents=True)
+    (store.night_dir(old) / "keogram.jpg").write_bytes(b"\xff\xd8\xff")
+    events = EventStore(store)
+    start = datetime(2026, 9, 1, 22, 0, tzinfo=UTC)
+    events.import_event(EventKind.METEOR, old, start, start, 0.7, {"frames": 1}, None)
+    backlog = Backlog(tmp_path / "hub_backlog.json")
+    backlog.add([old])
+    identity = DeviceIdentity.load_or_create(tmp_path / "device.key")
+    hub = FakeHub(register_unpaired=0, close_code=1000)
+
+    async def scenario() -> None:
+        async with serve(hub.ws_handler, "127.0.0.1", 0) as server:
+            port = server.sockets[0].getsockname()[1]
+            cfg = HubConfig(hub_url=f"http://127.0.0.1:{port}")
+            pairing = PairingState(identity.device_id, cfg.hub_url, "sim", "0.1.0")
+            async with httpx.AsyncClient(
+                transport=httpx.MockTransport(hub.handle), base_url=cfg.hub_url
+            ) as http:
+                session = HubSession(
+                    cfg, identity, pairing, store, LiveState(), "sim", "0.1.0", lambda: None,
+                    http, backlog=backlog, night_products=lambda n: night_products(store, n),
+                    night_events=events.night_events,
+                )  # fmt: skip
+                stop = asyncio.Event()
+                task = asyncio.create_task(session.run(stop))
+                await asyncio.wait_for(hub.done.wait(), 10)
+                stop.set()
+                await asyncio.wait_for(task, 10)
+
+    asyncio.run(scenario())
+    bodies = [e.body for e in hub.received]
+    products = [b for b in bodies if isinstance(b, Products)]
+    assert [p.night_id for p in products] == [old]
+    sent = [b for b in bodies if isinstance(b, Event)]
+    assert [(e.night_id, e.imported) for e in sent] == [(old, True)]
+    assert backlog.next() is None

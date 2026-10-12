@@ -39,6 +39,8 @@ from allskyhub_agent.detect.sky import SkyConfig, SkyMeter
 from allskyhub_agent.discovery import Announcer
 from allskyhub_agent.hub.identity import DEFAULT_KEY_PATH, DeviceIdentity
 from allskyhub_agent.hub.pairing import PairingState
+from allskyhub_agent.importer.allsky import AllskyImporter, AllskySettings
+from allskyhub_agent.importer.backlog import BACKLOG_NAME, Backlog
 from allskyhub_agent.live import LiveState
 from allskyhub_agent.process.hotpixels import HotPixels
 from allskyhub_agent.process.skymask import SkyMask
@@ -87,6 +89,15 @@ def _parser() -> argparse.ArgumentParser:
     prod = sub.add_parser("products", help="build a night's keogram, startrails, timelapse")
     prod.add_argument("--data", type=Path, required=True, help="data directory")
     prod.add_argument("--night", required=True, help="night id, YYYYMMDD")
+    imp = sub.add_parser(
+        "import-allsky", help="take over the pictures of an existing Allsky (roadmap L18)"
+    )
+    imp.add_argument("--from", dest="source", type=Path, required=True, help="Allsky's folder")
+    imp.add_argument("--data", type=Path, required=True, help="the agent's data directory")
+    imp.add_argument("--settings", type=Path, default=None, help="the agent's settings file")
+    imp.add_argument("--nights", default=None, help="only these Allsky folders, YYYYMMDD,...")
+    imp.add_argument("--dry-run", action="store_true", help="only show what would come over")
+    imp.add_argument("--copy", action="store_true", help="copy instead of hard links")
     upd = sub.add_parser("update", help="install a newer signed agent release (root, SPEC §8)")
     upd.add_argument("--manifest-url", default=os.environ.get("ALLSKYHUB_UPDATE_MANIFEST_URL",
                                                               DEFAULT_MANIFEST_URL))  # fmt: skip
@@ -128,6 +139,47 @@ def _parser() -> argparse.ArgumentParser:
 DEFAULT_MANIFEST_URL = (
     "https://github.com/benhartwich/allskyhub/releases/download/channel-stable/manifest.json"
 )
+
+
+def run_import(args: argparse.Namespace) -> int:
+    """Roadmap L18: Allsky's nights, products and meteors into the agent's storage."""
+    logging.basicConfig(level=logging.WARNING, format="%(levelname)s %(name)s: %(message)s")
+    current = AgentSettings.load(args.settings) if args.settings else AgentSettings()
+    tz = ZoneInfo(args.tz or current.timezone)
+    data: Path = args.data
+    st = data.stat()
+    owner = (st.st_uid, st.st_gid)
+    store = ImageStore(data, tz)
+    allsky = AllskySettings.load(args.source)
+    camera = current.camera if current.camera != "auto" else None
+    profile = args.profile or camera or allsky.camera or "zwo-asi678mc"
+    importer = AllskyImporter(
+        args.source, store, EventStore(store), tz, profile, copy=args.copy, owner=owner
+    )
+    print(f"Allsky in {args.source}: {allsky.location or 'no place'}, {allsky.camera_name}, "
+          f"{allsky.latitude}, {allsky.longitude}")  # fmt: skip
+    only = set(args.nights.split(",")) if args.nights else None
+    if not importer.folders(only):
+        print("no Allsky night folders found")
+        return 1
+    r = importer.run(only, dry=args.dry_run)
+    verb = "would take over" if args.dry_run else "took over"
+    print(
+        f"{verb}: {r.images} images ({r.images_skipped} already there), {r.products} products, "
+        f"{r.meteors} meteors, {len(r.nights)} nights, {r.bytes / 1e9:.1f} GB"
+        + ("" if args.dry_run else f"; {r.linked} hard links, {r.copied} copies")
+    )
+    if args.dry_run:
+        return 0
+    if args.settings and not current.has_location and allsky.latitude is not None:
+        new = current.with_updates(
+            latitude=allsky.latitude, longitude=allsky.longitude, camera=allsky.camera
+        )
+        new.save(args.settings)
+        print(f"location {allsky.latitude}, {allsky.longitude} saved in {args.settings}")
+    # SPEC §6.7: the running agent announces these nights to the hub, one per second.
+    Backlog(data / BACKLOG_NAME).add(sorted(r.nights), owner)
+    return 0
 
 
 def run_update(args: argparse.Namespace) -> int:
@@ -192,6 +244,8 @@ def main(argv: list[str] | None = None) -> int:
             print("no camera found")
         return 0 if found else 1
 
+    if args.cmd == "import-allsky":
+        return run_import(args)
     tz = ZoneInfo(args.tz or "UTC")
     if args.cmd == "update":
         return run_update(args)
@@ -341,6 +395,8 @@ def main(argv: list[str] | None = None) -> int:
             on_set_settings=set_settings if settings_path else None,
             local_access=local_auth,
             settings_schema=current_schema if settings_path else None,
+            backlog=Backlog(args.data / BACKLOG_NAME),
+            night_events=event_store.night_events,
         )
         hub.start(hub_url)
         print(f"device {identity.device_id}, hub {hub_url}")

@@ -28,6 +28,7 @@ from websockets.exceptions import ConnectionClosed, InvalidStatus, WebSocketExce
 from allskyhub_agent.hub.backoff import Backoff
 from allskyhub_agent.hub.identity import DeviceIdentity
 from allskyhub_agent.hub.pairing import PairingState
+from allskyhub_agent.importer.backlog import Backlog
 from allskyhub_agent.live import LiveState
 from allskyhub_agent.products.build import product_path
 from allskyhub_agent.runner import FOCUS_FRAME_NAME
@@ -80,6 +81,8 @@ class HubConfig:
     hub_url: str = "https://allskyhub.org"
     register_interval_s: float = 5.0
     status_interval_s: float = 60.0
+    # Imported nights are announced one per interval (SPEC §6.7).
+    backlog_interval_s: float = 1.0
     replaced_wait_s: float = 300.0
     http_timeout_s: float = 30.0
 
@@ -168,8 +171,14 @@ class HubSession:
         on_set_settings: Callable[[SetSettingsArgs], list[str] | None] | None = None,
         local_access: LocalAccess | None = None,
         settings_schema: Callable[[], list[SettingSpec]] | None = None,
+        backlog: Backlog | None = None,
+        night_products: Callable[[str], Products | None] | None = None,
+        night_events: Callable[[str], list[Event]] | None = None,
     ) -> None:
         self._cfg = cfg
+        self._backlog = backlog
+        self._night_products = night_products
+        self._night_events = night_events
         self._settings_schema = settings_schema
         self._local_access = local_access
         self._id = identity
@@ -354,8 +363,12 @@ class HubSession:
         if q is None:
             return
         next_status = 0.0
+        next_backlog = 0.0
         while True:
             now = self._monotonic()
+            if self._backlog is not None and now >= next_backlog:
+                next_backlog = now + self._cfg.backlog_interval_s
+                await self._announce_old_night(ws)
             products, self._products = self._products, None
             if products is not None:
                 await self._send(ws, products)
@@ -372,6 +385,23 @@ class HubSession:
             except TimeoutError:
                 continue
             await self._send(ws, frame)
+
+    async def _announce_old_night(self, ws: WebSocketLike) -> None:
+        """SPEC §6.7: one imported night per call, its products and events; the hub asks
+        for the files it wants. Kept across reconnects until every night is through."""
+        if self._backlog is None:
+            return
+        night = await asyncio.to_thread(self._backlog.next)
+        if night is None:
+            return
+        if self._night_products is not None:
+            products = await asyncio.to_thread(self._night_products, night)
+            if products is not None:
+                await self._send(ws, products)
+        if self._night_events is not None:
+            for event in await asyncio.to_thread(self._night_events, night):
+                await self._send(ws, event)
+        await asyncio.to_thread(self._backlog.done, night)
 
     async def _reader(self, ws: WebSocketLike, token: str) -> None:
         async for raw in ws:

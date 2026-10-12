@@ -351,6 +351,8 @@ class Event(_Body):
     end: AwareDatetime
     confidence: float = Field(ge=0, le=1)
     has_image: bool = False
+    # SPEC §6.4: taken over from another program's records (roadmap L18), never a push.
+    imported: bool = False
     data: dict[str, float | int | str | bool | None] = Field(
         default_factory=dict[str, float | int | str | bool | None]
     )

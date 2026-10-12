@@ -11,7 +11,7 @@ import queue
 import threading
 from collections.abc import Callable
 from dataclasses import dataclass
-from datetime import UTC, timedelta
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
@@ -280,6 +280,44 @@ class EventStore:
                     "image_rev": ep.image_rev,
                     **self._position(ep.best_frame, x, y),
                 },
+            )
+            self._append(event)
+        return event
+
+    def import_event(
+        self,
+        kind: EventKind,
+        night: str,
+        start: datetime,
+        end: datetime,
+        confidence: float,
+        data: dict[str, float | int | str | bool | None],
+        picture: Path | None,
+    ) -> Event | None:
+        """An event from another program's records (roadmap L18); None if an event of this
+        kind already starts at that second, so a second import adds nothing."""
+        with self._lock:
+            eid = event_id(kind, start)
+            if eid in {e.id for e in self.night_events(night)}:
+                return None
+            has_image = False
+            if picture is not None:
+                try:
+                    with PILImage.open(picture) as im:
+                        self._write_pictures(im.convert("RGB"), night, eid)
+                    has_image = True
+                except OSError:
+                    log.warning("%s: picture %s unreadable", eid, picture)
+            event = Event(
+                id=eid,
+                night_id=night,
+                kind=kind,
+                start=start,
+                end=end,
+                confidence=confidence,
+                has_image=has_image,
+                imported=True,
+                data=data,
             )
             self._append(event)
         return event

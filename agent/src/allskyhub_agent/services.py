@@ -14,8 +14,9 @@ from allskyhub_agent.discovery import Announcer
 from allskyhub_agent.hub.client import EventSource, HubClient, HubConfig, HubSession, LocalAccess
 from allskyhub_agent.hub.identity import DeviceIdentity
 from allskyhub_agent.hub.pairing import PairingState
+from allskyhub_agent.importer.backlog import Backlog
 from allskyhub_agent.live import LiveState
-from allskyhub_agent.products.build import newest_products
+from allskyhub_agent.products.build import newest_products, night_products
 from allskyhub_agent.settings import AgentSettings
 from allskyhub_agent.store.images import ImageStore
 from allskyhub_protocol import Event, FrameInfo, Products, SetSettingsArgs, SettingSpec, Status
@@ -39,8 +40,12 @@ class HubManager:
         on_set_settings: Callable[[SetSettingsArgs], list[str] | None] | None = None,
         local_access: LocalAccess | None = None,
         settings_schema: Callable[[], list[SettingSpec]] | None = None,
+        backlog: Backlog | None = None,
+        night_events: Callable[[str], list[Event]] | None = None,
     ) -> None:
+        self._night_events = night_events
         self._identity = identity
+        self._backlog = backlog
         self._local_access = local_access
         self._settings_schema = settings_schema
         self._pairing = pairing
@@ -73,6 +78,9 @@ class HubManager:
                 on_set_settings=self._on_set_settings,
                 local_access=self._local_access,
                 settings_schema=self._settings_schema,
+                backlog=self._backlog,
+                night_products=lambda night: night_products(self._store, night),
+                night_events=self._night_events,
             )
 
         client = HubClient(make_session, cfg)

@@ -12,6 +12,8 @@ Routes:
     GET  /api/wifi/networks   visible Wi-Fi networks (setup mode only, SPEC §7.1)
     POST /api/setup/network   join a Wi-Fi network (setup mode only, SPEC §7.1)
     POST /api/focus           body "on" | "off" | "reset"
+    GET  /api/settings        {schema, values} for the settings form (SPEC §6.9)
+    POST /api/settings        partial JSON object → 202, or 400 {detail, fields}
     GET  /local-login         login page (SPEC §7.4)
     GET  /local-login/start   single sign-on: nonce cookie, redirect to the hub
     GET  /local-login/callback   page that posts the assertion from the fragment
@@ -29,12 +31,13 @@ import ipaddress
 import json
 import threading
 import time
-from collections.abc import Callable
-from dataclasses import asdict
+from collections.abc import Callable, Mapping
+from dataclasses import asdict, dataclass
 from http import HTTPStatus
 from http.cookies import CookieError, SimpleCookie
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from importlib import resources
+from typing import Any, cast
 from urllib.parse import parse_qs, urlencode
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_validator
@@ -51,6 +54,7 @@ from allskyhub_agent.web.auth import (
     SESSION_TTL_S,
     LocalAuth,
 )
+from allskyhub_protocol import SettingSpec
 
 _MAX_BODY = 4096
 _SETUP_NET = ipaddress.ip_network(f"{SETUP_ADDRESS}/24", strict=False)
@@ -95,6 +99,16 @@ class SetupNetworkBody(BaseModel):
         return v
 
 
+@dataclass(frozen=True)
+class SettingsForm:
+    """What the local settings form needs (SPEC §6.9, roadmap L7)."""
+
+    schema: Callable[[], list[SettingSpec]]
+    values: Callable[[], dict[str, Any]]
+    # Checks and stores a partial update; returns the invalid keys (nothing stored then).
+    change: Callable[[Mapping[str, Any], str], list[str]]
+
+
 def _page(name: str = "index.html") -> bytes:
     return resources.files("allskyhub_agent.web").joinpath(name).read_bytes()
 
@@ -118,6 +132,7 @@ def make_handler(
     settings: Callable[[], AgentSettings] | None = None,
     auth: LocalAuth | None = None,
     time_trusted: Callable[[], bool] = lambda: True,
+    settings_form: SettingsForm | None = None,
 ) -> type[BaseHTTPRequestHandler]:
     page = _page()
     login_page = _page("login.html")
@@ -298,6 +313,20 @@ def make_handler(
                 self._send(HTTPStatus.OK, callback_page, "text/html; charset=utf-8")
             elif path == "/":
                 self._send(HTTPStatus.OK, page, "text/html; charset=utf-8")
+            elif path == "/api/settings":
+                if settings_form is None:
+                    self._text(HTTPStatus.NOT_FOUND, "settings are not kept on this camera")
+                    return
+                self._json(
+                    HTTPStatus.OK,
+                    {
+                        "schema": [
+                            s.model_dump(mode="json", exclude_none=True)
+                            for s in settings_form.schema()
+                        ],
+                        "values": settings_form.values(),
+                    },
+                )
             elif path == "/api/status":
                 self._json(HTTPStatus.OK, live.status())
             elif path == "/api/setup":
@@ -339,12 +368,35 @@ def make_handler(
                 self._login_code()
             elif path == "/local-login/logout":
                 self._logout()
+            elif path == "/api/settings":
+                self._post_settings()
             elif path == "/api/focus":
                 self._post_focus()
             elif path == "/api/setup/network":
                 self._post_network()
             else:
                 self._text(HTTPStatus.NOT_FOUND, "not found")
+
+        def _post_settings(self) -> None:
+            if settings_form is None:
+                self._text(HTTPStatus.NOT_FOUND, "settings are not kept on this camera")
+                return
+            raw = self._read_body()
+            if raw is None:
+                return
+            try:
+                body: object = json.loads(raw)
+            except ValueError:
+                body = None
+            if not isinstance(body, dict) or not body:
+                self._json(HTTPStatus.BAD_REQUEST, {"detail": "invalid", "fields": ["args"]})
+                return
+            bad = settings_form.change(cast(dict[str, Any], body), "the local UI")
+            if bad:
+                self._json(HTTPStatus.BAD_REQUEST, {"detail": "invalid", "fields": bad})
+                return
+            # SPEC §6.5: stored; the capture restarts with the new settings in a moment.
+            self._json(HTTPStatus.ACCEPTED, {"restarting": True})
 
         def _post_focus(self) -> None:
             raw = self._read_body()
@@ -409,9 +461,12 @@ class WebServer:
         settings: Callable[[], AgentSettings] | None = None,
         auth: LocalAuth | None = None,
         time_trusted: Callable[[], bool] = lambda: True,
+        settings_form: SettingsForm | None = None,
     ) -> None:
         net = ipaddress.ip_network(setup_net) if setup_net else _SETUP_NET
-        handler = make_handler(live, pairing, setup, net, settings, auth, time_trusted)
+        handler = make_handler(
+            live, pairing, setup, net, settings, auth, time_trusted, settings_form
+        )
         self._httpd = ThreadingHTTPServer((host, port), handler)
         self._httpd.daemon_threads = True
         self._thread = threading.Thread(target=self._httpd.serve_forever, daemon=True)

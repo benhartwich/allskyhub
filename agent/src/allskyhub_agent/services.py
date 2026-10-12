@@ -18,7 +18,7 @@ from allskyhub_agent.live import LiveState
 from allskyhub_agent.products.build import newest_products
 from allskyhub_agent.settings import AgentSettings
 from allskyhub_agent.store.images import ImageStore
-from allskyhub_protocol import Event, FrameInfo, Products, SetSettingsArgs, Status
+from allskyhub_protocol import Event, FrameInfo, Products, SetSettingsArgs, SettingSpec, Status
 
 log = logging.getLogger(__name__)
 
@@ -36,11 +36,13 @@ class HubManager:
         status: Callable[[], Status | None],
         settings_path: Path | None,
         events: EventSource | None = None,
-        on_set_settings: Callable[[SetSettingsArgs], None] | None = None,
+        on_set_settings: Callable[[SetSettingsArgs], list[str] | None] | None = None,
         local_access: LocalAccess | None = None,
+        settings_schema: Callable[[], list[SettingSpec]] | None = None,
     ) -> None:
         self._identity = identity
         self._local_access = local_access
+        self._settings_schema = settings_schema
         self._pairing = pairing
         self._store = store
         self._live = live
@@ -70,6 +72,7 @@ class HubManager:
                 events=self._events,
                 on_set_settings=self._on_set_settings,
                 local_access=self._local_access,
+                settings_schema=self._settings_schema,
             )
 
         client = HubClient(make_session, cfg)

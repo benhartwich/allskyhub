@@ -2,7 +2,7 @@
 {% block title %}Galerie · {{ device.name }} · allskyhub{% endblock %}
 {% block content %}
 <a class="back" href="/cameras/{{ device.id }}">← {{ device.name }}</a>
-<h1>Galerie</h1>
+<div class="page-head"><h1>Galerie</h1><a class="button small secondary" href="/cameras/{{ device.id }}/renders">Zeitraffer &amp; Keogramme</a></div>
 {% if nights %}
 <ul class="card list nights">
   {% for n in nights %}

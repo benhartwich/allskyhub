@@ -29,6 +29,9 @@ class Settings(BaseSettings):
     # Archive retention (privacy policy): full images and thumbnails.
     keep_full_days: int = Field(default=7, ge=1)
     keep_thumb_days: int = Field(default=30, ge=1)
+    # Roadmap C8: timelapses and keograms over several nights, made with ffmpeg.
+    ffmpeg_path: str = "ffmpeg"
+    keep_render_days: int = Field(default=7, ge=1)
     # Night products (SPEC §6.5): a long 1080p timelapse can reach a few hundred MB.
     max_product_mb: int = Field(default=512, ge=1)
     # Push (roadmap #6): the Firebase service account JSON. Unset: push is off, nothing is

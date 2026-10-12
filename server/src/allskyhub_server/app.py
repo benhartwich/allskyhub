@@ -24,6 +24,7 @@ from allskyhub_server.auth.hub_keys import HubKeys
 from allskyhub_server.db import create_engine, create_sessionmaker
 from allskyhub_server.devices.connections import ConnectionRegistry
 from allskyhub_server.devices.images import ImageStore
+from allskyhub_server.devices.renders import Renderer
 from allskyhub_server.devices.space_weather import KpCache, OvationCache
 from allskyhub_server.devices.tonight import ForecastCache
 from allskyhub_server.push.fcm import Sender
@@ -164,7 +165,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             else None
         )
         app.state.notifier = Notifier(app.state.sessionmaker, sender)
-        tasks = [cleanup]
+        app.state.renderer = Renderer(app.state.sessionmaker, app.state.images, settings)
+        tasks = [cleanup, asyncio.create_task(app.state.renderer.run_forever())]
         if sender is not None:
             tasks.append(
                 asyncio.create_task(app.state.notifier.run_offline_checks(app.state.connections))

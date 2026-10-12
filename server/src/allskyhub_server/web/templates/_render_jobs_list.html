@@ -1,0 +1,25 @@
+{% if jobs %}
+<ul class="list card">
+  {% for j in jobs %}
+  <li class="render-job">
+    <div class="cam-meta">
+      <strong>{{ 'Zeitraffer' if j.kind == 'timelapse' else 'Keogramm' }} · {{ j.start.astimezone(zone).strftime('%d.%m. %H:%M') if j.kind == 'timelapse' else j.start.astimezone(zone).strftime('%d.%m.') }} – {{ j.end.astimezone(zone).strftime('%d.%m. %H:%M') if j.kind == 'timelapse' else j.end.astimezone(zone).strftime('%d.%m.%Y') }}</strong>
+      <span class="badge{{ ' ok' if j.state == 'done' }}">{{ {'queued': 'wartet', 'running': 'läuft', 'done': 'fertig', 'failed': 'fehlgeschlagen'}[j.state] }}</span>
+    </div>
+    {% if j.state == 'done' %}
+    {% set url = '/cameras/' ~ device.id ~ '/renders/' ~ j.id ~ '/file' %}
+    {% if j.kind == 'timelapse' %}<video class="product-video" src="{{ url }}" controls preload="metadata"></video>{% else %}<a href="{{ url }}"><img class="product-image" src="{{ url }}" alt="Keogramm über Nächte"></a>{% endif %}
+    <p class="muted small">{{ j.frames }} {{ 'Bilder' if j.kind == 'timelapse' else 'Nächte' }} · {{ j.size | filesize }} · <a href="{{ url }}" download>Herunterladen</a></p>
+    {% elif j.state == 'failed' %}<p class="warn">{{ j.error }}</p>{% endif %}
+    {% if j.state != 'running' %}
+    <form method="post" action="/cameras/{{ device.id }}/renders/{{ j.id }}/delete" class="inline">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+      <button class="link">Löschen</button>
+    </form>
+    {% endif %}
+  </li>
+  {% endfor %}
+</ul>
+{% else %}
+<p class="muted">Noch keine Aufträge.</p>
+{% endif %}

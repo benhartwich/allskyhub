@@ -40,6 +40,7 @@ from allskyhub_server.models import (
     NightStat,
     PairingCode,
     Product,
+    RenderJob,
     SkySample,
 )
 
@@ -223,6 +224,7 @@ async def unpair(db: AsyncSession, device: Device) -> None:
     await db.execute(delete(EventRecord).where(EventRecord.device_id == device.id))
     await db.execute(delete(SkySample).where(SkySample.device_id == device.id))
     await db.execute(delete(NightStat).where(NightStat.device_id == device.id))
+    await db.execute(delete(RenderJob).where(RenderJob.device_id == device.id))
     device.latest_image_at = None
     device.latest_thumb_at = None
     device.last_frame = None

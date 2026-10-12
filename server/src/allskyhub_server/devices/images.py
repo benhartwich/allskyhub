@@ -50,6 +50,10 @@ class ImageStore:
         os.link(target, link)
         link.replace(latest)
 
+    def render_path(self, device_id: str, job_id: str, suffix: str) -> Path:
+        """Roadmap C8; under the device's folder, so removing the camera removes it."""
+        return self.root / device_id / "renders" / f"{job_id}{suffix}"
+
     def product_path(self, device_id: str, night_id: str, name: str, variant: FrameVariant) -> Path:
         """``name`` is one of the fixed product names (PRODUCT_NAMES)."""
         return self.root / device_id / night_id / "products" / variant.value / name

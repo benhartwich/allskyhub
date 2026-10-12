@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import threading
 import time
+from collections.abc import Callable
 from dataclasses import dataclass
 
 
@@ -32,18 +33,28 @@ class PairingState:
         self._code: str | None = None
         self._code_deadline: float | None = None
         self._connected = False
+        self._on_paired: Callable[[], None] | None = None
+        self._on_unpaired: Callable[[], None] | None = None
+
+    def watch(self, on_paired: Callable[[], None], on_unpaired: Callable[[], None]) -> None:
+        """Called on every answer from the hub about pairing (the local login, SPEC §7.4)."""
+        self._on_paired, self._on_unpaired = on_paired, on_unpaired
 
     def set_unpaired(self, code: str | None, expires_in: int | None, now: float) -> None:
         with self._lock:
             self._paired = False
             self._code = code
             self._code_deadline = now + expires_in if code and expires_in else None
+        if self._on_unpaired is not None:
+            self._on_unpaired()
 
     def set_paired(self) -> None:
         with self._lock:
             self._paired = True
             self._code = None
             self._code_deadline = None
+        if self._on_paired is not None:
+            self._on_paired()
 
     def set_hub_url(self, hub_url: str) -> None:
         with self._lock:

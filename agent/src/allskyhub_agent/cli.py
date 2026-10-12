@@ -54,6 +54,7 @@ from allskyhub_agent.setup.setup_file import apply_once as apply_setup_file
 from allskyhub_agent.store.images import ImageStore
 from allskyhub_agent.update.installer import Paths, Updater
 from allskyhub_agent.update.status import update_status
+from allskyhub_agent.web.auth import LocalAuth
 from allskyhub_agent.web.server import WebServer
 from allskyhub_protocol import DeviceSettings, FrameInfo, SetSettingsArgs, Status
 
@@ -198,6 +199,7 @@ def main(argv: list[str] | None = None) -> int:
     live = LiveState()
     store = ImageStore(args.data, tz)
     pairing: PairingState | None = None
+    local_auth: LocalAuth | None = None
     hub: HubManager | None = None
     setup: SetupController | None = None
     stop_bg = threading.Event()
@@ -252,6 +254,9 @@ def main(argv: list[str] | None = None) -> int:
     if hub_url:
         identity = DeviceIdentity.load_or_create(args.key)
         pairing = PairingState(identity.device_id, hub_url, profile_id, __version__)
+        # SPEC §7.4: a paired camera's local UI needs a login.
+        local_auth = LocalAuth(args.data / "local_auth.json", identity.device_id)
+        pairing.watch(local_auth.mark_paired, local_auth.clear)
 
         def status() -> Status | None:
             f = live.last_frame()
@@ -309,6 +314,7 @@ def main(argv: list[str] | None = None) -> int:
             settings_path,
             events=event_store,
             on_set_settings=set_settings if settings_path else None,
+            local_access=local_auth,
         )
         hub.start(hub_url)
         print(f"device {identity.device_id}, hub {hub_url}")
@@ -334,7 +340,14 @@ def main(argv: list[str] | None = None) -> int:
         host, _, port = str(args.http).rpartition(":")
         host = host or "0.0.0.0"  # noqa: S104 - the local UI is meant for the LAN (SPEC §7)
         web = WebServer(
-            live, host, int(port), pairing, setup, settings=load_settings if settings_path else None
+            live,
+            host,
+            int(port),
+            pairing,
+            setup,
+            settings=load_settings if settings_path else None,
+            auth=local_auth,
+            time_trusted=system.time_trusted,
         )
         web.start()
         print(f"web UI on http://{host}:{web.port}/")

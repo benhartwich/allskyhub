@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Anmelden – allskyhub</title>
+<style>
+  body { margin: 0; background: #0b0d12; color: #e6e9ef;
+         font: 16px/1.4 system-ui, -apple-system, "Segoe UI", sans-serif; }
+  main { max-width: 420px; margin: 0 auto; padding: 32px 16px; }
+</style>
+</head>
+<body>
+<main>
+  <p>Anmeldung läuft …</p>
+  <form id="f" method="post" action="callback"><input type="hidden" name="assertion" id="a"></form>
+</main>
+<script>
+// SPEC §7.4 step 3: the assertion comes in the fragment, which no server or log sees.
+// It is sent on as a same-origin POST, which carries the SameSite=Lax nonce cookie.
+const a = new URLSearchParams(location.hash.slice(1)).get("assertion") || "";
+history.replaceState(null, "", location.pathname);
+document.getElementById("a").value = a;
+document.getElementById("f").submit();
+</script>
+</body>
+</html>

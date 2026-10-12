@@ -322,3 +322,24 @@ def test_settings_schema_texts_problems_and_numbers() -> None:
         assert invalid_settings(hello.settings_schema, {"latitude": v, "longitude": 1.0}) == [
             "latitude"
         ]
+
+
+def test_write_only_setting() -> None:
+    """SPEC §6.9: a secret is a string field that is never reported."""
+    from allskyhub_protocol import SettingSpec
+
+    key = SettingSpec.model_validate(
+        {
+            "key": "nina_api_key",
+            "type": "string",
+            "label": "Key",
+            "group": "N.I.N.A.",
+            "write_only": True,
+            "nullable": True,
+        }
+    )
+    assert key.write_only
+    with pytest.raises(ValidationError):
+        SettingSpec.model_validate(
+            {"key": "x", "type": "int", "label": "X", "group": "G", "write_only": True}
+        )

@@ -50,6 +50,16 @@ def test_checks() -> None:
     problems = {p.key: p.level for p in health.check(bad, True, NOW)}
     assert problems == {"disk": "error", "sensor_hot": "warn", "cpu_hot": "warn",
                         "clock": "warn", "update": "warn"}  # fmt: skip
+    # SPEC §6.3 alpaca_error: shown with the configured port; unknown values as they are.
+    taken = _device(last_status={"alpaca_error": "port_in_use",
+                                 "settings": {"alpaca_port": 11111}})  # fmt: skip
+    [problem] = health.check(taken, True, NOW)
+    assert problem.key == "alpaca"
+    assert problem.text.startswith("Alpaca-Port belegt: Port 11111 oder UDP 32227")
+    odd = _device(last_status={"alpaca_error": "bind_failed"})
+    assert [p.text for p in health.check(odd, True, NOW)] == [
+        "Die Alpaca-Schnittstelle meldet einen Fehler (bind_failed)."
+    ]
 
 
 class _Online:

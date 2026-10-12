@@ -86,7 +86,22 @@ def check(device: Device, online: bool, now: dt.datetime) -> list[Problem]:
     update = cast(dict[str, Any], status.get("update") or {})
     if update.get("state") in ("failed", "rolled_back"):
         problems.append(Problem("update", "warn", "Das letzte Software-Update ist fehlgeschlagen."))
+    alpaca = status.get("alpaca_error")  # SPEC §6.3, §7.5
+    if isinstance(alpaca, str) and alpaca:
+        problems.append(Problem("alpaca", "warn", _alpaca_text(alpaca, settings)))
     return problems
+
+
+def _alpaca_text(error: str, settings: dict[str, Any]) -> str:
+    if error == "port_in_use":
+        port = settings.get("alpaca_port")
+        which = f"Port {port}" if isinstance(port, int) else "Der Alpaca-Port"
+        return (
+            f"Alpaca-Port belegt: {which} oder UDP 32227 wird schon von einem anderen "
+            "Programm genutzt (etwa ASCOM Remote). In den Einstellungen einen anderen "
+            "Port wählen."
+        )
+    return f"Die Alpaca-Schnittstelle meldet einen Fehler ({error[:40]})."
 
 
 # Roadmap C12: the forecast says clear, the camera has seen next to nothing for this long.

@@ -213,7 +213,7 @@ async def test_privacy_and_account_page_with_push(
     email = await make_account(client)
     assert "Firebase Cloud Messaging" in (await client.get("/datenschutz")).text
     page = await client.get("/account")
-    assert "Benachrichtigungen in der App" in page.text
+    assert "Bei neuen Ereignissen" in page.text  # the push-only box
     r = await client.post(
         "/account/notifications",
         data={"notify_offline": "true", "csrf_token": csrf_from(page.text)},

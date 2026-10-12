@@ -199,6 +199,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         )
         app.state.notifier = Notifier(app.state.sessionmaker, sender)
         app.state.notifier.mailer = app.state.mailer
+        app.state.notifier.base_url = settings.base_url
         app.state.notifier.forecast = app.state.forecast
         app.state.renderer = Renderer(app.state.sessionmaker, app.state.images, settings)
         tasks = [

@@ -70,8 +70,11 @@ class AccountSettings(BaseModel):
     notify_offline: bool | None = None
     notify_aurora: bool | None = None
     notify_summary: bool | None = None
-    # Read only: the hub can send push notifications at all.
+    notify_tonight: bool | None = None
+    notify_by_mail: bool | None = None
+    # Read only: the hub can send push notifications / e-mail at all.
     push_available: bool | None = None
+    mail_available: bool | None = None
 
 
 class PushTokenRequest(_In):
@@ -563,7 +566,10 @@ def _account_settings(request: Request, user: User) -> AccountSettings:
         notify_offline=user.notify_offline,
         notify_aurora=user.notify_aurora,
         notify_summary=user.notify_summary,
+        notify_tonight=user.notify_tonight,
+        notify_by_mail=user.notify_by_mail,
         push_available=request.app.state.notifier.enabled,
+        mail_available=request.app.state.mailer.enabled,
     )
 
 
@@ -589,6 +595,10 @@ async def put_settings(
         user.notify_aurora = body.notify_aurora
     if body.notify_summary is not None:
         user.notify_summary = body.notify_summary
+    if body.notify_tonight is not None:
+        user.notify_tonight = body.notify_tonight
+    if body.notify_by_mail is not None:
+        user.notify_by_mail = body.notify_by_mail
     await db.commit()
     return _account_settings(request, user)
 

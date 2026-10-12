@@ -10,10 +10,11 @@ from fastapi import APIRouter, HTTPException, Path, Request
 from fastapi.responses import FileResponse, Response
 
 from allskyhub_protocol import FrameVariant
-from allskyhub_server.devices import archive, public, sky_chart, space_weather
+from allskyhub_server.devices import archive, public, sky_chart, space_weather, tonight
 from allskyhub_server.devices.event_text import EVENT_TITLES, meteor_summary
 from allskyhub_server.devices.images import ImageStore
 from allskyhub_server.devices.space_weather import KpCache, OvationCache
+from allskyhub_server.devices.tonight import ForecastCache
 from allskyhub_server.models import Device
 from allskyhub_server.web.deps import DbSession
 from allskyhub_server.web.render import render
@@ -74,6 +75,8 @@ async def sky_page(request: Request, db: DbSession, slug: str) -> Response:
         cache: KpCache = request.app.state.kp
         kp = await cache.get()
     lat = public.latitude(device)
+    forecast: ForecastCache = request.app.state.forecast
+    night = await tonight.for_device(forecast, device.last_status, now) if sections.sky else None
     return render(
         request,
         "public_sky.html",
@@ -87,6 +90,7 @@ async def sky_page(request: Request, db: DbSession, slug: str) -> Response:
             "sky_night": sky_night,
             "sky_charts": charts,
             "kp": kp,
+            "tonight": night,
             "today": now.date(),
             "kp_needed": space_weather.needed_kp(lat) if lat is not None else None,
             "hemisphere": "south" if lat is not None and lat < 0 else "north",

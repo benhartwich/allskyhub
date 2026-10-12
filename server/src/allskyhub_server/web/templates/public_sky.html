@@ -63,6 +63,7 @@
       {% if p.notes %}<p class="notes">{{ p.notes }}</p>{% endif %}
     </div>
     {% endif %}
+    {% if tonight %}{% include "_tonight.html" %}{% endif %}
     {% if kp %}
     <div class="card">
       <h2>Polarlicht-Aussichten</h2>

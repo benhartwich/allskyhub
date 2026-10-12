@@ -59,6 +59,8 @@ class AccountSettings(BaseModel):
     event_keep_days: int | None = None
     notify_events: bool | None = None
     notify_offline: bool | None = None
+    notify_aurora: bool | None = None
+    notify_summary: bool | None = None
     # Read only: the hub can send push notifications at all.
     push_available: bool | None = None
 
@@ -538,6 +540,8 @@ def _account_settings(request: Request, user: User) -> AccountSettings:
         event_keep_days=user.event_keep_days,
         notify_events=user.notify_events,
         notify_offline=user.notify_offline,
+        notify_aurora=user.notify_aurora,
+        notify_summary=user.notify_summary,
         push_available=request.app.state.notifier.enabled,
     )
 
@@ -560,6 +564,10 @@ async def put_settings(
         user.notify_events = body.notify_events
     if body.notify_offline is not None:
         user.notify_offline = body.notify_offline
+    if body.notify_aurora is not None:
+        user.notify_aurora = body.notify_aurora
+    if body.notify_summary is not None:
+        user.notify_summary = body.notify_summary
     await db.commit()
     return _account_settings(request, user)
 

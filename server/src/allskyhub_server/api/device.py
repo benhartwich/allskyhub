@@ -51,6 +51,7 @@ from allskyhub_server.devices import local_access, pairing, public
 from allskyhub_server.devices.connections import Connection, ConnectionRegistry
 from allskyhub_server.devices.events import image_rev
 from allskyhub_server.devices.images import JPEG_MAGIC, ImageStore
+from allskyhub_server.devices.space_weather import KpCache
 from allskyhub_server.models import Device, EventRecord, Frame, Product, SkySample, User
 from allskyhub_server.push.notify import Notifier
 from allskyhub_server.settings import Settings
@@ -371,6 +372,7 @@ async def device_ws(websocket: WebSocket) -> None:
             with contextlib.suppress(RuntimeError):
                 await websocket.close(code)
 
+    kp: KpCache = websocket.app.state.kp
     conn = Connection(info.device_id, send_text, close)
     old = await registry.attach(conn)
     if old is not None:
@@ -386,7 +388,7 @@ async def device_ws(websocket: WebSocket) -> None:
     try:
         while True:
             raw = await websocket.receive_text()
-            await _handle(raw, conn, maker, settings, registry, notifier, store)
+            await _handle(raw, conn, maker, settings, registry, notifier, store, kp)
     except WebSocketDisconnect:
         pass
     finally:
@@ -411,6 +413,7 @@ async def _handle(
     registry: ConnectionRegistry,
     notifier: Notifier,
     store: ImageStore,
+    kp: KpCache,
 ) -> None:
     try:
         env = parse_envelope(raw)
@@ -430,6 +433,7 @@ async def _handle(
         await _touch(maker, conn.device_id, last_status=body.model_dump(mode="json"))
         if body.sky is not None:
             await _store_sky(maker, conn.device_id, body.sky)
+            _background(notifier.aurora(conn.device_id, kp))
     elif isinstance(body, FrameInfo):
         await _on_frame(body, conn, maker, settings, registry)
     elif isinstance(body, Products):

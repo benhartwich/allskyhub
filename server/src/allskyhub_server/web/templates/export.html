@@ -1,0 +1,24 @@
+{% extends "base.html" %}
+{% block title %}Export · {{ device.name }}{% endblock %}
+{% block content %}
+<a class="back" href="/cameras/{{ device.id }}/stats">← Statistik</a>
+<h1>Daten für die Wissenschaft</h1>
+<p class="lead">Die Messungen deiner Kamera als CSV, lesbar ohne allskyhub: Zeiten in UTC, Richtungen als Azimut und Höhe, sobald die Kamera ausgerichtet ist.</p>
+<div class="stack">
+  <div class="card stack">
+    <h2>Meteore, einzeln</h2>
+    <p class="muted">Jeder erkannte Meteor mit Zeit, Dauer, Richtung, Helligkeit, Strom und deiner Markierung. Für eigene Auswertungen oder den Abgleich mit Meteornetzwerken.</p>
+    <p><a class="button secondary" href="/cameras/{{ device.id }}/export/meteors.csv" download>meteors.csv</a></p>
+  </div>
+  <div class="card stack">
+    <h2>Meteore pro Stunde</h2>
+    <p class="muted">Zählung pro UTC-Stunde nach Strom (nur über den Radianten zugeordnet), sporadisch und ohne Zuordnung, ohne als Fehlalarm markierte. Die Grundlage für Raten wie in IMO-Berichten.</p>
+    <p><a class="button secondary" href="/cameras/{{ device.id }}/export/meteors-hourly.csv" download>meteors-hourly.csv</a></p>
+  </div>
+  <div class="card stack">
+    <h2>Himmelshelligkeit pro Nacht</h2>
+    <p class="muted">Die dunkelste Messung jeder Nacht mit Zeit und Ort (letzte 30 Tage). Passt für <a href="{{ globe_at_night }}" rel="noopener" target="_blank">Globe at Night</a>; der Wert ist eine Näherung aus dem Kamerabild, solange die Kamera nicht mit einem SQM abgeglichen ist.</p>
+    <p><a class="button secondary" href="/cameras/{{ device.id }}/export/sqm.csv" download>sqm.csv</a></p>
+  </div>
+</div>
+{% endblock %}

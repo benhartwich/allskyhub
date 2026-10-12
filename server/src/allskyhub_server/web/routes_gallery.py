@@ -13,12 +13,21 @@ from sqlalchemy import select
 
 from allskyhub_protocol import EVENT_ID_PATTERN, FrameVariant
 from allskyhub_server.auth.sessions import SessionInfo
-from allskyhub_server.devices import archive, events, queries, renders, sky_chart, stats, tonight
+from allskyhub_server.devices import (
+    archive,
+    events,
+    queries,
+    renders,
+    science,
+    sky_chart,
+    stats,
+    tonight,
+)
 from allskyhub_server.devices.connections import ConnectionRegistry
 from allskyhub_server.devices.event_text import EVENT_TITLES, event_rows, meteor_summary
 from allskyhub_server.devices.images import ImageStore
 from allskyhub_server.devices.queries import Role
-from allskyhub_server.models import Device, EventRecord, RenderJob
+from allskyhub_server.models import Device, EventRecord, RenderJob, SkySample
 from allskyhub_server.web.deps import CurrentSession, DbSession, csrf_protect
 from allskyhub_server.web.render import render
 
@@ -245,6 +254,8 @@ async def event_page(
             "event": event,
             "state": await _event_state(request, device, event),
             "rows": event_rows(event),
+            "fireball": science.fireball_facts(event),
+            "fireball_form": science.FIREBALL_FORM,
             "event_titles": EVENT_TITLES,
         },
         session=session,
@@ -494,3 +505,48 @@ async def render_delete(
     await db.delete(job)
     await db.commit()
     return RedirectResponse(f"/cameras/{device.id}/renders", status_code=303)
+
+
+EXPORTS = {
+    "meteors": ("Meteore, einzeln", "meteors.csv"),
+    "meteors-hourly": ("Meteore pro Stunde", "meteors-hourly.csv"),
+    "sqm": ("Himmelshelligkeit pro Nacht", "sqm.csv"),
+}
+
+
+@router.get("/cameras/{device_id}/export")
+async def export_page(
+    request: Request, db: DbSession, session: CurrentSession, device_id: str
+) -> Response:
+    """Roadmap C11: downloads for science."""
+    device = await _own(db, session, device_id)
+    context = {"device": device, "exports": EXPORTS, "globe_at_night": science.GLOBE_AT_NIGHT}
+    return render(request, "export.html", context, session=session)
+
+
+@router.get("/cameras/{device_id}/export/{name}.csv")
+async def export_csv(db: DbSession, session: CurrentSession, device_id: str, name: str) -> Response:
+    device = await _own(db, session, device_id)
+    if name not in EXPORTS:
+        raise HTTPException(404)
+    settings: dict[str, Any] = (device.last_status or {}).get("settings") or {}
+    lat, lon = settings.get("latitude"), settings.get("longitude")
+    lat = float(lat) if isinstance(lat, int | float) else None
+    lon = float(lon) if isinstance(lon, int | float) else None
+    if name == "sqm":
+        samples = list(await db.scalars(select(SkySample).where(SkySample.device_id == device.id)))
+        body = science.sqm_csv(samples, lat, lon)
+    else:
+        rows = await events.events(db, device.id, limit=100_000)
+        meteors = [e for e in rows if e.kind == "meteor"]
+        body = (
+            science.meteors_csv(meteors, lat, lon)
+            if name == "meteors"
+            else science.hourly_counts_csv(meteors)
+        )
+    filename = f"allskyhub-{device.id[:6]}-{EXPORTS[name][1]}"
+    return Response(
+        body,
+        media_type="text/csv; charset=utf-8",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )

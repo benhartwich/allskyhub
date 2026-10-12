@@ -20,5 +20,13 @@
     <dt>Dunkel</dt><dd>{% if n.dusk and n.dawn %}{{ tonight.fmt(n.dusk) }} – {{ tonight.fmt(n.dawn) }} Uhr{% else %}nicht astronomisch dunkel{% endif %}</dd>
     <dt>Mond</dt><dd>{{ tonight.moon_phase }}, {{ (n.moon_illumination * 100) | round | int }} % beleuchtet{% for name, t in tonight.moon_events %} · {{ name }} {{ tonight.fmt(t) }}{% endfor %}</dd>
   </dl>
-  <p class="muted small">Wolken: Open-Meteo. Gut ist eine Stunde mit weniger als 30 % Wolken, ohne hellen Mond am Himmel.</p>
+  {% if tonight.passes %}
+  <h3 class="tonight-sub">Überflüge</h3>
+  <ul class="list passes">
+    {% for p in tonight.passes %}
+    <li><strong>{{ tonight.fmt(p.start) }}–{{ tonight.fmt(p.end) }}</strong> {{ p.name }}, bis {{ p.max_altitude | round | int }}° hoch, von {{ p.start_azimuth | compass }} nach {{ p.end_azimuth | compass }}</li>
+    {% endfor %}
+  </ul>
+  {% endif %}
+  <p class="muted small">Wolken: Open-Meteo, Bahndaten: CelesTrak. Gut ist eine Stunde mit weniger als 30 % Wolken, ohne hellen Mond am Himmel.</p>
 </div>

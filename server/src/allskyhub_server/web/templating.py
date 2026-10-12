@@ -12,6 +12,8 @@ from zoneinfo import ZoneInfo
 import allskyhub_design
 from fastapi.templating import Jinja2Templates
 
+from allskyhub_server.devices.event_text import compass
+
 TEMPLATE_DIR = Path(__file__).parent / "templates"
 STATIC_DIR = Path(__file__).parent / "static"
 
@@ -96,6 +98,7 @@ _filters = cast(dict[str, Any], templates.env.filters)
 _filters["age"] = age
 _filters["night_title"] = night_title
 _filters["clock"] = clock
+_filters["compass"] = compass
 _filters["mmss"] = mmss
 _filters["filesize"] = filesize
 cast(dict[str, Any], templates.env.filters)["localtime"] = localtime

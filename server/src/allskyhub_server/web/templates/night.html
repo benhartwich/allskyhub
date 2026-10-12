@@ -1,5 +1,10 @@
 {% extends "base.html" %}
 {% block title %}{{ night_id | night_title }} · {{ device.name }} · allskyhub{% endblock %}
+{% block head %}
+  <link rel="stylesheet" href="{{ asset('uplot.min.css') }}">
+  <script src="{{ asset('uplot.min.js') }}" defer></script>
+  <script src="{{ asset('charts.js') }}" defer></script>
+{% endblock %}
 {% block content %}
 <a class="back" href="/cameras/{{ device.id }}/gallery">← Galerie</a>
 <h1>{{ night_id | night_title }}</h1>
@@ -14,15 +19,9 @@
 </div>
 {% endif %}
 {% if sky_charts %}
-<section class="card sky-charts">
-  <h2>Himmel in dieser Nacht</h2>
-  {% for c in sky_charts %}
-  <figure>
-    <figcaption><strong>{{ c.title }}</strong> <span class="muted">zuletzt {{ c.latest }} {{ c.unit }} · Skala {{ c.low }}–{{ c.high }}</span></figcaption>
-    {{ c.svg }}
-  </figure>
-  {% endfor %}
-  <p class="muted">Lücken: Die Kamera konnte den Himmel da nicht beurteilen (Tag, Dämmerung).</p>
+<section class="stack">
+  <h2>Messwerte dieser Nacht</h2>
+  {% with data_url = "/cameras/" ~ device.id ~ "/charts/data", with_status = true, compact = true, default_range = night_id, full_url = "/cameras/" ~ device.id ~ "/charts?night=" ~ night_id %}{% include "_chart_viewer.html" %}{% endwith %}
 </section>
 {% endif %}
 {% if events %}

@@ -24,10 +24,11 @@ a.card.cam:hover { transform: translateY(-4px); border-color: rgba(122, 162, 247
 .cam-page { display: grid; gap: 20px; }
 .cam-page > * { min-width: 0; }
 .cam-live > * + * { margin-top: 16px; }
+.cam-left { display: grid; gap: 20px; min-width: 0; }
 @media (min-width: 60rem) {
   .cam-page { grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr); align-items: start; }
-  .cam-live { grid-column: 1; grid-row: 1 / span 20; position: sticky; top: 84px; }
-  .cam-page > :not(.cam-live) { grid-column: 2; }
+  .cam-left { grid-column: 1; grid-row: 1 / span 20; }
+  .cam-page > :not(.cam-left) { grid-column: 2; }
 }
 
 /* Public start page */
@@ -188,3 +189,41 @@ table.stats th { color: var(--text-2); font-weight: 600; }
 .chart-temp polyline { stroke: #ff9bd2; } .chart-temp circle { fill: #ff9bd2; }
 .chart-cpu polyline { stroke: #ff7a93; } .chart-cpu circle { fill: #ff7a93; }
 .chart-disk polyline { stroke: #8fe3ff; } .chart-disk circle { fill: #8fe3ff; }
+
+/* Measurement viewer (charts.js, uPlot). Colours as tokens: 6-digit hex, charts.js appends
+   alpha for fills. The red theme turns everything into reds of different brightness. */
+:root {
+  --chart-sqm: #7aa2f7; --chart-clouds: #a7b0cc; --chart-stars: #9ece6a; --chart-exposure: #f2c06b;
+  --chart-gain: #b48cff; --chart-temp: #ff9bd2; --chart-cpu: #ff7a93; --chart-disk: #8fe3ff;
+  --chart-sun: #ffd166; --chart-moon: #e6e9f5; --chart-grid: #ffffff14; --chart-axis: #a9b1d6;
+  --chart-day: #4a6cd426; --chart-civil: #3a56b01c; --chart-nautical: #2a3f8a14; --chart-astro: #1c2c6a0d;
+}
+[data-theme="red"] {
+  --chart-sqm: #ff4040; --chart-clouds: #b03030; --chart-stars: #ff7070; --chart-exposure: #ff5050;
+  --chart-gain: #c03838; --chart-temp: #ff6060; --chart-cpu: #d04040; --chart-disk: #a02828;
+  --chart-sun: #ff8080; --chart-moon: #ffa0a0; --chart-grid: #ff20201a; --chart-axis: #d04040;
+  --chart-day: #ff20201f; --chart-civil: #ff202016; --chart-nautical: #ff20200f; --chart-astro: #ff202008;
+}
+.chart-controls { display: grid; gap: 10px; }
+.chart-range, .chart-options, .chart-night { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.chart-night { padding-right: 6px; margin-right: 2px; border-right: 1px solid var(--line); }
+.chart-viewer [hidden] { display: none !important; }
+@media (max-width: 40rem) { .chart-night { border-right: 0; padding-right: 0; } }
+.chart-night input[type="date"] { width: auto; padding: 4px 8px; }
+.chart-options .check { margin-right: 6px; }
+.chart-meta { margin: 0; }
+.chart-panels { display: grid; gap: 14px; margin-top: 14px; min-width: 0; }
+.chart-panel { margin: 0; padding: 12px 8px 4px; background: rgba(6, 10, 24, .6); border-radius: 14px;
+  box-shadow: 0 0 0 1px var(--line); min-width: 0; overflow: hidden; }
+.chart-panel figcaption { padding: 0 8px 6px; }
+.chart-year [data-year-panel] { min-width: 0; overflow: hidden; }
+.chart-year .actions { display: flex; gap: 8px; align-items: center; }
+.chart-empty { padding: 0 8px 10px; margin: 0; }
+.chart-panel .u-legend, .chart-year .u-legend { font-size: 12.5px; color: var(--text-2); text-align: left; padding: 4px 8px; }
+.u-legend .u-series th { font-weight: 500; }
+.u-legend .u-value { color: var(--text); font-variant-numeric: tabular-nums; }
+.u-select { background: rgb(122 162 247 / .14); }
+[data-theme="red"] .u-select { background: rgb(255 40 40 / .14); }
+[data-theme="red"] .chart-panel { background: rgba(20, 0, 0, .6); }
+.chart-notes dd { margin-bottom: 8px; }
+.chart-link { display: inline-block; margin-top: 4px; }

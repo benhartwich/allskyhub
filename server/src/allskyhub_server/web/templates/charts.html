@@ -1,0 +1,32 @@
+{% extends "base.html" %}
+{% block title %}Messdaten · {{ back_title }}{% endblock %}
+{% block head %}
+  <link rel="stylesheet" href="{{ asset('uplot.min.css') }}">
+  <script src="{{ asset('uplot.min.js') }}" defer></script>
+  <script src="{{ asset('charts.js') }}" defer></script>
+{% endblock %}
+{% block content %}
+<a class="back" href="{{ back_url }}">← {{ back_title }}</a>
+<div class="page-head"><h1>Messdaten</h1></div>
+
+{% include "_chart_viewer.html" %}
+
+{% if nights_url %}
+<section class="card chart-year" data-year-chart data-src="{{ nights_url }}">
+  <h2>Nächte im Jahr</h2>
+  <p class="muted small">Dunkelster Himmel und klare Stunden je Nacht, dazu die Mondphase. So sieht man Trends über Monate, unabhängig vom Mond.</p>
+  <div data-year-panel></div>
+</section>
+{% endif %}
+
+<section class="card chart-notes">
+  <h2>Zu den Werten</h2>
+  <dl class="facts">
+    <dt>Himmelshelligkeit</dt><dd>in mag/″², größere Werte = dunkler. Aus dem Himmelshintergrund des Kamerabilds, normiert auf Belichtung und Gain, nur bei astronomischer Nacht (Sonne unter −18°). Ein Näherungswert, solange die Kamera nicht gegen ein SQM-Messgerät kalibriert ist.</dd>
+    <dt>Bewölkung</dt><dd>aus den Sternen im oberen Himmel, nur bei Nacht (Sonne unter −12°).</dd>
+    <dt>Sterne</dt><dd>Zahl der im Bild erkannten Sterne.</dd>
+    <dt>Dämmerung</dt><dd>Hintergrund von hell nach dunkel: Tag, bürgerliche (bis −6°), nautische (bis −12°) und astronomische Dämmerung (bis −18°), Nacht.</dd>
+    <dt>Zeiten</dt><dd>Ortszeit der Kamera (<span data-chart-tz>–</span>). Über mehr als zwei Tage sind die Werte zu Mittelwerten zusammengefasst; Lücken sind Zeiten ohne Messung.</dd>
+  </dl>
+</section>
+{% endblock %}

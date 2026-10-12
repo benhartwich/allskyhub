@@ -6,11 +6,11 @@ import datetime as dt
 from pathlib import Path as FsPath
 from typing import Annotated
 
-from fastapi import APIRouter, HTTPException, Path, Request
-from fastapi.responses import FileResponse, Response
+from fastapi import APIRouter, HTTPException, Path, Query, Request
+from fastapi.responses import FileResponse, JSONResponse, Response
 
 from allskyhub_protocol import FrameVariant
-from allskyhub_server.devices import archive, public, sky_chart, space_weather, tonight
+from allskyhub_server.devices import archive, public, series, sky_chart, space_weather, tonight
 from allskyhub_server.devices import camera_map as camera_map_mod
 from allskyhub_server.devices.event_text import EVENT_TITLES, meteor_summary
 from allskyhub_server.devices.images import ImageStore
@@ -55,6 +55,45 @@ def _base(device: Device, slug: str) -> dict[str, object]:
         "coordinates": public.coordinates(device),
         "event_titles": EVENT_TITLES,
     }
+
+
+async def _sky_device(db: DbSession, slug: str) -> Device:
+    """The device, if its public page shows sky values."""
+    device = await _device(db, slug)
+    if not public.profile(device).sections.sky:
+        raise HTTPException(404)
+    return device
+
+
+@router.get("/sky/{slug}/charts")
+async def sky_charts_page(request: Request, db: DbSession, slug: str) -> Response:
+    """The measurement viewer on the public page: sky values only, no camera internals."""
+    device = await _sky_device(db, slug)
+    return render(
+        request,
+        "charts.html",
+        {
+            **_base(device, slug),
+            "data_url": f"/sky/{slug}/charts/data",
+            "nights_url": None,
+            "back_url": f"/sky/{slug}",
+            "back_title": public.title(device),
+            "with_status": False,
+        },
+    )
+
+
+@router.get("/sky/{slug}/charts/data")
+async def sky_charts_data(
+    db: DbSession,
+    slug: str,
+    night: Annotated[str | None, Query(pattern=r"^\d{8}$")] = None,
+    hours: int | None = None,
+) -> JSONResponse:
+    device = await _sky_device(db, slug)
+    rng = await series.resolve(db, device, night, hours, dt.datetime.now(dt.UTC))
+    data = await series.load(db, device, rng, with_status=False, public=True)
+    return JSONResponse(data, headers={"Cache-Control": "public, max-age=60"})
 
 
 @router.get("/sky/{slug}")

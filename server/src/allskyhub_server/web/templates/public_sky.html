@@ -1,6 +1,9 @@
 {% extends "base.html" %}
 {% block title %}{{ title }} · Himmel live{% endblock %}
 {% block head %}
+  <link rel="stylesheet" href="{{ asset('uplot.min.css') }}">
+  <script src="{{ asset('uplot.min.js') }}" defer></script>
+  <script src="{{ asset('charts.js') }}" defer></script>
   <link rel="stylesheet" href="{{ asset('public.css') }}">
   <script src="{{ asset('public.js') }}" defer></script>
   <meta property="og:title" content="{{ title }} · Himmel live">
@@ -74,20 +77,15 @@
       <p class="muted small">Daten und Karte: NOAA Space Weather Prediction Center.</p>
     </div>
     {% endif %}
-    {% if sky_charts %}
-    <div class="card sky-charts">
-      <h2>Himmelsqualität</h2>
-      <p class="muted small">{{ sky_night | night_title }}</p>
-      {% for c in sky_charts %}
-      <figure>
-        <figcaption><strong>{{ c.title }}</strong> <span class="muted">zuletzt {{ c.latest }} {{ c.unit }}</span></figcaption>
-        {{ c.svg }}
-      </figure>
-      {% endfor %}
-    </div>
-    {% endif %}
   </aside>
 </div>
+
+{% if sky_charts %}
+<section class="stack">
+  <h2>Himmelsqualität</h2>
+  {% with data_url = "/sky/" ~ slug ~ "/charts/data", with_status = false, compact = true, default_range = "night", full_url = "/sky/" ~ slug ~ "/charts" %}{% include "_chart_viewer.html" %}{% endwith %}
+</section>
+{% endif %}
 
 {% if events %}
 <section class="stack">

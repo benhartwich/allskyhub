@@ -83,6 +83,7 @@ async def test_downloads(
                              stars=500))  # fmt: skip
         m = _meteor(1, 0, {"shower": "Perseids", "shower_match": "radiant", "peak": 0.95})
         m.device_id = dev.device_id
+        m.event_id = "meteor-20260812T221503Z"  # a real id, as the event page checks it
         db.add(m)
         await db.commit()
     base = f"/cameras/{dev.device_id}/export"
@@ -97,7 +98,8 @@ async def test_downloads(
     ]  # fmt: skip
     assert len(_rows((await client.get(f"{base}/meteors.csv")).text)) == 1
     assert (await client.get(f"{base}/nope.csv")).status_code == 404
-    event = (await client.get(f"/cameras/{dev.device_id}/events/20260812/meteor-1")).text
+    page = f"/cameras/{dev.device_id}/events/20260812/meteor-20260812T221503Z"
+    event = (await client.get(page)).text
     assert "Feuerkugel bei der IMO melden" in event
 
     await make_account(new_client)

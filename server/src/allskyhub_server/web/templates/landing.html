@@ -2,34 +2,73 @@
 {% block title %}allskyhub – deine Allsky-Kamera, einfach{% endblock %}
 {% block content %}
 <section class="hero">
-  <h1>Der ganze Himmel, auf deinem Handy.</h1>
-  <p class="lead">allskyhub ist eine Allsky-Kamera zum Einstecken: Raspberry Pi mit getesteter Kamera, fertiges Image, Einrichtung mit dem Handy. Kein FTP, keine Portfreigabe, keine Installationsorgien.</p>
-  <p class="actions">
-    <a class="button" href="/login">Anmelden</a>
-  </p>
+  <div class="stack">
+    <p class="eyebrow">Allsky · Open Source · Plug and play</p>
+    <h1>Der ganze Himmel, auf deinem Handy.</h1>
+    <p class="lead">allskyhub ist eine Allsky-Kamera zum Einstecken: Raspberry Pi mit getesteter Kamera, fertiges Image, Einrichtung mit dem Handy. Kein FTP, keine Portfreigabe, keine Installationsorgien.</p>
+    <p class="actions">
+      <a class="button" href="/login">Anmelden</a>
+      <a class="button secondary" href="https://github.com/benhartwich/allskyhub">Auf GitHub ansehen</a>
+    </p>
+  </div>
+  <svg class="dome" viewBox="0 0 400 400" role="img" aria-label="Allsky-Aufnahme: der ganze Himmel in einem Kreis, mit Milchstraße und Meteor">
+    <defs>
+      <radialGradient id="dome-sky" cx=".5" cy=".5" r=".5">
+        <stop offset="0" stop-color="#16224f"/><stop offset=".72" stop-color="#0a1130"/><stop offset=".93" stop-color="#1b2a5e"/><stop offset="1" stop-color="#3a3f7a"/>
+      </radialGradient>
+      <linearGradient id="dome-milky" x1="0" y1="0" x2="1" y2="1">
+        <stop offset="0" stop-color="#c9d6ff" stop-opacity="0"/><stop offset=".5" stop-color="#dfe6ff" stop-opacity=".32"/><stop offset="1" stop-color="#c9d6ff" stop-opacity="0"/>
+      </linearGradient>
+      <linearGradient id="dome-aurora" x1="0" y1="1" x2="0" y2="0">
+        <stop offset=".25" stop-color="#4fe3b0" stop-opacity=".85"/><stop offset=".6" stop-color="#3fd6a0" stop-opacity=".35"/><stop offset="1" stop-color="#b48cff" stop-opacity="0"/>
+      </linearGradient>
+      <linearGradient id="dome-meteor" x1="0" y1="0" x2="1" y2="1">
+        <stop offset="0" stop-color="#fff" stop-opacity="0"/><stop offset="1" stop-color="#fff"/>
+      </linearGradient>
+      <clipPath id="dome-clip"><circle cx="200" cy="200" r="182"/></clipPath>
+    </defs>
+    <circle cx="200" cy="200" r="190" fill="none" stroke="#7aa2f7" stroke-opacity=".35"/>
+    <circle cx="200" cy="200" r="182" fill="url(#dome-sky)"/>
+    <g clip-path="url(#dome-clip)">
+      <g class="spin">
+        <ellipse cx="200" cy="200" rx="230" ry="46" transform="rotate(-38 200 200)" fill="url(#dome-milky)"/>
+        <g fill="#fff"><circle cx="106" cy="216" r="0.4" opacity="0.76"/><circle cx="245" cy="44" r="0.4" opacity="0.90"/><circle cx="113" cy="104" r="1.8" opacity="0.68"/><circle cx="321" cy="191" r="0.6" opacity="0.49"/><circle cx="249" cy="332" r="0.5" opacity="0.84"/><circle cx="262" cy="43" r="0.9" opacity="0.75"/><circle cx="332" cy="190" r="0.8" opacity="0.93"/><circle cx="277" cy="352" r="0.4" opacity="0.88"/><circle cx="180" cy="357" r="1.2" opacity="0.46"/><circle cx="69" cy="98" r="1.6" opacity="0.66"/><circle cx="246" cy="128" r="0.5" opacity="0.63"/><circle cx="146" cy="231" r="0.6" opacity="0.94"/><circle cx="266" cy="354" r="1.2" opacity="0.99"/><circle cx="262" cy="79" r="1.2" opacity="0.98"/><circle cx="346" cy="225" r="0.8" opacity="0.53"/><circle cx="319" cy="226" r="0.4" opacity="0.44"/><circle cx="168" cy="74" r="0.4" opacity="0.86"/><circle cx="241" cy="36" r="0.8" opacity="0.60"/><circle cx="131" cy="48" r="0.6" opacity="0.42"/><circle cx="91" cy="167" r="0.6" opacity="0.49"/><circle cx="343" cy="156" r="0.5" opacity="0.71"/><circle cx="252" cy="234" r="0.5" opacity="0.77"/><circle cx="359" cy="203" r="0.4" opacity="0.83"/><circle cx="106" cy="128" r="1.7" opacity="0.71"/><circle cx="217" cy="24" r="0.4" opacity="0.75"/><circle cx="27" cy="242" r="0.6" opacity="0.44"/><circle cx="246" cy="188" r="0.7" opacity="0.61"/><circle cx="275" cy="286" r="0.4" opacity="0.44"/><circle cx="110" cy="184" r="0.6" opacity="0.59"/><circle cx="151" cy="133" r="0.4" opacity="0.76"/><circle cx="128" cy="156" r="0.9" opacity="0.42"/><circle cx="225" cy="285" r="0.4" opacity="0.53"/><circle cx="309" cy="106" r="0.4" opacity="0.66"/><circle cx="271" cy="57" r="0.4" opacity="0.60"/><circle cx="320" cy="178" r="1.2" opacity="0.50"/><circle cx="141" cy="254" r="1.3" opacity="0.67"/><circle cx="101" cy="64" r="0.5" opacity="0.51"/><circle cx="310" cy="322" r="0.4" opacity="0.57"/><circle cx="311" cy="251" r="1.0" opacity="0.61"/><circle cx="67" cy="125" r="1.0" opacity="0.56"/><circle cx="145" cy="170" r="0.4" opacity="0.65"/><circle cx="176" cy="362" r="1.4" opacity="0.53"/><circle cx="288" cy="321" r="0.7" opacity="0.71"/><circle cx="124" cy="143" r="0.4" opacity="0.44"/><circle cx="232" cy="123" r="1.0" opacity="0.43"/><circle cx="345" cy="270" r="1.4" opacity="0.94"/><circle cx="344" cy="228" r="0.4" opacity="0.85"/><circle cx="82" cy="128" r="0.7" opacity="0.71"/><circle cx="169" cy="358" r="0.6" opacity="0.60"/><circle cx="111" cy="330" r="0.5" opacity="0.87"/><circle cx="147" cy="91" r="0.5" opacity="0.89"/><circle cx="82" cy="305" r="1.4" opacity="0.88"/><circle cx="246" cy="331" r="0.4" opacity="0.56"/><circle cx="117" cy="210" r="0.4" opacity="0.68"/><circle cx="51" cy="201" r="0.4" opacity="0.59"/><circle cx="146" cy="253" r="0.6" opacity="0.62"/><circle cx="89" cy="138" r="0.4" opacity="0.73"/><circle cx="278" cy="157" r="0.4" opacity="0.51"/><circle cx="154" cy="238" r="0.9" opacity="0.63"/><circle cx="308" cy="244" r="0.4" opacity="0.62"/><circle cx="199" cy="273" r="0.4" opacity="0.82"/><circle cx="186" cy="108" r="0.5" opacity="0.82"/><circle cx="46" cy="173" r="0.4" opacity="0.93"/><circle cx="357" cy="155" r="1.3" opacity="0.87"/><circle cx="114" cy="187" r="0.4" opacity="0.89"/><circle cx="258" cy="339" r="1.0" opacity="0.80"/><circle cx="284" cy="223" r="0.4" opacity="0.75"/><circle cx="262" cy="321" r="1.6" opacity="0.75"/><circle cx="296" cy="204" r="0.8" opacity="0.46"/><circle cx="42" cy="137" r="0.5" opacity="0.90"/><circle cx="107" cy="85" r="0.4" opacity="0.77"/><circle cx="291" cy="162" r="0.4" opacity="0.64"/><circle cx="146" cy="171" r="0.4" opacity="0.70"/><circle cx="370" cy="169" r="0.8" opacity="0.50"/><circle cx="269" cy="292" r="0.7" opacity="0.71"/><circle cx="194" cy="251" r="1.3" opacity="0.49"/><circle cx="55" cy="289" r="1.4" opacity="0.71"/><circle cx="179" cy="279" r="0.4" opacity="0.56"/><circle cx="92" cy="231" r="0.4" opacity="0.54"/><circle cx="269" cy="363" r="0.4" opacity="0.82"/><circle cx="169" cy="327" r="0.6" opacity="0.56"/><circle cx="193" cy="158" r="0.4" opacity="0.62"/><circle cx="136" cy="299" r="0.4" opacity="0.99"/><circle cx="193" cy="236" r="0.5" opacity="0.90"/><circle cx="316" cy="221" r="0.5" opacity="0.83"/><circle cx="328" cy="164" r="0.8" opacity="0.98"/><circle cx="188" cy="103" r="0.4" opacity="0.83"/><circle cx="263" cy="365" r="1.1" opacity="0.55"/><circle cx="88" cy="113" r="0.4" opacity="0.82"/><circle cx="112" cy="331" r="0.4" opacity="0.65"/><circle cx="282" cy="51" r="0.4" opacity="0.90"/><circle cx="125" cy="148" r="0.6" opacity="0.81"/><circle cx="177" cy="195" r="0.4" opacity="0.75"/><circle cx="364" cy="161" r="0.5" opacity="0.47"/><circle cx="119" cy="260" r="0.4" opacity="0.93"/><circle cx="359" cy="155" r="0.9" opacity="0.85"/><circle cx="126" cy="263" r="0.7" opacity="0.88"/><circle cx="116" cy="292" r="1.6" opacity="0.80"/><circle cx="213" cy="61" r="0.5" opacity="0.61"/><circle cx="279" cy="264" r="0.5" opacity="0.51"/><circle cx="252" cy="247" r="0.4" opacity="0.93"/><circle cx="256" cy="64" r="1.5" opacity="0.48"/><circle cx="139" cy="279" r="0.6" opacity="0.73"/><circle cx="253" cy="185" r="0.4" opacity="0.51"/><circle cx="45" cy="278" r="0.9" opacity="0.73"/><circle cx="286" cy="149" r="0.4" opacity="0.63"/><circle cx="202" cy="109" r="0.9" opacity="0.61"/><circle cx="140" cy="165" r="0.5" opacity="0.86"/><circle cx="147" cy="325" r="0.4" opacity="0.56"/><circle cx="300" cy="282" r="0.4" opacity="0.51"/><circle cx="170" cy="288" r="1.0" opacity="0.85"/><circle cx="233" cy="73" r="0.4" opacity="0.52"/><circle cx="210" cy="225" r="0.4" opacity="0.55"/><circle cx="362" cy="158" r="0.5" opacity="0.75"/><circle cx="267" cy="128" r="1.2" opacity="0.69"/><circle cx="236" cy="282" r="0.4" opacity="0.86"/><circle cx="258" cy="197" r="0.5" opacity="0.68"/><circle cx="90" cy="211" r="0.4" opacity="0.70"/><circle cx="253" cy="180" r="0.5" opacity="0.98"/><circle cx="305" cy="244" r="0.4" opacity="0.62"/><circle cx="214" cy="355" r="0.4" opacity="0.92"/><circle cx="270" cy="68" r="1.2" opacity="0.76"/><circle cx="354" cy="278" r="0.8" opacity="0.61"/><circle cx="330" cy="177" r="0.9" opacity="0.69"/><circle cx="78" cy="199" r="0.7" opacity="0.72"/><circle cx="172" cy="254" r="0.4" opacity="0.68"/><circle cx="293" cy="165" r="0.4" opacity="0.94"/><circle cx="279" cy="152" r="0.4" opacity="0.72"/><circle cx="235" cy="101" r="0.4" opacity="0.53"/><circle cx="302" cy="72" r="0.5" opacity="0.52"/><circle cx="95" cy="81" r="0.4" opacity="0.50"/><circle cx="81" cy="196" r="0.4" opacity="0.41"/><circle cx="181" cy="167" r="0.7" opacity="0.43"/><circle cx="165" cy="163" r="0.4" opacity="0.98"/><circle cx="99" cy="54" r="0.5" opacity="0.50"/><circle cx="244" cy="145" r="0.4" opacity="0.43"/><circle cx="282" cy="119" r="0.9" opacity="0.68"/><circle cx="356" cy="128" r="0.4" opacity="0.56"/><circle cx="313" cy="246" r="0.4" opacity="0.46"/><circle cx="39" cy="256" r="1.3" opacity="0.52"/></g>
+      </g>
+      <path class="aurora-band" d="M18 250 Q 90 150 170 205 T 300 175 T 382 215 L 382 400 L 18 400 Z" fill="url(#dome-aurora)"/>
+      <path d="M18 352 L 60 340 L 92 346 L 120 330 L 160 342 L 205 326 L 250 344 L 290 334 L 330 348 L 382 336 L 382 400 L 18 400 Z" fill="#02030a"/>
+      <line class="meteor" x1="110" y1="80" x2="300" y2="210" stroke="url(#dome-meteor)" stroke-width="2.4" stroke-linecap="round"/>
+    </g>
+    <g font-family="Space Grotesk, system-ui, sans-serif" font-size="13" font-weight="600" fill="#a7b0cc" text-anchor="middle">
+      <text x="200" y="14">N</text><text x="392" y="205">O</text><text x="200" y="398">S</text><text x="8" y="205">W</text>
+    </g>
+  </svg>
 </section>
 
 <section class="features">
   <div class="card">
+    <div class="feature-icon" aria-hidden="true">📡</div>
     <h2>Einschalten und koppeln</h2>
     <p class="muted">Die Kamera öffnet ein eigenes WLAN, die App gibt ihr dein Heimnetz und koppelt sie mit deinem Konto. Ohne SSH, ohne Tippen von Codes.</p>
   </div>
   <div class="card">
+    <div class="feature-icon" aria-hidden="true">🛰️</div>
     <h2>Nur ausgehende Verbindung</h2>
     <p class="muted">Die Kamera meldet sich selbst beim Hub. Live-Bild und letzte Aufnahme siehst du überall, ohne Router-Konfiguration.</p>
   </div>
   <div class="card">
-    <h2>Gute Bilder ohne Tuning</h2>
-    <p class="muted">Automatische Belichtung, Tag- und Nachtumschaltung nach Sonnenstand, Fokushilfe. Die Kamera nimmt auch auf, wenn das Netz weg ist.</p>
+    <div class="feature-icon" aria-hidden="true">☄️</div>
+    <h2>Meteore, Polarlicht, Blitze</h2>
+    <p class="muted">Die Kamera erkennt Ereignisse am Himmel selbst, ordnet Meteore ihrem Strom zu und meldet sich, wenn etwas passiert.</p>
   </div>
   <div class="card">
-    <h2>Open Source</h2>
-    <p class="muted">Kamera-Software, Hub und App sind frei. Du kannst den Hub auch selbst betreiben.</p>
+    <div class="feature-icon" aria-hidden="true">🌌</div>
+    <h2>Gute Bilder ohne Tuning</h2>
+    <p class="muted">Automatische Belichtung, Tag- und Nachtumschaltung nach Sonnenstand, Zeitraffer, Keogramm und Sternspuren jede Nacht. Die Kamera nimmt auch auf, wenn das Netz weg ist.</p>
   </div>
 </section>
 
 <section class="card note">
   <h2>Stand</h2>
-  <p class="muted">allskyhub ist in Entwicklung und im Testbetrieb; Konten gibt es derzeit nur auf Einladung. Die erste unterstützte Kamera ist die ZWO ASI678MC am Raspberry Pi 4/5. Mitlesen und mitmachen auf <a href="https://github.com/benhartwich/allskyhub">GitHub</a>.</p>
+  <p class="muted">allskyhub ist in Entwicklung und im Testbetrieb; Konten gibt es derzeit nur auf Einladung. Die erste unterstützte Kamera ist die ZWO ASI678MC am Raspberry Pi 4/5. Kamera-Software, Hub und App sind frei – mitlesen und mitmachen auf <a href="https://github.com/benhartwich/allskyhub">GitHub</a>.</p>
 </section>
 {% endblock %}

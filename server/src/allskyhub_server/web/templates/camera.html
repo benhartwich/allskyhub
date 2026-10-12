@@ -53,6 +53,25 @@
   </dl>
 </div>
 <div class="card">
+  <h2>Lokale Seite der Kamera</h2>
+  <p class="muted">Im Heimnetz hat die Kamera eine eigene Seite. Dort meldest du dich mit „Mit allskyhub anmelden“ an. Für Zeiten ohne Internet gibt es einen Offline-Code.</p>
+  {% if device.local_access_set_at %}
+  <p>Offline-Code angelegt am {{ device.local_access_set_at | localtime }}{% if device.local_access_pending %} · <span class="warn">noch nicht bei der Kamera</span>{% else %} · bei der Kamera{% endif %}</p>
+  {% endif %}
+  <div class="actions">
+    <form method="post" action="/cameras/{{ device.id }}/local-access">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+      <button type="submit" class="secondary">{{ 'Neuen Offline-Code erzeugen' if device.local_access_set_at else 'Offline-Code erzeugen' }}</button>
+    </form>
+    {% if device.local_access_set_at %}
+    <form method="post" action="/cameras/{{ device.id }}/local-access/remove">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+      <button type="submit" class="danger">Offline-Code löschen</button>
+    </form>
+    {% endif %}
+  </div>
+</div>
+<div class="card">
   <h2>Öffentliche Seite</h2>
   {% if device.public_slug %}
   {% set url = request.base_url ~ "sky/" ~ device.public_slug %}

@@ -1,0 +1,21 @@
+{% extends "base.html" %}
+{% block title %}Lokale Anmeldung · {{ device.name }}{% endblock %}
+{% block content %}
+<div class="auth">
+  <h1>An der Kamera anmelden</h1>
+  <div class="card stack">
+    <p>Die lokale Seite deiner Kamera <strong>{{ device.name }}</strong> möchte dich mit deinem allskyhub-Konto anmelden.</p>
+    <dl class="facts">
+      <dt>Adresse</dt><dd><code>{{ origin }}</code></dd>
+    </dl>
+    <p class="muted">Bestätige nur, wenn du gerade selbst auf diese Adresse zugreifst. Danach bist du dort 30 Tage angemeldet.</p>
+    <form method="post" action="/cameras/{{ device.id }}/local-login" class="stack">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+      <input type="hidden" name="return" value="{{ base }}">
+      <input type="hidden" name="nonce" value="{{ nonce }}">
+      <button type="submit">Anmelden bei {{ origin }}</button>
+    </form>
+    <a class="back" href="/cameras/{{ device.id }}">Abbrechen</a>
+  </div>
+</div>
+{% endblock %}

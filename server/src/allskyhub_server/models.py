@@ -119,6 +119,13 @@ class Device(Base):
     public_slug: Mapped[str | None] = mapped_column(String(32), unique=True)
     # What the public page shows and its texts (devices/public.py PublicProfile); None = defaults.
     public_profile: Mapped[dict[str, Any] | None] = mapped_column(JSONB)
+    # SPEC §7.4 B: the offline code's Argon2id verifier (never the code itself), whether the
+    # device still has to get it (`local_access`, §6.5), and when the owner made it.
+    local_access_verifier: Mapped[str | None] = mapped_column(String(512))
+    local_access_pending: Mapped[bool] = mapped_column(
+        Boolean, default=False, server_default="false"
+    )
+    local_access_set_at: Mapped[dt.datetime | None] = mapped_column(_tz())
 
 
 class DeviceNonce(Base):

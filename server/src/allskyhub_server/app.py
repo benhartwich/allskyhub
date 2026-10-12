@@ -20,6 +20,7 @@ from starlette.types import ASGIApp, Message, Receive, Scope, Send
 from allskyhub_server import maintenance
 from allskyhub_server.api import app as app_api
 from allskyhub_server.api import device as device_api
+from allskyhub_server.auth.hub_keys import HubKeys
 from allskyhub_server.db import create_engine, create_sessionmaker
 from allskyhub_server.devices.connections import ConnectionRegistry
 from allskyhub_server.devices.images import ImageStore
@@ -33,6 +34,7 @@ from allskyhub_server.web import (
     routes_cameras,
     routes_gallery,
     routes_legal,
+    routes_local,
     routes_public,
 )
 from allskyhub_server.web.deps import LoginRequiredError
@@ -127,7 +129,8 @@ def _install_error_handlers(app: FastAPI) -> None:
     async def login_required(request: Request, exc: LoginRequiredError) -> Response:  # pyright: ignore[reportUnusedFunction]
         if not _wants_html(request):
             return JSONResponse({"detail": "Not signed in"}, status_code=401)
-        target = "/login?next=" + quote(request.url.path, safe="/")
+        path = request.url.path + (f"?{request.url.query}" if request.url.query else "")
+        target = "/login?next=" + quote(path, safe="/")
         if request.headers.get("hx-request"):
             return Response(status_code=204, headers={"HX-Redirect": target})
         return RedirectResponse(target, status_code=303)
@@ -186,6 +189,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.state.connections = ConnectionRegistry()
     app.state.images = ImageStore(settings.image_dir)
     app.state.kp = KpCache()
+    app.state.hub_keys = HubKeys(settings.key_dir)
     app.add_middleware(AccessLogMiddleware)
     _install_error_handlers(app)
 
@@ -196,6 +200,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(routes_gallery.router)
     app.include_router(routes_legal.router)
     app.include_router(routes_public.router)
+    app.include_router(routes_local.router)
     app.include_router(device_api.router)
     app.include_router(app_api.router)
 

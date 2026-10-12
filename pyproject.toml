@@ -1,5 +1,5 @@
 [tool.uv.workspace]
-members = ["packages/protocol", "agent", "server"]
+members = ["packages/protocol", "packages/design", "agent", "server"]
 
 [tool.uv]
 python-preference = "only-system"

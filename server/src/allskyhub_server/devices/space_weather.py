@@ -94,3 +94,45 @@ class KpCache:
             except (httpx.HTTPError, ValueError):
                 pass
             return self._value
+
+
+# Roadmap C13: NOAA's OVATION aurora forecast map (public domain), kept for 10 minutes.
+OVATION_URL = "https://services.swpc.noaa.gov/images/animations/ovation/{hemisphere}/latest.jpg"
+OVATION_MAX_AGE_S = 600
+OVATION_MAX_BYTES = 2_000_000
+
+
+class OvationCache:
+    """The hub serves the map itself: visitors' browsers never talk to NOAA (CSP, privacy)."""
+
+    def __init__(self, client: httpx.AsyncClient | None = None) -> None:
+        self._client = client
+        self._data: dict[str, tuple[float, bytes | None]] = {}
+        self._lock = asyncio.Lock()
+
+    async def get(self, hemisphere: str) -> bytes | None:
+        if hemisphere not in ("north", "south"):
+            return None
+        cached = self._data.get(hemisphere)
+        if cached and time.monotonic() - cached[0] < OVATION_MAX_AGE_S:
+            return cached[1]
+        async with self._lock:
+            cached = self._data.get(hemisphere)
+            if cached and time.monotonic() - cached[0] < OVATION_MAX_AGE_S:
+                return cached[1]
+            image = cached[1] if cached else None
+            try:
+                client = self._client or httpx.AsyncClient(timeout=TIMEOUT_S)
+                try:
+                    r = await client.get(OVATION_URL.format(hemisphere=hemisphere))
+                    r.raise_for_status()
+                    body = r.content
+                    if body.startswith(b"\xff\xd8") and len(body) <= OVATION_MAX_BYTES:
+                        image = body
+                finally:
+                    if self._client is None:
+                        await client.aclose()
+            except httpx.HTTPError:
+                pass
+            self._data[hemisphere] = (time.monotonic(), image)
+            return image

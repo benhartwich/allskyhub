@@ -373,3 +373,27 @@ class CameraMember(Base):
     )
     role: Mapped[str] = mapped_column(String(10))
     created_at: Mapped[dt.datetime] = mapped_column(_tz(), server_default=func.now())
+
+
+class MeteorPair(Base):
+    """One meteor seen by two cameras and its trajectory (roadmap C4). ``a`` is the device
+    with the smaller id. Kept after the events expire; removed with either pairing."""
+
+    __tablename__ = "meteor_pair"
+    __table_args__ = (UniqueConstraint("device_a", "event_a", "device_b", "event_b"),)
+
+    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid7)
+    device_a: Mapped[str] = mapped_column(ForeignKey("device.id", ondelete="CASCADE"), index=True)
+    event_a: Mapped[str] = mapped_column(String(64))
+    device_b: Mapped[str] = mapped_column(ForeignKey("device.id", ondelete="CASCADE"), index=True)
+    event_b: Mapped[str] = mapped_column(String(64))
+    at: Mapped[dt.datetime] = mapped_column(_tz())
+    high_lat: Mapped[float] = mapped_column(Float)
+    high_lon: Mapped[float] = mapped_column(Float)
+    high_km: Mapped[float] = mapped_column(Float)
+    low_lat: Mapped[float] = mapped_column(Float)
+    low_lon: Mapped[float] = mapped_column(Float)
+    low_km: Mapped[float] = mapped_column(Float)
+    length_km: Mapped[float] = mapped_column(Float)
+    convergence_deg: Mapped[float] = mapped_column(Float)
+    created_at: Mapped[dt.datetime] = mapped_column(_tz(), server_default=func.now())

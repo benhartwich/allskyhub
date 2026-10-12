@@ -21,6 +21,19 @@
   </div>
   {% endif %}
 </form>
+{% for s in seen_too %}
+{% set p = s.pair %}
+<div class="card trajectory">
+  <h2>Bahn des Meteors</h2>
+  <p>Auch gesehen von {% if s.link %}<a href="{{ s.link }}">{{ s.name }}</a>{% else %}{{ s.name }}{% endif %}. Aus beiden Blickwinkeln ergibt sich:</p>
+  <dl class="facts">
+    <dt>Höhe</dt><dd>{{ '%.0f' | format(p.high_km) }} km → {{ '%.0f' | format(p.low_km) }} km</dd>
+    <dt>Länge der Spur</dt><dd>{{ '%.0f' | format(p.length_km) }} km</dd>
+    <dt>Über</dt><dd>{{ '%.2f' | format(p.high_lat) | replace('.', ',') }}° N, {{ '%.2f' | format(p.high_lon) | replace('.', ',') }}° O → {{ '%.2f' | format(p.low_lat) | replace('.', ',') }}° N, {{ '%.2f' | format(p.low_lon) | replace('.', ',') }}° O</dd>
+    <dt>Schnittwinkel</dt><dd>{{ p.convergence_deg | round | int }}° {% if p.convergence_deg < 20 %}<span class="warn">(flach, ungenauer)</span>{% endif %}</dd>
+  </dl>
+</div>
+{% endfor %}
 <div class="card">
   <dl class="facts">
     {% for label, value in rows %}<dt>{{ label }}</dt><dd>{{ value }}</dd>{% endfor %}

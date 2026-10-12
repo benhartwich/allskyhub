@@ -13,7 +13,17 @@ from sqlalchemy import select
 
 from allskyhub_protocol import EVENT_ID_PATTERN, FrameVariant
 from allskyhub_server.auth.sessions import SessionInfo
-from allskyhub_server.devices import archive, events, queries, renders, sky_chart, stats, tonight
+from allskyhub_server.devices import (
+    archive,
+    events,
+    meteor_pairs,
+    public,
+    queries,
+    renders,
+    sky_chart,
+    stats,
+    tonight,
+)
 from allskyhub_server.devices.connections import ConnectionRegistry
 from allskyhub_server.devices.event_text import EVENT_TITLES, event_rows, meteor_summary
 from allskyhub_server.devices.images import ImageStore
@@ -237,6 +247,16 @@ async def event_page(
 ) -> Response:
     device = await _own(db, session, device_id)
     event = await _event(db, device, night_id, event_id)
+    seen_too: list[dict[str, object]] = []
+    for pair, other in await meteor_pairs.for_event(db, device.id, event.event_id):
+        own = other.owner_id == device.owner_id
+        other_event = pair.event_b if pair.device_a == device.id else pair.event_a
+        seen_too.append({
+            "pair": pair,
+            "name": other.name if own else public.title(other),
+            "link": (f"/cameras/{other.id}/events/{other_event[7:15]}/{other_event}" if own
+                     else f"/sky/{other.public_slug}" if other.public_slug else None),
+        })  # fmt: skip
     return render(
         request,
         "event.html",
@@ -245,6 +265,7 @@ async def event_page(
             "event": event,
             "state": await _event_state(request, device, event),
             "rows": event_rows(event),
+            "seen_too": seen_too,
             "event_titles": EVENT_TITLES,
         },
         session=session,

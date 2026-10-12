@@ -47,7 +47,7 @@ from allskyhub_protocol import (
 from allskyhub_server.auth import ratelimit
 from allskyhub_server.auth.accounts import DEFAULT_EVENT_KEEP_DAYS
 from allskyhub_server.auth.hub_keys import HubKeys
-from allskyhub_server.devices import local_access, pairing, public, settings_form
+from allskyhub_server.devices import local_access, meteor_pairs, pairing, public, settings_form
 from allskyhub_server.devices.connections import Connection, ConnectionRegistry
 from allskyhub_server.devices.events import image_rev
 from allskyhub_server.devices.images import JPEG_MAGIC, ImageStore
@@ -624,6 +624,9 @@ async def _on_event(
     if is_new:
         # Roadmap #6; in its own task so a slow push service never delays the device.
         _background(notifier.event(conn.device_id, body.id))
+    if body.kind == "meteor":
+        # Roadmap C4: the same meteor at another camera (also when the event was updated).
+        _background(meteor_pairs.pair_event(maker, conn.device_id, body.id))
     if not body.has_image:
         return
     if not stored.has_thumb:

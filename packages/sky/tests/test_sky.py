@@ -42,3 +42,25 @@ def test_overlay() -> None:
     assert (drawn.width, drawn.height) == (1200, 1200)
     assert {label.text for label in drawn.cardinals} == {"N", "O", "S", "W"}
     assert "Pegasus" in {label.text for label in drawn.names}  # high in an October night
+
+
+def test_cardinals_stay_in_a_cropped_frame() -> None:
+    """A 16:9 frame cuts off the horizon at top and bottom: N and S go to the edge, in
+    their true direction from the centre."""
+    wide = Lens(cx=1920, cy=1080, a1=2010, a3=0, tilt_east_deg=0, tilt_north_deg=0,
+                width=3840, height=2160)  # fmt: skip
+    drawn = overlay(wide, 0.0, True, 48.14, 14.39, AT)
+    margin = drawn.font
+    found = {label.text: label for label in drawn.cardinals}
+    for label in drawn.cardinals:
+        assert margin - 1e-6 <= label.x <= wide.width - margin + 1e-6
+        assert margin - 1e-6 <= label.y <= wide.height - margin + 1e-6
+    assert abs(found["N"].x - 1920) < 1e-6
+    assert abs(found["N"].y - margin) < 1e-6
+    assert abs(found["S"].y - (wide.height - margin)) < 1e-6
+    # a1 > cx: O and W are just outside too (mirrored: O on the left), on the centre line.
+    assert abs(found["O"].x - margin) < 1e-6
+    assert abs(found["O"].y - project(3.0, 90, wide, 0.0, True)[1]) < 1.0
+    # Inside the frame nothing moves.
+    square = overlay(LENS, 0.0, True, 48.14, 14.39, AT)
+    assert square.cardinals[0].y == project(3.0, 0.0, LENS, 0.0, True)[1]

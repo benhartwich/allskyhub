@@ -2,6 +2,7 @@
 
 import 'dart:async';
 import 'dart:convert';
+import 'dart:typed_data';
 
 import 'package:http/http.dart' as http;
 
@@ -430,6 +431,24 @@ class HubClient {
         as Map<String, dynamic>,
   );
 
+  /// Roadmap C11: the CSV files for science the hub offers.
+  Future<List<ExportItem>> exports(String cameraId) async => [
+    for (final e
+        in await _send('GET', '/cameras/$cameraId/exports') as List<dynamic>)
+      ExportItem.fromJson(e as Map<String, dynamic>),
+  ];
+
+  Future<Uint8List> exportCsv(String cameraId, String name) async {
+    final response = await _http.get(
+      _uri('/cameras/$cameraId/exports/$name.csv'),
+      headers: authHeaders,
+    );
+    if (response.statusCode >= 400) {
+      throw HubException(response.statusCode, response.reasonPhrase ?? 'error');
+    }
+    return response.bodyBytes;
+  }
+
   /// Roadmap C7: one year in months; [year] 0 is this year.
   Future<YearStats> stats(String cameraId, {int year = 0}) async =>
       YearStats.fromJson(
@@ -803,4 +822,16 @@ class YearStats {
 
   /// Years with data, newest first.
   final List<int> years;
+}
+
+/// A CSV export (roadmap C11), e.g. `meteors` → `meteors.csv`.
+class ExportItem {
+  ExportItem.fromJson(Map<String, dynamic> json)
+    : name = json['name'] as String,
+      title = json['title'] as String,
+      filename = json['filename'] as String;
+
+  final String name;
+  final String title;
+  final String filename;
 }

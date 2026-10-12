@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:typed_data';
 
 import 'package:allskyhub_app/api/hub_client.dart';
 import 'package:allskyhub_app/screens/manage_screens.dart';
@@ -89,6 +90,18 @@ class FakeManageHub {
           'years': [2026, 2025],
         });
       }
+      if (path == '/api/v1/cameras/cam1/exports') {
+        return _json([
+          {
+            'name': 'sqm',
+            'title': 'Himmelshelligkeit pro Nacht',
+            'filename': 'sqm.csv',
+          },
+        ]);
+      }
+      if (path == '/api/v1/cameras/cam1/exports/sqm.csv') {
+        return http.Response('night,sqm\n20261011,21.3\n', 200);
+      }
       return http.Response('', 404);
     }),
   );
@@ -174,6 +187,24 @@ void main() {
     await tester.tap(find.text('2025'));
     await tester.pumpAndSettle();
     expect(find.byKey(const Key('stats-empty')), findsOneWidget);
+  });
+
+  testWidgets('exports are handed to the share sheet', (tester) async {
+    final hub = FakeManageHub();
+    final shared = <String, String>{};
+    await _pump(
+      tester,
+      ExportScreen(
+        client: hub.client,
+        camera: camera,
+        share: (Uint8List bytes, String name, Rect? origin) async {
+          shared[name] = utf8.decode(bytes);
+        },
+      ),
+    );
+    await tester.tap(find.byKey(const Key('export-sqm')));
+    await tester.pumpAndSettle();
+    expect(shared, {'allskyhub-cam1-sqm.csv': 'night,sqm\n20261011,21.3\n'});
   });
 
   test('camera role defaults to owner for older hubs', () {

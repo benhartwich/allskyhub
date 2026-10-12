@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:share_plus/share_plus.dart';
 
 import '../api/hub_client.dart';
 
@@ -381,6 +382,133 @@ class _PublicPageScreenState extends State<PublicPageScreen> {
                 ),
               ],
             ),
+    );
+  }
+}
+
+/// Hands a file to the phone's share sheet; replaced in tests.
+typedef ShareFile =
+    Future<void> Function(Uint8List bytes, String filename, Rect? origin);
+
+Future<void> shareFile(Uint8List bytes, String filename, Rect? origin) async {
+  await SharePlus.instance.share(
+    ShareParams(
+      files: [XFile.fromData(bytes, mimeType: 'text/csv', name: filename)],
+      fileNameOverrides: [filename],
+      sharePositionOrigin: origin,
+    ),
+  );
+}
+
+/// Roadmap C11: the CSV files for science (meteors, hourly counts, sky brightness),
+/// shared to mail, cloud storage or another app.
+class ExportScreen extends StatefulWidget {
+  const ExportScreen({
+    super.key,
+    required this.client,
+    required this.camera,
+    this.share = shareFile,
+  });
+
+  final HubClient client;
+  final Camera camera;
+  final ShareFile share;
+
+  @override
+  State<ExportScreen> createState() => _ExportScreenState();
+}
+
+class _ExportScreenState extends State<ExportScreen> {
+  List<ExportItem>? _items;
+  String? _busy;
+  String? _error;
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  Future<void> _load() async {
+    try {
+      final items = await widget.client.exports(widget.camera.id);
+      if (mounted) setState(() => _items = items);
+    } on Exception catch (e) {
+      if (mounted) setState(() => _error = _describe(e));
+    }
+  }
+
+  Future<void> _share(ExportItem item, BuildContext tileContext) async {
+    final box = tileContext.findRenderObject() as RenderBox?;
+    final origin = box == null
+        ? null
+        : box.localToGlobal(Offset.zero) & box.size;
+    // Like the web download: allskyhub-<first 6 of the id>-meteors.csv.
+    final id = widget.camera.id;
+    final filename =
+        'allskyhub-${id.length > 6 ? id.substring(0, 6) : id}-${item.filename}';
+    setState(() {
+      _busy = item.name;
+      _error = null;
+    });
+    try {
+      final bytes = await widget.client.exportCsv(widget.camera.id, item.name);
+      await widget.share(bytes, filename, origin);
+    } on Exception catch (e) {
+      if (mounted) setState(() => _error = _describe(e));
+    } finally {
+      if (mounted) setState(() => _busy = null);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final items = _items;
+    return Scaffold(
+      appBar: AppBar(title: const Text('Exporte')),
+      body: ListView(
+        padding: const EdgeInsets.all(16),
+        children: [
+          Text(
+            'Tabellen (CSV) mit Zeiten in UTC, zum Weitergeben an '
+            'Tabellenkalkulation, IMO oder Globe at Night.',
+            style: theme.textTheme.bodyMedium,
+          ),
+          if (_error case final error?)
+            Padding(
+              padding: const EdgeInsets.only(top: 12),
+              child: Text(
+                error,
+                style: TextStyle(color: theme.colorScheme.error),
+              ),
+            ),
+          const SizedBox(height: 8),
+          if (items == null && _error == null)
+            const Padding(
+              padding: EdgeInsets.all(16),
+              child: Center(child: CircularProgressIndicator()),
+            )
+          else
+            for (final item in items ?? const <ExportItem>[])
+              Builder(
+                builder: (tileContext) => ListTile(
+                  key: Key('export-${item.name}'),
+                  contentPadding: EdgeInsets.zero,
+                  leading: const Icon(Icons.table_chart_outlined),
+                  title: Text(item.title),
+                  subtitle: Text(item.filename),
+                  trailing: _busy == item.name
+                      ? const SizedBox.square(
+                          dimension: 24,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : const Icon(Icons.ios_share),
+                  onTap: _busy == null ? () => _share(item, tileContext) : null,
+                ),
+              ),
+        ],
+      ),
     );
   }
 }

@@ -312,6 +312,14 @@ class _CameraScreenState extends State<CameraScreen> {
                     () => StatsScreen(client: widget.client, camera: _camera),
                   ),
                 ),
+                OutlinedButton.icon(
+                  key: const Key('open-exports'),
+                  icon: const Icon(Icons.download_outlined),
+                  label: const Text('Exporte'),
+                  onPressed: () => _open(
+                    () => ExportScreen(client: widget.client, camera: _camera),
+                  ),
+                ),
                 if (_camera.isOwner) ...[
                   OutlinedButton.icon(
                     key: const Key('open-sharing'),

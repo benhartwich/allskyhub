@@ -62,7 +62,7 @@ it. Order:
 | L14 | Updates: version, channel, check/install, rollback | agent | updater from #7 |
 | L15 | Logs and support: agent journal, download a support bundle; backup/restore of settings | agent | Allsky "Support" |
 | L16 | N.I.N.A. integration: an ASCOM Alpaca server on the camera (discovery on UDP 32227, SafetyMonitor/0 with IsSafe from cloud cover, SQM, rain/lightning, stale data = unsafe; ObservingConditions/0 with cloudcover, skyquality), so NINA, SGP and Voyager connect without a plugin and "Loop while safe" works; optionally read NINA's Advanced API (host + key) and relay its state to the hub (C15) | agent | Benjamin, 2026-10-12; see Touch-N-Stars (GPL-3.0) and bortle.eu, which already reads NINA; needs a SPEC section |
-| L17 | Watchdog on the camera: systemd watchdog for the agent, the Pi's hardware watchdog, reset the USB camera when no frames come, reboot when the network or the hub has been unreachable for hours | agent | Benjamin, 2026-10-12; capture never depends on the hub (rule 1), so reboots only for local faults |
+| L17 | Watchdog on the camera: systemd watchdog for the agent, the Pi's hardware watchdog, reset the USB camera when no frames come, reboot when the local network (gateway, DNS) has been unreachable for hours, never just because the hub is down | agent | Benjamin, 2026-10-12; capture never depends on the hub (rule 1), so reboots only for local faults |
 
 Not ported on purpose: the free-form module manager and file editor (fixed detectors
 instead), the website upload/remote server (the hub and its public page do that).

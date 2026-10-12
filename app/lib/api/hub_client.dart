@@ -2,6 +2,7 @@
 
 import 'dart:async';
 import 'dart:convert';
+import 'dart:typed_data';
 
 import 'package:http/http.dart' as http;
 
@@ -31,6 +32,7 @@ class Camera {
     this.latestImageAt,
     this.status = const {},
     this.frame = const {},
+    this.role = 'owner',
   });
 
   factory Camera.fromJson(Map<String, dynamic> json) => Camera(
@@ -42,6 +44,7 @@ class Camera {
     latestImageAt: _date(json['latest_image_at']),
     status: (json['status'] as Map<String, dynamic>?) ?? const {},
     frame: (json['frame'] as Map<String, dynamic>?) ?? const {},
+    role: json['role'] as String? ?? 'owner',
   );
 
   final String id;
@@ -56,6 +59,13 @@ class Camera {
 
   /// Latest `frame` body (SPEC §4.4).
   final Map<String, dynamic> frame;
+
+  /// Roadmap C10: `owner`, or `admin`/`viewer` for a camera shared with this account
+  /// (older hubs send nothing: their cameras are all owned).
+  final String role;
+
+  bool get isOwner => role == 'owner';
+  bool get canChange => role != 'viewer';
 
   static DateTime? _date(Object? value) =>
       value is String ? DateTime.parse(value) : null;
@@ -368,6 +378,87 @@ class HubClient {
 
   Future<void> remove(String id) => _send('DELETE', '/cameras/$id');
 
+  /// Roadmap C10: the accounts a camera is shared with (owner only).
+  Future<List<Member>> members(String cameraId) async =>
+      _members(await _send('GET', '/cameras/$cameraId/members'));
+
+  /// Adds an existing account or changes its role (`viewer`, `admin`); throws a
+  /// [HubException] with a German message for unknown addresses.
+  Future<List<Member>> share(
+    String cameraId,
+    String email, {
+    String role = 'viewer',
+  }) async => _members(
+    await _send(
+      'POST',
+      '/cameras/$cameraId/members',
+      body: {'email': email, 'role': role},
+    ),
+  );
+
+  /// The owner removes someone, or a member leaves with their own id ([myId]).
+  Future<void> unshare(String cameraId, String userId) =>
+      _send('DELETE', '/cameras/$cameraId/members/$userId');
+
+  Future<String> myId() async =>
+      (await _send('GET', '/account/me') as Map<String, dynamic>)['user_id']
+          as String;
+
+  static List<Member> _members(Object? json) => [
+    for (final m in json! as List<dynamic>)
+      Member.fromJson(m as Map<String, dynamic>),
+  ];
+
+  /// Roadmap #9, SPEC §6.8: the public sky page and what it shows (owner only).
+  Future<PublicState> publicState(String cameraId) async =>
+      PublicState.fromJson(
+        await _send('GET', '/cameras/$cameraId/public/profile')
+            as Map<String, dynamic>,
+      );
+
+  /// Switches the page ([enabled]) and/or replaces the whole [profile]; a 422 carries a
+  /// German sentence.
+  Future<PublicState> updatePublic(
+    String cameraId, {
+    bool? enabled,
+    Map<String, dynamic>? profile,
+  }) async => PublicState.fromJson(
+    await _send(
+          'PUT',
+          '/cameras/$cameraId/public/profile',
+          body: {'enabled': ?enabled, 'profile': ?profile},
+        )
+        as Map<String, dynamic>,
+  );
+
+  /// Roadmap C11: the CSV files for science the hub offers.
+  Future<List<ExportItem>> exports(String cameraId) async => [
+    for (final e
+        in await _send('GET', '/cameras/$cameraId/exports') as List<dynamic>)
+      ExportItem.fromJson(e as Map<String, dynamic>),
+  ];
+
+  Future<Uint8List> exportCsv(String cameraId, String name) async {
+    final response = await _http.get(
+      _uri('/cameras/$cameraId/exports/$name.csv'),
+      headers: authHeaders,
+    );
+    if (response.statusCode >= 400) {
+      throw HubException(response.statusCode, response.reasonPhrase ?? 'error');
+    }
+    return response.bodyBytes;
+  }
+
+  /// Roadmap C7: one year in months; [year] 0 is this year.
+  Future<YearStats> stats(String cameraId, {int year = 0}) async =>
+      YearStats.fromJson(
+        await _sendUri(
+              'GET',
+              _uri('/cameras/$cameraId/stats', {if (year > 0) 'year': '$year'}),
+            )
+            as Map<String, dynamic>,
+      );
+
   /// Nights with archived frames, newest first.
   Future<List<Night>> nights(String cameraId) async {
     final json =
@@ -652,4 +743,95 @@ class SeriesData {
 
   double? get moonIllumination =>
       ephemeris?.columns['moon_illumination']?.firstOrNull;
+}
+
+/// An account a camera is shared with (roadmap C10).
+class Member {
+  Member.fromJson(Map<String, dynamic> json)
+    : userId = json['user_id'] as String,
+      email = json['email'] as String,
+      role = json['role'] as String;
+
+  final String userId;
+  final String email;
+
+  /// `viewer` (looks) or `admin` (also changes settings, marks detections).
+  final String role;
+}
+
+/// `GET /cameras/{id}/public/profile`: the same model as the camera's local UI (SPEC §6.8).
+class PublicState {
+  PublicState.fromJson(Map<String, dynamic> json)
+    : enabled = json['enabled'] as bool,
+      url = json['url'] as String?,
+      profile = json['profile'] as Map<String, dynamic>;
+
+  final bool enabled;
+  final String? url;
+
+  /// title, location_label, show_coordinates, camera, lens, computer, owner, notes and
+  /// `sections` (live, loop, archive, events, sky, aurora, observatory). Sent back whole
+  /// on save, so fields a newer hub adds survive.
+  final Map<String, dynamic> profile;
+}
+
+/// One month or a whole year of `GET /cameras/{id}/stats` (roadmap C7).
+class StatsPeriod {
+  StatsPeriod.fromJson(Map<String, dynamic> json)
+    : label = json['label'] as String,
+      nights = json['nights'] as int,
+      clearNights = json['clear_nights'] as int,
+      clearHours = (json['clear_hours'] as num).toDouble(),
+      bestSqm = (json['best_sqm'] as num?)?.toDouble(),
+      meteors = json['meteors'] as int,
+      aurora = json['aurora'] as int,
+      storms = json['storms'] as int;
+
+  final String label;
+
+  /// Nights with any data; clear ones have at least two clear hours.
+  final int nights;
+  final int clearNights;
+  final double clearHours;
+  final double? bestSqm;
+  final int meteors;
+  final int aurora;
+  final int storms;
+}
+
+class YearStats {
+  YearStats.fromJson(Map<String, dynamic> json)
+    : year = json['year'] as int,
+      months = [
+        for (final m in json['months'] as List<dynamic>)
+          StatsPeriod.fromJson(m as Map<String, dynamic>),
+      ],
+      total = StatsPeriod.fromJson(json['total'] as Map<String, dynamic>),
+      showers = {
+        for (final e in (json['showers'] as Map<String, dynamic>).entries)
+          e.key: e.value as int,
+      },
+      years = [for (final y in json['years'] as List<dynamic>) y as int];
+
+  final int year;
+  final List<StatsPeriod> months;
+  final StatsPeriod total;
+
+  /// Meteor showers by name, most meteors first.
+  final Map<String, int> showers;
+
+  /// Years with data, newest first.
+  final List<int> years;
+}
+
+/// A CSV export (roadmap C11), e.g. `meteors` → `meteors.csv`.
+class ExportItem {
+  ExportItem.fromJson(Map<String, dynamic> json)
+    : name = json['name'] as String,
+      title = json['title'] as String,
+      filename = json['filename'] as String;
+
+  final String name;
+  final String title;
+  final String filename;
 }

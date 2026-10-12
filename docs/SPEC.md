@@ -331,7 +331,8 @@ only when `track_ordered` is true (known from several frames or from its shower'
 radiant); otherwise the order is arbitrary. The meteor happened somewhere between the
 event's `start` and `end`, which are the frame's exposure (up to a minute at night), so
 the hub pairs meteors of two cameras by overlapping intervals and matching tracks, not by
-a fixed time difference.
+a fixed time difference. The camera fills the track ends only while its clock is
+synchronised (`time_trusted`, §4.4), otherwise they are null.
 
 A meteor's `shower` depends on `shower_match`:
 
@@ -451,7 +452,8 @@ state.
 `profile`: `title` (≤ 100 characters), `location_label`, `camera`, `lens`, `computer`,
 `owner` (each ≤ 200), `notes` (≤ 2000), all strings, empty = not shown;
 `show_coordinates` (bool, default false: the coordinates appear rounded to 0.1°);
-`sections`: `{live, loop, archive, events, sky, aurora}`, booleans, default true. An
+`sections`: `{live, loop, archive, events, sky, aurora}`, booleans, default true, and
+`observatory` (§7.5), default false. An
 unknown key, a wrong type or a text that is too long is answered with 422 and a German
 sentence in `detail` that the local UI shows as it is. Models: `PublicProfile`,
 `PublicState`, `PublicUpdate` in `allskyhub_protocol.device_api`.
@@ -478,6 +480,7 @@ Each entry:
 | `choices` | `choice` only: `[{value, label}]`, `value` a string, `label` a text as above |
 | `max_length` | `string` only, default 200 |
 | `nullable` | the value may be `null` ("not set"); default false |
+| `write_only` | a secret such as an API key; default false. `status.settings` never contains it, only `<key>_set` (bool). Forms show an empty password field with "gesetzt" or "nicht gesetzt"; an empty field leaves the value as it is, `null` in `set_settings` deletes it |
 
 **Texts** (`label`, `group`, `help`, `choices[].label`) are either a string, which is
 German, or `{"de": "...", "en": "..."}` with `en` optional. Forms show the user's language
@@ -723,10 +726,12 @@ only 0 (other values `0x401`); `refresh` does nothing.
 Implementations are checked with ASCOM ConformU.
 
 **Relaying N.I.N.A.** With the settings `nina_url` (for example
-`http://192.168.1.30:1888`, empty = off) and `nina_api_key` (optional), the agent reads the
+`http://192.168.1.30:1888`, empty = off) and `nina_api_key` (optional, `write_only`, §6.9), the agent reads the
 state of N.I.N.A.'s Advanced API plugin every 30 s on the local network and reports it as
-`status.observatory` (§6.3). It only reads; it never controls N.I.N.A. The key is stored
-with the settings and never reported in `status.settings`.
+`status.observatory` (§6.3). It only reads; it never controls N.I.N.A. Target names and
+sequences can be private: the hub shows `observatory` to the owner and the camera's
+members, and on the public page only with the section `observatory` (§6.8, default
+false).
 
 ## 8. Updates
 

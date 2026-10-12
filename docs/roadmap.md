@@ -37,6 +37,7 @@ postkasten.cloud). Changes to `packages/protocol` and `docs/SPEC.md` have one ow
 | 14 | ~~App: "Standort ändern" and camera settings via `set_settings`~~ | hub | done |
 | 15 | E-mail from the hub: invitations, password reset, alerts as an alternative to push | hub | the hub sends no mail yet; invitation links are passed on by hand (`allskyhub-server invite`). Needs an SMTP account (Benjamin) |
 | 16 | Public sky page like astronomy.garden, manageable on the hub and on the camera | hub + agent | hub sections done (#this PR); constellation overlay, `GET/PUT /device/v1/public` and the camera's local UI follow (SPEC PR) |
+| 17 | Own domain for a public page (e.g. sky.example.org): the owner sets a CNAME to allskyhub.org, presses "Domain übernehmen", the hub checks DNS, gets a Let's Encrypt certificate (HTTP-01) and serves the page there | hub | needs a certificate path that does not stop nginx (today certbot standalone) and an nginx catch-all; Benjamin decides before it goes live |
 
 ## Needs Benjamin / hardware
 

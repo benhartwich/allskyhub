@@ -26,4 +26,12 @@
     {% for label, value in rows %}<dt>{{ label }}</dt><dd>{{ value }}</dd>{% endfor %}
   </dl>
 </div>
+{% if fireball %}
+<div class="card">
+  <h2>Feuerkugel?</h2>
+  <p class="muted">Ein sehr heller Meteor. Wenn er dir auch so vorkam: Die International Meteor Organization sammelt Meldungen, um Bahn und Herkunft zu bestimmen. Das Formular fragt nach diesen Angaben:</p>
+  <dl class="facts">{% for label, value in fireball %}<dt>{{ label }}</dt><dd>{{ value }}</dd>{% endfor %}</dl>
+  <p><a class="button secondary" href="{{ fireball_form }}" rel="noopener" target="_blank">Feuerkugel bei der IMO melden</a></p>
+</div>
+{% endif %}
 {% endblock %}

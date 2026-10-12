@@ -1,0 +1,6 @@
+{# Roadmap H1: constellations and N/O/S/W over the image (devices/sky_overlay.py); needs `ov`. #}
+<svg class="sky-overlay" viewBox="0 0 {{ ov.width }} {{ ov.height }}" preserveAspectRatio="xMidYMid meet" aria-hidden="true">
+  <path class="sky-lines" d="{{ ov.paths | join(' ') }}"/>
+  {% for l in ov.names %}<text class="sky-name" x="{{ '%.0f' | format(l.x) }}" y="{{ '%.0f' | format(l.y) }}" font-size="{{ ov.font }}">{{ l.text }}</text>{% endfor %}
+  {% for l in ov.cardinals %}<text class="sky-cardinal" x="{{ '%.0f' | format(l.x) }}" y="{{ '%.0f' | format(l.y) }}" font-size="{{ ov.font * 1.6 }}">{{ l.text }}</text>{% endfor %}
+</svg>

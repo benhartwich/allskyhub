@@ -12,6 +12,7 @@ from zoneinfo import ZoneInfo
 import allskyhub_design
 from fastapi.templating import Jinja2Templates
 
+from allskyhub_server.devices import sky_overlay as overlay
 from allskyhub_server.devices.event_text import compass
 
 TEMPLATE_DIR = Path(__file__).parent / "templates"
@@ -93,7 +94,16 @@ def filesize(size: int) -> str:
     return f"{-(-size // 1024)} KB"
 
 
+def sky_overlay(device: Any) -> Any:
+    """Roadmap H1: constellations for the device's latest image, None without a lens."""
+    if device.latest_image_at is None:
+        return None
+    at = overlay.image_time(device.last_frame, device.latest_image_at)
+    return overlay.build(device.last_status, at)
+
+
 cast(dict[str, Any], templates.env.globals)["asset"] = asset
+cast(dict[str, Any], templates.env.globals)["sky_overlay"] = sky_overlay
 _filters = cast(dict[str, Any], templates.env.filters)
 _filters["age"] = age
 _filters["night_title"] = night_title

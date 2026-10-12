@@ -38,7 +38,9 @@ router = APIRouter(prefix="/api/v1")
 
 
 class _In(BaseModel):
-    model_config = ConfigDict(extra="forbid")
+    # Like the device protocol (SPEC §6.1, compatible changes): a newer app may send fields
+    # this hub does not know yet; they are ignored, never refused.
+    model_config = ConfigDict(extra="ignore")
 
 
 class LoginRequest(_In):

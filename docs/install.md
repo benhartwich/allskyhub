@@ -77,6 +77,95 @@ Then pair it in the browser:
 To test an image without a camera, use `"camera": "sim"`: everything works with a
 simulated sky.
 
+### 2.5 Local page after pairing
+
+Before pairing, the local page at `http://<camera-ip>:8080` is open on your network. Once
+the camera is paired, it asks for a login ([SPEC §7.4](SPEC.md)):
+
+- **Mit allskyhub anmelden:** you sign in on the hub, and it sends you back logged in for
+  30 days.
+- **Offline code:** for when the internet is down. You create it on the hub under the
+  camera's settings.
+
+### 2.6 Install on an existing Raspberry Pi, next to Allsky
+
+If a Pi already runs [Allsky](https://github.com/AllskyTeam/allsky), the agent can run on it
+as well, without the image. Only one program can use the camera, so you switch between
+them. The image's Wi-Fi handling, setup mode, updater and firewall are left out: the Pi
+keeps its own network setup.
+
+1. **User, data directory and ZWO SDK.** Allsky's own copy of the SDK works:
+
+   ```bash
+   sudo useradd --system --home-dir /var/lib/allskyhub-agent --no-create-home \
+     --shell /usr/sbin/nologin --groups video allskyhub
+   sudo install -d -o allskyhub -g allskyhub -m 0750 /var/lib/allskyhub-agent /var/lib/allskyhub-agent/data
+   sudo install -d /opt/allskyhub-agent/lib
+   sudo install -m 0755 ~/allsky/server/assets/asi_sdk/lib/armv8/libASICamera2.so.1.39 /opt/allskyhub-agent/lib/
+   sudo ln -sfn libASICamera2.so.1.39 /opt/allskyhub-agent/lib/libASICamera2.so
+   ```
+
+2. **Agent release.** Build it from a checkout with [uv](https://docs.astral.sh/uv/) into its
+   own release directory. Updating works the same way: build a new directory, then point
+   `current` at it.
+
+   ```bash
+   V=0.1.0-$(git -C ~/allskyhub rev-parse --short=7 HEAD)
+   R=/opt/allskyhub-agent/releases/$V
+   sudo install -d $R
+   cd ~/allskyhub && sudo env UV_PYTHON_DOWNLOADS=never UV_PROJECT_ENVIRONMENT=$R/.venv \
+     sh -c "uv venv -q --python /usr/bin/python3 $R/.venv && uv sync -q --frozen --no-dev --no-editable --package allskyhub-agent"
+   sudo ln -sfn releases/$V /opt/allskyhub-agent/current
+   ```
+
+3. **Settings on the command line.** Without network management (`--network none`) the agent
+   cannot take location and time zone from the app for good, so they go into
+   `/etc/allskyhub-agent/allskyhub-agent.env`:
+
+   ```bash
+   ALLSKYHUB_AGENT_ARGS="--asi-sdk /opt/allskyhub-agent/lib/libASICamera2.so --lat 48.14 --lon 14.39 --tz Europe/Vienna --profile zwo-asi678mc run --data /var/lib/allskyhub-agent/data --hub https://allskyhub.org --http 0.0.0.0:8080"
+   ```
+
+4. **Service, not enabled.** Copy `image/files/etc/systemd/system/allskyhub-agent.service`
+   to `/etc/systemd/system/` and add a drop-in
+   `/etc/systemd/system/allskyhub-agent.service.d/allsky-switch.conf`:
+
+   ```ini
+   [Unit]
+   Conflicts=allsky.service
+   After=allsky.service
+   ```
+
+   `Conflicts=` stops Allsky when the agent starts and the other way round. `After=` makes
+   systemd finish the stop before the start; without it both programs open the camera at
+   the same time. Leave the agent disabled, so the Pi starts with Allsky after a reboot.
+
+5. **Switch.** `sudo systemctl start allskyhub-agent` (Allsky stops) or
+   `sudo systemctl start allsky` (the agent stops). A small script for this,
+   `allsky-switch hub|allsky|status`, saves typing. Note that Allsky's udev rule starts Allsky
+   whenever the camera is plugged in again.
+
+6. **Pair** as in section 2.3: open `http://<pi-ip>:8080` and enter the code on the hub.
+
+7. **Optional: the local page under your Allsky domain.** If lighttpd already serves the
+   Allsky WebUI with a certificate, it can forward the domain to the agent while the agent
+   runs. `/etc/lighttpd/conf-available/allskyhub-proxy.conf`:
+
+   ```
+   server.modules += ( "mod_proxy" )
+   $HTTP["host"] == "cam.example.org" {
+       $HTTP["url"] !~ "^/\.well-known/" {
+           proxy.server = ( "" => ( ( "host" => "127.0.0.1", "port" => 8080 ) ) )
+       }
+   }
+   ```
+
+   Link it into `conf-enabled/` when the agent starts and remove it when it stops, for
+   example with `ExecStartPost=+` and `ExecStopPost=+` in another drop-in that run a script
+   and then `systemctl reload lighttpd`. `/.well-known/` stays with lighttpd so certificate
+   renewal keeps working. lighttpd sends `X-Forwarded-Proto`, so the login cookie is
+   marked `Secure` behind HTTPS.
+
 ## 3. An account on allskyhub.org
 
 Accounts are by invitation for now. Ask the project for an invitation; you get a link to set

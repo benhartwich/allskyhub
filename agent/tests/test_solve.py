@@ -169,3 +169,10 @@ def test_meteor_event_gets_its_sky_position(tmp_path: Path) -> None:
     # 250 px right of the centre with r = 500 t: zenith angle 45°, east (not mirrored).
     assert ev.data["azimuth_deg"] == pytest.approx(90, abs=2)
     assert ev.data["altitude_deg"] == pytest.approx(45, abs=2)
+    # SPEC §6.4 (C4): the ends lie on either side of the midpoint, one higher, one lower.
+    alts = sorted(
+        [float(ev.data["start_altitude_deg"] or 0), float(ev.data["end_altitude_deg"] or 0)]
+    )
+    mid = float(ev.data["altitude_deg"] or 0)
+    assert alts[0] < mid < alts[1]
+    assert ev.data["start_azimuth_deg"] is not None

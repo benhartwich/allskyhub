@@ -186,7 +186,11 @@ def test_event_store_and_worker(tmp_path: Path) -> None:
     assert ev.id.startswith("meteor-")
     assert ev.has_image
     assert set(ev.data) == {"length_px", "peak", "frames", "direction_deg", "shower",
-                            "shower_match", "azimuth_deg", "altitude_deg"}  # fmt: skip
+                            "shower_match", "azimuth_deg", "altitude_deg",
+                            "start_azimuth_deg", "start_altitude_deg", "end_azimuth_deg",
+                            "end_altitude_deg", "track_ordered"}  # fmt: skip
+    assert ev.data["start_azimuth_deg"] is None
+    assert ev.data["track_ordered"] is False
     assert ev.data["azimuth_deg"] is None  # no orientation yet
     assert ev.data["shower"] == "Orionids"  # 8 October
     assert ev.data["shower_match"] == "date"

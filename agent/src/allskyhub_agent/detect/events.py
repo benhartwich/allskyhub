@@ -54,8 +54,10 @@ class EventStore:
         store: ImageStore,
         orientation: Callable[[], Solution | None] | None = None,
         location: Callable[[], tuple[float, float] | None] | None = None,
+        time_trusted: Callable[[], bool] = lambda: True,
     ) -> None:
         self._store = store
+        self._time_trusted = time_trusted
         self._lock = threading.Lock()
         # SPEC §4.8: the orientation valid when an event is saved gives its sky position.
         self._orientation = orientation
@@ -87,6 +89,27 @@ class EventStore:
             pos = sol.position(x, y, *size) if size is not None else None
         az, alt = pos if pos is not None else (None, None)
         return {"azimuth_deg": az, "altitude_deg": alt}
+
+    def _track_ends(self, frame: FrameInfo, s: Streak) -> dict[str, float | bool | None]:
+        """Both ends of the track in the sky for triangulation (SPEC §6.4, roadmap C4). One
+        frame does not show the direction of flight, so the order is arbitrary."""
+        if not self._time_trusted():
+            # Pairing with other cameras needs the right time (SPEC §6.4): no ends without it.
+            return {
+                "start_azimuth_deg": None,
+                "start_altitude_deg": None,
+                "end_azimuth_deg": None,
+                "end_altitude_deg": None,
+                "track_ordered": False,
+            }
+        a, b = self._position(frame, *s.p1), self._position(frame, *s.p2)
+        return {
+            "start_azimuth_deg": a["azimuth_deg"],
+            "start_altitude_deg": a["altitude_deg"],
+            "end_azimuth_deg": b["azimuth_deg"],
+            "end_altitude_deg": b["altitude_deg"],
+            "track_ordered": False,
+        }
 
     def _frame_size(self, frame: FrameInfo) -> tuple[int, int] | None:
         try:
@@ -170,6 +193,7 @@ class EventStore:
                     "direction_deg": s.direction_deg,
                     **self._shower(f, s),
                     **self._position(f, s.cx, s.cy),
+                    **self._track_ends(f, s),
                 },
             )
             self._append(event)

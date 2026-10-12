@@ -16,11 +16,17 @@ from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import delete
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 
-from allskyhub_protocol import EVENT_ID_PATTERN, CloseCode, FrameVariant, SetSettingsArgs
+from allskyhub_protocol import (
+    EVENT_ID_PATTERN,
+    CloseCode,
+    FrameVariant,
+    SetSettingsArgs,
+    invalid_settings,
+)
 from allskyhub_server.auth import accounts, app_tokens, ratelimit
 from allskyhub_server.auth.passwords import verify_secret_async
 from allskyhub_server.auth.tokens import hash_token
-from allskyhub_server.devices import archive, events, pairing, public, queries
+from allskyhub_server.devices import archive, events, pairing, public, queries, settings_form
 from allskyhub_server.devices import settings as settings_mod
 from allskyhub_server.devices.connections import ConnectionRegistry
 from allskyhub_server.devices.images import ImageStore
@@ -188,6 +194,8 @@ class Camera(BaseModel):
     frame: dict[str, Any] | None
     # Opt-in public sky page (roadmap #9), or None.
     public_url: str | None = None
+    # SPEC §6.9: the form for the settings screen (the fixed fields for old agents).
+    settings_schema: list[dict[str, Any]] = []
 
 
 def _bearer(request: Request) -> str:
@@ -227,6 +235,7 @@ def _camera(device: Device, registry: ConnectionRegistry, base_url: str) -> Came
         public_url=(
             f"{base_url.rstrip('/')}/sky/{device.public_slug}" if device.public_slug else None
         ),
+        settings_schema=[s.model_dump(mode="json") for s in settings_form.schema_of(device)[0]],
     )
 
 
@@ -482,7 +491,15 @@ async def camera_settings(
     camera's answer; 409 offline, 400 rejected (German message), 504 no answer. The camera
     then restarts its capture and reports the new values in ``status.settings``."""
     device = await _own(db, user, device_id)
-    outcome = await settings_mod.apply(_registry(request), device.id, body)
+    schema, own = settings_form.schema_of(device)
+    changes = body.model_dump(mode="json", exclude_unset=True)
+    if own and (bad := invalid_settings(schema, changes)):
+        names = settings_form.field_labels(schema)
+        listed = ", ".join(dict.fromkeys(names.get(k, k) for k in bad))
+        raise HTTPException(400, f"Ungültige Angabe: {listed}.")
+    outcome = await settings_mod.apply(
+        _registry(request), device.id, changes, settings_form.field_labels(schema)
+    )
     if not outcome.ok:
         raise HTTPException(outcome.status, outcome.message)
     return {"status": "applied"}

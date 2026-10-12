@@ -282,3 +282,8 @@ table.stats th { color: var(--text-2); font-weight: 600; }
 .health-line.ok::before { background: var(--ok); box-shadow: 0 0 10px var(--ok); }
 .health-line.warn { color: var(--warn); } .health-line.warn::before { background: var(--warn); }
 .health-line.error { color: var(--danger); } .health-line.error::before { background: var(--danger); box-shadow: 0 0 10px var(--danger); }
+
+/* Settings form from the camera's schema (SPEC §6.9). */
+.settings-form fieldset { border: 0; padding: 0; margin: 0; }
+.settings-form legend { font-family: var(--display); font-weight: 600; font-size: 15px; color: var(--text-2);
+                        text-transform: uppercase; letter-spacing: 1px; margin-bottom: 6px; }

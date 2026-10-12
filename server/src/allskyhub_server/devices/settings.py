@@ -7,6 +7,7 @@ restarts its capture, so the result is known within seconds.
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import Any
 
 from allskyhub_protocol import Command, CommandName, ErrorReply, SetSettingsArgs
 from allskyhub_server.devices.connections import ConnectionRegistry, DeviceOfflineError
@@ -38,15 +39,27 @@ class Outcome:
     status: int = 200
 
 
-def describe_fields(message: str) -> str:
-    """The device names invalid fields comma-separated (SPEC §6.5); make them German."""
-    names = [FIELD_NAMES.get(f.strip(), f.strip()) for f in message.split(",") if f.strip()]
-    return ", ".join(names) or "unbekannt"
+def describe_fields(message: str, labels: dict[str, str] | None = None) -> str:
+    """The device names invalid fields comma-separated (SPEC §6.5); make them German, with
+    the labels of the device's schema (§6.9) when known."""
+    names = labels or FIELD_NAMES
+    found = [names.get(f.strip(), f.strip()) for f in message.split(",") if f.strip()]
+    return ", ".join(dict.fromkeys(found)) or "unbekannt"
 
 
-async def apply(registry: ConnectionRegistry, device_id: str, args: SetSettingsArgs) -> Outcome:
-    """Send only the given keys; the device changes all or nothing."""
-    payload = args.model_dump(mode="json", exclude_none=True)
+async def apply(
+    registry: ConnectionRegistry,
+    device_id: str,
+    args: SetSettingsArgs | dict[str, Any],
+    labels: dict[str, str] | None = None,
+) -> Outcome:
+    """Send only the given keys (a null resets a nullable setting, SPEC §6.5); the device
+    changes all or nothing."""
+    payload = (
+        args.model_dump(mode="json", exclude_unset=True)
+        if isinstance(args, SetSettingsArgs)
+        else args
+    )
     if not payload:
         return Outcome(False, "Keine Änderung angegeben.", 400)
     cmd = Command(name=CommandName.SET_SETTINGS, args=payload)
@@ -61,7 +74,7 @@ async def apply(registry: ConnectionRegistry, device_id: str, args: SetSettingsA
     if isinstance(reply, ErrorReply):
         if reply.code == "invalid_args":
             return Outcome(
-                False, f"Die Kamera hat abgelehnt: {describe_fields(reply.message)}.", 400
+                False, f"Die Kamera hat abgelehnt: {describe_fields(reply.message, labels)}.", 400
             )
         return Outcome(False, f"Die Kamera meldet einen Fehler ({reply.code}).", 502)
     return Outcome(True)

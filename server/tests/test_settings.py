@@ -131,10 +131,10 @@ async def test_web_settings_form(app: FastAPI, client: httpx.AsyncClient, live_a
             )
         )  # fmt: skip
         args = await answer(ws)
-        assert args.model_dump(exclude_none=True) == {
+        # Only what changed: the time zone stays as the camera reported it.
+        assert args.model_dump(exclude_unset=True) == {
             "latitude": 47.8,
             "longitude": 13.05,
-            "timezone": "Europe/Vienna",
             "day_delay_s": 60.0,
         }
         r = await post

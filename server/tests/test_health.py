@@ -100,3 +100,18 @@ async def test_camera_page_shows_health(app: FastAPI, client: httpx.AsyncClient)
     page = (await client.get(f"/cameras/{dev.device_id}")).text
     assert "Zustand" in page
     assert "Die Kamera ist offline" in page  # never connected
+
+
+def test_dome_hint() -> None:
+    """Roadmap C12: forecast clear, camera overcast for two hours."""
+    now = dt.datetime(2026, 10, 13, 23, 30, tzinfo=dt.UTC)
+    samples = [(now - dt.timedelta(minutes=10 * i), 0.95) for i in range(12)]
+    clear = {dt.datetime(2026, 10, 13, h, tzinfo=dt.UTC): 5 for h in range(20, 24)}
+    hint = health.dome_hint(samples, clear, now)
+    assert hint is not None
+    assert hint.key == "dome"
+    # Clouds in the forecast, a clear moment, too few samples or no forecast: no hint.
+    assert health.dome_hint(samples, dict.fromkeys(clear, 60), now) is None
+    assert health.dome_hint([*samples[:-1], (now, 0.2)], clear, now) is None
+    assert health.dome_hint(samples[:3], clear, now) is None
+    assert health.dome_hint(samples, {}, now) is None

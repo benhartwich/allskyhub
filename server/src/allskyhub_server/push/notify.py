@@ -18,6 +18,7 @@ from allskyhub_server.devices import astro, health, night_summary, space_weather
 from allskyhub_server.devices.connections import ConnectionRegistry
 from allskyhub_server.devices.event_text import EVENT_TITLES
 from allskyhub_server.devices.events import storm_key
+from allskyhub_server.devices.tonight import ForecastCache
 from allskyhub_server.models import Device, EventRecord, PushToken, User
 from allskyhub_server.push.fcm import Message
 
@@ -50,6 +51,8 @@ class Notifier:
         self._sender = sender
         self._last_event: dict[str, dt.datetime] = {}
         self._storms_notified: set[str] = set()
+        # Set by the app: the dome hint (roadmap C12) compares with the cloud forecast.
+        self.forecast: ForecastCache | None = None
 
     @property
     def enabled(self) -> bool:
@@ -167,7 +170,8 @@ class Notifier:
                 online = registry.is_online(device.id)
                 if not online:
                     continue  # nothing new can be known; keep what was reported
-                problems = {p.key: p for p in health.check(device, online, now)}
+                found = await health.full_check(db, device, online, now, self.forecast)
+                problems = {p.key: p for p in found}
                 before = set(device.health_notified or [])
                 new = [p for k, p in problems.items() if k not in before]
                 gone = before - problems.keys()

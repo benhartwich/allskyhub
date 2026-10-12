@@ -1,0 +1,197 @@
+import 'dart:convert';
+
+import 'package:allskyhub_app/api/hub_client.dart';
+import 'package:allskyhub_app/screens/manage_screens.dart';
+import 'package:allskyhub_app/screens/stats_screen.dart';
+import 'package:flutter/material.dart';
+import 'package:flutter_test/flutter_test.dart';
+import 'package:http/http.dart' as http;
+import 'package:http/testing.dart';
+
+final camera = Camera(id: 'cam1', name: 'Garten', profile: 'sim', online: true);
+
+/// Roadmap C10, #9 and C7 against a small fake of the app API (api/app_manage.py).
+class FakeManageHub {
+  final members = <Map<String, dynamic>>[];
+  var enabled = false;
+  var profile = <String, dynamic>{
+    'title': '',
+    'location_label': '',
+    'show_coordinates': false,
+    'camera': '',
+    'lens': '',
+    'computer': '',
+    'owner': '',
+    'notes': '',
+    'sections': {'live': true, 'loop': true, 'observatory': false},
+    'future_field': 'kept',
+  };
+
+  HubClient get client => HubClient(
+    baseUrl: 'https://hub.example',
+    token: 'tok',
+    httpClient: MockClient((request) async {
+      final path = request.url.path;
+      if (path == '/api/v1/cameras/cam1/members') {
+        if (request.method == 'POST') {
+          final body = jsonDecode(request.body) as Map<String, dynamic>;
+          if (body['email'] == 'nobody@example.org') {
+            return _json({
+              'detail': 'Es gibt kein Konto mit dieser Adresse.',
+            }, 400);
+          }
+          members.add({
+            'user_id': 'u${members.length + 1}',
+            'email': body['email'],
+            'role': body['role'],
+          });
+        }
+        return _json(members);
+      }
+      if (path.startsWith('/api/v1/cameras/cam1/members/') &&
+          request.method == 'DELETE') {
+        members.removeWhere((m) => path.endsWith('/${m['user_id']}'));
+        return http.Response('', 204);
+      }
+      if (path == '/api/v1/cameras/cam1/public/profile') {
+        if (request.method == 'PUT') {
+          final body = jsonDecode(request.body) as Map<String, dynamic>;
+          if (body['enabled'] is bool) enabled = body['enabled'] as bool;
+          if (body['profile'] case final Map<String, dynamic> p) profile = p;
+        }
+        return _json({
+          'enabled': enabled,
+          'url': enabled ? 'https://hub.example/sky/abc' : null,
+          'profile': profile,
+        });
+      }
+      if (path == '/api/v1/cameras/cam1/stats') {
+        final year = int.parse(request.url.queryParameters['year'] ?? '2026');
+        Map<String, dynamic> period(String label, int nights) => {
+          'label': label,
+          'nights': nights,
+          'clear_nights': nights ~/ 2,
+          'clear_hours': nights * 3.0,
+          'best_sqm': nights > 0 ? 21.3 : null,
+          'meteors': nights * 2,
+          'aurora': 0,
+          'storms': 0,
+        };
+        final full = year == 2026;
+        return _json({
+          'year': year,
+          'months': [
+            for (var i = 1; i <= 12; i++)
+              period('M$i', full && i == 10 ? 4 : 0),
+          ],
+          'total': period('$year', full ? 4 : 0),
+          'showers': full ? {'Orioniden': 3} : <String, int>{},
+          'years': [2026, 2025],
+        });
+      }
+      return http.Response('', 404);
+    }),
+  );
+}
+
+http.Response _json(Object body, [int status = 200]) => http.Response(
+  jsonEncode(body),
+  status,
+  headers: {'content-type': 'application/json; charset=utf-8'},
+);
+
+Future<void> _pump(WidgetTester tester, Widget screen) async {
+  tester.view.physicalSize = const Size(420, 2400);
+  tester.view.devicePixelRatio = 1;
+  addTearDown(tester.view.reset);
+  await tester.pumpWidget(MaterialApp(home: screen));
+  await tester.pumpAndSettle();
+}
+
+void main() {
+  testWidgets('shares and stops sharing', (tester) async {
+    final hub = FakeManageHub();
+    await _pump(tester, SharingScreen(client: hub.client, camera: camera));
+    expect(find.text('Noch niemand.'), findsOneWidget);
+
+    await tester.enterText(
+      find.byKey(const Key('share-email')),
+      'nobody@example.org',
+    );
+    await tester.tap(find.byKey(const Key('share-add')));
+    await tester.pumpAndSettle();
+    expect(find.text('Es gibt kein Konto mit dieser Adresse.'), findsOneWidget);
+
+    await tester.enterText(
+      find.byKey(const Key('share-email')),
+      'oma@example.org',
+    );
+    await tester.tap(find.text('Verwalten'));
+    await tester.tap(find.byKey(const Key('share-add')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('share-error')), findsNothing);
+    expect(find.text('oma@example.org'), findsOneWidget);
+    expect(hub.members.single['role'], 'admin');
+
+    await tester.tap(find.byTooltip('Nicht mehr teilen'));
+    await tester.pumpAndSettle();
+    expect(hub.members, isEmpty);
+    expect(find.text('Noch niemand.'), findsOneWidget);
+  });
+
+  testWidgets('public page: switch on, edit, keep unknown fields', (
+    tester,
+  ) async {
+    final hub = FakeManageHub();
+    await _pump(tester, PublicPageScreen(client: hub.client, camera: camera));
+    expect(find.byKey(const Key('public-url')), findsNothing);
+
+    await tester.tap(find.byKey(const Key('public-enabled')));
+    await tester.pumpAndSettle();
+    expect(hub.enabled, isTrue);
+    expect(find.text('https://hub.example/sky/abc'), findsOneWidget);
+
+    await tester.enterText(find.byKey(const Key('public-title')), 'Sternwarte');
+    await tester.tap(find.byKey(const Key('section-observatory')));
+    await tester.tap(find.byKey(const Key('show-coordinates')));
+    await tester.tap(find.byKey(const Key('public-save')));
+    await tester.pumpAndSettle();
+    expect(find.text('Gespeichert.'), findsOneWidget);
+    expect(hub.profile['title'], 'Sternwarte');
+    expect(hub.profile['show_coordinates'], isTrue);
+    expect((hub.profile['sections'] as Map)['observatory'], isTrue);
+    expect((hub.profile['sections'] as Map)['live'], isTrue);
+    expect(hub.profile['future_field'], 'kept');
+  });
+
+  testWidgets('statistics per year', (tester) async {
+    final hub = FakeManageHub();
+    await _pump(tester, StatsScreen(client: hub.client, camera: camera));
+    expect(find.text('2 von 4'), findsOneWidget);
+    expect(find.text('Orioniden'), findsOneWidget);
+    expect(find.text('M10'), findsNWidgets(2)); // bar label and table row
+
+    await tester.tap(find.text('2025'));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('stats-empty')), findsOneWidget);
+  });
+
+  test('camera role defaults to owner for older hubs', () {
+    final old = Camera.fromJson({
+      'id': 'a',
+      'name': 'n',
+      'profile': 'p',
+      'online': false,
+    });
+    expect(old.isOwner, isTrue);
+    final shared = Camera.fromJson({
+      'id': 'a',
+      'name': 'n',
+      'profile': 'p',
+      'online': false,
+      'role': 'viewer',
+    });
+    expect(shared.isOwner, isFalse);
+    expect(shared.canChange, isFalse);
+  });
+}

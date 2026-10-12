@@ -202,6 +202,8 @@ class Camera(BaseModel):
     public_url: str | None = None
     # SPEC §6.9: the form for the settings screen (the fixed fields for old agents).
     settings_schema: list[dict[str, Any]] = []
+    # Roadmap C10: "owner", or "admin"/"viewer" for a camera shared with this account.
+    role: Role = "owner"
 
 
 def _bearer(request: Request) -> str:
@@ -226,7 +228,9 @@ def _registry(request: Request) -> ConnectionRegistry:
     return registry
 
 
-def _camera(device: Device, registry: ConnectionRegistry, base_url: str) -> Camera:
+def _camera(
+    device: Device, registry: ConnectionRegistry, base_url: str, role: Role = "owner"
+) -> Camera:
     return Camera(
         id=device.id,
         name=device.name,
@@ -242,6 +246,7 @@ def _camera(device: Device, registry: ConnectionRegistry, base_url: str) -> Came
             f"{base_url.rstrip('/')}/sky/{device.public_slug}" if device.public_slug else None
         ),
         settings_schema=[s.model_dump(mode="json") for s in settings_form.schema_of(device)[0]],
+        role=role,
     )
 
 
@@ -280,8 +285,8 @@ async def logout(request: Request, db: DbSession, user: AppUser) -> Response:
 async def cameras(request: Request, db: DbSession, user: AppUser) -> list[Camera]:
     registry = _registry(request)
     return [
-        _camera(d, registry, request.app.state.settings.base_url)
-        for d, _ in await queries.visible(db, user.id)
+        _camera(d, registry, request.app.state.settings.base_url, role)
+        for d, role in await queries.visible(db, user.id)
     ]
 
 
@@ -315,8 +320,11 @@ async def _own(db: DbSession, user: User, device_id: str, need: Role = "viewer")
 
 @router.get("/cameras/{device_id}")
 async def camera(request: Request, db: DbSession, user: AppUser, device_id: str) -> Camera:
-    device = await _own(db, user, device_id)
-    return _camera(device, _registry(request), request.app.state.settings.base_url)
+    found = await queries.visible_one(db, user.id, device_id)
+    if found is None:
+        raise HTTPException(404, "Not found")
+    device, role = found
+    return _camera(device, _registry(request), request.app.state.settings.base_url, role)
 
 
 @router.get("/cameras/{device_id}/image/{variant}.jpg")

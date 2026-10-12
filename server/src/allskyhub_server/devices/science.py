@@ -13,8 +13,12 @@ import io
 from collections import defaultdict
 from typing import Any
 
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from allskyhub_server.devices import events
 from allskyhub_server.devices.event_text import shower_name
-from allskyhub_server.models import EventRecord, SkySample
+from allskyhub_server.models import Device, EventRecord, SkySample
 
 # IMO fireball report form; it cannot be prefilled, so the page lists what to enter.
 FIREBALL_FORM = "https://fireball.imo.net/members/imo/report_intro"
@@ -22,6 +26,12 @@ FIREBALL_FORM = "https://fireball.imo.net/members/imo/report_intro"
 GLOBE_AT_NIGHT = "https://www.globeatnight.org/webapp/"
 # A meteor this bright (peak brightness of its track) may be a fireball worth reporting.
 FIREBALL_PEAK = 0.9
+
+EXPORTS = {
+    "meteors": ("Meteore, einzeln", "meteors.csv"),
+    "meteors-hourly": ("Meteore pro Stunde", "meteors-hourly.csv"),
+    "sqm": ("Himmelshelligkeit pro Nacht", "sqm.csv"),
+}
 
 
 def _num(value: object) -> str:
@@ -140,3 +150,19 @@ def fireball_facts(event: EventRecord) -> list[tuple[str, str]] | None:
             ("Strom", shower_name(shower) if isinstance(shower, str) and shower else "sporadisch")
         )
     return facts
+
+
+async def export(db: AsyncSession, device: Device, name: str) -> tuple[str, str]:
+    """CSV body and file name of one of ``EXPORTS`` (web page and app API alike)."""
+    settings: dict[str, Any] = (device.last_status or {}).get("settings") or {}
+    lat, lon = settings.get("latitude"), settings.get("longitude")
+    lat = float(lat) if isinstance(lat, int | float) else None
+    lon = float(lon) if isinstance(lon, int | float) else None
+    if name == "sqm":
+        samples = list(await db.scalars(select(SkySample).where(SkySample.device_id == device.id)))
+        body = sqm_csv(samples, lat, lon)
+    else:
+        rows = await events.events(db, device.id, limit=100_000)
+        meteors = [e for e in rows if e.kind == "meteor"]
+        body = meteors_csv(meteors, lat, lon) if name == "meteors" else hourly_counts_csv(meteors)
+    return body, f"allskyhub-{device.id[:6]}-{EXPORTS[name][1]}"

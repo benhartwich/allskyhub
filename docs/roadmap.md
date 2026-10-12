@@ -110,7 +110,7 @@ hub side. Push needs the Firebase project; until then the same messages show on 
 | # | Item | Owner | Notes |
 |---|---|---|---|
 | H1 | Constellation lines, names and N/E/S/W over the live image on the public page | hub (+ agent: lens model in status) | waits for the SPEC change |
-| H2 | Flutter app catches up with the web: charts, lightbox, sharing, statistics, "Heute Nacht", exports, e-mail notification switches | hub | after the local work, as Benjamin ordered |
+| H2 | Flutter app catches up with the web: charts, lightbox, sharing, statistics, "Heute Nacht", exports, e-mail notification switches | hub | in parallel since 2026-10: done except exports in the app (the API has them; sharing a file needs a new app dependency) |
 
 ## Needs Benjamin / hardware
 

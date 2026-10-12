@@ -6,7 +6,9 @@ import '../api/hub_client.dart';
 import '../platform/location.dart';
 import 'camera_settings_screen.dart';
 import 'camera_status.dart';
+import 'manage_screens.dart';
 import 'measurements_screen.dart';
+import 'stats_screen.dart';
 import 'zoomable.dart';
 
 /// Live view: polls the latest image with `live=true` every few seconds, so the hub asks
@@ -66,13 +68,17 @@ class _CameraScreenState extends State<CameraScreen> {
     }
   }
 
+  /// The owner unpairs the camera; someone it is shared with leaves it (roadmap C10).
   Future<void> _remove() async {
+    final owner = _camera.isOwner;
     final ok = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Kamera entfernen?'),
-        content: const Text(
-          'Die Kamera wird von deinem Konto getrennt und zeigt danach einen neuen Kopplungscode.',
+        title: Text(owner ? 'Kamera entfernen?' : 'Kamera verlassen?'),
+        content: Text(
+          owner
+              ? 'Die Kamera wird von deinem Konto getrennt und zeigt danach einen neuen Kopplungscode.'
+              : 'Du siehst die Kamera danach nicht mehr, bis sie wieder mit dir geteilt wird.',
         ),
         actions: [
           TextButton(
@@ -81,15 +87,36 @@ class _CameraScreenState extends State<CameraScreen> {
           ),
           FilledButton(
             onPressed: () => Navigator.pop(context, true),
-            child: const Text('Entfernen'),
+            child: Text(owner ? 'Entfernen' : 'Verlassen'),
           ),
         ],
       ),
     );
     if (ok != true) return;
-    await widget.client.remove(_camera.id);
+    try {
+      if (owner) {
+        await widget.client.remove(_camera.id);
+      } else {
+        await widget.client.unshare(_camera.id, await widget.client.myId());
+      }
+    } on Exception catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              e is HubException ? e.message : 'Keine Verbindung zum Hub.',
+            ),
+          ),
+        );
+      }
+      return;
+    }
     if (mounted) Navigator.of(context).pop();
   }
+
+  void _open(Widget Function() screen) => Navigator.of(
+    context,
+  ).push(MaterialPageRoute<void>(builder: (_) => screen()));
 
   /// The live picture in full screen, to zoom into (the picture of this moment).
   void _openFullscreen() {
@@ -125,22 +152,22 @@ class _CameraScreenState extends State<CameraScreen> {
       appBar: AppBar(
         title: Text(_camera.name),
         actions: [
-          IconButton(
-            tooltip: 'Einstellungen',
-            icon: const Icon(Icons.settings_outlined),
-            onPressed: () => Navigator.of(context).push(
-              MaterialPageRoute<void>(
-                builder: (_) => CameraSettingsScreen(
+          if (_camera.canChange)
+            IconButton(
+              tooltip: 'Einstellungen',
+              icon: const Icon(Icons.settings_outlined),
+              onPressed: () => _open(
+                () => CameraSettingsScreen(
                   client: widget.client,
                   camera: _camera,
                   locationSource: PlatformLocationSource(),
                 ),
               ),
             ),
-          ),
           IconButton(
-            tooltip: 'Entfernen',
-            icon: const Icon(Icons.delete_outline),
+            key: const Key('remove-camera'),
+            tooltip: _camera.isOwner ? 'Entfernen' : 'Verlassen',
+            icon: Icon(_camera.isOwner ? Icons.delete_outline : Icons.logout),
             onPressed: _remove,
           ),
         ],
@@ -261,19 +288,53 @@ class _CameraScreenState extends State<CameraScreen> {
           ],
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-            child: OutlinedButton.icon(
-              key: const Key('open-measurements'),
-              icon: const Icon(Icons.show_chart),
-              label: const Text('Messdaten'),
-              onPressed: () => Navigator.of(context).push(
-                MaterialPageRoute<void>(
-                  builder: (_) => MeasurementsScreen(
-                    client: widget.client,
-                    cameraId: _camera.id,
-                    hours: 24,
+            child: Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: [
+                OutlinedButton.icon(
+                  key: const Key('open-measurements'),
+                  icon: const Icon(Icons.show_chart),
+                  label: const Text('Messdaten'),
+                  onPressed: () => _open(
+                    () => MeasurementsScreen(
+                      client: widget.client,
+                      cameraId: _camera.id,
+                      hours: 24,
+                    ),
                   ),
                 ),
-              ),
+                OutlinedButton.icon(
+                  key: const Key('open-stats'),
+                  icon: const Icon(Icons.bar_chart),
+                  label: const Text('Statistik'),
+                  onPressed: () => _open(
+                    () => StatsScreen(client: widget.client, camera: _camera),
+                  ),
+                ),
+                if (_camera.isOwner) ...[
+                  OutlinedButton.icon(
+                    key: const Key('open-sharing'),
+                    icon: const Icon(Icons.group_outlined),
+                    label: const Text('Teilen'),
+                    onPressed: () => _open(
+                      () =>
+                          SharingScreen(client: widget.client, camera: _camera),
+                    ),
+                  ),
+                  OutlinedButton.icon(
+                    key: const Key('open-public'),
+                    icon: const Icon(Icons.public),
+                    label: const Text('Öffentliche Seite'),
+                    onPressed: () => _open(
+                      () => PublicPageScreen(
+                        client: widget.client,
+                        camera: _camera,
+                      ),
+                    ),
+                  ),
+                ],
+              ],
             ),
           ),
         ],

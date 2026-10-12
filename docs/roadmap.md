@@ -78,21 +78,21 @@ hub side. Push needs the Firebase project; until then the same messages show on 
 
 | # | Item | Owner | Notes |
 |---|---|---|---|
-| C1 | "Heute Nacht": observing window from a cloud forecast (Open-Meteo), astronomical twilight and the moon (phase, rise, set), on the camera page, public page and app; evening push | hub | own sun/moon code (Meeus, low precision), no new dependency |
-| C2 | Aurora alarm that looks: push when Kp reaches the camera's latitude threshold **and** the camera reports a clear sky | hub | Kp from #16, cloud cover from `status.sky` |
+| C1 | ~~"Heute Nacht": observing window from a cloud forecast (Open-Meteo), astronomical twilight and the moon (phase, rise, set), on the camera page, public page and app; evening push~~ | hub | done: #86/#89; own sun/moon code (Meeus, low precision), no new dependency |
+| C2 | ~~Aurora alarm that looks: push when Kp reaches the camera's latitude threshold **and** the camera reports a clear sky~~ | hub | done: #89; Kp from #16, cloud cover from `status.sky` |
 | C3 | Morning summary per camera: meteors, clear hours, best sky brightness, the night's best picture; push, later e-mail (#15) | hub | |
-| C4 | Meteor triangulation: the same meteor seen by two oriented cameras gives its path, height and radiant | hub | needs `azimuth_deg`/`altitude_deg` of both ends from the agent (SPEC change) |
-| C5 | Map of all public cameras | hub | coordinates rounded as on the public page, only where the owner shows them |
-| C6 | Satellite passes (ISS, bright satellites) as a forecast and to drop satellite trails from meteor detections | hub | TLE from CelesTrak, SGP4 |
-| C7 | Statistics per month and year: clear nights, sky brightness, meteors per shower | hub | from `sky_sample` and `event` |
-| C8 | Timelapse over a chosen period and monthly keograms from the archive | hub | thumbnails only, ffmpeg on the hub |
-| C9 | Embeddable widget and image feed for own websites, RSS/Atom for detections | hub | per public page |
+| C4 | ~~Meteor triangulation: the same meteor seen by two oriented cameras gives its path, height and radiant~~ | hub | done: #110 (agent #108); needs `azimuth_deg`/`altitude_deg` of both ends from the agent (SPEC change) |
+| C5 | ~~Map of all public cameras~~ | hub | done: #95; coordinates rounded as on the public page, only where the owner shows them |
+| C6 | ~~Satellite passes (ISS, bright satellites) as a forecast and to drop satellite trails from meteor detections~~ | hub | done: #105 (passes; satellite trails in meteors: agent); TLE from CelesTrak, SGP4 |
+| C7 | ~~Statistics per month and year: clear nights, sky brightness, meteors per shower~~ | hub | done: #92; from `sky_sample` and `event` |
+| C8 | ~~Timelapse over a chosen period and monthly keograms from the archive~~ | hub | done: #98; thumbnails only, ffmpeg on the hub |
+| C9 | ~~Embeddable widget and image feed for own websites, RSS/Atom for detections~~ | hub | done: #91; per public page |
 | C10 | Share a camera with family or a club (roles: viewer, admin) | hub | |
 | C11 | Export for science: meteors for IMO/GMN, prefilled fireball reports, sky brightness for Globe at Night | hub | |
 | C12 | Maintenance hints: dew or dirt on the dome, recognised from the pictures | hub | |
 | C13 | Aurora map (NOAA OVATION) on the public page | hub | |
-| C14 | Camera monitoring with escalation: push after 30 min offline (exists), e-mail after a few hours (#15); "online but no new pictures", disk almost full, sensor or CPU too hot, clock not synchronised, camera missing; daily health line on the camera page | hub | Benjamin: what other projects do not do; the camera's own watchdog is L17 |
-| C15 | N.I.N.A. on the hub: show what the telescope is imaging (target, sequence progress, last image) next to the sky, push when the sky turns unsafe | hub | data relayed by the agent (L16); opt-in, NINA is LAN-only |
+| C14 | ~~Camera monitoring with escalation: push after 30 min offline (exists), e-mail after a few hours (#15); "online but no new pictures", disk almost full, sensor or CPU too hot, clock not synchronised, camera missing; daily health line on the camera page~~ | hub | done: #93 (e-mail with #15); Benjamin: what other projects do not do; the camera's own watchdog is L17 |
+| C15 | ~~N.I.N.A. on the hub: show what the telescope is imaging (target, sequence progress, last image) next to the sky, push when the sky turns unsafe~~ | hub | done: #111 (agent: N.I.N.A. client); data relayed by the agent (L16); opt-in, NINA is LAN-only |
 
 ## Needs Benjamin / hardware
 

@@ -140,7 +140,8 @@ a.card.cam:hover { transform: translateY(-4px); border-color: rgba(122, 162, 247
                box-shadow: 0 0 0 1px rgba(122, 162, 247, .3); }
 .cam-meta { display: flex; justify-content: space-between; align-items: center; gap: 8px; font-family: var(--display); font-size: 18px; }
 .live { margin: 0; display: grid; gap: 10px; }
-.live img { object-fit: contain; background: #000; border-radius: 20px;
+/* Cameras deliver 16:9 (ASI678MC) or 4:3 pictures: show them in their own shape. */
+.live img { aspect-ratio: auto; height: auto; object-fit: contain; background: #000; border-radius: 20px;
             box-shadow: 0 0 0 1px rgba(122, 162, 247, .3), 0 0 80px -10px rgba(110, 120, 255, .55); }
 
 .card.danger { border-style: dashed; border-color: rgba(255, 122, 147, .35); }

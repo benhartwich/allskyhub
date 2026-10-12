@@ -68,15 +68,10 @@ const _panels = [
     log: true,
     right: _Line('gain', 'Gain', '', _gain),
   ),
-  _Panel(
-    'Temperaturen und Speicher',
-    'status',
-    [
-      _Line('sensor', 'Sensor', '°C', _sensor, digits: 1),
-      _Line('cpu', 'Prozessor', '°C', _cpu),
-    ],
-    right: _Line('disk', 'Speicher frei', '%', _disk),
-  ),
+  _Panel('Temperaturen und Speicher', 'status', [
+    _Line('sensor', 'Sensor', '°C', _sensor, digits: 1),
+    _Line('cpu', 'Prozessor', '°C', _cpu),
+  ], right: _Line('disk', 'Speicher frei', '%', _disk)),
 ];
 
 /// The ranges offered, like on the web: one night or the last hours.

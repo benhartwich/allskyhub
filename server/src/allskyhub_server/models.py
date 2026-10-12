@@ -58,6 +58,10 @@ class User(Base):
     # Push notifications (roadmap #6), each off until the user switches it on.
     notify_events: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
     notify_offline: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
+    # Roadmap C2: Kp high enough for the camera's latitude while its sky is clear.
+    notify_aurora: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
+    # Roadmap C3: a summary of each camera's night in the morning.
+    notify_summary: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
     created_at: Mapped[dt.datetime] = mapped_column(_tz(), server_default=func.now())
 
 
@@ -114,6 +118,9 @@ class Device(Base):
     latest_thumb_at: Mapped[dt.datetime | None] = mapped_column(_tz())
     # When an "offline" push was sent for the current outage (roadmap #6); cleared on reconnect.
     offline_notified_at: Mapped[dt.datetime | None] = mapped_column(_tz())
+    # Roadmap C2/C3: last aurora alarm, and the night whose summary went out.
+    aurora_notified_at: Mapped[dt.datetime | None] = mapped_column(_tz())
+    summary_night: Mapped[str | None] = mapped_column(String(8))
     # Opt-in public sky page (/sky/<slug>): a random slug, never the device id; switching the
     # page off drops it, so old links stop working.
     public_slug: Mapped[str | None] = mapped_column(String(32), unique=True)

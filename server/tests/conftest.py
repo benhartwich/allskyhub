@@ -25,6 +25,7 @@ from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
 
 from allskyhub_server.app import create_app
 from allskyhub_server.devices.space_weather import KpCache
+from allskyhub_server.devices.tonight import ForecastCache
 from allskyhub_server.models import Base
 from allskyhub_server.settings import Settings
 
@@ -93,6 +94,10 @@ async def app(settings: Settings, engine: AsyncEngine) -> AsyncIterator[FastAPI]
     application = create_app(settings)
     # No requests to NOAA from tests: a fixed Kp forecast for today and tomorrow.
     application.state.kp = KpCache(httpx.AsyncClient(transport=httpx.MockTransport(_kp_answer)))
+    # Nor to Open-Meteo: clear skies everywhere.
+    application.state.forecast = ForecastCache(
+        httpx.AsyncClient(transport=httpx.MockTransport(_forecast_answer))
+    )
     async with application.router.lifespan_context(application):
         yield application
 
@@ -109,6 +114,12 @@ def _kp_answer(request: httpx.Request) -> httpx.Response:
         },
     ]
     return httpx.Response(200, json=rows)
+
+
+def _forecast_answer(request: httpx.Request) -> httpx.Response:
+    start = dt.datetime.now(dt.UTC).replace(hour=0, minute=0, second=0, microsecond=0)
+    times = [int((start + dt.timedelta(hours=i)).timestamp()) for i in range(72)]
+    return httpx.Response(200, json={"hourly": {"time": times, "cloud_cover": [5] * 72}})
 
 
 @pytest.fixture

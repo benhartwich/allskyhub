@@ -199,7 +199,13 @@ SCHEMA_JSON = [
         "group": "Bild",
         "choices": [{"value": "none", "label": "Nein"}, {"value": "h", "label": "Horizontal"}],
     },
-    {"key": "overlay", "type": "bool", "label": "Overlay", "group": "Bild"},
+    {
+        "key": "overlay",
+        "type": "bool",
+        "label": {"de": "Einblendung", "en": "Overlay"},
+        "group": {"de": "Bild", "en": "Image"},
+        "help": {"de": "Text im Bild"},
+    },
     {
         "key": "title",
         "type": "string",
@@ -272,3 +278,36 @@ def test_settings_schema_in_hello_and_checks() -> None:
     ):
         with pytest.raises(ValidationError):
             SettingSpec.model_validate(broken)
+
+
+def test_settings_schema_texts_problems_and_numbers() -> None:
+    """SPEC §6.9: German or German + English texts, unusable schemas, NaN and infinity."""
+    from allskyhub_protocol import Hello, SettingSpec, invalid_settings, localized, schema_problems
+
+    hello = Hello.model_validate(
+        {
+            "device_id": "a" * 26,
+            "profile": "sim",
+            "agent_version": "1",
+            "settings_schema": SCHEMA_JSON,
+        }
+    )
+    overlay = next(s for s in hello.settings_schema if s.key == "overlay")
+    assert localized(overlay.label, "en") == "Overlay"
+    assert localized(overlay.label) == "Einblendung"
+    assert overlay.help is not None
+    assert localized(overlay.help, "en") == "Text im Bild"  # falls back to German
+    assert schema_problems(hello.settings_schema) == []
+    dup = [*hello.settings_schema, hello.settings_schema[1]]
+    lat = SettingSpec.model_validate(
+        {"key": "latitude", "type": "number", "label": "Breite", "group": "Standort"}
+    )
+    assert schema_problems([*dup, lat]) == [
+        "duplicate key timezone",
+        "latitude is part of location",
+    ]
+    for v in (float("nan"), float("inf")):
+        assert invalid_settings(hello.settings_schema, {"night_delay_s": v}) == ["night_delay_s"]
+        assert invalid_settings(hello.settings_schema, {"latitude": v, "longitude": 1.0}) == [
+            "latitude"
+        ]

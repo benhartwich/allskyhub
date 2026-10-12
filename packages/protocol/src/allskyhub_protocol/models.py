@@ -6,10 +6,11 @@ body model; `Envelope.wrap()` builds one from a body, `parse_envelope()` reads o
 
 from __future__ import annotations
 
+import math
 from collections.abc import Mapping
 from datetime import UTC, datetime
 from enum import StrEnum
-from typing import Any, ClassVar, Literal, cast
+from typing import Annotated, Any, ClassVar, Literal, cast
 from uuid import uuid4
 
 from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, model_validator
@@ -40,11 +41,46 @@ class SettingType(StrEnum):
     LOCATION = "location"  # latitude + longitude, key "location"
 
 
+_Label = Annotated[str, Field(min_length=1, max_length=60)]
+_Group = Annotated[str, Field(min_length=1, max_length=40)]
+_Help = Annotated[str, Field(min_length=1, max_length=300)]
+
+
+class LabelText(BaseModel):
+    """A schema text in German and optionally English (SPEC §6.9)."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    de: _Label
+    en: _Label | None = None
+
+
+class GroupText(BaseModel):
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    de: _Group
+    en: _Group | None = None
+
+
+class HelpText(BaseModel):
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    de: _Help
+    en: _Help | None = None
+
+
+def localized(text: str | LabelText | GroupText | HelpText, lang: str = "de") -> str:
+    """A schema text in `lang`, falling back to German (SPEC §6.9)."""
+    if isinstance(text, str):
+        return text
+    return (text.en if lang == "en" else None) or text.de
+
+
 class SettingChoice(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 
     value: str = Field(min_length=1, max_length=40)
-    label: str = Field(min_length=1, max_length=60)
+    label: _Label | LabelText
 
 
 class SettingSpec(BaseModel):
@@ -54,9 +90,9 @@ class SettingSpec(BaseModel):
 
     key: str = Field(pattern=r"^[a-z][a-z0-9_]{0,39}$")
     type: SettingType
-    label: str = Field(min_length=1, max_length=60)
-    group: str = Field(min_length=1, max_length=40)
-    help: str | None = Field(default=None, max_length=300)
+    label: _Label | LabelText
+    group: _Group | GroupText
+    help: _Help | HelpText | None = None
     unit: str | None = Field(default=None, max_length=10)
     min: float | None = None
     max: float | None = None
@@ -88,7 +124,7 @@ def _invalid_value(spec: SettingSpec, v: object) -> bool:
         case SettingType.BOOL:
             return not isinstance(v, bool)
         case SettingType.INT | SettingType.NUMBER:
-            if isinstance(v, bool) or not isinstance(v, int | float):
+            if isinstance(v, bool) or not isinstance(v, int | float) or not math.isfinite(v):
                 return True
             if spec.type is SettingType.INT and not float(v).is_integer():
                 return True
@@ -103,6 +139,15 @@ def _invalid_value(spec: SettingSpec, v: object) -> bool:
             return True  # set through latitude and longitude
 
 
+def schema_problems(schema: list[SettingSpec]) -> list[str]:
+    """Why a settings schema cannot be used (SPEC §6.9); empty if it is fine. The hub
+    then keeps the device's previous schema."""
+    keys = [s.key for s in schema]
+    problems = [f"duplicate key {k}" for k in sorted({k for k in keys if keys.count(k) > 1})]
+    problems += [f"{k} is part of location" for k in ("latitude", "longitude") if k in keys]
+    return problems
+
+
 def invalid_settings(schema: list[SettingSpec], values: Mapping[str, object]) -> list[str]:
     """The keys of a partial `set_settings` object the schema does not allow (SPEC §6.9),
     sorted; empty if all are fine."""
@@ -115,9 +160,8 @@ def invalid_settings(schema: list[SettingSpec], values: Mapping[str, object]) ->
         elif "latitude" in values:
             for k, v, lim in (("latitude", lat, 90), ("longitude", lon, 180)):
                 ok = v is None and specs["location"].nullable
-                ok = ok or (
-                    not isinstance(v, bool) and isinstance(v, int | float) and -lim <= v <= lim
-                )
+                number = not isinstance(v, bool) and isinstance(v, int | float) and math.isfinite(v)
+                ok = ok or (number and -lim <= cast(float, v) <= lim)
                 if not ok:
                     bad.add(k)
     for k, v in values.items():

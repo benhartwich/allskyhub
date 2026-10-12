@@ -340,7 +340,8 @@ night (§6.7).
 **`set_settings`** with a partial object of keys from `settings_schema` (§6.9), for
 example `latitude` and `longitude` (both or neither), `timezone` (IANA), `camera`
 (`auto`, `zwo-asi678mc`, `rpi-hq`, `sim`), `day_delay_s` and `night_delay_s` (0..3600 s
-between frames). Only the given keys change; an unknown key or a value the schema does
+between frames). Only the given keys change: a key that is left out keeps its value, and
+`null` resets a `nullable` setting ("not set"). An unknown key or a value the schema does
 not allow changes nothing and is answered with `error` `invalid_args`, whose `message`
 names the fields, comma-separated. The device validates; the hub may check against the
 schema first to show errors at once. On success the device stores the settings, answers `ack` and restarts its
@@ -442,14 +443,22 @@ Each entry:
 |---|---|
 | `key` | name in `status.settings` and `set_settings`, `^[a-z][a-z0-9_]{0,39}$` |
 | `type` | `number`, `int`, `bool`, `choice`, `string` or `location` |
-| `label` | German label, ≤ 60 characters |
-| `group` | German section heading, ≤ 40 characters; entries of one group are shown together, groups in order of first appearance |
-| `help` | optional German sentence under the field, ≤ 300 characters |
+| `label` | label, ≤ 60 characters |
+| `group` | section heading, ≤ 40 characters; entries of one group are shown together, groups in order of first appearance |
+| `help` | optional sentence under the field, ≤ 300 characters |
 | `unit` | optional unit shown after the value (`s`, `ms`, `%`, `°`), ≤ 10 characters |
-| `min`, `max`, `step` | `number` and `int` only, optional; values outside `min`..`max` are `invalid_args` |
-| `choices` | `choice` only: `[{value, label}]`, `value` a string, `label` German |
+| `min`, `max`, `step` | `number` and `int` only, optional; values outside `min`..`max`, NaN and infinity are `invalid_args`; `step` is only a hint for the form and not checked |
+| `choices` | `choice` only: `[{value, label}]`, `value` a string, `label` a text as above |
 | `max_length` | `string` only, default 200 |
 | `nullable` | the value may be `null` ("not set"); default false |
+
+**Texts** (`label`, `group`, `help`, `choices[].label`) are either a string, which is
+German, or `{"de": "...", "en": "..."}` with `en` optional. Forms show the user's language
+and fall back to German.
+
+**A usable schema** has every key once and no `latitude` or `longitude` entries of its own
+(they belong to `location`). The hub checks this (`schema_problems`) and keeps the
+previous schema of the device if the new one is not usable.
 
 Values in `status.settings` and `set_settings`: JSON number for `number`, integer for
 `int`, boolean for `bool`, one of the `choices` values for `choice`, string for `string`.
@@ -458,9 +467,11 @@ two keys `latitude` (−90..90) and `longitude` (−180..180), which are reporte
 together as before; the forms show it as a map with a coordinate field.
 
 `settings_schema` may be empty for an old agent; the hub then shows the fixed fields
-listed under `set_settings` (§6.5). The hub must accept `settings_schema` and further keys
-in `status.settings` before agents send them (deploy the hub first). Models:
-`SettingSpec`, `SettingChoice`, `SettingType` in `allskyhub_protocol.models`.
+listed under `set_settings` (§6.5) and checks them with `SetSettingsArgs` only, not with
+`invalid_settings`. The hub must accept `settings_schema` and further keys
+in `status.settings` before agents send them (deploy the hub first). Models and checks:
+`SettingSpec`, `SettingChoice`, `SettingType`, `LabelText`, `GroupText`, `HelpText`,
+`localized`, `schema_problems` and `invalid_settings` in `allskyhub_protocol.models`.
 
 ## 7. Local web UI
 

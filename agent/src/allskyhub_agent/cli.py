@@ -288,6 +288,7 @@ def main(argv: list[str] | None = None) -> int:
         store,
         orientation=lambda: orienter.solution if orienter is not None else None,
         location=lambda: (loc.lat, loc.lon) if loc is not None else None,
+        time_trusted=system.time_trusted if settings_path else lambda: True,
     )
     # Sky condition for status (SPEC §6.3); configured for the profile once it is known.
     sky_meter: SkyMeter | None = None

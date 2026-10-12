@@ -39,6 +39,7 @@ from allskyhub_protocol import (
     EventKind,
     FrameInfo,
     Hello,
+    HubKey,
     Mode,
     Products,
     Purpose,
@@ -98,6 +99,7 @@ class FakeHub:
     upload_headers: list[dict[str, str]] = field(default_factory=list[dict[str, str]])
     received: list[Envelope] = field(default_factory=list[Envelope])
     ws_auth: list[str] = field(default_factory=list[str])
+    hub_keys: list[dict[str, str]] = field(default_factory=list[dict[str, str]])
     commands: list[Command] = field(default_factory=list[Command])
     done: asyncio.Event = field(default_factory=asyncio.Event)
     replies: dict[str, Ack | ErrorReply] = field(default_factory=dict[str, Ack | ErrorReply])
@@ -147,7 +149,12 @@ class FakeHub:
                 return httpx.Response(401, json={"detail": "bad signature"})
             self.tokens += 1
             return httpx.Response(
-                200, json={"access_token": f"tok{self.tokens}", "expires_in": 3600}
+                200,
+                json={
+                    "access_token": f"tok{self.tokens}",
+                    "expires_in": 3600,
+                    "hub_keys": self.hub_keys,
+                },
             )
         if (
             path.startswith(("/device/v1/frames/", "/device/v1/products/", "/device/v1/events/"))
@@ -513,3 +520,59 @@ def test_set_settings_command(tmp_path: Path) -> None:
     assert isinstance(second, Ack)
     assert len(got) == 1
     assert (got[0].latitude, got[0].longitude, got[0].night_delay_s) == (48.0, 14.0, 5)
+
+
+class _Local:
+    def __init__(self) -> None:
+        self.keys: list[HubKey] = []
+        self.verifiers: list[str | None] = []
+
+    def set_hub_keys(self, keys: list[HubKey]) -> None:
+        self.keys = keys
+
+    def set_verifier(self, phc: str | None) -> None:
+        self.verifiers.append(phc)
+
+
+def test_hub_keys_and_local_access(tmp_path: Path) -> None:
+    """SPEC §6.2 step 6 and §6.5 `local_access`: keys from the token, verifier by command."""
+    store, _, _ = _store_with_frame(tmp_path)
+    identity = DeviceIdentity.load_or_create(tmp_path / "device.key")
+    hub = FakeHub(register_unpaired=0, close_code=1000)
+    key = {"kid": "k1", "public_key": "A" * 43}
+    hub.hub_keys = [key]
+    good = "$argon2id$v=19$m=19456,t=2,p=1$c2FsdHNhbHRzYWx0$aGFzaGhhc2hoYXNoaGFzaA"
+    weak = "$argon2id$v=19$m=4096,t=1,p=1$c2FsdHNhbHRzYWx0$aGFzaGhhc2hoYXNoaGFzaA"
+    hub.commands = [
+        Command(name=CommandName.LOCAL_ACCESS, args={"verifier": weak}),
+        Command(name=CommandName.LOCAL_ACCESS, args={"verifier": good}),
+        Command(name=CommandName.LOCAL_ACCESS, args={"verifier": None}),
+    ]
+    local = _Local()
+
+    async def scenario() -> None:
+        async with serve(hub.ws_handler, "127.0.0.1", 0) as server:
+            port = server.sockets[0].getsockname()[1]
+            cfg = HubConfig(hub_url=f"http://127.0.0.1:{port}")
+            pairing = PairingState(identity.device_id, cfg.hub_url, "sim", "0.1.0")
+            async with httpx.AsyncClient(
+                transport=httpx.MockTransport(hub.handle), base_url=cfg.hub_url
+            ) as http:
+                session = HubSession(
+                    cfg, identity, pairing, store, LiveState(), "sim", "0.1.0",
+                    lambda: None, http, local_access=local,
+                )  # fmt: skip
+                stop = asyncio.Event()
+                task = asyncio.create_task(session.run(stop))
+                await asyncio.wait_for(hub.done.wait(), 10)
+                stop.set()
+                await asyncio.wait_for(task, 10)
+
+    asyncio.run(scenario())
+    assert local.keys == [HubKey(**key)]
+    weak_reply, good_reply, remove_reply = hub.reply_order
+    assert isinstance(weak_reply, ErrorReply)
+    assert weak_reply.code == "invalid_args"
+    assert isinstance(good_reply, Ack)
+    assert isinstance(remove_reply, Ack)
+    assert local.verifiers == [good, None]

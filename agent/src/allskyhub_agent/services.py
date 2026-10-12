@@ -11,7 +11,7 @@ import httpx
 
 from allskyhub_agent import __version__
 from allskyhub_agent.discovery import Announcer
-from allskyhub_agent.hub.client import EventSource, HubClient, HubConfig, HubSession
+from allskyhub_agent.hub.client import EventSource, HubClient, HubConfig, HubSession, LocalAccess
 from allskyhub_agent.hub.identity import DeviceIdentity
 from allskyhub_agent.hub.pairing import PairingState
 from allskyhub_agent.live import LiveState
@@ -37,8 +37,10 @@ class HubManager:
         settings_path: Path | None,
         events: EventSource | None = None,
         on_set_settings: Callable[[SetSettingsArgs], None] | None = None,
+        local_access: LocalAccess | None = None,
     ) -> None:
         self._identity = identity
+        self._local_access = local_access
         self._pairing = pairing
         self._store = store
         self._live = live
@@ -67,6 +69,7 @@ class HubManager:
                 latest_products=lambda: newest_products(self._store),
                 events=self._events,
                 on_set_settings=self._on_set_settings,
+                local_access=self._local_access,
             )
 
         client = HubClient(make_session, cfg)

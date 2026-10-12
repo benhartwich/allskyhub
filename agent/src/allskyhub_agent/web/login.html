@@ -1,0 +1,63 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Anmelden – allskyhub</title>
+<style>
+  :root { --bg: #0b0d12; --panel: #151922; --text: #e6e9ef; --muted: #8a93a6;
+          --accent: #6ea8ff; --bad: #ff7a7a; --line: #262c38; }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text);
+         font: 16px/1.4 system-ui, -apple-system, "Segoe UI", sans-serif; }
+  main { max-width: 420px; margin: 0 auto; padding: 32px 16px; }
+  h1 { font-size: 1.2rem; margin: 0 0 16px; font-weight: 600; }
+  .panel { background: var(--panel); border: 1px solid var(--line); border-radius: 12px;
+           padding: 16px; margin-bottom: 12px; }
+  a.button, button { display: block; width: 100%; text-align: center; font: inherit;
+           padding: 12px 16px; border-radius: 10px; border: 1px solid var(--accent);
+           background: var(--accent); color: #0b0d12; text-decoration: none; min-height: 44px; }
+  button.secondary { background: #1e2430; color: var(--text); border-color: var(--line); }
+  input { width: 100%; font: inherit; padding: 12px; margin: 8px 0 12px; border-radius: 10px;
+          border: 1px solid var(--line); background: #0f1218; color: var(--text);
+          letter-spacing: .1em; text-transform: uppercase; }
+  .hint { color: var(--muted); font-size: .9rem; margin: 8px 0 0; }
+  .error { color: var(--bad); margin: 0 0 12px; }
+  [hidden] { display: none !important; }
+</style>
+</head>
+<body>
+<main>
+  <h1>allskyhub-Kamera</h1>
+  <p class="error" id="error" hidden></p>
+  <section class="panel">
+    <a class="button" href="local-login/start">Mit allskyhub anmelden</a>
+    <p class="hint">Mit dem Konto, dem diese Kamera gehört.</p>
+  </section>
+  <section class="panel" id="codePanel">
+    <form method="post" action="local-login/code">
+      <label for="code">Offline-Code</label>
+      <input id="code" name="code" autocomplete="off" autocapitalize="characters"
+             spellcheck="false" placeholder="XXXX-XXXX-XXXX" required>
+      <button class="secondary" type="submit">Mit Code anmelden</button>
+    </form>
+    <p class="hint">Falls der Hub nicht erreichbar ist. Den Code erzeugst du in den
+      Kamera-Einstellungen auf allskyhub.</p>
+  </section>
+</main>
+<script>
+const MESSAGES = {
+  wrong: "Der Code stimmt nicht.",
+  locked: "Zu viele Fehlversuche. Bitte 15 Minuten warten oder mit allskyhub anmelden.",
+  no_code: "Für diese Kamera ist kein Offline-Code eingerichtet.",
+  failed: "Die Anmeldung über allskyhub hat nicht geklappt. Bitte noch einmal versuchen.",
+};
+const e = new URLSearchParams(location.search).get("e");
+if (e && MESSAGES[e]) {
+  const el = document.getElementById("error");
+  el.textContent = MESSAGES[e];
+  el.hidden = false;
+}
+</script>
+</body>
+</html>

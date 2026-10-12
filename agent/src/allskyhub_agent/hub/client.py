@@ -45,6 +45,8 @@ from allskyhub_protocol import (
     FrameInfo,
     FrameVariant,
     Hello,
+    HubKey,
+    LocalAccessArgs,
     Products,
     Purpose,
     RegisterRequest,
@@ -61,7 +63,14 @@ from allskyhub_protocol import (
 
 log = logging.getLogger(__name__)
 
-CAPABILITIES = ["upload_frame", "upload_product", "upload_event", "focus_mode", "set_settings"]
+CAPABILITIES = [
+    "upload_frame",
+    "upload_product",
+    "upload_event",
+    "focus_mode",
+    "set_settings",
+    "local_access",
+]
 
 
 @dataclass(frozen=True)
@@ -113,6 +122,14 @@ class EventSource(Protocol):
     def image_path(self, night: str, eid: str, thumbnail: bool) -> Path | None: ...
 
 
+class LocalAccess(Protocol):
+    """The local login's store (SPEC §7.4), written from the hub connection."""
+
+    def set_hub_keys(self, keys: list[HubKey]) -> None: ...
+
+    def set_verifier(self, phc: str | None) -> None: ...
+
+
 class HubSession:
     """The connection logic; `HubClient` runs it in a thread."""
 
@@ -132,8 +149,10 @@ class HubSession:
         latest_products: Callable[[], Products | None] | None = None,
         events: EventSource | None = None,
         on_set_settings: Callable[[SetSettingsArgs], None] | None = None,
+        local_access: LocalAccess | None = None,
     ) -> None:
         self._cfg = cfg
+        self._local_access = local_access
         self._id = identity
         self._pairing = pairing
         self._store = store
@@ -243,7 +262,11 @@ class HubSession:
         if r.status_code == 403:
             raise _NotPaired
         r.raise_for_status()
-        return TokenResponse.model_validate_json(r.content).access_token
+        resp = TokenResponse.model_validate_json(r.content)
+        if self._local_access is not None:
+            # SPEC §6.2 step 6: every token answer replaces the stored hub keys.
+            await asyncio.to_thread(self._local_access.set_hub_keys, list(resp.hub_keys))
+        return resp.access_token
 
     async def _session(self, token: str, stop: asyncio.Event) -> int | None:
         """One WebSocket connection; returns the close code (None if we stopped)."""
@@ -369,6 +392,14 @@ class HubSession:
             return Ack(ref=ref)
         if cmd.name is CommandName.UPLOAD_EVENT:
             return await self._upload_event(ref, cmd, token)
+        if cmd.name is CommandName.LOCAL_ACCESS and self._local_access is not None:
+            try:
+                local = LocalAccessArgs.model_validate(cmd.args)
+            except ValidationError:
+                return ErrorReply(ref=ref, code=ErrorCode.INVALID_ARGS, message="verifier")
+            # SPEC §6.5: store it and drop the sessions opened with the old code.
+            await asyncio.to_thread(self._local_access.set_verifier, local.verifier)
+            return Ack(ref=ref)
         if cmd.name is CommandName.FOCUS_MODE:
             on = cmd.args.get("on")
             if not isinstance(on, bool):

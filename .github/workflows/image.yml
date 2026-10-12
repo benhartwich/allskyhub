@@ -12,6 +12,7 @@ on:
       - "image/**"
       - "agent/**"
       - "packages/protocol/**"
+      - "packages/design/**"
       - "uv.lock"
       - ".github/workflows/image.yml"
 

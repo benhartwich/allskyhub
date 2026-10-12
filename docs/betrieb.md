@@ -81,7 +81,7 @@ Geräte verbinden sich nach dem Neustart von selbst wieder (SPEC §6.1).
 bekommen 404. Die Seite zeigt die laufende Version, die neuen Commits auf `main` und deren
 CI (GitHub-API, eine Minute gecacht), freien Speicher und einen Mail-Test.
 
-„Jetzt deployen“ geht nur bei grüner CI und mit dem Passwort. Der Hub selbst hat keine
+„Jetzt deployen“ geht nur bei grüner CI und mit dem Passwort. Als CI zählen die Checks, deren Name mit `ALLSKYHUB_SERVER_DEPLOY_CHECKS` beginnt (Standard `check`, die Tests). Der Bau des Pi-Images zählt nicht, er dauert viel länger. Der Hub selbst hat keine
 Rechte dafür: Er legt `/var/lib/allskyhub-server/deploy/request` mit dem gezeigten Commit
 ab. `allskyhub-deploy.path` startet dann `deploy/admin/allskyhub-deploy.sh` als root. Das
 Skript holt genau diesen Commit, wenn er noch `origin/main` ist (nur Fast-Forward, kein

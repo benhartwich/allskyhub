@@ -81,8 +81,12 @@ def _commit(item: dict[str, Any]) -> Commit:
     )
 
 
-def ci_state(check_runs: list[dict[str, Any]]) -> str:
-    """All check runs of a commit together: green only when every one finished well."""
+def ci_state(check_runs: list[dict[str, Any]], only: tuple[str, ...] = ()) -> str:
+    """The commit's check runs together: green only when every one finished well. With
+    ``only``, just the runs whose name starts with one of them (the hub's tests, not the
+    Raspberry Pi image that takes far longer to build)."""
+    if only:
+        check_runs = [r for r in check_runs if str(r.get("name", "")).startswith(only)]
     if not check_runs:
         return "unknown"
     if any(run.get("status") != "completed" for run in check_runs):
@@ -95,8 +99,11 @@ def ci_state(check_runs: list[dict[str, Any]]) -> str:
 class GitHub:
     """Anonymous GitHub API (60 requests an hour), so answers are kept for a minute."""
 
-    def __init__(self, repo: str, client: httpx.AsyncClient | None = None) -> None:
+    def __init__(
+        self, repo: str, client: httpx.AsyncClient | None = None, checks: tuple[str, ...] = ()
+    ) -> None:
         self.repo = repo
+        self.checks = checks
         self._client = client
         self._cached: tuple[float, str | None, Upstream] | None = None
 
@@ -137,7 +144,7 @@ class GitHub:
             sha=head.sha,
             commits=commits,
             ahead=ahead,
-            ci=ci_state(runs),
+            ci=ci_state(runs, self.checks),
             ci_url=f"https://github.com/{self.repo}/commit/{head.sha}",
         )
         self._cached = (time.monotonic(), running, result)

@@ -49,6 +49,9 @@ class Settings(BaseSettings):
     admin_emails: str = ""
     # Where the admin page looks for new versions and their CI (GitHub, public API).
     deploy_repo: str = "benhartwich/allskyhub"
+    # Which CI checks must be green before a deploy (name prefixes, comma-separated): the
+    # hub's tests, not the Raspberry Pi image build, which takes much longer.
+    deploy_checks: str = "check"
 
     session_cookie_name: str = "allskyhub_session"
     session_cookie_secure: bool = True
@@ -81,6 +84,10 @@ class Settings(BaseSettings):
     @property
     def admins(self) -> frozenset[str]:
         return frozenset(e.strip().lower() for e in self.admin_emails.split(",") if e.strip())
+
+    @property
+    def deploy_check_names(self) -> tuple[str, ...]:
+        return tuple(c.strip() for c in self.deploy_checks.split(",") if c.strip())
 
     @property
     def push_enabled(self) -> bool:

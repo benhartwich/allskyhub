@@ -37,6 +37,12 @@ def test_ci_state() -> None:
         {"status": "completed", "conclusion": "failure"},
     ]
     assert deploy.ci_state(runs) == "failure"
+    hub_green = [
+        {"name": "check (3.11)", "status": "completed", "conclusion": "success"},
+        {"name": "build", "status": "in_progress"},  # the Pi image
+    ]
+    assert deploy.ci_state(hub_green) == "pending"
+    assert deploy.ci_state(hub_green, ("check",)) == "success"
 
 
 def test_job_reads_the_helpers_answer(tmp_path: Path) -> None:

@@ -240,7 +240,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.state.hub_keys = HubKeys(settings.key_dir)
     app.state.forecast = ForecastCache()
     app.state.tles = TleCache()
-    app.state.github = GitHub(settings.deploy_repo)
+    app.state.github = GitHub(settings.deploy_repo, checks=settings.deploy_check_names)
     app.add_middleware(CustomDomainMiddleware, hosts=app.state.hosts)
     app.add_middleware(AccessLogMiddleware)
     _install_error_handlers(app)

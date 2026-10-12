@@ -235,6 +235,12 @@ base64url-encoded without padding.
 5. **Token.** The paired agent gets an access token (`POST /device/v1/token` with device
    id, nonce and signature; valid 1 hour) and uses it as bearer token for the WebSocket
    and uploads. It fetches a new one before expiry or after close code 4401.
+6. **Hub keys.** The token answer also carries `hub_keys`, the hub's current Ed25519
+   public keys for signing local logins (§7.4): `[{kid, public_key}]`, `public_key`
+   base64url without padding. The agent replaces its stored list with every token
+   answer. The hub signs with its newest key and keeps an old key in the list for at least
+   30 days after rotating. Trust in these keys rests on the TLS connection to the hub, as
+   everything else in this protocol does.
 
 ### 6.3 Device → hub
 
@@ -325,7 +331,7 @@ night (§6.7).
 ### 6.5 Hub → device
 
 `command`: `set_settings`, `focus_mode` (`{on: bool}`, §7), `restart`, `update`,
-`upload_frame`, `upload_product`, `upload_event`. Each command is acknowledged with `ack` or `error` (`code` one of
+`upload_frame`, `upload_product`, `upload_event`, `local_access`. Each command is acknowledged with `ack` or `error` (`code` one of
 `not_found`, `invalid_args`, `unsupported`, `failed`).
 
 **`set_settings`** with a partial object: `latitude` and `longitude` (both or neither),
@@ -357,6 +363,13 @@ device uploads the event's picture with
 `PUT /device/v1/events/{night_id}/{event_id}?variant=<variant>` (`image/jpeg`), then
 answers `ack`, or `error` with `not_found` if the event has no picture or it is gone.
 
+**`local_access`** `{verifier}`: the verifier of the camera's offline code (§7.4), a PHC
+string `$argon2id$v=19$m=19456,t=2,p=1$<salt>$<hash>`, or `null` to remove it. The device
+stores it (replacing an older one), drops all local sessions that were opened with the
+offline code, and answers `ack`. The hub sends it when the owner creates or removes the
+code and, until the device has acknowledged it, again after every `hello`. The hub never
+stores the code itself, only the verifier until it is delivered.
+
 ### 6.6 Device HTTP endpoints
 
 All bodies are JSON (models in `packages/protocol`, `allskyhub_protocol.device_api`)
@@ -366,16 +379,18 @@ except the image upload.
 |---|---|---|
 | `POST /device/v1/challenge` | none | `{device_id}` → `{nonce, expires_in}` |
 | `POST /device/v1/register` | signature (`register`) | `{public_key, profile, agent_version, nonce, signature}` → `{device_id, paired, pairing_code?, expires_in?}` |
-| `POST /device/v1/token` | signature (`token`) | `{device_id, nonce, signature}` → `{access_token, token_type: "bearer", expires_in}` |
+| `POST /device/v1/token` | signature (`token`) | `{device_id, nonce, signature}` → `{access_token, token_type: "bearer", expires_in, hub_keys}` |
 | `GET /device/v1/ws` | bearer | WebSocket (§6.1) |
 | `PUT /device/v1/frames/{night_id}/{name}?variant=` | bearer | `image/jpeg` → 204 |
 | `PUT /device/v1/products/{night_id}/{name}?variant=` | bearer | `image/jpeg` or `video/mp4` → 204 |
 | `PUT /device/v1/events/{night_id}/{event_id}?variant=` | bearer | `image/jpeg` → 204 |
+| `GET /device/v1/public` | bearer | → `{enabled, url, profile}` (§6.8) |
+| `PUT /device/v1/public` | bearer | `{enabled?, profile?}` → `{enabled, url, profile}` (§6.8) |
 
 Errors are HTTP status codes with `{"detail": "..."}`: 400 invalid body, 401 bad
 signature, nonce or token, 403 device not paired (token), 404 unknown upload (the hub
-did not ask for this frame), 413 image too large, 429 rate limited (with
-`Retry-After`).
+did not ask for this frame), 413 image too large, 422 invalid public profile (§6.8),
+429 rate limited (with `Retry-After`).
 
 ### 6.7 Offline behaviour
 
@@ -383,6 +398,26 @@ The device does not queue uploads or WebSocket messages while the hub is unreach
 capture and storage go on (§1, goal 4). After reconnecting it sends `hello`, a fresh
 `status`, the newest night's `products` and the current night's `event`s, and the hub
 requests whatever it wants with `upload_frame`, `upload_product` and `upload_event`.
+
+### 6.8 Public page
+
+Each camera can have a public page on the hub (`/sky/<slug>`, off by default). The owner
+manages it in the hub's web UI and, through these endpoints, in the camera's local UI
+(§7.4). The hub is the only place it is stored; the last write wins.
+
+`GET /device/v1/public` → `{enabled, url, profile}`: `url` is the page's address or
+`null` while it is off. `PUT /device/v1/public` with `{enabled?, profile?}`: `enabled`
+switches the page (switching off makes the old address invalid at once; switching on
+again gives a new one); `profile`, if given, replaces the whole profile, and missing
+fields take their defaults. The answer is the new state.
+
+`profile`: `title` (≤ 100 characters), `location_label`, `camera`, `lens`, `computer`,
+`owner` (each ≤ 200), `notes` (≤ 2000), all strings, empty = not shown;
+`show_coordinates` (bool, default false: the coordinates appear rounded to 0.1°);
+`sections`: `{live, loop, archive, events, sky, aurora}`, booleans, default true. An
+unknown key, a wrong type or a text that is too long is answered with 422 and a German
+sentence in `detail` that the local UI shows as it is. Models: `PublicProfile`,
+`PublicState`, `PublicUpdate` in `allskyhub_protocol.device_api`.
 
 ## 7. Local web UI
 
@@ -404,8 +439,9 @@ expires_in, connected, setup_mode, last_error, location_set, timezone, camera}`,
 or `null` once paired or before the first registration, `expires_in` counts down in
 seconds, and `connected` says whether the WebSocket to the hub is open.
 
-Until pairing can restrict it, the local UI has no authentication and is meant for the
-local network only.
+Before pairing the local UI has no authentication and is meant for the local network
+only; setup mode (§7.1) stays limited to it. After pairing it needs a local login
+(§7.4).
 
 ### 7.1 Setup mode
 
@@ -466,6 +502,60 @@ camera if one is connected, else a Raspberry Pi camera), `zwo-asi678mc`, `rpi-hq
 boot, applied (Wi-Fi as a NetworkManager connection, country, hub, location, time zone,
 camera) and deleted. An unusable file is renamed to `allskyhub-setup.failed.json` and not tried
 again.
+
+### 7.4 Local login
+
+**Unpaired**, nothing changes: no login. **Paired**, every page and API of the local UI
+needs a local session, except `GET /api/setup` (no secrets; the app's onboarding polls
+it), the login routes below and the static files. There are two ways to log in; both
+open the same session.
+
+**A: with the allskyhub account (single sign-on through the hub).**
+
+1. The agent creates a nonce (32 random bytes, base64url), keeps it with the time it was
+   made (monotonic clock) for 5 minutes, sets it as cookie `ash_login_nonce` (HttpOnly,
+   SameSite=Lax, Max-Age 300) and redirects to
+   `<hub>/cameras/<device_id>/local-login?return=<base>&nonce=<nonce>`, where `<base>` is
+   the absolute URL under which the browser reached the local UI (scheme, host, port and
+   path prefix, for example `https://cam.example.org/hub/`).
+2. The hub requires a web login (and returns to this step afterwards) and that the
+   camera belongs to the account; otherwise 404. `return` must be an absolute `http` or
+   `https` URL without user info, query or fragment, at most 500 characters. The hub
+   shows the camera's name and the target origin and asks for confirmation (any origin is
+   allowed, since cameras sit behind addresses the hub cannot know).
+3. After confirmation the hub answers with a page that sends a form `POST` to
+   `<base>local-login/callback` with the field `assertion` (a button, which the hub's own
+   script may press). The assertion never appears in a URL.
+4. The assertion is `<payload>.<signature>`: `payload` is the base64url-encoded JSON
+   `{kid, aud, sub, nonce, iat, exp}` (`aud` the device id, `sub` the user id, `iat` and
+   `exp` Unix seconds, `exp` at most 60 s after `iat`); `signature` is base64url of the
+   Ed25519 signature with key `kid` over the UTF-8 bytes
+   `allskyhub-v1\nlocal-login\n<payload>`.
+5. The agent accepts it if `kid` is in its hub keys (§6.2), the signature is valid, `aud`
+   is its own id, `nonce` equals the cookie and a nonce it made less than 5 minutes ago
+   (each nonce once), and, if its clock is trusted (§4.4 `time_trusted`), `exp` has not
+   passed. It then opens a session.
+
+**B: offline code**, for when the hub cannot be reached. In the hub's web UI the owner
+creates a code for the camera: 12 characters from the pairing alphabet (§6.2), shown once
+as `XXXX-XXXX-XXXX`, then only replaceable or removable. The hub sends the camera only an
+Argon2id verifier (`local_access`, §6.5), deliberately not anything derived from the
+account password, so a stolen camera allows no offline attack on it. The local login
+form takes the code with or without hyphens, in any case. The agent allows 5 failed
+attempts per 15 minutes in total and then refuses until that time has passed.
+
+**Session.** Cookie `ash_session` with 32 random bytes, HttpOnly, SameSite=Lax, Max-Age 30
+days, `Secure` when the request came over HTTPS (also `X-Forwarded-Proto: https` from a
+reverse proxy on the same machine). The agent stores only a hash of it, with the way of
+login and the time. Logging out deletes it.
+
+**Unpairing.** When the hub says the device is no longer paired (close code 4403 or
+`paired: false`), the agent deletes all sessions, the offline verifier and the hub keys.
+
+**Public page.** The local UI manages the public page (§6.8) through the agent, which
+forwards to `GET` and `PUT /device/v1/public`. Writing needs a session. While the hub is
+unreachable the local UI shows the last known state read-only, with the note "Hub nicht
+erreichbar". On 422 it shows the hub's `detail`.
 
 ## 8. Updates
 

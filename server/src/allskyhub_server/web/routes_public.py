@@ -77,7 +77,11 @@ async def sky_page(request: Request, db: DbSession, slug: str) -> Response:
         kp = await cache.get()
     lat = public.latitude(device)
     forecast: ForecastCache = request.app.state.forecast
-    night = await tonight.for_device(forecast, device.last_status, now) if sections.sky else None
+    night = (
+        await tonight.for_device(forecast, device.last_status, now, request.app.state.tles)
+        if sections.sky
+        else None
+    )
     return render(
         request,
         "public_sky.html",

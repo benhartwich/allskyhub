@@ -132,7 +132,9 @@ async def _camera_context(
     current = settings_form.current_values(device)
     return {
         "device": device,
-        "tonight": await tonight.for_device(forecast, device.last_status, now),
+        "tonight": await tonight.for_device(
+            forecast, device.last_status, now, request.app.state.tles
+        ),
         "last_night": await _last_night(db, device),
         "health": health.check(device, online, now),
         "online": online,

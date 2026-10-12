@@ -20,6 +20,8 @@ dependencies = [
   "cryptography>=44",
   # Push notifications through Firebase Cloud Messaging (HTTP v1), roadmap #6.
   "httpx>=0.28",
+  # Satellite passes from TLEs (roadmap C6); the standard SGP4 propagator, MIT.
+  "sgp4>=2.24",
 ]
 
 [tool.uv.sources]

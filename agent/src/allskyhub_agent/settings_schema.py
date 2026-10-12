@@ -205,7 +205,8 @@ def _observatory_entries() -> list[dict[str, Any]]:
 
 def build_schema(profile: Profile) -> list[SettingSpec]:
     night = profile.exposure.night
-    max_exposure_s = night.max_exposure_us / 1e6
+    max_exposure_s = night.max_exposure_us / 1e6  # the default for an empty field
+    cap_s = profile.night_cap_us / 1e6
     entries: list[dict[str, Any]] = [
         {
             "key": "location",
@@ -263,11 +264,13 @@ def build_schema(profile: Profile) -> list[SettingSpec]:
             "group": {"de": "Aufnahme", "en": "Capture"},
             "unit": "s",
             "min": 1,
-            "max": max_exposure_s,
+            "max": cap_s,
             "step": 1,
             "help": {
-                "de": f"Leer: {max_exposure_s:g} s. Kürzer gibt rundere Sterne.",
-                "en": f"Empty: {max_exposure_s:g} s. Shorter gives rounder stars.",
+                "de": f"Leer: {max_exposure_s:g} s, höchstens {cap_s:g} s. Kürzer gibt rundere "
+                "Sterne, länger zeigt mehr bei dunklem Himmel.",
+                "en": f"Empty: {max_exposure_s:g} s, at most {cap_s:g} s. Shorter gives rounder "
+                "stars, longer shows more under a dark sky.",
             },
         },
         {

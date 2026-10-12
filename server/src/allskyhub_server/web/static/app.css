@@ -254,3 +254,23 @@ button:disabled { opacity: .45; cursor: not-allowed; transform: none; filter: no
 /* "Letzte Nacht" (roadmap C3): the night's best picture. */
 .best-shot { display: grid; gap: 6px; color: var(--text); text-decoration: none; font-size: 14px; }
 .best-shot img { width: 100%; border-radius: 12px; background: #000; box-shadow: 0 0 0 1px var(--line); }
+
+/* Statistics (roadmap C7). */
+.stat-tiles { display: grid; gap: 12px; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); }
+.stat-tiles .card { gap: 2px; }
+.stat-tiles small { color: var(--text-2); font-size: 12px; text-transform: uppercase; letter-spacing: .8px; }
+.stat-tiles strong { font-family: var(--display); font-size: 30px; }
+.month-bars { list-style: none; margin: 0; padding: 0; display: flex; gap: 6px; align-items: flex-end; height: 140px; }
+.month-bars li { flex: 1; display: grid; grid-template-rows: 1fr auto; justify-items: center; height: 100%; }
+.month-bars .bar { width: 100%; align-self: end; border-radius: 6px 6px 2px 2px; height: 2%;
+                   background: linear-gradient(180deg, #8fe3ff, #7aa2f7 60%, #b48cff); }
+.month-bars small { font-size: 11px; color: var(--text-2); }
+.month-bars .h1 .bar { height: 10%; } .month-bars .h2 .bar { height: 20%; } .month-bars .h3 .bar { height: 30%; }
+.month-bars .h4 .bar { height: 40%; } .month-bars .h5 .bar { height: 50%; } .month-bars .h6 .bar { height: 60%; }
+.month-bars .h7 .bar { height: 70%; } .month-bars .h8 .bar { height: 80%; } .month-bars .h9 .bar { height: 90%; }
+.month-bars .h10 .bar { height: 100%; }
+.table-scroll { overflow-x: auto; }
+table.stats { width: 100%; border-collapse: collapse; font-size: 14px; }
+table.stats th, table.stats td { padding: 8px 10px; text-align: right; border-bottom: 1px solid var(--line); white-space: nowrap; }
+table.stats th:first-child, table.stats td:first-child { text-align: left; }
+table.stats th { color: var(--text-2); font-weight: 600; }

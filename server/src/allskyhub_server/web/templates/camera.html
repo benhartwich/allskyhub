@@ -4,7 +4,7 @@
 <a class="back" href="/">← Meine Kameras</a>
 <div class="page-head">
   <h1>{{ device.name }}</h1>
-  <a class="button small" href="/cameras/{{ device.id }}/gallery">Galerie</a>
+  <span class="actions"><a class="button small secondary" href="/cameras/{{ device.id }}/stats">Statistik</a><a class="button small" href="/cameras/{{ device.id }}/gallery">Galerie</a></span>
 </div>
 <div class="cam-page">
 <div class="cam-live" hx-get="/cameras/{{ device.id }}/live" hx-trigger="load, every 5s" hx-swap="innerHTML">

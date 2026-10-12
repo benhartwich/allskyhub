@@ -1,0 +1,60 @@
+{% extends "base.html" %}
+{% block title %}Statistik {{ stats.year }} · {{ device.name }}{% endblock %}
+{% block content %}
+<a class="back" href="/cameras/{{ device.id }}">← {{ device.name }}</a>
+<div class="page-head">
+  <h1>Statistik {{ stats.year }}</h1>
+  {% if stats.years | length > 1 %}
+  <nav class="actions" aria-label="Jahr">
+    {% for y in stats.years %}<a class="button small{{ '' if y == stats.year else ' secondary' }}" href="?year={{ y }}">{{ y }}</a>{% endfor %}
+  </nav>
+  {% endif %}
+</div>
+{% set t = stats.total %}
+{% if t.nights == 0 %}
+<div class="card empty"><h2>Noch keine Nächte</h2><p class="muted">Die Statistik wächst mit jeder Nacht. Die Werte einer Nacht kommen am Morgen danach dazu.</p></div>
+{% else %}
+<div class="stat-tiles">
+  <div class="card"><small>Nächte mit Daten</small><strong>{{ t.nights }}</strong></div>
+  <div class="card"><small>Klare Nächte</small><strong>{{ t.clear_nights }}</strong><span class="muted">mind. 2 h klar</span></div>
+  <div class="card"><small>Klare Stunden</small><strong>{{ '%.0f' | format(t.clear_hours) }}</strong></div>
+  <div class="card"><small>Dunkelster Himmel</small><strong>{{ '%.2f' | format(t.best_sqm) | replace('.', ',') if t.best_sqm is not none else '–' }}</strong><span class="muted">mag/″²</span></div>
+  <div class="card"><small>Meteore</small><strong>{{ t.meteors }}</strong></div>
+  <div class="card"><small>Polarlicht · Gewitter</small><strong>{{ t.aurora }} · {{ t.storms }}</strong></div>
+</div>
+
+<section class="card">
+  <h2>Klare Stunden pro Monat</h2>
+  <ol class="month-bars" aria-label="Klare Stunden pro Monat">
+    {% for m in stats.months %}
+    {% set level = ((m.clear_hours / stats.max_clear_hours) * 10) | round | int %}
+    <li class="h{{ level }}" title="{{ m.label }}: {{ '%.0f' | format(m.clear_hours) }} h klar in {{ m.clear_nights }} klaren Nächten"><span class="bar"></span><small>{{ m.label }}</small></li>
+    {% endfor %}
+  </ol>
+</section>
+
+<section class="card">
+  <h2>Monate</h2>
+  <div class="table-scroll">
+  <table class="stats">
+    <thead><tr><th>Monat</th><th>Nächte</th><th>klar</th><th>Stunden klar</th><th>bester SQM</th><th>Meteore</th><th>Polarlicht</th><th>Gewitter</th></tr></thead>
+    <tbody>
+      {% for m in stats.months if m.nights %}
+      <tr><td>{{ m.label }}</td><td>{{ m.nights }}</td><td>{{ m.clear_nights }}</td><td>{{ '%.1f' | format(m.clear_hours) | replace('.', ',') }}</td><td>{{ '%.2f' | format(m.best_sqm) | replace('.', ',') if m.best_sqm is not none else '–' }}</td><td>{{ m.meteors }}</td><td>{{ m.aurora }}</td><td>{{ m.storms }}</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  </div>
+</section>
+
+{% if stats.showers %}
+<section class="card">
+  <h2>Meteore nach Strom</h2>
+  <p class="muted">Nur Meteore, deren Bahn die Kamera einem Radianten zuordnen konnte (ausgerichtete Kamera).</p>
+  <dl class="facts">
+    {% for name, count in stats.showers.items() %}<dt>{{ name }}</dt><dd>{{ count }}</dd>{% endfor %}
+  </dl>
+</section>
+{% endif %}
+{% endif %}
+{% endblock %}

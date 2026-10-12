@@ -27,6 +27,7 @@ from allskyhub_server.app import create_app
 from allskyhub_server.devices.satellites import TleCache
 from allskyhub_server.devices.space_weather import KpCache, OvationCache
 from allskyhub_server.devices.tonight import ForecastCache
+from allskyhub_server.mail.send import MemoryMailer
 from allskyhub_server.models import Base
 from allskyhub_server.settings import Settings
 
@@ -100,6 +101,8 @@ async def app(settings: Settings, engine: AsyncEngine) -> AsyncIterator[FastAPI]
     )
     # Nor to CelesTrak: a fixed ISS element set (test_satellites.py).
     application.state.tles = TleCache(httpx.AsyncClient(transport=httpx.MockTransport(_tle_answer)))
+    # Mails stay in memory (roadmap #15).
+    application.state.mailer = MemoryMailer()
     # Nor to Open-Meteo: clear skies everywhere.
     application.state.forecast = ForecastCache(
         httpx.AsyncClient(transport=httpx.MockTransport(_forecast_answer))

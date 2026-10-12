@@ -22,12 +22,15 @@ from allskyhub_server.api import app as app_api
 from allskyhub_server.api import device as device_api
 from allskyhub_server.auth.hub_keys import HubKeys
 from allskyhub_server.db import create_engine, create_sessionmaker
+from allskyhub_server.devices import domains
 from allskyhub_server.devices.connections import ConnectionRegistry
+from allskyhub_server.devices.domains import HostMap
 from allskyhub_server.devices.images import ImageStore
 from allskyhub_server.devices.renders import Renderer
 from allskyhub_server.devices.satellites import TleCache
 from allskyhub_server.devices.space_weather import KpCache, OvationCache
 from allskyhub_server.devices.tonight import ForecastCache
+from allskyhub_server.mail.send import SmtpMailer
 from allskyhub_server.push.fcm import Sender
 from allskyhub_server.push.notify import Notifier
 from allskyhub_server.settings import Settings, get_settings
@@ -55,6 +58,32 @@ SECURITY_HEADERS = {
         b"frame-ancestors 'none'; base-uri 'self'; form-action 'self'"
     ),
 }
+
+
+class CustomDomainMiddleware:
+    """Roadmap #17: a request for an active custom domain gets that camera's public page;
+    everything else of the hub is not served there. Unknown hosts pass unchanged."""
+
+    def __init__(self, app: ASGIApp, hosts: HostMap) -> None:
+        self.app = app
+        self.hosts = hosts
+
+    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+        if scope["type"] in ("http", "websocket") and self.hosts.slugs:
+            host = ""
+            for key, value in scope.get("headers", []):
+                if key == b"host":
+                    host = value.decode("latin-1").split(":", 1)[0].lower()
+                    break
+            slug = self.hosts.slugs.get(host)
+            if slug is not None:
+                path = domains.rewrite(scope["path"], slug)
+                if path is None:
+                    response = Response("Nicht gefunden.", status_code=404)
+                    await response(scope, receive, send)
+                    return
+                scope = {**scope, "path": path, "raw_path": path.encode()}
+        await self.app(scope, receive, send)
 
 
 class AccessLogMiddleware:
@@ -166,10 +195,17 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             else None
         )
         app.state.notifier = Notifier(app.state.sessionmaker, sender)
+        app.state.notifier.mailer = app.state.mailer
         app.state.notifier.forecast = app.state.forecast
         app.state.renderer = Renderer(app.state.sessionmaker, app.state.images, settings)
-        tasks = [cleanup, asyncio.create_task(app.state.renderer.run_forever())]
-        if sender is not None:
+        tasks = [
+            cleanup,
+            asyncio.create_task(app.state.renderer.run_forever()),
+            asyncio.create_task(
+                domains.run_forever(app.state.sessionmaker, settings.data_dir, app.state.hosts)
+            ),
+        ]
+        if sender is not None or app.state.mailer.enabled:
             tasks.append(
                 asyncio.create_task(app.state.notifier.run_offline_checks(app.state.connections))
             )
@@ -194,10 +230,13 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.state.connections = ConnectionRegistry()
     app.state.images = ImageStore(settings.image_dir)
     app.state.kp = KpCache()
+    app.state.hosts = HostMap()
+    app.state.mailer = SmtpMailer(settings)
     app.state.ovation = OvationCache()
     app.state.hub_keys = HubKeys(settings.key_dir)
     app.state.forecast = ForecastCache()
     app.state.tles = TleCache()
+    app.add_middleware(CustomDomainMiddleware, hosts=app.state.hosts)
     app.add_middleware(AccessLogMiddleware)
     _install_error_handlers(app)
 

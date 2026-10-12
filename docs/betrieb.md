@@ -110,6 +110,38 @@ gunzip -c allskyhub-latest.sql.gz | sudo -u allskyhub-server env $(xargs < /etc/
 systemctl start allskyhub-server.socket
 ```
 
+## Eigene Domains für öffentliche Seiten
+
+Besitzer tragen unter „Seite gestalten“ eine Domain ein (CNAME auf `allskyhub.org`). Der Hub
+prüft das DNS und legt einen Auftrag in `/var/lib/allskyhub-server/domains/` ab; ein
+root-Helfer (`deploy/domains/allskyhub-domains.sh`) prüft erneut, holt das Zertifikat mit
+`certbot --standalone` (nginx ist dafür einige Sekunden gestoppt), schreibt
+`/etc/nginx/sites-available/allskyhub-domain-<domain>.conf` und lädt nginx neu. Die
+monatliche Verlängerung erledigt der bestehende `certbot renew` mit seinen Hooks.
+
+```bash
+cp deploy/systemd/allskyhub-domains.* /etc/systemd/system/
+systemctl daemon-reload && systemctl enable --now allskyhub-domains.timer
+```
+
+Protokoll: `/var/log/allskyhub-domains.log`, `journalctl -u allskyhub-domains`.
+
+## E-Mail
+
+Aus, solange `ALLSKYHUB_SERVER_SMTP_HOST` leer ist. Der Hub verschickt über SMTP mit
+STARTTLS (Port 587): Einladungen (`invite`, außer mit `--no-mail`), „Passwort vergessen“
+und eine Nachricht, wenn eine Kamera seit 6 Stunden offline ist. Postfach in Mailcow
+anlegen, dann in die Env-Datei (siehe `deploy/allskyhub-server.env.example`):
+
+```bash
+ALLSKYHUB_SERVER_SMTP_HOST=postkasten.cloud
+ALLSKYHUB_SERVER_SMTP_USER=noreply@allskyhub.org
+ALLSKYHUB_SERVER_SMTP_PASSWORD=…
+```
+
+DNS für `allskyhub.org`: MX auf `postkasten.cloud`, SPF `v=spf1 mx a:postkasten.cloud -all`,
+DKIM-Eintrag `dkim._domainkey` aus Mailcow, DMARC `p=reject` kann bleiben.
+
 ## Push-Benachrichtigungen (Firebase)
 
 Aus, solange `ALLSKYHUB_SERVER_FCM_SERVICE_ACCOUNT_FILE` nicht gesetzt ist; dann geht nichts an

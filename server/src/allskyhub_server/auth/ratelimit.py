@@ -56,6 +56,9 @@ async def hit(engine: AsyncEngine, key: str, limits: Sequence[Limit]) -> None:
 LOGIN_PER_ACCOUNT = (Limit(10, 900),)
 LOGIN_PER_IP = (Limit(50, 900),)
 INVITE_PER_IP = (Limit(20, 3600),)
+# Roadmap #15: "Passwort vergessen" mails, per address and per IP.
+RESET_PER_EMAIL = (Limit(3, 3600),)
+RESET_PER_IP = (Limit(10, 3600),)
 # Device API (SPEC §6.6): a registering device calls challenge + register every ~5 s.
 DEVICE_CHALLENGE_PER_IP = (Limit(120, 60), Limit(2000, 3600))
 DEVICE_REGISTER_PER_IP = (Limit(60, 60),)

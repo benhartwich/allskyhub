@@ -37,6 +37,12 @@ class Settings(BaseSettings):
     # Push (roadmap #6): the Firebase service account JSON. Unset: push is off, nothing is
     # sent to Google and the privacy policy does not mention it.
     fcm_service_account_file: Path | None = None
+    # E-mail (roadmap #15): off while smtp_host is empty. Submission with STARTTLS.
+    smtp_host: str = ""
+    smtp_port: int = 587
+    smtp_user: str = ""
+    smtp_password: str = ""
+    mail_from: str = "allskyhub <noreply@allskyhub.org>"
     max_image_mb: int = Field(default=25, ge=1)
 
     session_cookie_name: str = "allskyhub_session"
@@ -62,6 +68,10 @@ class Settings(BaseSettings):
     @property
     def is_dev(self) -> bool:
         return self.env == "dev"
+
+    @property
+    def mail_enabled(self) -> bool:
+        return bool(self.smtp_host)
 
     @property
     def push_enabled(self) -> bool:

@@ -385,7 +385,9 @@ async def device_ws(websocket: WebSocket) -> None:
     old = await registry.attach(conn)
     if old is not None:
         await old.close(CloseCode.REPLACED)
-    await _touch(maker, info.device_id, offline_notified_at=None)  # a new outage may notify
+    await _touch(
+        maker, info.device_id, offline_notified_at=None, offline_mailed_at=None
+    )  # a new outage may notify
     log.info("device connected", extra={"device_id": info.device_id})
 
     async def expire() -> None:

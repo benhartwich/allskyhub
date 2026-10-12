@@ -1,0 +1,7 @@
+[Unit]
+Description=allskyhub: own domains for public pages (certificate and nginx, roadmap #17)
+After=network-online.target nginx.service
+
+[Service]
+Type=oneshot
+ExecStart=/opt/allskyhub-server/deploy/domains/allskyhub-domains.sh

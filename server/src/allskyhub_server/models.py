@@ -121,6 +121,8 @@ class Device(Base):
     # Roadmap C2/C3: last aurora alarm, and the night whose summary went out.
     aurora_notified_at: Mapped[dt.datetime | None] = mapped_column(_tz())
     summary_night: Mapped[str | None] = mapped_column(String(8))
+    # Roadmap #15: when the owner got an e-mail about this outage (long offline).
+    offline_mailed_at: Mapped[dt.datetime | None] = mapped_column(_tz())
     # Roadmap C14: health problems (devices/health.py keys) already reported to the owner.
     health_notified: Mapped[list[str]] = mapped_column(JSONB, default=list, server_default="[]")
     # SPEC §6.9: the settings schema from the newest valid `hello`; None for old agents.
@@ -130,6 +132,11 @@ class Device(Base):
     public_slug: Mapped[str | None] = mapped_column(String(32), unique=True)
     # What the public page shows and its texts (devices/public.py PublicProfile); None = defaults.
     public_profile: Mapped[dict[str, Any] | None] = mapped_column(JSONB)
+    # Roadmap #17: the public page under the owner's own domain, set up by a root helper
+    # (deploy/domains): state "pending", "active", "failed" or "removing".
+    custom_domain: Mapped[str | None] = mapped_column(String(253), unique=True)
+    custom_domain_state: Mapped[str | None] = mapped_column(String(10))
+    custom_domain_error: Mapped[str | None] = mapped_column(String(300))
     # SPEC §7.4 B: the offline code's Argon2id verifier (never the code itself), whether the
     # device still has to get it (`local_access`, §6.5), and when the owner made it.
     local_access_verifier: Mapped[str | None] = mapped_column(String(512))
@@ -416,3 +423,16 @@ class StatusSample(Base):
     disk_free_pct: Mapped[float | None] = mapped_column(Float)
 
     __table_args__ = (Index("ix_status_sample_device_id_at", "device_id", "at"),)
+
+
+class PasswordReset(Base):
+    """A "Passwort vergessen" link (roadmap #15): stored as SHA-256, single use, one hour."""
+
+    __tablename__ = "password_reset"
+
+    token_hash: Mapped[bytes] = mapped_column(LargeBinary(32), primary_key=True)
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("user_account.id", ondelete="CASCADE"), index=True
+    )
+    expires_at: Mapped[dt.datetime] = mapped_column(_tz(), index=True)
+    used_at: Mapped[dt.datetime | None] = mapped_column(_tz())

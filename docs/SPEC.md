@@ -478,6 +478,12 @@ Endpoints, only reachable from the setup network:
   `wifi_auth`, `wifi_not_found` or `no_internet` (otherwise `null`).
 - The Wi-Fi password is stored only in the system's network configuration, never in
   logs and never sent to the hub.
+- **Paired cameras.** Setup mode also starts on a paired camera (its Wi-Fi gone for 2
+  minutes). Then `GET /api/wifi/networks` and `POST /api/setup/network` need a local session
+  (§7.4), like everything else; `GET /api/setup` stays open. In the setup network there is
+  no internet, so only the offline code works. Without a session nobody nearby can move
+  the camera to another network or another hub. A camera without an offline code can be
+  reached again on its old network, through Ethernet or with a setup file (§7.3).
 
 ### 7.2 Discovery
 

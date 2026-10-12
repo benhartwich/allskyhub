@@ -97,27 +97,27 @@ function render(s) {
   if (s.frames !== lastFrames) {
     lastFrames = s.frames;
     const q = "?n=" + s.frames;
-    $("live").src = "/api/live.jpg" + q;
-    if (focus) $("crop").src = "/api/crop.jpg" + q;
+    $("live").src = "api/live.jpg" + q;
+    if (focus) $("crop").src = "api/crop.jpg" + q;
   }
 }
 
 async function poll() {
   try {
-    const r = await fetch("/api/status", { cache: "no-store" });
+    const r = await fetch("api/status", { cache: "no-store" });
     if (r.ok) render(await r.json());
   } catch (e) { /* camera restarting; try again */ }
   setTimeout(poll, focus ? 500 : 2000);
 }
 
 async function post(action) {
-  const r = await fetch("/api/focus", { method: "POST", body: action });
+  const r = await fetch("api/focus", { method: "POST", body: action });
   if (r.ok) render(await r.json());
 }
 
 async function pollSetup() {
   try {
-    const r = await fetch("/api/setup", { cache: "no-store" });
+    const r = await fetch("api/setup", { cache: "no-store" });
     if (r.ok) {
       const s = await r.json();
       const show = !s.paired && s.pairing_code;

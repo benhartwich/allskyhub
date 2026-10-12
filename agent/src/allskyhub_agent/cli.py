@@ -191,6 +191,10 @@ def main(argv: list[str] | None = None) -> int:
             print(f"  skipped {name}: {why}")
         return 0
 
+    # The running agent logs to the journal too; httpx would add a line per request.
+    logging.basicConfig(level=logging.INFO, format="%(levelname)s %(name)s: %(message)s")
+    logging.getLogger("httpx").setLevel(logging.WARNING)
+
     live = LiveState()
     store = ImageStore(args.data, tz)
     pairing: PairingState | None = None

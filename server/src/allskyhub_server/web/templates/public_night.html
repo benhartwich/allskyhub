@@ -1,0 +1,54 @@
+{% extends "base.html" %}
+{% block title %}{{ night_id | night_title }} · {{ title }}{% endblock %}
+{% block head %}<link rel="stylesheet" href="{{ asset('public.css') }}">{% endblock %}
+{% block content %}
+<a class="back" href="/sky/{{ slug }}">← {{ title }}</a>
+<h1>{{ night_id | night_title }}</h1>
+{% if products %}
+<section class="card">
+  <h2>Nachtbilder</h2>
+  <div class="public-products">
+    {% for product in products %}
+    <a href="/sky/{{ slug }}/products/{{ night_id }}/{{ product.name }}?full={{ 'true' if product.has_full else 'false' }}">
+      <img src="/sky/{{ slug }}/products/{{ night_id }}/{{ product.name }}" alt="{{ 'Keogramm' if product.kind == 'keogram' else 'Sternspuren' }} der Nacht" loading="lazy">
+      <span class="muted">{{ 'Keogramm' if product.kind == 'keogram' else 'Sternspuren' }}</span>
+    </a>
+    {% endfor %}
+  </div>
+</section>
+{% endif %}
+{% if events %}
+<section class="stack">
+  <h2>Ereignisse</h2>
+  {% if meteors %}<p class="muted">{{ meteors }}</p>{% endif %}
+  <div class="event-strip">
+    {% for e in events %}
+    <figure class="event-thumb">
+      <img src="/sky/{{ slug }}/events/{{ e.night_id }}/{{ e.event_id }}.jpg?v={{ (e.data or {}).get('image_rev', 1) }}" alt="{{ event_titles[e.kind] or e.kind }}" loading="lazy">
+      <figcaption>{{ event_titles[e.kind] or e.kind }} · {{ e.start | clock }}</figcaption>
+    </figure>
+    {% endfor %}
+  </div>
+</section>
+{% endif %}
+{% if sky_charts %}
+<section class="card sky-charts">
+  <h2>Himmelsqualität</h2>
+  {% for c in sky_charts %}
+  <figure>
+    <figcaption><strong>{{ c.title }}</strong> <span class="muted">zuletzt {{ c.latest }} {{ c.unit }} · Skala {{ c.low }}–{{ c.high }}</span></figcaption>
+    {{ c.svg }}
+  </figure>
+  {% endfor %}
+</section>
+{% endif %}
+{% if frames %}
+<ul class="thumbs">
+  {% for f in frames %}
+  <li><a href="/sky/{{ slug }}/frames/{{ night_id }}/{{ f.name }}"><img src="/sky/{{ slug }}/frames/{{ night_id }}/{{ f.name }}" alt="Aufnahme {{ f.captured_at | clock }}" loading="lazy"><span>{{ f.captured_at | clock }}</span></a></li>
+  {% endfor %}
+</ul>
+{% elif not products and not events %}
+<p class="muted">Aus dieser Nacht ist nichts mehr da.</p>
+{% endif %}
+{% endblock %}

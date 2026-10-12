@@ -1,13 +1,107 @@
 {% extends "base.html" %}
-{% block title %}{{ device.name }} · Himmel live · allskyhub{% endblock %}
+{% block title %}{{ title }} · Himmel live{% endblock %}
+{% block head %}
+  <link rel="stylesheet" href="{{ asset('public.css') }}">
+  <script src="{{ asset('public.js') }}" defer></script>
+  <meta property="og:title" content="{{ title }} · Himmel live">
+  <meta property="og:description" content="{{ profile.location_label or 'Allsky-Kamera' }}: der ganze Himmel, live.">
+  <meta property="og:type" content="website">
+  <meta property="og:url" content="{{ base_url }}/sky/{{ slug }}">
+  {% if device.latest_image_at %}<meta property="og:image" content="{{ base_url }}/sky/{{ slug }}/latest.jpg">{% endif %}
+  <meta name="twitter:card" content="summary_large_image">
+{% endblock %}
 {% block content %}
-<h1>{{ device.name }}</h1>
-<div hx-get="/sky/{{ slug }}/now" hx-trigger="every 60s" hx-swap="innerHTML">
-  {% include "_public_now.html" %}
+<header class="sky-head">
+  <div>
+    <p class="eyebrow">Allsky-Kamera{% if profile.location_label %} · {{ profile.location_label }}{% endif %}</p>
+    <h1>{{ title }}</h1>
+    {% if coordinates %}<p class="muted">{{ '%.1f' | format(coordinates[0]) }}° {{ 'N' if coordinates[0] >= 0 else 'S' }}, {{ '%.1f' | format(coordinates[1]) }}° {{ 'O' if coordinates[1] >= 0 else 'W' }}</p>{% endif %}
+  </div>
+  {% if kp and kp.days %}
+  <div class="kp-strip" aria-label="Polarlicht-Vorhersage (Kp-Index)">
+    {% for d in kp.days %}
+    <span class="kp {{ 'kp-high' if d.kp >= 5 else ('kp-mid' if d.kp >= 4 else 'kp-low') }}" title="höchster Kp-Wert des Tages{{ ' (Vorhersage)' if d.predicted }}">
+      <small>{{ 'Heute' if d.day == today else ['Mo','Di','Mi','Do','Fr','Sa','So'][d.day.weekday()] }}</small>{{ '%.1f' | format(d.kp) | replace('.', ',') }}
+    </span>
+    {% endfor %}
+  </div>
+  {% endif %}
+</header>
+
+<div class="sky-grid">
+  <section class="sky-main">
+    {% if profile.sections.live %}
+    <div hx-get="/sky/{{ slug }}/now" hx-trigger="every 30s" hx-swap="innerHTML">
+      {% include "_public_now.html" %}
+    </div>
+    {% endif %}
+    {% if loop_frames %}
+    <div class="card loop-card">
+      <div class="cam-meta"><h2>Die letzte Stunde</h2><button type="button" class="secondary small-btn" data-loop-toggle aria-pressed="false">▶ Abspielen</button></div>
+      <div class="loop" data-loop>
+        {% for f in loop_frames %}
+        <img {% if loop.last %}src{% else %}data-src{% endif %}="/sky/{{ slug }}/frames/{{ f.night_id }}/{{ f.name }}" alt="" data-time="{{ f.captured_at | clock }}"{% if loop.last %} class="on"{% endif %}>
+        {% endfor %}
+      </div>
+      <p class="muted" data-loop-label>{{ loop_frames | length }} Bilder, {{ loop_frames[0].captured_at | clock }}–{{ loop_frames[-1].captured_at | clock }} Uhr</p>
+    </div>
+    {% endif %}
+  </section>
+
+  <aside class="sky-side">
+    {% set p = profile %}
+    {% if p.camera or p.lens or p.computer or p.owner or p.notes %}
+    <div class="card">
+      <h2>Über diese Kamera</h2>
+      <dl class="facts">
+        {% if p.camera %}<dt>Kamera</dt><dd>{{ p.camera }}</dd>{% endif %}
+        {% if p.lens %}<dt>Objektiv</dt><dd>{{ p.lens }}</dd>{% endif %}
+        {% if p.computer %}<dt>Rechner</dt><dd>{{ p.computer }}</dd>{% endif %}
+        {% if p.owner %}<dt>Betrieben von</dt><dd>{{ p.owner }}</dd>{% endif %}
+      </dl>
+      {% if p.notes %}<p class="notes">{{ p.notes }}</p>{% endif %}
+    </div>
+    {% endif %}
+    {% if kp %}
+    <div class="card">
+      <h2>Polarlicht-Aussichten</h2>
+      {% if kp.now is not none %}<p>Aktueller Kp-Index: <strong>{{ '%.1f' | format(kp.now) | replace('.', ',') }}</strong></p>{% endif %}
+      {% if kp_needed is not none %}<p class="muted">Faustregel für diesen Standort: ab etwa Kp {{ '%.0f' | format(kp_needed) }} können Polarlichter tief am Horizont sichtbar werden, in einer klaren, dunklen Nacht.</p>{% endif %}
+      <p class="muted small">Daten: NOAA Space Weather Prediction Center.</p>
+    </div>
+    {% endif %}
+    {% if sky_charts %}
+    <div class="card sky-charts">
+      <h2>Himmelsqualität</h2>
+      <p class="muted small">{{ sky_night | night_title }}</p>
+      {% for c in sky_charts %}
+      <figure>
+        <figcaption><strong>{{ c.title }}</strong> <span class="muted">zuletzt {{ c.latest }} {{ c.unit }}</span></figcaption>
+        {{ c.svg }}
+      </figure>
+      {% endfor %}
+    </div>
+    {% endif %}
+  </aside>
 </div>
+
+{% if events %}
+<section class="stack">
+  <h2>Zuletzt am Himmel</h2>
+  <div class="event-strip">
+    {% for e in events %}
+    <a class="event-thumb" href="/sky/{{ slug }}/nights/{{ e.night_id }}">
+      <img src="/sky/{{ slug }}/events/{{ e.night_id }}/{{ e.event_id }}.jpg?v={{ (e.data or {}).get('image_rev', 1) }}" alt="{{ event_titles[e.kind] or e.kind }}" loading="lazy">
+      <span>{{ event_titles[e.kind] or e.kind }} · {{ e.start | localtime }}</span>
+    </a>
+    {% endfor %}
+  </div>
+</section>
+{% endif %}
+
 {% if products %}
 <section class="card">
-  <h2>Letzte Nacht</h2>
+  <div class="cam-meta"><h2>Letzte Nacht</h2><a href="/sky/{{ slug }}/nights/{{ night_id }}">{{ night_id | night_title }}</a></div>
   <div class="public-products">
     {% for product in products %}
     <a href="/sky/{{ slug }}/products/{{ night_id }}/{{ product.name }}?full={{ 'true' if product.has_full else 'false' }}">
@@ -18,5 +112,19 @@
   </div>
 </section>
 {% endif %}
-<p class="muted">Eine Allsky-Kamera mit <a href="/">allskyhub</a>.</p>
+
+{% if nights %}
+<section class="stack">
+  <h2>Archiv</h2>
+  <ul class="night-list">
+    {% for n in nights %}
+    <li><a class="card" href="/sky/{{ slug }}/nights/{{ n.night_id }}">
+      <strong>{{ n.night_id | night_title }}</strong>
+      <span class="muted">{{ n.frames }} Bilder{% if n.events %} · {{ n.events }} Ereignis{{ 'se' if n.events != 1 }}{% endif %}</span>
+    </a></li>
+    {% endfor %}
+  </ul>
+</section>
+{% endif %}
+<p class="muted center">Eine Allsky-Kamera mit <a href="/">allskyhub</a> – freie Software für den ganzen Himmel.</p>
 {% endblock %}

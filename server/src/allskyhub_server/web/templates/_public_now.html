@@ -1,9 +1,17 @@
 {%- set fr = device.last_frame or {} -%}
+{%- set sky = (device.last_status or {}).get('sky') or {} -%}
 <figure class="live">
   {% if device.latest_image_at %}
-  <img src="/sky/{{ slug }}/latest.jpg?t={{ device.latest_image_at.timestamp() | int }}" alt="Aktuelles Himmelsbild von {{ device.name }}">
-  <figcaption class="muted">
-    Aufgenommen {{ device.latest_image_at | age }}{% if fr.mode is defined %} · {{ 'Nacht' if fr.mode == 'night' else 'Tag' }}{% endif %}{% if fr.sun_elevation is defined %} · Sonne {{ '%.1f' | format(fr.sun_elevation) }}°{% endif %}
+  <a href="/sky/{{ slug }}/latest.jpg?t={{ device.latest_image_at.timestamp() | int }}" title="Vollbild"><img src="/sky/{{ slug }}/latest.jpg?t={{ device.latest_image_at.timestamp() | int }}" alt="Aktuelles Himmelsbild"></a>
+  <figcaption class="now-facts">
+    <span class="fact"><small>Aufgenommen</small>{{ device.latest_image_at | clock }} Uhr · {{ device.latest_image_at | age }}</span>
+    {% if fr.mode is defined %}<span class="fact"><small>Modus</small>{{ 'Nacht' if fr.mode == 'night' else 'Tag' }}</span>{% endif %}
+    {% if fr.sun_elevation is defined %}<span class="fact"><small>Sonne</small>{{ '%.1f' | format(fr.sun_elevation) }}°</span>{% endif %}
+    {% if fr.exposure_us is defined %}<span class="fact"><small>Belichtung</small>{{ '%.3g' | format(fr.exposure_us / 1e6) | replace('.', ',') }} s</span>{% endif %}
+    {% if fr.gain is defined %}<span class="fact"><small>Gain</small>{{ fr.gain | round | int }}</span>{% endif %}
+    {% if sky.cloud_cover is number %}<span class="fact"><small>Bewölkung</small>{{ (sky.cloud_cover * 100) | round | int }} %</span>{% endif %}
+    {% if sky.sqm_mag is number %}<span class="fact"><small>Himmelshelligkeit</small>{{ '%.2f' | format(sky.sqm_mag) | replace('.', ',') }} mag/″²</span>{% endif %}
+    {% if sky.stars is number %}<span class="fact"><small>Sterne</small>{{ sky.stars }}</span>{% endif %}
   </figcaption>
   {% else %}
   <div class="sky-ph" aria-hidden="true"></div>

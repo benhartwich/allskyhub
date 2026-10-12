@@ -13,11 +13,12 @@ from allskyhub_protocol import FrameVariant
 from allskyhub_server.devices import archive, public, sky_chart, space_weather, tonight
 from allskyhub_server.devices.event_text import EVENT_TITLES, meteor_summary
 from allskyhub_server.devices.images import ImageStore
-from allskyhub_server.devices.space_weather import KpCache
+from allskyhub_server.devices.space_weather import KpCache, OvationCache
 from allskyhub_server.devices.tonight import ForecastCache
 from allskyhub_server.models import Device
 from allskyhub_server.web.deps import DbSession
 from allskyhub_server.web.render import render
+from allskyhub_server.web.templating import templates
 
 router = APIRouter()
 
@@ -92,6 +93,7 @@ async def sky_page(request: Request, db: DbSession, slug: str) -> Response:
             "tonight": night,
             "today": now.date(),
             "kp_needed": space_weather.needed_kp(lat) if lat is not None else None,
+            "hemisphere": "south" if lat is not None and lat < 0 else "north",
             "base_url": str(request.base_url).rstrip("/"),
         },
     )
@@ -177,3 +179,51 @@ async def sky_event_image(
     store: ImageStore = request.app.state.images
     # Replaced pictures get a new image_rev in the URL, so a short cache is enough.
     return _jpeg(store.event_path(device.id, night_id, event_id, FrameVariant.THUMB), PUBLIC_CACHE)
+
+
+# Roadmap C9: embedding on other websites. Only these answers may be framed by anyone.
+EMBED_CSP = (
+    "default-src 'self'; img-src 'self' data:; style-src 'self'; script-src 'self'; "
+    "frame-ancestors *; base-uri 'self'; form-action 'self'"
+)
+
+
+@router.get("/sky/{slug}/widget")
+async def sky_widget(request: Request, db: DbSession, slug: str) -> Response:
+    """A small page with the latest image for an <iframe> on another website."""
+    device = await _device(db, slug)
+    response = render(request, "public_widget.html", {**_base(device, slug)})
+    response.headers["Content-Security-Policy"] = EMBED_CSP
+    response.headers["X-Frame-Options"] = "ALLOWALL"  # ignored by browsers; CSP decides
+    return response
+
+
+@router.get("/sky/{slug}/events.atom")
+async def sky_events_feed(request: Request, db: DbSession, slug: str) -> Response:
+    """Atom feed of the detections shown on the public page (roadmap C9)."""
+    device = await _device(db, slug)
+    if not public.profile(device).sections.events:
+        raise HTTPException(404)
+    events = await public.recent_events(db, device, limit=30)
+    base = str(request.base_url).rstrip("/")
+    body = templates.get_template("public_events.atom.xml").render(
+        {**_base(device, slug), "events": events, "base_url": base,
+         "updated": events[0].start if events else device.paired_at or dt.datetime.now(dt.UTC)}
+    )  # fmt: skip
+    return Response(
+        body,
+        media_type="application/atom+xml; charset=utf-8",
+        headers={"Cache-Control": "public, max-age=300"},
+    )
+
+
+@router.get("/space-weather/ovation/{hemisphere}.jpg")
+async def ovation(request: Request, hemisphere: str) -> Response:
+    """NOAA's aurora forecast map through the hub (roadmap C13)."""
+    cache: OvationCache = request.app.state.ovation
+    image = await cache.get(hemisphere)
+    if image is None:
+        raise HTTPException(404)
+    return Response(
+        image, media_type="image/jpeg", headers={"Cache-Control": "public, max-age=600"}
+    )

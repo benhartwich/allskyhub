@@ -30,4 +30,15 @@
   </div>
   <button type="submit">Speichern</button>
 </form>
+{% if device.public_slug %}
+{% set base = request.base_url ~ "sky/" ~ device.public_slug %}
+<div class="card stack">
+  <h2>Auf der eigenen Website</h2>
+  <label>Bild mit Link als Widget
+    <textarea class="embed-code" rows="3" readonly>&lt;iframe src="{{ base }}/widget" width="480" height="340" style="border:0" title="{{ device.name }}"&gt;&lt;/iframe&gt;</textarea>
+  </label>
+  <label>Nur das aktuelle Bild<input class="embed-code" readonly value="{{ base }}/latest.jpg"></label>
+  {% if profile.sections.events %}<label>Ereignisse als Feed (Atom)<input class="embed-code" readonly value="{{ base }}/events.atom"></label>{% endif %}
+</div>
+{% endif %}
 {% endblock %}

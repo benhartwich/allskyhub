@@ -28,6 +28,10 @@ def test_schema_is_usable_and_follows_the_profile() -> None:
     assert "wb_r" not in {s.key for s in rpi}  # white balance only where the camera has it
     longest = next(s for s in rpi if s.key == "night_max_exposure_s")
     assert longest.max == 200
+    # Benjamin, 2026-10-12: up to 300 s on the ZWO when set; empty stays 60 s.
+    zwo_longest = next(s for s in zwo if s.key == "night_max_exposure_s")
+    assert zwo_longest.max == 300
+    assert "Leer: 60 s" in str(zwo_longest.help)
 
 
 def test_values_report_every_key_and_fit_device_settings() -> None:
@@ -87,7 +91,10 @@ def test_night_limits_stay_within_the_profile() -> None:
         150.0,
     )
     wild = with_night_limits(p, AgentSettings(night_max_exposure_s=9999, night_max_gain=9999))
-    assert wild.exposure.night == p.exposure.night
+    assert wild.exposure.night.max_exposure_us == 300_000_000  # the cap, not the default
+    assert wild.exposure.night.max_gain == p.exposure.night.max_gain
+    long = with_night_limits(p, AgentSettings(night_max_exposure_s=180))
+    assert long.exposure.night.max_exposure_us == 180_000_000
     assert with_night_limits(p, AgentSettings()).exposure == p.exposure
 
 

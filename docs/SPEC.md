@@ -524,7 +524,7 @@ Each entry:
 | `min`, `max`, `step` | `number` and `int` only, optional; values outside `min`..`max`, NaN and infinity are `invalid_args`; `step` is only a hint for the form and not checked |
 | `choices` | `choice` only: `[{value, label}]`, `value` a string, `label` a text as above |
 | `max_length` | `string` only, default 200 |
-| `nullable` | the value may be `null` ("not set"); default false |
+| `nullable` | the value may be `null` ("not set": the device's default, which `help` names and which can be lower than `max`, e.g. 60 s for `night_max_exposure_s` with `max` 300); default false |
 | `write_only` | a secret such as an API key; default false. `status.settings` never contains it, only `<key>_set` (bool). Forms show an empty password field with "gesetzt" or "nicht gesetzt"; an empty field leaves the value as it is, `null` in `set_settings` deletes it |
 
 **Texts** (`label`, `group`, `help`, `choices[].label`) are either a string, which is

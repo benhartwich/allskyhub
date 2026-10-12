@@ -86,6 +86,10 @@ async def test_push_once_per_storm(app: FastAPI, client: httpx.AsyncClient) -> N
     async with maker() as db:
         rows = [flash(dev.device_id, m, 0.2) for m in (0, 1, 2)]
         rows.append(flash(dev.device_id, 50, 0.2, storm="storm-20261008T222012Z"))
+        # Pushes are only for recent detections: move the storm into the last hour.
+        shift = dt.datetime.now(dt.UTC) - dt.timedelta(hours=1) - T0
+        for row in rows:
+            row.start = row.end = row.start + shift
         db.add_all(rows)
         user_id = (
             await db.execute(update(User).values(notify_events=True).returning(User.id))

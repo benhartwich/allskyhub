@@ -3,16 +3,21 @@
 from __future__ import annotations
 
 import datetime as dt
-from typing import Annotated
+import uuid
+from typing import Annotated, Any
+from zoneinfo import ZoneInfo
 
 from fastapi import APIRouter, Depends, Form, HTTPException, Path, Query, Request
-from fastapi.responses import JSONResponse, RedirectResponse, Response
+from fastapi.responses import FileResponse, JSONResponse, RedirectResponse, Response
+from sqlalchemy import select
 
 from allskyhub_protocol import EVENT_ID_PATTERN, FrameVariant
-from allskyhub_server.devices import archive, events, queries, sky_chart, stats
+from allskyhub_server.auth.sessions import SessionInfo
+from allskyhub_server.devices import archive, events, queries, renders, sky_chart, stats, tonight
 from allskyhub_server.devices.connections import ConnectionRegistry
 from allskyhub_server.devices.event_text import EVENT_TITLES, event_rows, meteor_summary
-from allskyhub_server.models import Device, EventRecord
+from allskyhub_server.devices.images import ImageStore
+from allskyhub_server.models import Device, EventRecord, RenderJob
 from allskyhub_server.web.deps import CurrentSession, DbSession, csrf_protect
 from allskyhub_server.web.render import render
 
@@ -336,3 +341,143 @@ async def statistics(
         {"device": device, "stats": await stats.year(db, device.id, chosen)},
         session=session,
     )
+
+
+def _zone(device: Device) -> ZoneInfo:
+    settings: dict[str, Any] = (device.last_status or {}).get("settings") or {}
+    return tonight.zone_for(settings.get("timezone"))
+
+
+async def _render_page(
+    request: Request, db: DbSession, session: SessionInfo, device: Device, **extra: object
+) -> Response:
+    jobs = list(
+        await db.scalars(
+            select(RenderJob)
+            .where(RenderJob.device_id == device.id)
+            .order_by(RenderJob.created_at.desc())
+        )
+    )
+    zone = _zone(device)
+    now = dt.datetime.now(zone)
+    evening = (now - dt.timedelta(days=1)).replace(hour=18, minute=0, second=0, microsecond=0)
+    return render(
+        request,
+        "renders.html",
+        {
+            "device": device,
+            "jobs": jobs,
+            "zone": zone,
+            "busy": any(j.state in ("queued", "running") for j in jobs),
+            "default_start": evening.strftime("%Y-%m-%dT%H:%M"),
+            "default_end": (evening + dt.timedelta(hours=14)).strftime("%Y-%m-%dT%H:%M"),
+            "default_from": (now.date() - dt.timedelta(days=30)).isoformat(),
+            "default_to": now.date().isoformat(),
+            **extra,
+        },
+        session=session,
+        status_code=400 if extra.get("error") else 200,
+    )
+
+
+@router.get("/cameras/{device_id}/renders")
+async def renders_page(
+    request: Request, db: DbSession, session: CurrentSession, device_id: str
+) -> Response:
+    """Roadmap C8: timelapse over a chosen period, keogram over several nights."""
+    return await _render_page(request, db, session, await _own(db, session, device_id))
+
+
+@router.get("/cameras/{device_id}/renders/list")
+async def renders_list(
+    request: Request, db: DbSession, session: CurrentSession, device_id: str
+) -> Response:
+    """Polled while a job runs."""
+    device = await _own(db, session, device_id)
+    jobs = list(
+        await db.scalars(
+            select(RenderJob)
+            .where(RenderJob.device_id == device.id)
+            .order_by(RenderJob.created_at.desc())
+        )
+    )
+    busy = any(j.state in ("queued", "running") for j in jobs)
+    context = {"device": device, "jobs": jobs, "zone": _zone(device), "busy": busy}
+    return render(request, "_render_jobs.html", context, session=session)
+
+
+def _local(value: str, zone: ZoneInfo) -> dt.datetime:
+    return dt.datetime.fromisoformat(value).replace(tzinfo=zone).astimezone(dt.UTC)
+
+
+@router.post("/cameras/{device_id}/renders")
+async def render_request(
+    request: Request,
+    db: DbSession,
+    session: CurrentSession,
+    device_id: str,
+    kind: Annotated[str, Form()],
+    start: Annotated[str, Form(max_length=20)] = "",
+    end: Annotated[str, Form(max_length=20)] = "",
+    fps: Annotated[int, Form()] = 25,
+) -> Response:
+    device = await _own(db, session, device_id)
+    zone = _zone(device)
+    try:
+        if kind == "keogram":
+            begin = _local(f"{start}T00:00", zone)
+            finish = _local(f"{end}T23:59", zone)
+        else:
+            begin, finish = _local(start, zone), _local(end, zone)
+        await renders.request(db, device, kind, begin, finish, fps)
+    except ValueError:
+        return await _render_page(
+            request, db, session, device, error="Bitte Datum und Uhrzeit angeben."
+        )
+    except renders.RenderError as exc:
+        return await _render_page(request, db, session, device, error=str(exc))
+    await db.commit()
+    request.app.state.renderer.wake()
+    return RedirectResponse(f"/cameras/{device.id}/renders", status_code=303)
+
+
+async def _job(db: DbSession, device: Device, job_id: str) -> RenderJob:
+    try:
+        job = await db.get(RenderJob, uuid.UUID(job_id))
+    except ValueError:
+        job = None
+    if job is None or job.device_id != device.id:
+        raise HTTPException(404)
+    return job
+
+
+@router.get("/cameras/{device_id}/renders/{job_id}/file", response_model=None)
+async def render_file(
+    request: Request, db: DbSession, session: CurrentSession, device_id: str, job_id: str
+) -> Response:
+    device = await _own(db, session, device_id)
+    job = await _job(db, device, job_id)
+    store: ImageStore = request.app.state.images
+    path = store.render_path(device.id, str(job.id), renders.SUFFIX[job.kind])
+    if job.state != "done" or not path.is_file():
+        raise HTTPException(404)
+    return FileResponse(
+        path,
+        media_type=renders.MEDIA[job.kind],
+        headers={"Cache-Control": "private, max-age=86400"},
+    )
+
+
+@router.post("/cameras/{device_id}/renders/{job_id}/delete")
+async def render_delete(
+    request: Request, db: DbSession, session: CurrentSession, device_id: str, job_id: str
+) -> Response:
+    device = await _own(db, session, device_id)
+    job = await _job(db, device, job_id)
+    if job.state == "running":
+        return await _render_page(request, db, session, device, error="Läuft gerade, bitte warten.")
+    store: ImageStore = request.app.state.images
+    store.render_path(device.id, str(job.id), renders.SUFFIX[job.kind]).unlink(missing_ok=True)
+    await db.delete(job)
+    await db.commit()
+    return RedirectResponse(f"/cameras/{device.id}/renders", status_code=303)

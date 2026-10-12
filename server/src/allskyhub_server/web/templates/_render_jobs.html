@@ -1,0 +1,3 @@
+<div id="render-jobs"{% if busy %} hx-get="/cameras/{{ device.id }}/renders/list" hx-trigger="every 4s" hx-swap="outerHTML"{% endif %}>
+  {% include "_render_jobs_list.html" %}
+</div>

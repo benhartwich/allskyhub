@@ -191,7 +191,7 @@ The hub is a FastAPI app with PostgreSQL behind nginx. These steps are for Debia
 ### 4.1 Packages and user
 
 ```bash
-apt install postgresql nginx certbot git curl
+apt install postgresql nginx certbot git curl ffmpeg
 curl -LsSf https://astral.sh/uv/install.sh | env UV_INSTALL_DIR=/usr/local/bin sh
 
 useradd --system --home-dir /var/lib/allskyhub-server --shell /usr/sbin/nologin allskyhub-server

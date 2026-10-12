@@ -338,3 +338,23 @@ class NightStat(Base):
     updated_at: Mapped[dt.datetime] = mapped_column(
         _tz(), server_default=func.now(), onupdate=func.now()
     )
+
+
+class RenderJob(Base):
+    """A timelapse or a keogram over several nights, made on the hub from the archive's
+    thumbnails (roadmap C8). The file lives with the camera's images."""
+
+    __tablename__ = "render_job"
+
+    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid7)
+    device_id: Mapped[str] = mapped_column(ForeignKey("device.id", ondelete="CASCADE"), index=True)
+    kind: Mapped[str] = mapped_column(String(16))  # "timelapse" or "keogram"
+    start: Mapped[dt.datetime] = mapped_column(_tz())
+    end: Mapped[dt.datetime] = mapped_column(_tz())
+    fps: Mapped[int] = mapped_column(Integer, default=25, server_default="25")
+    state: Mapped[str] = mapped_column(String(10), default="queued", server_default="queued")
+    error: Mapped[str | None] = mapped_column(String(300))
+    frames: Mapped[int | None] = mapped_column(Integer)
+    size: Mapped[int | None] = mapped_column(BigInteger)
+    created_at: Mapped[dt.datetime] = mapped_column(_tz(), server_default=func.now())
+    finished_at: Mapped[dt.datetime | None] = mapped_column(_tz())

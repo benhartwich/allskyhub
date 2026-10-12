@@ -1,0 +1,32 @@
+{% extends "base.html" %}
+{% block title %}Zeitraffer & Keogramme · {{ device.name }}{% endblock %}
+{% block content %}
+<a class="back" href="/cameras/{{ device.id }}/gallery">← Galerie</a>
+<h1>Zeitraffer & Keogramme</h1>
+<p class="lead">Aus den Vorschaubildern des Archivs (etwa eines pro Minute, 30 Tage lang), auf dem Hub erstellt. Fertige Dateien bleiben 7 Tage.</p>
+<div class="grid-2 render-forms">
+  <form method="post" action="/cameras/{{ device.id }}/renders" class="card stack">
+    <h2>Zeitraffer</h2>
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <input type="hidden" name="kind" value="timelapse">
+    <label>Von<input type="datetime-local" name="start" value="{{ default_start }}" required></label>
+    <label>Bis<input type="datetime-local" name="end" value="{{ default_end }}" required></label>
+    <label>Bilder pro Sekunde<input type="number" name="fps" min="5" max="60" value="25"></label>
+    <p class="muted small">Bis zu 31 Tage; lange Zeiträume werden gleichmäßig ausgedünnt (höchstens 6000 Bilder).</p>
+    <button type="submit">Zeitraffer erstellen</button>
+  </form>
+  <form method="post" action="/cameras/{{ device.id }}/renders" class="card stack">
+    <h2>Keogramm über Nächte</h2>
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <input type="hidden" name="kind" value="keogram">
+    <label>Von der Nacht<input type="date" name="start" value="{{ default_from }}" required></label>
+    <label>Bis zur Nacht<input type="date" name="end" value="{{ default_to }}" required></label>
+    <p class="muted small">Die Keogramme der einzelnen Nächte nebeneinander: Wolken, Mond und Dämmerung eines ganzen Monats auf einen Blick.</p>
+    <button type="submit">Keogramm erstellen</button>
+  </form>
+</div>
+<section class="stack">
+  <h2>Aufträge</h2>
+  {% include "_render_jobs.html" %}
+</section>
+{% endblock %}

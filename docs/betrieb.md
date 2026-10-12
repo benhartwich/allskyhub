@@ -110,6 +110,22 @@ gunzip -c allskyhub-latest.sql.gz | sudo -u allskyhub-server env $(xargs < /etc/
 systemctl start allskyhub-server.socket
 ```
 
+## Eigene Domains für öffentliche Seiten
+
+Besitzer tragen unter „Seite gestalten“ eine Domain ein (CNAME auf `allskyhub.org`). Der Hub
+prüft das DNS und legt einen Auftrag in `/var/lib/allskyhub-server/domains/` ab; ein
+root-Helfer (`deploy/domains/allskyhub-domains.sh`) prüft erneut, holt das Zertifikat mit
+`certbot --standalone` (nginx ist dafür einige Sekunden gestoppt), schreibt
+`/etc/nginx/sites-available/allskyhub-domain-<domain>.conf` und lädt nginx neu. Die
+monatliche Verlängerung erledigt der bestehende `certbot renew` mit seinen Hooks.
+
+```bash
+cp deploy/systemd/allskyhub-domains.* /etc/systemd/system/
+systemctl daemon-reload && systemctl enable --now allskyhub-domains.timer
+```
+
+Protokoll: `/var/log/allskyhub-domains.log`, `journalctl -u allskyhub-domains`.
+
 ## E-Mail
 
 Aus, solange `ALLSKYHUB_SERVER_SMTP_HOST` leer ist. Der Hub verschickt über SMTP mit

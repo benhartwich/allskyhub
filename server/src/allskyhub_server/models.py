@@ -132,6 +132,11 @@ class Device(Base):
     public_slug: Mapped[str | None] = mapped_column(String(32), unique=True)
     # What the public page shows and its texts (devices/public.py PublicProfile); None = defaults.
     public_profile: Mapped[dict[str, Any] | None] = mapped_column(JSONB)
+    # Roadmap #17: the public page under the owner's own domain, set up by a root helper
+    # (deploy/domains): state "pending", "active", "failed" or "removing".
+    custom_domain: Mapped[str | None] = mapped_column(String(253), unique=True)
+    custom_domain_state: Mapped[str | None] = mapped_column(String(10))
+    custom_domain_error: Mapped[str | None] = mapped_column(String(300))
     # SPEC §7.4 B: the offline code's Argon2id verifier (never the code itself), whether the
     # device still has to get it (`local_access`, §6.5), and when the owner made it.
     local_access_verifier: Mapped[str | None] = mapped_column(String(512))

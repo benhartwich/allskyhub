@@ -31,6 +31,35 @@
   <button type="submit">Speichern</button>
 </form>
 {% if device.public_slug %}
+<div class="card stack" id="domain">
+  <h2>Eigene Domain</h2>
+  <p class="muted">Zeige diese Seite unter deiner eigenen Adresse, z. B. <code>himmel.example.org</code>. Lege dafür im DNS deiner Domain einen <strong>CNAME</strong>-Eintrag auf <code>{{ request.base_url.hostname }}</code> an und drücke dann „Domain übernehmen“. Das Zertifikat holen wir automatisch.</p>
+  {% if device.custom_domain %}
+  <p>
+    <code>{{ device.custom_domain }}</code> ·
+    {% if device.custom_domain_state == 'active' %}<span class="badge ok">aktiv</span> <a href="https://{{ device.custom_domain }}/">öffnen</a>
+    {% elif device.custom_domain_state == 'pending' %}<span class="badge">wird eingerichtet</span> <span class="muted small">(Zertifikat wird geholt, dauert ein paar Minuten)</span>
+    {% elif device.custom_domain_state == 'removing' %}<span class="badge">wird entfernt</span>
+    {% else %}<span class="badge">fehlgeschlagen</span> <span class="warn small">{{ device.custom_domain_error }}</span>{% endif %}
+  </p>
+  {% if device.custom_domain_state != 'removing' %}
+  <form method="post" action="/cameras/{{ device.id }}/public/domain/remove" class="inline">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <button type="submit" class="danger">Domain entfernen</button>
+  </form>
+  {% endif %}
+  {% endif %}
+  {% if not device.custom_domain or device.custom_domain_state == 'failed' %}
+  <form method="post" action="/cameras/{{ device.id }}/public/domain" class="stack">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    {% if domain_error %}<p class="msg error">{{ domain_error }}</p>{% endif %}
+    <label>Domain<input name="domain" value="{{ domain_value or device.custom_domain or '' }}" placeholder="himmel.example.org" autocomplete="off"></label>
+    <button type="submit" class="secondary">Domain übernehmen</button>
+  </form>
+  {% endif %}
+</div>
+{% endif %}
+{% if device.public_slug %}
 {% set base = request.base_url ~ "sky/" ~ device.public_slug %}
 <div class="card stack">
   <h2>Auf der eigenen Website</h2>

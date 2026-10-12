@@ -15,6 +15,7 @@ from allskyhub_server.auth import ratelimit
 from allskyhub_server.auth.sessions import SessionInfo
 from allskyhub_server.devices import (
     archive,
+    domains,
     events,
     health,
     night_summary,
@@ -255,12 +256,11 @@ async def public_edit(
     request: Request, db: DbSession, session: CurrentSession, device_id: str
 ) -> Response:
     device = await _own_device(db, session, device_id)
-    return render(
-        request,
-        "public_edit.html",
-        {"device": device, "profile": public.profile(device), "sections": PUBLIC_SECTIONS},
-        session=session,
-    )
+    return render(request, "public_edit.html", _public_edit_context(device), session=session)
+
+
+def _public_edit_context(device: Device) -> dict[str, object]:
+    return {"device": device, "profile": public.profile(device), "sections": PUBLIC_SECTIONS}
 
 
 @router.post("/cameras/{device_id}/public/edit")
@@ -359,3 +359,38 @@ async def unshare(
     await sharing.remove(db, device.id, user_id)
     await db.commit()
     return RedirectResponse(f"/cameras/{device.id}#teilen", status_code=303)
+
+
+@router.post("/cameras/{device_id}/public/domain")
+async def public_domain(
+    request: Request,
+    db: DbSession,
+    session: CurrentSession,
+    settings: SettingsDep,
+    device_id: str,
+    domain: Annotated[str, Form(max_length=300)],
+) -> Response:
+    """Roadmap #17: the public page under the owner's own domain."""
+    device = await _own_device(db, session, device_id)
+    try:
+        await domains.request(db, device, domain, settings.base_url, settings.data_dir)
+    except domains.DomainError as exc:
+        return render(
+            request,
+            "public_edit.html",
+            {**_public_edit_context(device), "domain_error": str(exc), "domain_value": domain},
+            session=session,
+            status_code=400,
+        )
+    await db.commit()
+    return RedirectResponse(f"/cameras/{device.id}/public/edit#domain", status_code=303)
+
+
+@router.post("/cameras/{device_id}/public/domain/remove")
+async def public_domain_remove(
+    db: DbSession, session: CurrentSession, settings: SettingsDep, device_id: str
+) -> Response:
+    device = await _own_device(db, session, device_id)
+    domains.remove(device, settings.data_dir)
+    await db.commit()
+    return RedirectResponse(f"/cameras/{device.id}/public/edit#domain", status_code=303)

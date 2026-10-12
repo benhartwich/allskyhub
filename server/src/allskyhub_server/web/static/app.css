@@ -290,3 +290,7 @@ table.stats th { color: var(--text-2); font-weight: 600; }
 .camera-map .dot { fill: var(--aurora); stroke: #fff; stroke-width: 2; vector-effect: non-scaling-stroke; }
 .camera-map .halo { fill: rgba(79, 227, 176, .25); }
 .camera-map a:hover .dot { fill: #fff; }
+/* Settings form from the camera's schema (SPEC §6.9). */
+.settings-form fieldset { border: 0; padding: 0; margin: 0; }
+.settings-form legend { font-family: var(--display); font-weight: 600; font-size: 15px; color: var(--text-2);
+                        text-transform: uppercase; letter-spacing: 1px; margin-bottom: 6px; }

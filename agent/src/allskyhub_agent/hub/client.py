@@ -52,6 +52,7 @@ from allskyhub_protocol import (
     RegisterRequest,
     RegisterResponse,
     SetSettingsArgs,
+    SettingSpec,
     Status,
     TokenRequest,
     TokenResponse,
@@ -148,10 +149,12 @@ class HubSession:
         monotonic: Callable[[], float] = time.monotonic,
         latest_products: Callable[[], Products | None] | None = None,
         events: EventSource | None = None,
-        on_set_settings: Callable[[SetSettingsArgs], None] | None = None,
+        on_set_settings: Callable[[SetSettingsArgs], list[str] | None] | None = None,
         local_access: LocalAccess | None = None,
+        settings_schema: Callable[[], list[SettingSpec]] | None = None,
     ) -> None:
         self._cfg = cfg
+        self._settings_schema = settings_schema
         self._local_access = local_access
         self._id = identity
         self._pairing = pairing
@@ -282,6 +285,7 @@ class HubSession:
                         profile=self._profile,
                         agent_version=self._version,
                         capabilities=CAPABILITIES,
+                        settings_schema=self._settings_schema() if self._settings_schema else [],
                     ),
                 )
                 if self._latest_products is not None:
@@ -387,8 +391,11 @@ class HubSession:
                     {".".join(str(p) for p in e["loc"]) or "args" for e in exc.errors()}
                 )
                 return ErrorReply(ref=ref, code=ErrorCode.INVALID_ARGS, message=", ".join(fields))
-            # SPEC §6.5: store, ack; the capture restarts with the new settings afterwards.
-            await asyncio.to_thread(self._on_set_settings, args)
+            # SPEC §6.5, §6.9: check against the schema, store, ack; the capture restarts with
+            # the new settings afterwards.
+            bad = await asyncio.to_thread(self._on_set_settings, args)
+            if bad:
+                return ErrorReply(ref=ref, code=ErrorCode.INVALID_ARGS, message=", ".join(bad))
             return Ack(ref=ref)
         if cmd.name is CommandName.UPLOAD_EVENT:
             return await self._upload_event(ref, cmd, token)

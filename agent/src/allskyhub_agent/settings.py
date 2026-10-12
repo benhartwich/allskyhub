@@ -4,9 +4,10 @@ from __future__ import annotations
 
 import json
 import os
+from collections.abc import Mapping
 from dataclasses import asdict, dataclass, replace
 from pathlib import Path
-from typing import cast
+from typing import Any, cast
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 DEFAULT_PATH = Path("/var/lib/allskyhub-agent/settings.json")
@@ -33,6 +34,13 @@ class AgentSettings:
     # Pause between frames (SPEC §4.1).
     day_delay_s: float = 30.0
     night_delay_s: float = 0.0
+    # Settings from the local UI and the hub's form (SPEC §6.9, roadmap L7). None: the
+    # hardware profile's or the camera's own value.
+    night_max_exposure_s: float | None = None
+    night_max_gain: int | None = None
+    wb_r: int | None = None
+    wb_b: int | None = None
+    jpeg_quality: int = 90
 
     @property
     def has_location(self) -> bool:
@@ -81,21 +89,50 @@ class AgentSettings:
             d.get("camera"),
         )
         dd, nd = d.get("day_delay_s"), d.get("night_delay_s")
+        later = {
+            k: d[k]
+            for k in ("night_max_exposure_s", "night_max_gain", "wb_r", "wb_b", "jpeg_quality")
+            if isinstance(d.get(k), int | float) and not isinstance(d.get(k), bool)
+        }
         location_ok = (
             isinstance(lat, int | float)
             and isinstance(lon, int | float)
             and -90 <= lat <= 90
             and -180 <= lon <= 180
         )
-        return cls().with_updates(
-            hub_url=hub if isinstance(hub, str) else None,
-            latitude=float(lat) if location_ok and isinstance(lat, int | float) else None,
-            longitude=float(lon) if location_ok and isinstance(lon, int | float) else None,
-            timezone=tz if isinstance(tz, str) else None,
-            camera=cam if isinstance(cam, str) else None,
-            day_delay_s=float(dd) if isinstance(dd, int | float) else None,
-            night_delay_s=float(nd) if isinstance(nd, int | float) else None,
+        return (
+            cls()
+            .with_values(later)
+            .with_updates(
+                hub_url=hub if isinstance(hub, str) else None,
+                latitude=float(lat) if location_ok and isinstance(lat, int | float) else None,
+                longitude=float(lon) if location_ok and isinstance(lon, int | float) else None,
+                timezone=tz if isinstance(tz, str) else None,
+                camera=cam if isinstance(cam, str) else None,
+                day_delay_s=float(dd) if isinstance(dd, int | float) else None,
+                night_delay_s=float(nd) if isinstance(nd, int | float) else None,
+            )
         )
+
+    def with_values(self, values: Mapping[str, Any]) -> AgentSettings:
+        """A copy with the keys in `values` set; `None` resets a nullable setting (SPEC
+        §6.5). The caller has checked them against the settings schema (SPEC §6.9)."""
+        s = self.with_updates(
+            latitude=values.get("latitude"),
+            longitude=values.get("longitude"),
+            timezone=values.get("timezone"),
+            camera=values.get("camera"),
+            day_delay_s=values.get("day_delay_s"),
+            night_delay_s=values.get("night_delay_s"),
+        )
+        extra: dict[str, Any] = {}
+        for key in ("night_max_exposure_s", "night_max_gain", "wb_r", "wb_b"):
+            if key in values:
+                v = values[key]
+                extra[key] = None if v is None else (float(v) if key.endswith("_s") else int(v))
+        if values.get("jpeg_quality") is not None:
+            extra["jpeg_quality"] = int(values["jpeg_quality"])
+        return replace(s, **extra)
 
     def save(self, path: Path) -> None:
         path.parent.mkdir(parents=True, exist_ok=True)

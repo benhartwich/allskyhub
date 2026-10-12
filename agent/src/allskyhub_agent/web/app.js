@@ -55,11 +55,73 @@ document.addEventListener("keydown", (e) => {
   if (e.key === "ArrowRight") $("lbNext").click();
 });
 
+// --- Overlay (L11) ------------------------------------------------------------------
+// Drawn over the image when it is shown; the stored frames stay as the camera took them.
+// On unless this browser switched it off.
+const loadPref = (k) => { try { return localStorage.getItem("ash-ov-" + k) !== "0"; } catch { return true; } };
+const savePref = (k, on) => { try { localStorage.setItem("ash-ov-" + k, on ? "1" : "0"); } catch { /* private mode */ } };
+
+function overlaySvg(f, orientation, ov, w, h, fixedColours = false) {
+  const H = w ? 1000 * h / w : 562.5;
+  const fs = 22;  // in viewBox units: about 2 % of the width
+  const cls = fixedColours ? ' fill="#fff" stroke="rgba(0,0,0,.75)" stroke-width="4" paint-order="stroke"' : "";
+  let out = "";
+  if (ov.data && f) {
+    const at = new Date(f.captured_at);
+    const lines = [
+      at.toLocaleDateString("de-AT", { day: "2-digit", month: "2-digit", year: "numeric" }) + " " +
+        at.toLocaleTimeString("de-AT", { hour: "2-digit", minute: "2-digit", second: "2-digit" }),
+      `${fmtExposure(f.exposure_us)} · Gain ${f.gain}${f.sensor_temp_c != null ? ` · ${f.sensor_temp_c.toFixed(1)} °C` : ""}`,
+      `Sonne ${f.sun_elevation.toFixed(1)}° · ${f.mode === "night" ? "Nacht" : "Tag"}`,
+    ];
+    out += lines.map((t, i) => `<text class="ov-text" x="16" y="${16 + fs * (i + 1) * 1.25}" font-size="${fs}"${cls}>${esc(t)}</text>`).join("");
+  }
+  const o = orientation && orientation.overlay;
+  if (ov.compass && o) {
+    out += o.points.map((p) => `<text class="ov-compass" x="${(p.x * 1000).toFixed(1)}" y="${(p.y * H).toFixed(1)}" font-size="${fs * 1.6}"
+      text-anchor="middle" dominant-baseline="middle"${cls}>${p.label}</text>`).join("");
+  }
+  return out;
+}
+
+// The shown image plus the overlay as one JPEG, made in the browser.
+function saveWithOverlay(img, svgInner, f) {
+  if (!img.naturalWidth) return;
+  const w = img.naturalWidth, h = img.naturalHeight;
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${h}" viewBox="0 0 1000 ${(1000 * h / w).toFixed(1)}"
+    font-family="system-ui, sans-serif" font-weight="600">${svgInner}</svg>`;
+  const layer = new Image();
+  layer.onload = () => {
+    const c = document.createElement("canvas");
+    c.width = w; c.height = h;
+    const g = c.getContext("2d");
+    g.drawImage(img, 0, 0);
+    g.drawImage(layer, 0, 0, w, h);
+    c.toBlob((blob) => {
+      const a = document.createElement("a");
+      a.href = URL.createObjectURL(blob);
+      const stamp = f ? f.name.replace(/\.jpg$/, "") : "allsky";
+      a.download = `${stamp}-overlay.jpg`;
+      a.click();
+      setTimeout(() => URL.revokeObjectURL(a.href), 10000);
+    }, "image/jpeg", 0.92);
+  };
+  layer.src = "data:image/svg+xml;charset=utf-8," + encodeURIComponent(svg);
+}
+
 // --- Live (L3) ---------------------------------------------------------------------
 function viewLive() {
   page.innerHTML = `
     <section class="card stack">
-      <img class="live-img" id="live" alt="Aktuelles Bild">
+      <div class="live-stage">
+        <img class="live-img" id="live" alt="Aktuelles Bild">
+        <svg id="liveOverlay" class="overlay" viewBox="0 0 1000 562.5" aria-hidden="true"></svg>
+      </div>
+      <div class="row">
+        <button type="button" class="secondary small" data-ov="data" aria-pressed="false">Daten</button>
+        <button type="button" class="secondary small" data-ov="compass" aria-pressed="false">Himmelsrichtungen</button>
+        <button type="button" class="secondary small" id="ovSave">Mit Overlay speichern</button>
+      </div>
       <dl class="facts" id="facts"><dt>Bild</dt><dd>Warte auf das erste Bild …</dd></dl>
     </section>
     <section class="card stack">
@@ -87,6 +149,26 @@ function viewLive() {
     </section>`;
   let lastFrames = -1;
   let focus = false;
+  let lastFrame = null;
+  let orientation = null;
+  getJSON("api/calibration").then((c) => { orientation = c.orientation; drawOverlay(); }).catch(() => {});
+  const ov = { data: loadPref("data"), compass: loadPref("compass") };
+  for (const b of document.querySelectorAll("[data-ov]")) {
+    const key = b.dataset.ov;
+    const sync = () => { b.classList.toggle("active", ov[key]); b.setAttribute("aria-pressed", String(ov[key])); };
+    sync();
+    b.onclick = () => { ov[key] = !ov[key]; savePref(key, ov[key]); sync(); drawOverlay(); };
+  }
+  // The overlay is drawn on top, never into the stored image (L11): Benjamin, 2026-10-12.
+  const drawOverlay = () => {
+    const img = $("live"), svg = $("liveOverlay");
+    if (!img || !svg) return;
+    svg.innerHTML = overlaySvg(lastFrame, orientation, ov, img.naturalWidth, img.naturalHeight);
+    if (img.naturalWidth) svg.setAttribute("viewBox", `0 0 1000 ${(1000 * img.naturalHeight / img.naturalWidth).toFixed(1)}`);
+  };
+  $("live").addEventListener("load", drawOverlay);
+  $("ovSave").onclick = () => saveWithOverlay($("live"), overlaySvg(lastFrame, orientation, { data: true, compass: ov.compass },
+    $("live").naturalWidth, $("live").naturalHeight, true), lastFrame);
   $("live").onclick = () => lightbox([{ src: $("live").src, caption: "Aktuelles Bild" }], 0);
   const render = (s) => {
     $("version").textContent = s.version;
@@ -96,6 +178,7 @@ function viewLive() {
     $("resetBtn").hidden = !focus;
     if (s.frame) {
       const f = s.frame;
+      lastFrame = f;
       $("facts").innerHTML = `
         <dt>Aufgenommen</dt><dd>${fmtTime(f.captured_at)}</dd>
         <dt>Modus</dt><dd>${f.mode === "night" ? "Nacht" : "Tag"}</dd>

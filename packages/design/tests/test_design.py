@@ -24,7 +24,8 @@ def test_css_urls_point_into_the_package() -> None:
 
 def test_red_theme_defines_every_colour_token() -> None:
     tokens = allskyhub_design.path("tokens.css").read_text()
-    root, red = tokens.split('[data-theme="red"]', 1)
+    # The rule, not the mention in the comment at the top.
+    root, red = tokens.split('[data-theme="red"] {', 1)
     colours = {"--bg", "--text", "--text-2", "--accent", "--ok", "--warn", "--danger", "--line"}
     for name in colours:
         assert f"{name}:" in root, name

@@ -321,16 +321,18 @@ class HubClient {
     Map<String, Object> changes,
   ) => _send('PUT', '/cameras/$cameraId/settings', body: changes);
 
-  /// Days the hub keeps this account's detections: 30, 90 or 365 (privacy policy).
-  Future<int> eventKeepDays() async =>
-      ((await _send('GET', '/account/settings')
-              as Map<String, dynamic>)['event_keep_days']
-          as int);
+  /// Retention of detections and the notifications (roadmap #6, #15, C1–C3).
+  Future<AccountSettings> accountSettings() async => AccountSettings.fromJson(
+    await _send('GET', '/account/settings') as Map<String, dynamic>,
+  );
 
-  Future<int> setEventKeepDays(int days) async =>
-      ((await _send('PUT', '/account/settings', body: {'event_keep_days': days})
-              as Map<String, dynamic>)['event_keep_days']
-          as int);
+  /// Only the given keys change (e.g. `{'event_keep_days': 90}`).
+  Future<AccountSettings> updateAccountSettings(
+    Map<String, Object> changes,
+  ) async => AccountSettings.fromJson(
+    await _send('PUT', '/account/settings', body: changes)
+        as Map<String, dynamic>,
+  );
 
   Future<void> changePassword(String current, String newPassword) => _send(
     'POST',
@@ -488,4 +490,31 @@ class HubClient {
         if (live) 'live': 'true',
         if (bust != null) 't': '$bust',
       });
+}
+
+/// Per-account settings from `GET /account/settings`. Notification switches the hub does
+/// not know (older hub) are missing from [notify].
+class AccountSettings {
+  AccountSettings.fromJson(Map<String, dynamic> json)
+    : keepDays = json['event_keep_days'] as int,
+      pushAvailable = json['push_available'] as bool? ?? false,
+      mailAvailable = json['mail_available'] as bool? ?? false,
+      notify = {
+        for (final key in notifyKeys)
+          if (json[key] is bool) key: json[key] as bool,
+      };
+
+  static const notifyKeys = [
+    'notify_events',
+    'notify_offline',
+    'notify_aurora',
+    'notify_summary',
+    'notify_tonight',
+    'notify_by_mail',
+  ];
+
+  final int keepDays;
+  final bool pushAvailable;
+  final bool mailAvailable;
+  final Map<String, bool> notify;
 }

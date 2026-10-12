@@ -26,6 +26,7 @@ class _AccountScreenState extends State<AccountScreen> {
   final _deletePassword = TextEditingController();
   bool _busy = false;
   int? _keepDays;
+  AccountSettings? _settings;
   String? _message;
   bool _messageIsError = false;
 
@@ -37,8 +38,13 @@ class _AccountScreenState extends State<AccountScreen> {
 
   Future<void> _loadSettings() async {
     try {
-      final days = await widget.client.eventKeepDays();
-      if (mounted) setState(() => _keepDays = days);
+      final settings = await widget.client.accountSettings();
+      if (mounted) {
+        setState(() {
+          _settings = settings;
+          _keepDays = settings.keepDays;
+        });
+      }
     } on Exception {
       // Older hub or offline: the section stays hidden.
     }
@@ -48,14 +54,39 @@ class _AccountScreenState extends State<AccountScreen> {
     final before = _keepDays;
     setState(() => _keepDays = days);
     try {
-      final saved = await widget.client.setEventKeepDays(days);
-      if (mounted) setState(() => _keepDays = saved);
+      final saved = await widget.client.updateAccountSettings({
+        'event_keep_days': days,
+      });
+      if (mounted) setState(() => _keepDays = saved.keepDays);
       _show('Gespeichert.');
     } on Exception catch (e) {
       if (mounted) setState(() => _keepDays = before);
       _show(_describe(e), error: true);
     }
   }
+
+  Future<void> _setNotify(String key, bool on) async {
+    final before = _settings;
+    if (before == null) return;
+    setState(() => _settings = _withNotify(before, key, on));
+    try {
+      final saved = await widget.client.updateAccountSettings({key: on});
+      if (mounted) setState(() => _settings = saved);
+      _show('Gespeichert.');
+    } on Exception catch (e) {
+      if (mounted) setState(() => _settings = before);
+      _show(_describe(e), error: true);
+    }
+  }
+
+  AccountSettings _withNotify(AccountSettings s, String key, bool on) =>
+      AccountSettings.fromJson({
+        'event_keep_days': s.keepDays,
+        'push_available': s.pushAvailable,
+        'mail_available': s.mailAvailable,
+        ...s.notify,
+        key: on,
+      });
 
   @override
   void dispose() {
@@ -185,6 +216,60 @@ class _AccountScreenState extends State<AccountScreen> {
                 ],
               ),
             ),
+            const SizedBox(height: 24),
+          ],
+          if (_settings case final settings?
+              when settings.pushAvailable || settings.mailAvailable) ...[
+            Text('Benachrichtigungen', style: theme.textTheme.titleMedium),
+            const SizedBox(height: 4),
+            Text(
+              settings.pushAvailable
+                  ? 'Auf diesem Telefon${settings.mailAvailable ? ' und auf Wunsch per E-Mail' : ''}.'
+                  : 'Per E-Mail, wenn du das unten einschaltest.',
+            ),
+            for (final (key, title, subtitle) in [
+              if (settings.pushAvailable)
+                (
+                  'notify_events',
+                  'Neue Ereignisse',
+                  'z. B. Meteor, höchstens alle 10 Minuten pro Kamera, nur in der App',
+                ),
+              (
+                'notify_offline',
+                'Probleme mit einer Kamera',
+                'offline, keine Bilder, Speicher fast voll, zu heiß, Uhr',
+              ),
+              (
+                'notify_aurora',
+                'Polarlicht möglich',
+                'Kp hoch genug und der Himmel über der Kamera klar',
+              ),
+              (
+                'notify_summary',
+                'Zusammenfassung der Nacht',
+                'morgens nach Sonnenaufgang',
+              ),
+              (
+                'notify_tonight',
+                'Heute Nacht klar',
+                'abends, wenn mindestens 2 Stunden klar und dunkel vorhergesagt sind',
+              ),
+              if (settings.mailAvailable)
+                (
+                  'notify_by_mail',
+                  'Auch per E-Mail',
+                  'alles außer einzelnen Ereignissen',
+                ),
+            ])
+              if (settings.notify.containsKey(key))
+                SwitchListTile(
+                  key: ValueKey(key),
+                  contentPadding: EdgeInsets.zero,
+                  title: Text(title),
+                  subtitle: Text(subtitle),
+                  value: settings.notify[key]!,
+                  onChanged: _busy ? null : (on) => _setNotify(key, on),
+                ),
             const SizedBox(height: 24),
           ],
           Text('Passwort ändern', style: theme.textTheme.titleMedium),

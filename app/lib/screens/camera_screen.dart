@@ -6,6 +6,7 @@ import '../api/hub_client.dart';
 import '../platform/location.dart';
 import 'camera_settings_screen.dart';
 import 'camera_status.dart';
+import 'zoomable.dart';
 
 /// Live view: polls the latest image with `live=true` every few seconds, so the hub asks
 /// the camera for every frame while this screen is open (SPEC §6.5).
@@ -76,6 +77,27 @@ class _CameraScreenState extends State<CameraScreen> {
     if (mounted) Navigator.of(context).pop();
   }
 
+  /// The live picture in full screen, to zoom into (the picture of this moment).
+  void _openFullscreen() {
+    final url = widget.client
+        .imageUrl(_camera.id, live: true, bust: _tick)
+        .toString();
+    Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => PhotoPager(
+          count: 1,
+          initial: 0,
+          title: (_) => _camera.name,
+          image: (_) => Image.network(
+            url,
+            headers: widget.client.authHeaders,
+            fit: BoxFit.contain,
+          ),
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -124,15 +146,19 @@ class _CameraScreenState extends State<CameraScreen> {
                             : 'Noch kein Bild.',
                       ),
                     )
-                  : Image.network(
-                      widget.client
-                          .imageUrl(_camera.id, live: true, bust: _tick)
-                          .toString(),
-                      headers: widget.client.authHeaders,
-                      fit: BoxFit.contain,
-                      gaplessPlayback: true,
-                      errorBuilder: (_, _, _) =>
-                          const Center(child: Text('Bild nicht verfügbar')),
+                  : GestureDetector(
+                      key: const Key('live-image'),
+                      onTap: _openFullscreen,
+                      child: Image.network(
+                        widget.client
+                            .imageUrl(_camera.id, live: true, bust: _tick)
+                            .toString(),
+                        headers: widget.client.authHeaders,
+                        fit: BoxFit.contain,
+                        gaplessPlayback: true,
+                        errorBuilder: (_, _, _) =>
+                            const Center(child: Text('Bild nicht verfügbar')),
+                      ),
                     ),
             ),
           ),

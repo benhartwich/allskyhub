@@ -12,6 +12,7 @@
   <link rel="stylesheet" href="{{ asset('design/base.css') }}">
   <link rel="stylesheet" href="{{ asset('app.css') }}">
   <script src="{{ asset('htmx.min.js') }}" defer></script>
+  <script src="{{ asset('lightbox.js') }}" defer></script>
   {% block head %}{% endblock %}
 </head>
 <body {% if csrf_token %}hx-headers='{"X-CSRF-Token": "{{ csrf_token }}"}'{% endif %}>

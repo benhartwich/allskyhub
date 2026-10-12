@@ -3,7 +3,7 @@
   {% if product.content_type == "video/mp4" %}
   <video class="product-video" src="{{ file }}" controls loop playsinline preload="metadata"></video>
   {% else %}
-  <a href="{{ file }}"><img class="product-image" src="{{ file }}" alt=""></a>
+  <a href="{{ file }}" data-lightbox><img class="product-image" src="{{ file }}" alt=""></a>
   {% endif %}
 {% elif state == "fetching" %}
   <div class="card" hx-get="/cameras/{{ device.id }}/products/{{ night_id }}/{{ product.name }}/state" hx-trigger="every 3s" hx-target="#product" hx-swap="innerHTML">

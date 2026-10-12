@@ -2,7 +2,7 @@
 {%- set fr = device.last_frame or {} -%}
 <figure class="live">
   {% if device.latest_image_at %}
-  <img src="/cameras/{{ device.id }}/image/full.jpg?t={{ device.latest_image_at.timestamp() | int }}" alt="Aktuelles Himmelsbild">
+  <a href="/cameras/{{ device.id }}/image/full.jpg?t={{ device.latest_image_at.timestamp() | int }}" data-lightbox data-caption="Aktuelles Himmelsbild · {{ device.latest_image_at | clock }} Uhr" title="Vollbild"><img src="/cameras/{{ device.id }}/image/full.jpg?t={{ device.latest_image_at.timestamp() | int }}" alt="Aktuelles Himmelsbild"></a>
   <figcaption class="muted">Bild {{ device.latest_image_at | age }}{% if online %} · live{% endif %}</figcaption>
   {% else %}
   <div class="sky-ph" aria-hidden="true"></div>

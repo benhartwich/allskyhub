@@ -3,10 +3,13 @@
 A plug-and-play all-sky camera: a Raspberry Pi with a tested camera, a ready-made image, pairing
 from your phone and an outbound connection to a hub. No installer, no FTP, no port forwarding.
 
-**Status:** early development (milestone M0). Not usable yet.
+**Status:** in testing. Cameras capture, detect meteors, aurora and lightning, and report to
+the hub; the hub on allskyhub.org runs by invitation; the app is not in the stores yet.
 
-- Website and hosted hub: [allskyhub.org](https://allskyhub.org) (coming)
+- **Installation (camera, account, own hub): [docs/install.md](docs/install.md)**
+- Website and hosted hub: [allskyhub.org](https://allskyhub.org)
 - Specification: [docs/SPEC.md](docs/SPEC.md)
+- Roadmap: [docs/roadmap.md](docs/roadmap.md)
 - Why this exists: [docs/research.md](docs/research.md)
 
 ## Parts

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import datetime as dt
 from typing import Annotated, Any, cast
 
 from fastapi import APIRouter, Depends, Form, HTTPException, Request
@@ -11,11 +12,12 @@ from pydantic import ValidationError
 from allskyhub_protocol import CloseCode, FrameVariant, SetSettingsArgs
 from allskyhub_server.auth import ratelimit
 from allskyhub_server.auth.sessions import SessionInfo
-from allskyhub_server.devices import events, pairing, public, queries
+from allskyhub_server.devices import events, pairing, public, queries, tonight
 from allskyhub_server.devices import settings as camera_settings
 from allskyhub_server.devices.connections import ConnectionRegistry
 from allskyhub_server.devices.event_text import EVENT_TITLES, orientation_line, update_line
 from allskyhub_server.devices.images import ImageStore
+from allskyhub_server.devices.tonight import ForecastCache
 from allskyhub_server.models import Device
 from allskyhub_server.web.deps import (
     CurrentSession,
@@ -98,11 +100,15 @@ async def camera(
     request: Request, db: DbSession, session: CurrentSession, device_id: str
 ) -> Response:
     device = await _own_device(db, session, device_id)
+    forecast: ForecastCache = request.app.state.forecast
     return render(
         request,
         "camera.html",
         {
             "device": device,
+            "tonight": await tonight.for_device(
+                forecast, device.last_status, dt.datetime.now(dt.UTC)
+            ),
             "online": _registry(request).is_online(device.id),
             "events": events.collapse(
                 await events.events(db, device.id, limit=200, hide_false=True)

@@ -1,0 +1,154 @@
+"""Taking over an existing Allsky installation (roadmap L18)."""
+
+from __future__ import annotations
+
+import json
+import sqlite3
+from datetime import UTC, datetime
+from pathlib import Path
+from zoneinfo import ZoneInfo
+
+import numpy as np
+from PIL import Image as PILImage
+
+from allskyhub_agent.detect.events import EventStore
+from allskyhub_agent.importer.allsky import AllskyImporter, AllskySettings, coordinate
+from allskyhub_agent.importer.backlog import Backlog
+from allskyhub_agent.products.build import night_products
+from allskyhub_agent.store.images import ImageStore
+from allskyhub_protocol import EventKind, Mode
+
+BERLIN = ZoneInfo("Europe/Berlin")
+VIENNA = ZoneInfo("Europe/Vienna")
+
+
+def _jpeg(path: Path, value: int = 40) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    PILImage.fromarray(np.full((90, 160, 3), value, dtype=np.uint8)).save(path, "JPEG")
+
+
+def make_allsky(root: Path) -> Path:
+    home = root / "allsky"
+    (home / "config" / "myFiles").mkdir(parents=True)
+    (home / "config" / "settings.json").write_text(json.dumps({
+        "latitude": "48.136010N", "longitude": "14.389510E", "angle": -6,
+        "location": "Hofkirchen", "owner": "Ben", "camera": "ZWO ASI678MC",
+        "cameratype": "ZWO", "cameramodel": "ASI678MC", "lens": "2.5 mm",
+    }))  # fmt: skip
+    day = home / "images" / "20261011"
+    for stamp in ("20261011070000", "20261011213000", "20261012031500"):
+        _jpeg(day / f"image-{stamp}.jpg")
+    _jpeg(day / "thumbnails" / "image-20261011213000.jpg")  # Allsky's small ones are ignored
+    _jpeg(day / "keogram" / "keogram-20261011.jpg")
+    _jpeg(day / "startrails" / "startrails-20261011.jpg")
+    (day / "allsky-20261011.mp4").write_bytes(b"\x00" * 100)
+    _jpeg(day / "meteors" / "meteors-20261012031500.jpg", 200)
+    (day / "meteors" / "meteors-20261012031500.json").write_text(json.dumps([{
+        "time": "20261012031500", "file": "meteors-20261012031500.jpg", "length": 106.6,
+        "angle": 146.1, "peak": 38, "showers": ["Orionids"],
+    }]))  # fmt: skip
+    (home / "images" / "image.jpg").write_bytes(b"x")  # not a night folder
+    con = sqlite3.connect(home / "config" / "myFiles" / "allsky.db")
+    con.execute(
+        "CREATE TABLE allsky_image (id INTEGER, timestamp INTEGER, AS_CAMERAIMAGE TEXT,"
+        " AS_DAY_OR_NIGHT TEXT, AS_EXPOSURE_US REAL, AS_GAIN REAL, AS_TEMPERATURE_C REAL,"
+        " AS_MEAN REAL)"
+    )
+    con.execute(
+        "INSERT INTO allsky_image VALUES (1, 0, 'image-20261012031500.jpg', 'NIGHT',"
+        " 30000000, 150, 12.5, 0.21)"
+    )
+    con.commit()
+    con.close()
+    return home
+
+
+def make_importer(
+    tmp_path: Path, home: Path, copy: bool = False
+) -> tuple[AllskyImporter, ImageStore, EventStore]:
+    store = ImageStore(tmp_path / "data", VIENNA)
+    events = EventStore(store)
+    imp = AllskyImporter(home, store, events, VIENNA, "zwo-asi678mc", source_tz=BERLIN,
+                         copy=copy, progress=lambda _: None)  # fmt: skip
+    return imp, store, events
+
+
+def test_settings_and_coordinates(tmp_path: Path) -> None:
+    s = AllskySettings.load(make_allsky(tmp_path))
+    assert (s.latitude, s.longitude, s.camera, s.location) == (
+        48.13601,
+        14.38951,
+        "zwo-asi678mc",
+        "Hofkirchen",
+    )
+    assert coordinate("33.9S") == -33.9
+    assert coordinate("70.5W") == -70.5
+    assert coordinate("nonsense") is None
+
+
+def test_dry_run_changes_nothing(tmp_path: Path) -> None:
+    imp, store, _ = make_importer(tmp_path, make_allsky(tmp_path))
+    r = imp.run(dry=True)
+    assert (r.images, r.products, r.meteors) == (3, 3, 1)
+    assert r.nights == {"20261010", "20261011"}
+    assert store.nights() == []
+
+
+def test_import_places_everything_and_is_repeatable(tmp_path: Path) -> None:
+    home = make_allsky(tmp_path)
+    imp, store, events = make_importer(tmp_path, home)
+    r = imp.run()
+    assert (r.images, r.products, r.meteors, r.linked) == (3, 3, 1, 6)
+    # 07:00 belongs to the night before; 21:30 and 03:15 to the night of the 11th (SPEC §4.5).
+    assert [f.name for f in store.read_index("20261010")] == ["image-20261011070000.jpg"]
+    night = store.read_index("20261011")
+    assert [f.name for f in night] == ["image-20261011213000.jpg", "image-20261012031500.jpg"]
+    late = night[1]
+    assert late.captured_at == datetime(2026, 10, 12, 1, 15, tzinfo=UTC)
+    assert (late.mode, late.exposure_us, late.gain, late.sensor_temp_c) == (
+        Mode.NIGHT,
+        30_000_000,
+        150.0,
+        12.5,
+    )
+    assert night[0].mode is Mode.NIGHT  # from the sun, no database row
+    src = home / "images" / "20261011" / "image-20261012031500.jpg"
+    dest = store.night_dir("20261011") / "image-20261012031500.jpg"
+    assert src.stat().st_ino == dest.stat().st_ino  # a hard link, no copy
+    assert store.path_for("20261011", dest.name, thumbnail=True) is not None
+    products = night_products(store, "20261011")
+    assert products is not None
+    assert {p.name for p in products.products} == {"keogram.jpg", "startrails.jpg", "timelapse.mp4"}
+    (meteor,) = events.night_events("20261011")
+    assert meteor.kind is EventKind.METEOR
+    assert meteor.imported
+    assert meteor.has_image
+    assert meteor.data["shower"] == "Orionids"
+    assert meteor.data["direction_deg"] == 56.1  # as Streak.direction_deg would give
+    assert meteor.end > meteor.start  # the exposure from Allsky's database
+
+    again = imp.run()
+    assert (again.images, again.products, again.meteors) == (0, 0, 0)
+    assert again.images_skipped == 3
+    assert len(store.read_index("20261011")) == 2
+    assert len(events.night_events("20261011")) == 1
+
+
+def test_copy_when_asked(tmp_path: Path) -> None:
+    imp, store, _ = make_importer(tmp_path, make_allsky(tmp_path), copy=True)
+    r = imp.run(only={"20261011"})
+    assert (r.linked, r.copied) == (0, 6)
+    dest = store.night_dir("20261011") / "keogram.jpg"
+    assert dest.stat().st_nlink == 1
+
+
+def test_backlog_keeps_nights_until_done(tmp_path: Path) -> None:
+    b = Backlog(tmp_path / "hub_backlog.json")
+    b.add(["20261011", "20261010"])
+    b.add(["20261011"])
+    assert b.next() == "20261010"
+    b.done("20261010")
+    assert Backlog(tmp_path / "hub_backlog.json").next() == "20261011"
+    b.done("20261011")
+    assert b.next() is None
+    assert not (tmp_path / "hub_backlog.json").exists()

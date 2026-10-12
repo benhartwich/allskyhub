@@ -301,13 +301,15 @@ base64url-encoded without padding.
 
 ### 6.4 Events
 
-`{id, night_id, kind, start, end, confidence, has_image, data}` with `kind` one of
+`{id, night_id, kind, start, end, confidence, has_image, imported, data}` with `kind` one of
 `meteor`, `lightning`, `aurora`, `nlc`, `satellite`, `clouds`, `sky_quality`.
 
 - `id` is stable on the device: the kind without underscores and the UTC start, e.g.
   `meteor-20261008T214512Z`, with `-2`, `-3` … for further events of the same kind
   starting in the same second. A resent event has the same id; the hub upserts by it.
 - `has_image`: the event has a picture, which the hub fetches with `upload_event` (§6.5).
+- `imported` (default false): taken over from another program's records (§6.7, roadmap
+  L18), not detected by the agent itself; never a push.
 - `data` is a flat object of numbers, strings, booleans and nulls. Per kind:
 
 | kind | keys |
@@ -434,6 +436,13 @@ The device does not queue uploads or WebSocket messages while the hub is unreach
 capture and storage go on (§1, goal 4). After reconnecting it sends `hello`, a fresh
 `status`, the newest night's `products` and the current night's `event`s, and the hub
 requests whatever it wants with `upload_frame`, `upload_product` and `upload_event`.
+
+**Imported nights.** After the agent took over another program's pictures (roadmap L18),
+it announces each imported night once: its `products` and its `event`s (with
+`imported: true`, §6.4), one night per second, carried on across reconnects until all are
+through. Frames of imported nights stay on the camera (local UI, §7). The hub stores them
+like any other night (upsert per night and name or id) and never sends a push for an
+imported event.
 
 ### 6.8 Public page
 

@@ -176,6 +176,27 @@ keeps its own network setup.
    renewal keeps working. lighttpd sends `X-Forwarded-Proto`, so the login cookie is
    marked `Secure` behind HTTPS.
 
+### 2.7 Take over the pictures of an existing Allsky
+
+On a Pi that ran Allsky, the agent can take over everything Allsky stored: every night's
+images with their metadata (from Allsky's database where it has them, else from the file
+name), keogram, star trails and timelapse, and the meteors of the meteor module. Images
+are hard-linked when Allsky's folder is on the same disk, so this needs no extra space;
+only the agent's thumbnails are new. Run it as root (hard links to another user's files
+need it), first as a dry run:
+
+```bash
+sudo /opt/allskyhub-agent/current/.venv/bin/allskyhub-agent import-allsky \
+  --from /home/allsky/allsky --data /var/lib/allskyhub-agent/data \
+  --settings /var/lib/allskyhub-agent/settings.json --dry-run
+```
+
+Without `--dry-run` it imports; `--nights 20261011,20261012` limits it to some nights.
+Running it again only adds what is new. If the agent has no location yet, it takes
+Allsky's. The running agent then announces the imported nights to the hub, one per
+second; the hub shows their products and meteors (marked as imported, no push
+notifications).
+
 ## 3. An account on allskyhub.org
 
 Accounts are by invitation for now. Ask the project for an invitation; you get a link to set

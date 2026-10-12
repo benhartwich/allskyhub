@@ -16,7 +16,7 @@ _VERSION = re.compile(VERSION_PATTERN)
 
 
 class _Model(BaseModel):
-    model_config = ConfigDict(extra="forbid", frozen=True)
+    model_config = ConfigDict(extra="ignore", frozen=True)
 
 
 class Bundle(_Model):

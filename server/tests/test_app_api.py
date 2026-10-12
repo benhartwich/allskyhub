@@ -91,3 +91,15 @@ async def test_logout_revokes_token(client: httpx.AsyncClient) -> None:
     auth = await _app_login(client, await make_account(client))
     assert (await client.post("/api/v1/auth/logout", headers=auth)).status_code == 204
     assert (await client.get("/api/v1/cameras", headers=auth)).status_code == 401
+
+
+async def test_unknown_fields_from_a_newer_app_are_ignored(
+    app: FastAPI, client: httpx.AsyncClient
+) -> None:
+    """SPEC §6.1 compatible changes, also for the app API: a newer app may send more."""
+    email = await make_account(client)
+    r = await client.post(
+        "/api/v1/auth/login",
+        json={"email": email, "password": PASSWORD, "label": "Pixel", "new_field": True},
+    )
+    assert r.status_code == 200

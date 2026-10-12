@@ -11,6 +11,7 @@ from fastapi.responses import FileResponse, Response
 
 from allskyhub_protocol import FrameVariant
 from allskyhub_server.devices import archive, public, sky_chart, space_weather, tonight
+from allskyhub_server.devices import camera_map as camera_map_mod
 from allskyhub_server.devices.event_text import EVENT_TITLES, meteor_summary
 from allskyhub_server.devices.images import ImageStore
 from allskyhub_server.devices.space_weather import KpCache, OvationCache
@@ -226,4 +227,22 @@ async def ovation(request: Request, hemisphere: str) -> Response:
         raise HTTPException(404)
     return Response(
         image, media_type="image/jpeg", headers={"Cache-Control": "public, max-age=600"}
+    )
+
+
+@router.get("/karte")
+async def camera_map(request: Request, db: DbSession, region: str = "europa") -> Response:
+    """Roadmap C5: all public cameras that show their place."""
+    name, view_box, dot = camera_map_mod.REGIONS.get(region, camera_map_mod.REGIONS["europa"])
+    return render(
+        request,
+        "camera_map.html",
+        {
+            "cameras": await camera_map_mod.cameras(db),
+            "regions": camera_map_mod.REGIONS,
+            "region": region if region in camera_map_mod.REGIONS else "europa",
+            "region_name": name,
+            "view_box": view_box,
+            "dot": dot,
+        },
     )

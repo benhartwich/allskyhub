@@ -75,13 +75,24 @@ def test_event_end_before_start_rejected() -> None:
         )
 
 
-def test_extra_fields_rejected() -> None:
+def test_unknown_fields_are_ignored() -> None:
+    """SPEC §6.1: a newer peer may add fields; an older one must still understand it."""
+    from allskyhub_protocol import PublicUpdate, TokenResponse
+
     raw = (
         '{"v":1,"type":"command","id":"x","ts":"2026-10-06T21:30:00Z",'
         '"body":{"name":"restart","oops":1}}'
     )
+    env = parse_envelope(raw)
+    assert isinstance(env.body, Command)
+    assert env.body.name == "restart"
+    token = TokenResponse.model_validate(
+        {"access_token": "t", "expires_in": 60, "hub_keys": [], "something_new": True}
+    )
+    assert token.expires_in == 60
+    # What an owner typed is checked strictly (SPEC §6.8).
     with pytest.raises(ValidationError):
-        parse_envelope(raw)
+        PublicUpdate.model_validate({"enabled": True, "titel": "typo"})
 
 
 def test_products_roundtrip_and_name_kind_check() -> None:

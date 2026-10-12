@@ -19,7 +19,8 @@ PROTOCOL_VERSION: Literal[1] = 1
 
 
 class _Body(BaseModel):
-    model_config = ConfigDict(extra="forbid", frozen=True)
+    # SPEC §6.1: receivers ignore fields they do not know, so either side can add one.
+    model_config = ConfigDict(extra="ignore", frozen=True)
     TYPE: ClassVar[str]
 
 
@@ -49,21 +50,21 @@ _Help = Annotated[str, Field(min_length=1, max_length=300)]
 class LabelText(BaseModel):
     """A schema text in German and optionally English (SPEC §6.9)."""
 
-    model_config = ConfigDict(extra="forbid", frozen=True)
+    model_config = ConfigDict(extra="ignore", frozen=True)
 
     de: _Label
     en: _Label | None = None
 
 
 class GroupText(BaseModel):
-    model_config = ConfigDict(extra="forbid", frozen=True)
+    model_config = ConfigDict(extra="ignore", frozen=True)
 
     de: _Group
     en: _Group | None = None
 
 
 class HelpText(BaseModel):
-    model_config = ConfigDict(extra="forbid", frozen=True)
+    model_config = ConfigDict(extra="ignore", frozen=True)
 
     de: _Help
     en: _Help | None = None
@@ -77,7 +78,7 @@ def localized(text: str | LabelText | GroupText | HelpText, lang: str = "de") ->
 
 
 class SettingChoice(BaseModel):
-    model_config = ConfigDict(extra="forbid", frozen=True)
+    model_config = ConfigDict(extra="ignore", frozen=True)
 
     value: str = Field(min_length=1, max_length=40)
     label: _Label | LabelText
@@ -86,7 +87,7 @@ class SettingChoice(BaseModel):
 class SettingSpec(BaseModel):
     """One entry of `hello.settings_schema` (SPEC §6.9)."""
 
-    model_config = ConfigDict(extra="forbid", frozen=True)
+    model_config = ConfigDict(extra="ignore", frozen=True)
 
     key: str = Field(pattern=r"^[a-z][a-z0-9_]{0,39}$")
     type: SettingType
@@ -205,7 +206,7 @@ class DeviceSettings(BaseModel):
 class SkyMetrics(BaseModel):
     """Sky condition measured on the newest frame, reported in `status` (SPEC §6.3)."""
 
-    model_config = ConfigDict(extra="forbid", frozen=True)
+    model_config = ConfigDict(extra="ignore", frozen=True)
 
     at: AwareDatetime  # captured_at of the measured frame
     night_id: str = Field(pattern=r"^\d{8}$")  # SPEC §4.5
@@ -217,7 +218,7 @@ class SkyMetrics(BaseModel):
 class Orientation(BaseModel):
     """The image's orientation from a plate solve, reported in `status` (SPEC §6.3, §4.8)."""
 
-    model_config = ConfigDict(extra="forbid", frozen=True)
+    model_config = ConfigDict(extra="ignore", frozen=True)
 
     north_deg: float = Field(ge=0, lt=360)  # image direction of north, 0 = up, clockwise
     mirrored: bool  # east counter-clockwise from north (the usual view of a sky camera)
@@ -241,7 +242,7 @@ class UpdateState(StrEnum):
 class UpdateStatus(BaseModel):
     """Reported in `status` (SPEC §6.3, §8)."""
 
-    model_config = ConfigDict(extra="forbid", frozen=True)
+    model_config = ConfigDict(extra="ignore", frozen=True)
 
     state: UpdateState
     version: str | None = None  # the version the state is about
@@ -350,7 +351,7 @@ PRODUCT_NAMES: dict[ProductKind, tuple[str, str]] = {
 class ProductFile(BaseModel):
     """One night product in a `products` message (SPEC §6.3)."""
 
-    model_config = ConfigDict(extra="forbid", frozen=True)
+    model_config = ConfigDict(extra="ignore", frozen=True)
 
     kind: ProductKind
     name: str
@@ -421,7 +422,7 @@ _BODY_TYPES: dict[str, type[_Body]] = {
 class Envelope(BaseModel):
     """Wrapper of every protocol message (SPEC §6.1)."""
 
-    model_config = ConfigDict(extra="forbid", frozen=True)
+    model_config = ConfigDict(extra="ignore", frozen=True)
 
     v: Literal[1] = PROTOCOL_VERSION
     type: str

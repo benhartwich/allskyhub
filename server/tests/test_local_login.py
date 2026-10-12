@@ -97,6 +97,8 @@ async def test_single_sign_on(
     page = await client.get(url, params=query)
     assert page.status_code == 200
     assert "http://192.168.1.20:8080" in page.text
+    # The form is redirected to the camera, so its origin must be an allowed form target.
+    assert "form-action 'self' http://192.168.1.20:8080" in page.headers["content-security-policy"]
     assert (await client.get(url, params={**query, "return": "ftp://x/"})).status_code == 400
     assert (await client.get(url, params={**query, "nonce": "short"})).status_code == 400
 

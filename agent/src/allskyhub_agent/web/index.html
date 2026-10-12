@@ -28,12 +28,33 @@
   .bar { height: 10px; background: #1e2430; border-radius: 6px; overflow: hidden; flex: 1; }
   .bar > div { height: 100%; width: 0; background: var(--good); transition: width .3s; }
   .hint { color: var(--muted); font-size: .9rem; margin: 8px 0 0; }
+  .form fieldset { border: 0; padding: 0; margin: 0 0 16px; }
+  .form legend { font-weight: 600; margin-bottom: 8px; }
+  .field { display: grid; gap: 4px; margin-bottom: 12px; }
+  .field label { font-size: .95rem; }
+  .field input, .field select { font: inherit; padding: 10px; border-radius: 10px;
+         border: 1px solid var(--line); background: #0f1218; color: var(--text); width: 100%; }
+  .field input[type=checkbox] { width: auto; min-height: 24px; }
+  .field .unit { color: var(--muted); }
+  .field.bad input, .field.bad select { border-color: #ff7a7a; }
+  .pair { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .msg { margin: 8px 0 0; }
+  .msg.bad { color: #ff7a7a; }
+  .msg.good { color: var(--good); }
+  header { display: flex; justify-content: space-between; align-items: center; }
+  header form { margin: 0; }
+  header button { min-height: 36px; padding: 6px 12px; }
   [hidden] { display: none !important; }
 </style>
 </head>
 <body>
 <main>
-  <h1>allskyhub camera</h1>
+  <header>
+    <h1>allskyhub camera</h1>
+    <form method="post" action="local-login/logout" id="logout" hidden>
+      <button type="submit">Abmelden</button>
+    </form>
+  </header>
 
   <section class="panel" id="pairPanel" hidden>
     <div class="meta" style="margin-top:0">Pairing code for the allskyhub app</div>
@@ -63,6 +84,14 @@
         number again.</p>
       <img id="crop" alt="Centre of the image at full resolution" style="margin-top:8px">
     </div>
+  </section>
+  <section class="panel" id="settingsPanel" hidden>
+    <h1>Einstellungen</h1>
+    <form class="form" id="settingsForm" novalidate></form>
+    <div class="row">
+      <button id="saveBtn" class="primary" type="button">Speichern</button>
+    </div>
+    <p class="msg" id="settingsMsg" hidden></p>
   </section>
 </main>
 <script>
@@ -128,6 +157,169 @@ async function pollSetup() {
   } catch (e) { /* try again */ }
   setTimeout(pollSetup, 3000);
 }
+
+// --- settings form, built from the camera's settings schema (SPEC §6.9) -------------
+const LANG = (navigator.language || "de").toLowerCase().startsWith("en") ? "en" : "de";
+const text = (t) => (t == null ? "" : typeof t === "string" ? t : (LANG === "en" && t.en) || t.de);
+let schema = [];
+let original = {};
+
+function input(spec, value) {
+  const el = document.createElement(spec.type === "choice" ? "select" : "input");
+  el.name = spec.key;
+  if (spec.type === "choice") {
+    for (const c of spec.choices) {
+      const o = document.createElement("option");
+      o.value = c.value;
+      o.textContent = text(c.label);
+      el.appendChild(o);
+    }
+    el.value = value ?? "";
+  } else if (spec.type === "bool") {
+    el.type = "checkbox";
+    el.checked = !!value;
+  } else if (spec.type === "number" || spec.type === "int") {
+    el.type = "number";
+    el.inputMode = spec.type === "int" ? "numeric" : "decimal";
+    for (const a of ["min", "max", "step"]) if (spec[a] != null) el[a] = spec[a];
+    el.value = value ?? "";
+    if (spec.nullable) el.placeholder = "leer";
+  } else {
+    el.type = "text";
+    if (spec.max_length) el.maxLength = spec.max_length;
+    el.value = value ?? "";
+  }
+  return el;
+}
+
+function field(spec, values) {
+  const wrap = document.createElement("div");
+  wrap.className = "field";
+  wrap.dataset.key = spec.key;
+  const label = document.createElement("label");
+  label.textContent = text(spec.label) + (spec.unit ? ` (${spec.unit})` : "");
+  wrap.appendChild(label);
+  if (spec.type === "location") {
+    const pair = document.createElement("div");
+    pair.className = "pair";
+    for (const [k, ph] of [["latitude", "Breite"], ["longitude", "Länge"]]) {
+      const el = input({ key: k, type: "number", step: 0.0001, nullable: true }, values[k]);
+      el.placeholder = ph;
+      pair.appendChild(el);
+    }
+    wrap.appendChild(pair);
+    if (navigator.geolocation) {
+      const b = document.createElement("button");
+      b.type = "button";
+      b.textContent = "Standort dieses Geräts";
+      b.onclick = () => navigator.geolocation.getCurrentPosition((p) => {
+        pair.children[0].value = p.coords.latitude.toFixed(4);
+        pair.children[1].value = p.coords.longitude.toFixed(4);
+      });
+      wrap.appendChild(b);
+    }
+  } else {
+    const el = input(spec, values[spec.key]);
+    el.id = "s_" + spec.key;
+    label.htmlFor = el.id;
+    wrap.appendChild(el);
+  }
+  if (spec.help) {
+    const h = document.createElement("p");
+    h.className = "hint";
+    h.textContent = text(spec.help);
+    wrap.appendChild(h);
+  }
+  return wrap;
+}
+
+function readValue(spec, form) {
+  const el = form.elements[spec.key];
+  if (spec.type === "bool") return el.checked;
+  if (spec.type === "number" || spec.type === "int") {
+    if (el.value === "") return spec.nullable ? null : undefined;
+    return spec.type === "int" ? parseInt(el.value, 10) : parseFloat(el.value);
+  }
+  return el.value;
+}
+
+function changes() {
+  const form = $("settingsForm");
+  const out = {};
+  for (const spec of schema) {
+    if (spec.type === "location") {
+      const lat = form.elements.latitude.value, lon = form.elements.longitude.value;
+      const a = lat === "" ? null : parseFloat(lat), b = lon === "" ? null : parseFloat(lon);
+      if (a !== original.latitude || b !== original.longitude) {
+        out.latitude = a;
+        out.longitude = b;
+      }
+      continue;
+    }
+    const v = readValue(spec, form);
+    if (v !== undefined && v !== original[spec.key]) out[spec.key] = v;
+  }
+  return out;
+}
+
+function message(t, good) {
+  const m = $("settingsMsg");
+  m.textContent = t;
+  m.className = "msg " + (good ? "good" : "bad");
+  m.hidden = false;
+}
+
+async function loadSettings() {
+  const r = await fetch("api/settings", { cache: "no-store" });
+  if (!r.ok) return;  // this camera keeps no settings
+  const data = await r.json();
+  schema = data.schema;
+  original = data.values;
+  const form = $("settingsForm");
+  form.innerHTML = "";
+  const groups = new Map();
+  for (const spec of schema) {
+    const g = text(spec.group);
+    if (!groups.has(g)) {
+      const fs = document.createElement("fieldset");
+      const lg = document.createElement("legend");
+      lg.textContent = g;
+      fs.appendChild(lg);
+      groups.set(g, fs);
+      form.appendChild(fs);
+    }
+    groups.get(g).appendChild(field(spec, original));
+  }
+  $("settingsPanel").hidden = false;
+}
+
+async function saveSettings() {
+  for (const el of document.querySelectorAll(".field.bad")) el.classList.remove("bad");
+  const body = changes();
+  if (!Object.keys(body).length) { message("Nichts geändert.", true); return; }
+  const r = await fetch("api/settings", {
+    method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body),
+  });
+  if (r.ok) {
+    message("Gespeichert. Die Kamera startet die Aufnahme neu …", true);
+    setTimeout(loadSettings, 8000);
+    return;
+  }
+  const err = await r.json().catch(() => ({ fields: [] }));
+  const names = [];
+  for (const k of err.fields || []) {
+    const key = k === "latitude" || k === "longitude" ? "location" : k;
+    const wrap = document.querySelector(`.field[data-key="${key}"]`);
+    if (wrap) { wrap.classList.add("bad"); names.push(wrap.querySelector("label").textContent); }
+  }
+  message("Nicht gespeichert: " + (names.join(", ") || "ungültige Eingabe") + ".", false);
+}
+
+$("saveBtn").onclick = saveSettings;
+fetch("api/setup", { cache: "no-store" }).then((r) => r.ok && r.json()).then((s) => {
+  if (s && s.paired) $("logout").hidden = false;
+}).catch(() => {});
+loadSettings();
 
 $("focusBtn").onclick = () => post(focus ? "off" : "on");
 $("resetBtn").onclick = () => post("reset");

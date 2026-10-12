@@ -14,6 +14,7 @@ import subprocess
 import sys
 import threading
 import time
+from collections.abc import Mapping
 from datetime import datetime
 from pathlib import Path
 from typing import Any, cast
@@ -21,13 +22,13 @@ from zoneinfo import ZoneInfo
 
 import httpx
 
-from allskyhub_agent import __version__, system
+from allskyhub_agent import __version__, settings_schema, system
 from allskyhub_agent.adapters.asi_sdk import AsiError, AsiSdk
 from allskyhub_agent.adapters.camera import Camera, CameraError
 from allskyhub_agent.adapters.libcamera import LibcameraCamera, list_cameras
 from allskyhub_agent.adapters.network import Network, NmcliNetwork, SimNetwork
 from allskyhub_agent.adapters.sim import SimCamera, sky_radiance
-from allskyhub_agent.adapters.zwo import ZwoCamera
+from allskyhub_agent.adapters.zwo import ZwoCamera, ZwoSettings
 from allskyhub_agent.calib.orientation import Orienter
 from allskyhub_agent.core.clock import Clock, SimClock, SystemClock
 from allskyhub_agent.core.exposure import AutoExposure
@@ -43,11 +44,12 @@ from allskyhub_agent.process.hotpixels import HotPixels
 from allskyhub_agent.process.skymask import SkyMask
 from allskyhub_agent.products.build import NightProducts, build_night, night_products
 from allskyhub_agent.products.worker import ProductWorker
-from allskyhub_agent.profiles import Profile, get_profile
+from allskyhub_agent.profiles import Profile, get_profile, with_night_limits
 from allskyhub_agent.runner import Location, LoopConfig, Runner
 from allskyhub_agent.services import HubManager, run_announcer
 from allskyhub_agent.settings import DEFAULT_PATH as SETTINGS_PATH
 from allskyhub_agent.settings import AgentSettings
+from allskyhub_agent.settings_schema import build_schema
 from allskyhub_agent.setup.controller import NetworkRequest, SetupController
 from allskyhub_agent.setup.setup_file import DEFAULT_PATH as SETUP_FILE_PATH
 from allskyhub_agent.setup.setup_file import apply_once as apply_setup_file
@@ -55,8 +57,8 @@ from allskyhub_agent.store.images import ImageStore
 from allskyhub_agent.update.installer import Paths, Updater
 from allskyhub_agent.update.status import update_status
 from allskyhub_agent.web.auth import LocalAuth
-from allskyhub_agent.web.server import WebServer
-from allskyhub_protocol import DeviceSettings, FrameInfo, SetSettingsArgs, Status
+from allskyhub_agent.web.server import SettingsForm, WebServer
+from allskyhub_protocol import DeviceSettings, FrameInfo, SetSettingsArgs, SettingSpec, Status
 
 log = logging.getLogger(__name__)
 
@@ -106,7 +108,12 @@ def _parser() -> argparse.ArgumentParser:
         default="none",
         help="manage the network: setup mode, setup file, saved hub URL (SPEC §7.1-7.3)",
     )
-    run.add_argument("--settings", type=Path, default=SETTINGS_PATH, help="agent settings file")
+    run.add_argument(
+        "--settings",
+        type=Path,
+        default=None,
+        help=f"agent settings file (always used in product mode, default {SETTINGS_PATH})",
+    )
     run.add_argument("--setup-file", type=Path, default=SETUP_FILE_PATH)
     run.add_argument(
         "--http",
@@ -151,7 +158,9 @@ def run_update(args: argparse.Namespace) -> int:
     return 0
 
 
-def open_camera(hint: str, asi_sdk: Path) -> tuple[Camera | None, Profile]:
+def open_camera(
+    hint: str, asi_sdk: Path, zwo: ZwoSettings | None = None
+) -> tuple[Camera | None, Profile]:
     """Open the camera for a profile id, or find one with "auto" (ZWO first, SPEC §3).
 
     Returns (None, profile) if no such camera is connected.
@@ -159,7 +168,7 @@ def open_camera(hint: str, asi_sdk: Path) -> tuple[Camera | None, Profile]:
     if hint in ("auto", "zwo-asi678mc") and asi_sdk.exists():
         sdk = AsiSdk(asi_sdk)
         if sdk.num_cameras() > 0:
-            return ZwoCamera(sdk), get_profile("zwo-asi678mc")
+            return ZwoCamera(sdk, settings=zwo), get_profile("zwo-asi678mc")
     if hint in ("auto", "rpi-hq") and list_cameras():
         return LibcameraCamera(), get_profile("rpi-hq")
     return None, get_profile("zwo-asi678mc" if hint == "auto" else hint)
@@ -207,23 +216,30 @@ def main(argv: list[str] | None = None) -> int:
 
     # Product mode (SPEC §7.1-7.3): the agent manages the network and keeps hub URL,
     # location, time zone and camera choice in its settings file.
+    settings_file: Path = args.settings or SETTINGS_PATH
     network: Network | None = None
     if args.network == "nmcli":
-        network = NmcliNetwork(country_file=args.settings.parent / "wifi-country")
+        network = NmcliNetwork(country_file=settings_file.parent / "wifi-country")
     elif args.network == "sim":
         network = SimNetwork()
-    settings_path: Path | None = args.settings if network is not None else None
+    # Product mode always keeps settings; a test install next to Allsky (--network none)
+    # keeps them when --settings is given (roadmap L7).
+    settings_path: Path | None = (
+        settings_file if network is not None or args.settings is not None else None
+    )
     settings_lock = threading.Lock()
 
     def load_settings() -> AgentSettings:
         with settings_lock:
-            return AgentSettings.load(args.settings) if settings_path else AgentSettings()
+            return AgentSettings.load(settings_file) if settings_path else AgentSettings()
 
     def update_settings(**changes: Any) -> AgentSettings:
         with settings_lock:
-            new = AgentSettings.load(args.settings).with_updates(**changes)
-            new.save(args.settings)
+            new = AgentSettings.load(settings_file).with_updates(**changes)
+            new.save(settings_file)
             return new
+
+    store = ImageStore(args.data, tz, quality=load_settings().jpeg_quality)
 
     hub_url: str | None = args.hub
     if network is not None:
@@ -239,6 +255,33 @@ def main(argv: list[str] | None = None) -> int:
         hub_url = hub_url or load_settings().hub_url
 
     profile_hint = "sim" if args.sim else (args.profile or load_settings().camera)
+    # SPEC §6.9: the settings form; its limits follow the profile once the camera is open.
+    schema_box = [
+        build_schema(get_profile({"auto": "zwo-asi678mc"}.get(profile_hint, profile_hint)))
+    ]
+
+    def current_schema() -> list[SettingSpec]:
+        return schema_box[0]
+
+    def settings_values() -> dict[str, Any]:
+        return settings_schema.values(load_settings(), current_schema())
+
+    def change_settings(changes: Mapping[str, Any], source: str) -> list[str]:
+        """SPEC §6.5: check, store, then restart the capture with the new settings; the
+        invalid keys if any (nothing changes then)."""
+        if settings_path is None:
+            return ["args"]
+        bad = settings_schema.check(current_schema(), changes)
+        if bad:
+            return bad
+        with settings_lock:
+            AgentSettings.load(settings_file).with_values(changes).save(settings_file)
+        log.info("new settings from %s; restarting the capture", source)
+        # Give the answer a moment to leave, then end run(): the service manager starts
+        # the agent again, which reads the new settings.
+        threading.Timer(2.0, restart_requested.set).start()
+        return []
+
     # Detections (SPEC §6.4); the night folders do not depend on the time zone.
     event_store = EventStore(
         store,
@@ -279,30 +322,10 @@ def main(argv: list[str] | None = None) -> int:
             )
 
         def device_settings() -> DeviceSettings:
-            cur = load_settings()
-            return DeviceSettings(
-                latitude=cur.latitude,
-                longitude=cur.longitude,
-                timezone=cur.timezone,
-                camera=cur.camera,
-                day_delay_s=cur.day_delay_s,
-                night_delay_s=cur.night_delay_s,
-            )
+            return DeviceSettings.model_validate(settings_values())
 
-        def set_settings(a: SetSettingsArgs) -> None:
-            """SPEC §6.5: store, then restart the capture with the new settings."""
-            update_settings(
-                latitude=a.latitude,
-                longitude=a.longitude,
-                timezone=a.timezone,
-                camera=a.camera,
-                day_delay_s=a.day_delay_s,
-                night_delay_s=a.night_delay_s,
-            )
-            log.info("new settings from the hub; restarting the capture")
-            # Give the ack a moment to leave, then end run(): the service manager starts
-            # the agent again, which reads the new settings.
-            threading.Timer(2.0, restart_requested.set).start()
+        def set_settings(a: SetSettingsArgs) -> list[str]:
+            return change_settings(a.model_dump(exclude_unset=True), "the hub")
 
         hub = HubManager(
             identity,
@@ -315,6 +338,7 @@ def main(argv: list[str] | None = None) -> int:
             events=event_store,
             on_set_settings=set_settings if settings_path else None,
             local_access=local_auth,
+            settings_schema=current_schema if settings_path else None,
         )
         hub.start(hub_url)
         print(f"device {identity.device_id}, hub {hub_url}")
@@ -348,6 +372,9 @@ def main(argv: list[str] | None = None) -> int:
             settings=load_settings if settings_path else None,
             auth=local_auth,
             time_trusted=system.time_trusted,
+            settings_form=SettingsForm(current_schema, settings_values, change_settings)
+            if settings_path
+            else None,
         )
         web.start()
         print(f"web UI on http://{host}:{web.port}/")
@@ -376,7 +403,7 @@ def main(argv: list[str] | None = None) -> int:
                 loc = Location(cur.latitude, cur.longitude)
                 if args.tz is None:
                     tz = ZoneInfo(cur.timezone)
-                    store = ImageStore(args.data, tz)
+                    store = ImageStore(args.data, tz, quality=cur.jpeg_quality)
                 break
             if settings_path is None:
                 print("--lat and --lon are needed without --network", file=sys.stderr)
@@ -416,7 +443,9 @@ def main(argv: list[str] | None = None) -> int:
         clock = SystemClock()
         try:
             while camera is None:
-                camera, profile = open_camera(profile_hint, args.asi_sdk)
+                cur = load_settings()
+                zwo = ZwoSettings(wb_r=cur.wb_r, wb_b=cur.wb_b)
+                camera, profile = open_camera(profile_hint, args.asi_sdk, zwo)
                 if camera is None:
                     if profile_hint != "auto":
                         print(f"camera {profile_hint!r} not found", file=sys.stderr)
@@ -432,6 +461,8 @@ def main(argv: list[str] | None = None) -> int:
             shutdown()
             return 1
 
+    schema_box[0] = build_schema(profile)
+    profile = with_night_limits(profile, load_settings())
     sky_meter = SkyMeter(SkyConfig(sqm_offset=profile.sqm_offset), profile.image_circle_frac)
     sky_mask = SkyMask(Path(args.data) / "calibration" / "skymask.png")
     here = loc

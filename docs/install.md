@@ -118,13 +118,23 @@ keeps its own network setup.
    sudo ln -sfn releases/$V /opt/allskyhub-agent/current
    ```
 
-3. **Settings on the command line.** Without network management (`--network none`) the agent
-   cannot take location and time zone from the app for good, so they go into
+3. **Settings file.** Without network management (`--network none`) the agent keeps its
+   settings only with `--settings`. Then location, time zone, camera and the rest can be
+   changed in the local UI, on the hub and in the app. Put this into
    `/etc/allskyhub-agent/allskyhub-agent.env`:
 
    ```bash
-   ALLSKYHUB_AGENT_ARGS="--asi-sdk /opt/allskyhub-agent/lib/libASICamera2.so --lat 48.14 --lon 14.39 --tz Europe/Vienna --profile zwo-asi678mc run --data /var/lib/allskyhub-agent/data --hub https://allskyhub.org --http 0.0.0.0:8080"
+   ALLSKYHUB_AGENT_ARGS="--asi-sdk /opt/allskyhub-agent/lib/libASICamera2.so run --data /var/lib/allskyhub-agent/data --settings /var/lib/allskyhub-agent/settings.json --hub https://allskyhub.org --http 0.0.0.0:8080"
    ```
+
+   and start with a settings file (owned by `allskyhub`):
+
+   ```json
+   {"latitude": 48.14, "longitude": 14.39, "timezone": "Europe/Vienna", "camera": "zwo-asi678mc"}
+   ```
+
+   `--lat`, `--lon`, `--tz` and `--profile` on the command line would override the file,
+   so leave them out.
 
 4. **Service, not enabled.** Copy `image/files/etc/systemd/system/allskyhub-agent.service`
    to `/etc/systemd/system/` and add a drop-in

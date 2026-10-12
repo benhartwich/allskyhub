@@ -2,9 +2,10 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 
 from allskyhub_agent.core.exposure import ExposureConfig, ModeLimits
+from allskyhub_agent.settings import AgentSettings
 
 
 @dataclass(frozen=True)
@@ -39,3 +40,18 @@ def get_profile(profile_id: str) -> Profile:
         return PROFILES[profile_id]
     except KeyError:
         raise ValueError(f"unknown profile {profile_id!r} (known: {', '.join(PROFILES)})") from None
+
+
+def with_night_limits(profile: Profile, s: AgentSettings) -> Profile:
+    """The profile with the night limits from the settings (roadmap L7), never beyond what
+    the profile allows; the auto exposure (SPEC §4.3) stays the only place that picks
+    exposure and gain."""
+    night = profile.exposure.night
+    max_us = night.max_exposure_us
+    if s.night_max_exposure_s is not None:
+        max_us = max(night.min_exposure_us, min(max_us, round(s.night_max_exposure_s * 1e6)))
+    max_gain = night.max_gain
+    if s.night_max_gain is not None:
+        max_gain = max(night.min_gain, min(max_gain, float(s.night_max_gain)))
+    night = replace(night, max_exposure_us=max_us, max_gain=max_gain)
+    return replace(profile, exposure=replace(profile.exposure, night=night))

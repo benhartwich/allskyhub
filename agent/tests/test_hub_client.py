@@ -576,3 +576,54 @@ def test_hub_keys_and_local_access(tmp_path: Path) -> None:
     assert isinstance(good_reply, Ack)
     assert isinstance(remove_reply, Ack)
     assert local.verifiers == [good, None]
+
+
+def test_hello_has_the_schema_and_set_settings_reports_bad_keys(tmp_path: Path) -> None:
+    """SPEC §6.9: the schema goes out in hello; keys the device refuses are invalid_args."""
+    from allskyhub_agent.profiles import get_profile
+    from allskyhub_agent.settings_schema import build_schema, check
+
+    store, _, _ = _store_with_frame(tmp_path)
+    identity = DeviceIdentity.load_or_create(tmp_path / "device.key")
+    hub = FakeHub(register_unpaired=0, close_code=1000)
+    hub.commands = [
+        Command(name=CommandName.SET_SETTINGS, args={"wb_r": 500}),
+        Command(name=CommandName.SET_SETTINGS, args={"wb_r": None, "jpeg_quality": 95}),
+    ]
+    schema = build_schema(get_profile("zwo-asi678mc"))
+    got: list[dict[str, object]] = []
+
+    def on_set(a: SetSettingsArgs) -> list[str]:
+        changes = a.model_dump(exclude_unset=True)
+        bad = check(schema, changes)
+        if not bad:
+            got.append(changes)
+        return bad
+
+    async def scenario() -> None:
+        async with serve(hub.ws_handler, "127.0.0.1", 0) as server:
+            port = server.sockets[0].getsockname()[1]
+            cfg = HubConfig(hub_url=f"http://127.0.0.1:{port}")
+            pairing = PairingState(identity.device_id, cfg.hub_url, "sim", "0.1.0")
+            async with httpx.AsyncClient(
+                transport=httpx.MockTransport(hub.handle), base_url=cfg.hub_url
+            ) as http:
+                session = HubSession(
+                    cfg, identity, pairing, store, LiveState(), "sim", "0.1.0",
+                    lambda: None, http, on_set_settings=on_set, settings_schema=lambda: schema,
+                )  # fmt: skip
+                stop = asyncio.Event()
+                task = asyncio.create_task(session.run(stop))
+                await asyncio.wait_for(hub.done.wait(), 10)
+                stop.set()
+                await asyncio.wait_for(task, 10)
+
+    asyncio.run(scenario())
+    hello = hub.received[0].body
+    assert isinstance(hello, Hello)
+    assert [s.key for s in hello.settings_schema] == [s.key for s in schema]
+    bad, ok = hub.reply_order
+    assert isinstance(bad, ErrorReply)
+    assert (bad.code, bad.message) == ("invalid_args", "wb_r")
+    assert isinstance(ok, Ack)
+    assert got == [{"wb_r": None, "jpeg_quality": 95}]

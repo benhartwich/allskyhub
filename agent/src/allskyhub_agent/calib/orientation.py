@@ -20,7 +20,7 @@ import cv2
 import numpy as np
 
 from allskyhub_agent.calib.solve import Solution, solve
-from allskyhub_protocol import FrameInfo, Orientation, SkyMetrics
+from allskyhub_protocol import FrameInfo, Lens, Orientation, SkyMetrics
 
 log = logging.getLogger(__name__)
 
@@ -93,6 +93,20 @@ class Orienter:
             solved_at=at,
             stars=sol.stars,
             rms_deg=sol.rms_deg,
+            # The fitted lens for drawing the sky onto the image (SPEC §4.8); unknown
+            # without the frame size (files from before it was kept).
+            lens=Lens(
+                cx=sol.cx,
+                cy=sol.cy,
+                a1=sol.a1,
+                a3=sol.a3,
+                tilt_east_deg=sol.tilt_east,
+                tilt_north_deg=sol.tilt_north,
+                width=sol.width,
+                height=sol.height,
+            )
+            if sol.width and sol.height
+            else None,
         )
 
     def busy(self) -> bool:

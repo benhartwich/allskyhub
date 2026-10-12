@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import math
+from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
@@ -108,6 +109,7 @@ def test_orienter_waits_for_a_clear_pair_and_reports(
     assert latest.north_deg == 18.2
     assert latest.mirrored
     assert latest.stars == 30
+    assert latest.lens is None  # no frame size kept: the lens cannot be drawn
     # Mid-exposure time.
     assert calls == [(str(frame(2).captured_at + timedelta(seconds=30)), "True")]
     assert not o.consider(frame(3), img, sky(0.0))  # solved: not again for a week
@@ -131,6 +133,19 @@ def test_orienter_gives_up_after_tries(tmp_path: Path, monkeypatch: pytest.Monke
         o.join(5)
     assert started == 2
     assert o.latest is None
+
+
+def test_orientation_reports_the_lens(tmp_path: Path) -> None:
+    # SPEC §4.8, §6.3: status carries the fitted lens when the frame size is known.
+    sol = replace(SOL, tilt_east=1.5, tilt_north=-0.5, width=1920, height=1080)
+    o = Orienter(tmp_path / "orientation.json", location=lambda: (LAT, LON))
+    o.store(sol, datetime(2026, 10, 12, 22, 0, tzinfo=UTC))
+    latest = o.latest
+    assert latest is not None
+    assert latest.lens is not None
+    assert (latest.lens.cx, latest.lens.a1, latest.lens.a3) == (1.0, 1000.0, -100.0)
+    assert (latest.lens.tilt_east_deg, latest.lens.tilt_north_deg) == (1.5, -0.5)
+    assert (latest.lens.width, latest.lens.height) == (1920, 1080)
 
 
 def test_position_of_a_pixel() -> None:

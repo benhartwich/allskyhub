@@ -143,6 +143,7 @@ def test_import_places_everything_and_is_repeatable(tmp_path: Path) -> None:
     assert again.sky == 0
     assert (again.images, again.products, again.meteors) == (0, 0, 0)
     assert again.images_skipped == 3
+    assert again.nights == set()  # nothing new: nothing to announce to the hub again
     assert len(store.read_index("20261011")) == 2
     assert len(events.night_events("20261011")) == 1
 

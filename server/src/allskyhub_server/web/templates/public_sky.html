@@ -73,7 +73,7 @@
       <h2>Polarlicht-Aussichten</h2>
       {% if kp.now is not none %}<p>Aktueller Kp-Index: <strong>{{ '%.1f' | format(kp.now) | replace('.', ',') }}</strong></p>{% endif %}
       {% if kp_needed is not none %}<p class="muted">Faustregel für diesen Standort: ab etwa Kp {{ '%.0f' | format(kp_needed) }} können Polarlichter tief am Horizont sichtbar werden, in einer klaren, dunklen Nacht.</p>{% endif %}
-      <a href="/space-weather/ovation/{{ hemisphere }}.jpg"><img class="ovation" src="/space-weather/ovation/{{ hemisphere }}.jpg" alt="Vorhersage der Polarlicht-Zone (NOAA OVATION)" loading="lazy"></a>
+      <a href="/space-weather/ovation/{{ hemisphere }}.jpg" data-lightbox data-caption="Polarlicht-Vorhersage (NOAA OVATION)"><img class="ovation" src="/space-weather/ovation/{{ hemisphere }}.jpg" alt="Vorhersage der Polarlicht-Zone (NOAA OVATION)" loading="lazy"></a>
       <p class="muted small">Daten und Karte: NOAA Space Weather Prediction Center.</p>
     </div>
     {% endif %}
@@ -106,7 +106,7 @@
   <div class="cam-meta"><h2>Letzte Nacht</h2><a href="/sky/{{ slug }}/nights/{{ night_id }}">{{ night_id | night_title }}</a></div>
   <div class="public-products">
     {% for product in products %}
-    <a href="/sky/{{ slug }}/products/{{ night_id }}/{{ product.name }}?full={{ 'true' if product.has_full else 'false' }}">
+    <a href="/sky/{{ slug }}/products/{{ night_id }}/{{ product.name }}?full={{ 'true' if product.has_full else 'false' }}" data-lightbox="products" data-caption="{{ 'Keogramm' if product.kind == 'keogram' else 'Sternspuren' }} · {{ night_id | night_title }}">
       <img src="/sky/{{ slug }}/products/{{ night_id }}/{{ product.name }}" alt="{{ 'Keogramm' if product.kind == 'keogram' else 'Sternspuren' }} der Nacht" loading="lazy">
       <span class="muted">{{ 'Keogramm' if product.kind == 'keogram' else 'Sternspuren' }}</span>
     </a>

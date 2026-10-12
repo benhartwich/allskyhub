@@ -34,6 +34,7 @@ from allskyhub_server.mail.send import SmtpMailer
 from allskyhub_server.push.fcm import Sender
 from allskyhub_server.push.notify import Notifier
 from allskyhub_server.settings import Settings, get_settings
+from allskyhub_server.version import short as version
 from allskyhub_server.web import (
     routes_account,
     routes_auth,
@@ -256,6 +257,6 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     async def healthz() -> dict[str, str]:  # pyright: ignore[reportUnusedFunction]
         async with app.state.engine.connect() as conn:
             await conn.execute(text("SELECT 1"))
-        return {"status": "ok"}
+        return {"status": "ok", "version": version()}
 
     return app

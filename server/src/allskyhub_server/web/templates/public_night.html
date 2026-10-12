@@ -14,7 +14,7 @@
   <h2>Nachtbilder</h2>
   <div class="public-products">
     {% for product in products %}
-    <a href="/sky/{{ slug }}/products/{{ night_id }}/{{ product.name }}?full={{ 'true' if product.has_full else 'false' }}">
+    <a href="/sky/{{ slug }}/products/{{ night_id }}/{{ product.name }}?full={{ 'true' if product.has_full else 'false' }}" data-lightbox="products" data-caption="{{ 'Keogramm' if product.kind == 'keogram' else 'Sternspuren' }} · {{ night_id | night_title }}">
       <img src="/sky/{{ slug }}/products/{{ night_id }}/{{ product.name }}" alt="{{ 'Keogramm' if product.kind == 'keogram' else 'Sternspuren' }} der Nacht" loading="lazy">
       <span class="muted">{{ 'Keogramm' if product.kind == 'keogram' else 'Sternspuren' }}</span>
     </a>
@@ -29,7 +29,7 @@
   <div class="event-strip">
     {% for e in events %}
     <figure class="event-thumb">
-      <img src="/sky/{{ slug }}/events/{{ e.night_id }}/{{ e.event_id }}.jpg?v={{ (e.data or {}).get('image_rev', 1) }}" alt="{{ event_titles[e.kind] or e.kind }}" loading="lazy">
+      <a href="/sky/{{ slug }}/events/{{ e.night_id }}/{{ e.event_id }}.jpg?v={{ (e.data or {}).get('image_rev', 1) }}" data-lightbox="events" data-caption="{{ event_titles[e.kind] or e.kind }} · {{ e.start | clock }} Uhr"><img src="/sky/{{ slug }}/events/{{ e.night_id }}/{{ e.event_id }}.jpg?v={{ (e.data or {}).get('image_rev', 1) }}" alt="{{ event_titles[e.kind] or e.kind }}" loading="lazy"></a>
       <figcaption>{{ event_titles[e.kind] or e.kind }} · {{ e.start | clock }}</figcaption>
     </figure>
     {% endfor %}
@@ -45,7 +45,7 @@
 {% if frames %}
 <ul class="thumbs">
   {% for f in frames %}
-  <li><a href="/sky/{{ slug }}/frames/{{ night_id }}/{{ f.name }}"><img src="/sky/{{ slug }}/frames/{{ night_id }}/{{ f.name }}" alt="Aufnahme {{ f.captured_at | clock }}" loading="lazy"><span>{{ f.captured_at | clock }}</span></a></li>
+  <li><a href="/sky/{{ slug }}/frames/{{ night_id }}/{{ f.name }}" data-lightbox="frames" data-caption="Aufnahme {{ f.captured_at | clock }} Uhr"><img src="/sky/{{ slug }}/frames/{{ night_id }}/{{ f.name }}" alt="Aufnahme {{ f.captured_at | clock }}" loading="lazy"><span>{{ f.captured_at | clock }}</span></a></li>
   {% endfor %}
 </ul>
 {% elif not products and not events %}

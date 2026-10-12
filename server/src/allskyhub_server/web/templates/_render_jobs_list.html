@@ -8,7 +8,7 @@
     </div>
     {% if j.state == 'done' %}
     {% set url = '/cameras/' ~ device.id ~ '/renders/' ~ j.id ~ '/file' %}
-    {% if j.kind == 'timelapse' %}<video class="product-video" src="{{ url }}" controls preload="metadata"></video>{% else %}<a href="{{ url }}"><img class="product-image" src="{{ url }}" alt="Keogramm über Nächte"></a>{% endif %}
+    {% if j.kind == 'timelapse' %}<video class="product-video" src="{{ url }}" controls preload="metadata"></video>{% else %}<a href="{{ url }}" data-lightbox><img class="product-image" src="{{ url }}" alt="Keogramm über Nächte"></a>{% endif %}
     <p class="muted small">{{ j.frames }} {{ 'Bilder' if j.kind == 'timelapse' else 'Nächte' }} · {{ j.size | filesize }} · <a href="{{ url }}" download>Herunterladen</a></p>
     {% elif j.state == 'failed' %}<p class="warn">{{ j.error }}</p>{% endif %}
     {% if j.state != 'running' %}

@@ -81,6 +81,8 @@ async def test_public_page_is_opt_in_and_shows_only_public_things(
     assert "Sternwarte Nord" in anon.text
     assert "-30.2°" in anon.text
     assert device_id not in anon.text  # no device id, no status internals
+    assert "data-lightbox" in anon.text  # the photo opens full screen
+    assert "lightbox.js" in anon.text
     # Status internals must not leak. Check the values and field names, not short words:
     # the page carries a random CSRF token that can contain any letters.
     for leak in ("cpu_temp_c", "disk_free_pct", "55 °C", "Prozessor", "Speicher frei"):

@@ -47,7 +47,7 @@ from allskyhub_protocol import (
 from allskyhub_server.auth import ratelimit
 from allskyhub_server.auth.accounts import DEFAULT_EVENT_KEEP_DAYS
 from allskyhub_server.auth.hub_keys import HubKeys
-from allskyhub_server.devices import local_access, pairing, public
+from allskyhub_server.devices import local_access, pairing, public, settings_form
 from allskyhub_server.devices.connections import Connection, ConnectionRegistry
 from allskyhub_server.devices.events import image_rev
 from allskyhub_server.devices.images import JPEG_MAGIC, ImageStore
@@ -425,7 +425,15 @@ async def _handle(
         if body.device_id != conn.device_id:
             await conn.close(CloseCode.REAUTH)
             return
-        await _touch(maker, conn.device_id, profile=body.profile, agent_version=body.agent_version)
+        values: dict[str, Any] = {"profile": body.profile, "agent_version": body.agent_version}
+        if body.settings_schema:
+            # SPEC §6.9: keep the newest consistent schema; an inconsistent one is ignored.
+            schema = [s.model_dump(mode="json") for s in body.settings_schema]
+            if settings_form.parse_schema(schema) is not None:
+                values["settings_schema"] = schema
+            else:
+                log.warning("inconsistent settings schema", extra={"device_id": conn.device_id})
+        await _touch(maker, conn.device_id, **values)
         # SPEC §6.5 local_access: resend an unacknowledged verifier after every hello. In a
         # task: the reply arrives on this very connection.
         _background(local_access.deliver(maker, registry, conn.device_id))

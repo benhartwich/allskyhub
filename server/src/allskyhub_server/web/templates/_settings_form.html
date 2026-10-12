@@ -1,0 +1,42 @@
+{# SPEC §6.9: the settings form from the camera's schema (or the fixed fields). #}
+<form method="post" action="/cameras/{{ device.id }}/settings" class="card stack settings-form">
+  <h2>Einstellungen</h2>
+  <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+  {% if not settings_reported %}<p class="muted">Die Kamera hat ihre aktuellen Einstellungen noch nicht gemeldet. Leere Felder bleiben unverändert.</p>{% endif %}
+  {% for group in settings_groups %}
+  <fieldset class="stack">
+    <legend>{{ group.name }}</legend>
+    {% for f in group.fields %}
+    {% set s = f.spec %}
+    {% if s.type == 'location' %}
+    <div class="grid-2">
+      <label>Breite<input name="latitude" inputmode="decimal" value="{{ f.lat }}" placeholder="48.14"></label>
+      <label>Länge<input name="longitude" inputmode="decimal" value="{{ f.lon }}" placeholder="14.39"></label>
+    </div>
+    {% elif s.type == 'bool' %}
+    <input type="hidden" name="{{ s.key }}__present" value="1">
+    <label class="check"><input type="checkbox" name="{{ s.key }}" value="true"{% if f.checked %} checked{% endif %}> {{ f.label }}</label>
+    {% elif s.type == 'choice' %}
+    <label>{{ f.label }}
+      <select name="{{ s.key }}">
+        <option value="">– unverändert –</option>
+        {% for value, title in f.choices %}<option value="{{ value }}"{% if f.value == value %} selected{% endif %}>{{ title }}</option>{% endfor %}
+      </select>
+    </label>
+    {% elif s.type in ('number', 'int') %}
+    <label>{{ f.label }}{% if s.unit %} ({{ s.unit }}){% endif %}
+      <input name="{{ s.key }}" inputmode="{{ 'numeric' if s.type == 'int' else 'decimal' }}" value="{{ f.value }}"{% if s.min is not none %} data-min="{{ s.min }}"{% endif %}{% if s.max is not none %} data-max="{{ s.max }}"{% endif %}>
+    </label>
+    {% else %}
+    <label>{{ f.label }}{% if s.unit %} ({{ s.unit }}){% endif %}
+      <input name="{{ s.key }}" maxlength="{{ s.max_length or 200 }}" value="{{ f.value }}">
+    </label>
+    {% endif %}
+    {% if f.help %}<p class="muted small">{{ f.help }}</p>{% endif %}
+    {% if s.type in ('number', 'int') and (s.min is not none or s.max is not none) %}<p class="muted small">Erlaubt: {{ s.min | int if s.min is not none and s.min == s.min | int else s.min }} bis {{ s.max | int if s.max is not none and s.max == s.max | int else s.max }}{% if s.unit %} {{ s.unit }}{% endif %}.</p>{% endif %}
+    {% endfor %}
+  </fieldset>
+  {% endfor %}
+  <p class="muted">Die Kamera übernimmt die Werte sofort und startet dafür die Aufnahme neu. Das geht nur, solange sie verbunden ist.</p>
+  <button type="submit"{% if not online %} disabled{% endif %}>Einstellungen übernehmen</button>
+</form>

@@ -177,5 +177,28 @@ def overlay(
         if alt >= LABEL_MIN_ALT and rank <= LABEL_MAX_RANK:
             x, y = pixel(alt, az)
             names.append(Label(x, y, name))
-    cardinals = [Label(*pixel(CARDINAL_ALT, az), text) for text, az in CARDINALS]
-    return Overlay(lens.width, lens.height, paths, names, cardinals)
+    result = Overlay(lens.width, lens.height, paths, names)
+    margin = result.font
+    for text, az in CARDINALS:
+        x, y = _into_frame(*pixel(CARDINAL_ALT, az), lens, margin)
+        result.cardinals.append(Label(x, y, text))
+    return result
+
+
+def _into_frame(x: float, y: float, lens: Lens, margin: float) -> tuple[float, float]:
+    """A point outside the frame (a 16:9 crop cuts off the horizon at top and bottom)
+    moved toward the image centre until it lies ``margin`` inside the edge, so it still
+    shows its true direction."""
+    lo_x, hi_x = margin, lens.width - margin
+    lo_y, hi_y = margin, lens.height - margin
+    if lo_x <= x <= hi_x and lo_y <= y <= hi_y:
+        return x, y
+    cx = min(max(lens.cx, lo_x), hi_x)
+    cy = min(max(lens.cy, lo_y), hi_y)
+    t = 1.0
+    for d, c, lo, hi in ((x - cx, cx, lo_x, hi_x), (y - cy, cy, lo_y, hi_y)):
+        if d > 0:
+            t = min(t, (hi - c) / d)
+        elif d < 0:
+            t = min(t, (lo - c) / d)
+    return cx + (x - cx) * t, cy + (y - cy) * t

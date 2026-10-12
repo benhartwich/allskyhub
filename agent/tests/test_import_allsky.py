@@ -58,6 +58,14 @@ def make_allsky(root: Path) -> Path:
         "INSERT INTO allsky_image VALUES (1, 0, 'image-20261012031500.jpg', 'NIGHT',"
         " 30000000, 150, 12.5, 0.21)"
     )
+    con.execute(
+        "CREATE TABLE allsky_skyquality (id INTEGER, timestamp INTEGER, AS_SKYQUALITY_SQM REAL,"
+        " AS_SKYQUALITY_CLOUD REAL, AS_SKYQUALITY_STARS REAL)"
+    )
+    night = int(datetime(2026, 10, 11, 21, 0, tzinfo=UTC).timestamp())  # 23:00 local
+    noon = int(datetime(2026, 10, 11, 10, 0, tzinfo=UTC).timestamp())
+    con.execute("INSERT INTO allsky_skyquality VALUES (1, ?, 20.5, 20.0, 140)", (night,))
+    con.execute("INSERT INTO allsky_skyquality VALUES (2, ?, 13.8, 90.0, 3)", (noon,))
     con.commit()
     con.close()
     return home
@@ -127,7 +135,12 @@ def test_import_places_everything_and_is_repeatable(tmp_path: Path) -> None:
     assert meteor.data["direction_deg"] == 56.1  # as Streak.direction_deg would give
     assert meteor.end > meteor.start  # the exposure from Allsky's database
 
+    (sky,) = store.read_sky("20261011")  # the noon sample is day: left out (SPEC §6.3)
+    assert (sky.cloud_cover, sky.sqm_mag, sky.stars) == (0.2, 20.5, 140)
+    assert r.sky == 1
+
     again = imp.run()
+    assert again.sky == 0
     assert (again.images, again.products, again.meteors) == (0, 0, 0)
     assert again.images_skipped == 3
     assert len(store.read_index("20261011")) == 2

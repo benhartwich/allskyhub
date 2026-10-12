@@ -31,7 +31,7 @@ from allskyhub_agent.core.sun import sun_elevation
 from allskyhub_agent.detect.events import EventStore
 from allskyhub_agent.products.build import KEOGRAM, MANIFEST, STARTRAILS, TIMELAPSE
 from allskyhub_agent.store.images import THUMB_WIDTH, ImageStore, night_id
-from allskyhub_protocol import EventKind, FrameInfo, Mode
+from allskyhub_protocol import EventKind, FrameInfo, Mode, SkyMetrics
 
 log = logging.getLogger(__name__)
 
@@ -122,6 +122,29 @@ def _image_rows(allsky_home: Path) -> dict[str, dict[str, Any]]:
     return out
 
 
+def _sky_rows(allsky_home: Path) -> list[tuple[int, float | None, float | None, float | None]]:
+    """(unix time, sqm, cloud %, stars) from the sky quality module's table, oldest first."""
+    db = allsky_home / "config" / "myFiles" / "allsky.db"
+    if not db.is_file():
+        return []
+    try:
+        con = sqlite3.connect(f"file:{db}?mode=ro", uri=True)
+        try:
+            rows = con.execute(
+                "SELECT timestamp, AS_SKYQUALITY_SQM, AS_SKYQUALITY_CLOUD, AS_SKYQUALITY_STARS"
+                " FROM allsky_skyquality ORDER BY timestamp"
+            ).fetchall()
+        finally:
+            con.close()
+    except sqlite3.Error:
+        return []  # no sky quality module
+
+    def num(v: object) -> float | None:
+        return float(v) if isinstance(v, int | float) and not isinstance(v, bool) else None
+
+    return [(int(t), num(q), num(c), num(n)) for t, q, c, n in rows if isinstance(t, int | float)]
+
+
 @dataclass
 class ImportReport:
     folders: int = 0
@@ -129,6 +152,7 @@ class ImportReport:
     images_skipped: int = 0
     products: int = 0
     meteors: int = 0
+    sky: int = 0
     linked: int = 0
     copied: int = 0
     bytes: int = 0
@@ -378,6 +402,48 @@ class AllskyImporter:
                 if event is None:
                     report.meteors -= 1
 
+    def _import_sky(self, folders: list[str], report: ImportReport, dry: bool) -> None:
+        """The sky quality module's history as the sky log (SPEC §5.1) for the charts, with
+        the agent's own rules: cloud cover only at night, sky brightness only at
+        astronomical night (SPEC §6.3)."""
+        lat, lon = self.settings.latitude, self.settings.longitude
+        if lat is None or lon is None:
+            return
+        days = set(folders)
+        known: dict[str, set[datetime]] = {}
+        new: dict[str, list[SkyMetrics]] = defaultdict(list)
+        for t, sqm_mag, cloud, stars in _sky_rows(self._home):
+            at = datetime.fromtimestamp(t, UTC)
+            # Only samples of the folders being imported (by the agent's night or the date).
+            nid = night_id(at, self._tz)
+            local_day = at.astimezone(self._src_tz).strftime("%Y%m%d")
+            if nid not in days and local_day not in days:
+                continue
+            sun = sun_elevation(at, lat, lon)
+            m = SkyMetrics(
+                at=at,
+                night_id=nid,
+                cloud_cover=round(min(1.0, max(0.0, cloud / 100)), 3)
+                if cloud is not None and sun <= -12
+                else None,
+                sqm_mag=round(sqm_mag, 2) if sqm_mag is not None and sun <= -18 else None,
+                stars=round(stars) if stars is not None and sun <= -12 else None,
+            )
+            if (m.cloud_cover, m.sqm_mag) == (None, None):
+                continue
+            if nid not in known:
+                known[nid] = {x.at for x in self._store.read_sky(nid)}
+            if at in known[nid]:
+                continue
+            new[nid].append(m)
+            report.sky += 1
+        if dry:
+            return
+        for nid, samples in new.items():
+            for m in samples:
+                self._store.append_sky(m)
+            self._chown(self._store.night_dir(nid) / "sky.jsonl")
+
     def run(self, only: set[str] | None = None, dry: bool = False) -> ImportReport:
         report = ImportReport()
         rows = _image_rows(self._home)
@@ -388,6 +454,7 @@ class AllskyImporter:
             self._import_products(date, report, dry)
             self._import_meteors(date, rows, report, dry)
             report.folders += 1
+        self._import_sky(folders, report, dry)
         return report
 
 

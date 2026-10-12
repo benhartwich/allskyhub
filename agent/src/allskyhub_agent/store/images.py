@@ -12,7 +12,7 @@ from PIL import Image as PILImage
 from pydantic import ValidationError
 
 from allskyhub_agent.adapters.camera import Image
-from allskyhub_protocol import FrameInfo
+from allskyhub_protocol import FrameInfo, SkyMetrics
 
 THUMB_WIDTH = 400
 
@@ -24,6 +24,7 @@ def _disk_usage(path: Path) -> tuple[int, int]:
 
 
 INDEX_NAME = "frames.jsonl"
+SKY_NAME = "sky.jsonl"
 
 
 def night_id(captured_at: datetime, local_tz: tzinfo) -> str:
@@ -95,6 +96,43 @@ class ImageStore:
                 continue
         out.sort(key=lambda f: f.captured_at)
         return out
+
+    def append_sky(self, m: SkyMetrics) -> None:
+        """SPEC §5.1: the sky measured on a frame, for the local charts (roadmap L6)."""
+        folder = self._images / m.night_id
+        folder.mkdir(parents=True, exist_ok=True)
+        with (folder / SKY_NAME).open("a", encoding="utf-8") as f:
+            f.write(m.model_dump_json() + "\n")
+
+    def read_sky(self, night: str) -> list[SkyMetrics]:
+        """Sky samples of a night in time order; damaged lines are skipped."""
+        if not (len(night) == 8 and night.isdigit()):
+            return []
+        try:
+            lines = (self._images / night / SKY_NAME).read_text(encoding="utf-8").splitlines()
+        except OSError:
+            return []
+        out: list[SkyMetrics] = []
+        for line in lines:
+            try:
+                out.append(SkyMetrics.model_validate_json(line))
+            except ValidationError:
+                continue
+        out.sort(key=lambda m: m.at)
+        return out
+
+    def nights(self) -> list[str]:
+        """Night ids with a folder, newest first."""
+        if not self._images.is_dir():
+            return []
+        return sorted(
+            (
+                p.name
+                for p in self._images.iterdir()
+                if p.is_dir() and len(p.name) == 8 and p.name.isdigit()
+            ),
+            reverse=True,
+        )
 
     def path_for(self, night: str, name: str, thumbnail: bool = False) -> Path | None:
         """Stored image (or its thumbnail) by night id and name; None if it does not exist.

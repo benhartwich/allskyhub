@@ -424,6 +424,8 @@ class DetectionWorker:
                     self._sky.set_mask(learned)
             self._mask_version = self._sky_mask.version
         metrics = self._sky.measure(job.frame, rgb) if self._sky is not None else None
+        if metrics is not None and (metrics.cloud_cover, metrics.sqm_mag) != (None, None):
+            self._store.append_sky(metrics)
         cloud = metrics.cloud_cover if metrics is not None else None
         if self._orienter is not None:
             self._orienter.consider(job.frame, job.path, metrics)

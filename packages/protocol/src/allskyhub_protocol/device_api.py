@@ -33,7 +33,8 @@ _B64URL = r"^[A-Za-z0-9_-]+$"
 
 
 class _Model(BaseModel):
-    model_config = ConfigDict(extra="forbid", frozen=True)
+    # SPEC §6.1: receivers ignore fields they do not know, so either side can add one.
+    model_config = ConfigDict(extra="ignore", frozen=True)
 
 
 def b64url(data: bytes) -> str:
@@ -301,6 +302,8 @@ def split_local_login_assertion(assertion: str) -> tuple[str, LocalLoginClaims, 
 class PublicSections(_Model):
     """Which parts of the public page are shown (SPEC §6.8)."""
 
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
     live: bool = True
     loop: bool = True
     archive: bool = True
@@ -335,6 +338,9 @@ class PublicState(_Model):
 
 class PublicUpdate(_Model):
     """Body of `PUT /device/v1/public` (SPEC §6.8): `profile` replaces the whole profile."""
+
+    # Input the owner typed: an unknown key is a mistake and answered with 422 (SPEC §6.8).
+    model_config = ConfigDict(extra="forbid", frozen=True)
 
     enabled: bool | None = None
     profile: PublicProfile | None = None

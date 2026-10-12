@@ -6,10 +6,22 @@ from typing import Any
 
 from fastapi import Request
 from fastapi.responses import HTMLResponse
+from sqlalchemy import inspect
 
 from allskyhub_server.auth import csrf
 from allskyhub_server.auth.sessions import SessionInfo
 from allskyhub_server.web.templating import templates
+
+
+def _is_admin(request: Request, session: SessionInfo | None) -> bool:
+    """For the menu link only (the admin routes check for themselves). Reads the e-mail
+    only if it is loaded: after a rollback the user is expired, and loading it here would
+    need the database outside the request's await."""
+    admins: frozenset[str] = request.app.state.settings.admins
+    if session is None or not admins:
+        return False
+    email = inspect(session.user).dict.get("email")
+    return isinstance(email, str) and email.lower() in admins
 
 
 def render(
@@ -30,6 +42,7 @@ def render(
         "csrf_token": session.csrf_token if session else anon_token,
         "mail_enabled": getattr(request.app.state, "mailer", None) is not None
         and request.app.state.mailer.enabled,
+        "is_admin": _is_admin(request, session),
     }
     data.update(context or {})
     response = templates.TemplateResponse(request, template, data, status_code=status_code)

@@ -44,6 +44,11 @@ class Settings(BaseSettings):
     smtp_password: str = ""
     mail_from: str = "allskyhub <noreply@allskyhub.org>"
     max_image_mb: int = Field(default=25, ge=1)
+    # Admin page (/admin): comma-separated e-mail addresses of accounts that may see the
+    # server's state and start a deploy. Empty: no admin page.
+    admin_emails: str = ""
+    # Where the admin page looks for new versions and their CI (GitHub, public API).
+    deploy_repo: str = "benhartwich/allskyhub"
 
     session_cookie_name: str = "allskyhub_session"
     session_cookie_secure: bool = True
@@ -72,6 +77,10 @@ class Settings(BaseSettings):
     @property
     def mail_enabled(self) -> bool:
         return bool(self.smtp_host)
+
+    @property
+    def admins(self) -> frozenset[str]:
+        return frozenset(e.strip().lower() for e in self.admin_emails.split(",") if e.strip())
 
     @property
     def push_enabled(self) -> bool:

@@ -1,0 +1,14 @@
+{# The root helper's progress (admin/deploy.py); polls itself while a deploy runs. #}
+{% if job.state != 'idle' %}
+<div class="deploy-job"{% if job.busy %} hx-get="/admin/deploy/job" hx-trigger="every 3s" hx-target="#deploy-job" hx-swap="innerHTML"{% endif %}>
+  <p class="deploy-state {{ job.state }}">
+    {% if job.state == 'requested' %}Deploy von <code>{{ (job.target or '')[:7] }}</code> angefordert, wartet auf den Server …
+    {% elif job.state == 'running' %}Deploy von <code>{{ (job.target or '')[:7] }}</code> läuft …
+    {% elif job.state == 'ok' %}Letzter Deploy erfolgreich: <code>{{ (job.target or '')[:7] }}</code>{% if running and job.target and running != job.target %} <span class="warn">(der Hub meldet noch <code>{{ running[:7] }}</code>, bitte neu laden)</span>{% endif %}
+    {% elif job.state == 'failed' %}Letzter Deploy fehlgeschlagen, es läuft weiter die alte Version.
+    {% endif %}
+    {% if job.changed_at %}<span class="muted small">· {{ job.changed_at | localtime }}</span>{% endif %}
+  </p>
+  {% if job.log %}<details{% if job.state in ('running', 'failed') %} open{% endif %}><summary>Protokoll</summary><pre class="deploy-log">{{ job.log }}</pre></details>{% endif %}
+</div>
+{% endif %}

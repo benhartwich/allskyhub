@@ -1,0 +1,10 @@
+[Unit]
+Description=allskyhub: deploy the version requested on the admin page
+After=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/opt/allskyhub-server/deploy/admin/allskyhub-deploy.sh
+TimeoutStartSec=15min
+# uv keeps its cache under $HOME, which system services do not get by default.
+Environment=HOME=/root

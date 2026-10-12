@@ -48,7 +48,12 @@ def commit(start: Path) -> str | None:
 
 
 @cache
+def full() -> str | None:
+    """Full sha of the running code, None outside a git checkout."""
+    return commit(Path(__file__).resolve().parent)
+
+
 def short() -> str:
     """Short sha of the running code, ``"unknown"`` outside a git checkout."""
-    sha = commit(Path(__file__).resolve().parent)
+    sha = full()
     return sha[:7] if sha else "unknown"

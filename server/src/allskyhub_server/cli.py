@@ -113,6 +113,7 @@ def _cmd_invite(args: argparse.Namespace) -> int:
 
     from allskyhub_server.auth import invitations
     from allskyhub_server.auth.accounts import AccountError
+    from allskyhub_server.mail.send import Mail, SmtpMailer
 
     async def work(db: AsyncSession, settings: Settings) -> int:
         try:
@@ -124,6 +125,20 @@ def _cmd_invite(args: argparse.Namespace) -> int:
         url = f"{settings.base_url.rstrip('/')}/invite?{urlencode({'token': token})}"
         print(f"Einladung für {args.email}, {args.days} Tage gültig, nur einmal verwendbar:")
         print(url)
+        mailer = SmtpMailer(settings)
+        if mailer.enabled and not args.no_mail:
+            sent = await mailer.send(
+                Mail(
+                    to=args.email,
+                    subject="Einladung zu allskyhub",
+                    body=(
+                        "Hallo,\n\ndu bist zu allskyhub eingeladen, dem Hub für Allsky-Kameras. "
+                        f"Mit diesem Link legst du dein Passwort fest ({args.days} Tage gültig, "
+                        f"nur einmal):\n\n{url}\n\nallskyhub\n"
+                    ),
+                )
+            )
+            print("Per E-Mail verschickt." if sent else "E-Mail ging nicht raus, siehe Log.")
         return 0
 
     return _run_db(work)
@@ -225,6 +240,7 @@ def build_parser() -> argparse.ArgumentParser:
     p = sub.add_parser("invite", help="invite someone (accounts exist only by invitation)")
     p.add_argument("email")
     p.add_argument("--days", type=int, default=7, help="valid for this many days (default 7)")
+    p.add_argument("--no-mail", action="store_true", help="only print the link")
     p.set_defaults(func=_cmd_invite)
 
     sub.add_parser("users", help="list accounts").set_defaults(func=_cmd_users)

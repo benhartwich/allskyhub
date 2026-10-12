@@ -4,13 +4,14 @@ from __future__ import annotations
 
 import uuid
 from typing import Annotated
-from urllib.parse import urlsplit
+from urllib.parse import urlencode, urlsplit
 
 from fastapi import APIRouter, Depends, Form, HTTPException, Request
 from fastapi.responses import RedirectResponse, Response
 
-from allskyhub_server.auth import accounts, invitations, ratelimit
+from allskyhub_server.auth import accounts, invitations, password_reset, ratelimit
 from allskyhub_server.auth.sessions import ABSOLUTE_LIFETIME, create_session, delete_session
+from allskyhub_server.mail.send import Mail, Mailer
 from allskyhub_server.settings import Settings
 from allskyhub_server.web.deps import (
     DbSession,
@@ -165,3 +166,96 @@ async def logout(request: Request, db: DbSession, settings: SettingsDep) -> Resp
     response = RedirectResponse("/login", status_code=303)
     response.delete_cookie(settings.session_cookie_name, path="/")
     return response
+
+
+def _mailer(request: Request) -> Mailer:
+    mailer: Mailer = request.app.state.mailer
+    return mailer
+
+
+@router.get("/password/forgot")
+async def forgot_form(request: Request) -> Response:
+    if not _mailer(request).enabled:
+        raise HTTPException(404)
+    return render(request, "password_forgot.html")
+
+
+@router.post("/password/forgot")
+async def forgot(
+    request: Request,
+    db: DbSession,
+    settings: SettingsDep,
+    email: Annotated[str, Form(max_length=254)],
+) -> Response:
+    """Roadmap #15: always the same answer, whether the address has an account or not."""
+    mailer = _mailer(request)
+    if not mailer.enabled:
+        raise HTTPException(404)
+    try:
+        await ratelimit.hit(
+            request.app.state.engine,
+            f"reset:ip:{client_ip(request, settings)}",
+            ratelimit.RESET_PER_IP,
+        )
+        await ratelimit.hit(
+            request.app.state.engine,
+            f"reset:email:{accounts.normalize_email(email)}",
+            ratelimit.RESET_PER_EMAIL,
+        )
+    except ratelimit.RateLimitedError as exc:
+        raise HTTPException(
+            429, "Zu viele Versuche.", {"Retry-After": str(exc.retry_after)}
+        ) from None
+    created = await password_reset.create(db, email)
+    await db.commit()
+    if created is not None:
+        user, token = created
+        link = f"{settings.base_url.rstrip('/')}/password/reset?{urlencode({'token': token})}"
+        await mailer.send(
+            Mail(
+                to=user.email,
+                subject="allskyhub: neues Passwort",
+                body=(
+                    "Hallo,\n\nfür dein allskyhub-Konto wurde ein neues Passwort angefordert. "
+                    f"Mit diesem Link legst du es fest (eine Stunde gültig, nur einmal):\n\n{link}"
+                    "\n\nWarst du das nicht, ignoriere diese Nachricht; dein Passwort bleibt "
+                    "dann, wie es ist.\n\nallskyhub\n"
+                ),
+            )
+        )
+    return render(request, "password_forgot.html", {"sent": True})
+
+
+@router.get("/password/reset")
+async def reset_form(request: Request, db: DbSession, token: str = "") -> Response:
+    valid = await password_reset.open_reset(db, token) is not None
+    return render(
+        request,
+        "password_reset.html",
+        {"token": token, "valid": valid},
+        status_code=200 if valid else 404,
+    )
+
+
+@router.post("/password/reset")
+async def reset(
+    request: Request,
+    db: DbSession,
+    settings: SettingsDep,
+    token: Annotated[str, Form(max_length=100)],
+    password: Annotated[str, Form(max_length=1024)],
+    password2: Annotated[str, Form(max_length=1024)],
+) -> Response:
+    try:
+        if password != password2:
+            raise accounts.AccountError("Die Passwörter stimmen nicht überein.")
+        user = await password_reset.use(db, token, password)
+    except accounts.AccountError as exc:
+        return render(
+            request,
+            "password_reset.html",
+            {"token": token, "valid": True, "error": exc.message},
+            status_code=400,
+        )
+    await db.commit()
+    return await _start_session(request, db, settings, user.id, "/")

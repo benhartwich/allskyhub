@@ -19,6 +19,7 @@ from allskyhub_server.devices.connections import ConnectionRegistry
 from allskyhub_server.devices.event_text import EVENT_TITLES
 from allskyhub_server.devices.events import storm_key
 from allskyhub_server.devices.tonight import ForecastCache
+from allskyhub_server.mail.send import Mail, Mailer
 from allskyhub_server.models import Device, EventRecord, PushToken, User
 from allskyhub_server.push.fcm import Message
 
@@ -28,6 +29,8 @@ log = logging.getLogger(__name__)
 EVENT_QUIET = dt.timedelta(minutes=10)
 OFFLINE_AFTER = dt.timedelta(minutes=30)
 OFFLINE_CHECK = dt.timedelta(minutes=5)
+# Roadmap #15: a long outage also by e-mail, once.
+OFFLINE_MAIL_AFTER = dt.timedelta(hours=6)
 # Roadmap C2: at most one aurora alarm per camera in this time; the sky measurement must
 # be this fresh (status repeats the last one, SPEC §6.3).
 AURORA_QUIET = dt.timedelta(hours=6)
@@ -53,6 +56,8 @@ class Notifier:
         self._storms_notified: set[str] = set()
         # Set by the app: the dome hint (roadmap C12) compares with the cloud forecast.
         self.forecast: ForecastCache | None = None
+        # Set by the app: e-mail for long outages (roadmap #15, C14).
+        self.mailer: Mailer | None = None
 
     @property
     def enabled(self) -> bool:
@@ -327,8 +332,52 @@ class Notifier:
                     Message(title=f"Die Nacht über {device.name}", body=summary.line(), data=data),
                 )
 
+    async def check_offline_mail(
+        self, registry: ConnectionRegistry, now: dt.datetime | None = None
+    ) -> None:
+        """Roadmap C14/#15: an e-mail once per outage when a camera is silent for hours,
+        for owners who want to hear about problems. Push may not reach a phone for that long."""
+        if self.mailer is None or not self.mailer.enabled:
+            return
+        now = now or _now()
+        async with self._maker() as db:
+            rows = (
+                await db.execute(
+                    select(Device, User)
+                    .join(User, User.id == Device.owner_id)
+                    .where(
+                        User.notify_offline.is_(True),
+                        Device.last_seen_at < now - OFFLINE_MAIL_AFTER,
+                        Device.offline_mailed_at.is_(None),
+                    )
+                )
+            ).all()
+            for device, user in rows:
+                if registry.is_online(device.id):
+                    continue
+                device.offline_mailed_at = now
+                await db.commit()
+                hours = int((now - (device.last_seen_at or now)).total_seconds() // 3600)
+                await self.mailer.send(
+                    Mail(
+                        to=user.email,
+                        subject=f"allskyhub: {device.name} ist seit {hours} Stunden offline",
+                        body=(
+                            f"Hallo,\n\ndeine Kamera „{device.name}“ hat sich seit {hours} "
+                            "Stunden nicht beim Hub gemeldet. Sie nimmt weiter auf, wenn nur das "
+                            "Netz fehlt; Strom, WLAN oder Router sind die üblichen Ursachen.\n\n"
+                            "Sobald sie wieder verbunden ist, holt der Hub nach, was fehlt.\n\n"
+                            "allskyhub\n"
+                        ),
+                    )
+                )
+
     async def run_offline_checks(self, registry: ConnectionRegistry) -> None:
         while True:
+            try:
+                await self.check_offline_mail(registry)
+            except Exception:
+                log.exception("mail: offline check failed")
             try:
                 await self.check_offline(registry)
             except Exception:

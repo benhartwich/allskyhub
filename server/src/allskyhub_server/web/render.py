@@ -28,6 +28,8 @@ def render(
         "session": session,
         "user": session.user if session else None,
         "csrf_token": session.csrf_token if session else anon_token,
+        "mail_enabled": getattr(request.app.state, "mailer", None) is not None
+        and request.app.state.mailer.enabled,
     }
     data.update(context or {})
     response = templates.TemplateResponse(request, template, data, status_code=status_code)

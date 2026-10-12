@@ -110,6 +110,22 @@ gunzip -c allskyhub-latest.sql.gz | sudo -u allskyhub-server env $(xargs < /etc/
 systemctl start allskyhub-server.socket
 ```
 
+## E-Mail
+
+Aus, solange `ALLSKYHUB_SERVER_SMTP_HOST` leer ist. Der Hub verschickt über SMTP mit
+STARTTLS (Port 587): Einladungen (`invite`, außer mit `--no-mail`), „Passwort vergessen“
+und eine Nachricht, wenn eine Kamera seit 6 Stunden offline ist. Postfach in Mailcow
+anlegen, dann in die Env-Datei (siehe `deploy/allskyhub-server.env.example`):
+
+```bash
+ALLSKYHUB_SERVER_SMTP_HOST=postkasten.cloud
+ALLSKYHUB_SERVER_SMTP_USER=noreply@allskyhub.org
+ALLSKYHUB_SERVER_SMTP_PASSWORD=…
+```
+
+DNS für `allskyhub.org`: MX auf `postkasten.cloud`, SPF `v=spf1 mx a:postkasten.cloud -all`,
+DKIM-Eintrag `dkim._domainkey` aus Mailcow, DMARC `p=reject` kann bleiben.
+
 ## Push-Benachrichtigungen (Firebase)
 
 Aus, solange `ALLSKYHUB_SERVER_FCM_SERVICE_ACCOUNT_FILE` nicht gesetzt ist; dann geht nichts an

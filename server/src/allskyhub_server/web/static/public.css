@@ -44,3 +44,11 @@ textarea { width: 100%; padding: 10px 14px; border-radius: 12px; border: 1px sol
 .fact { display: grid; padding: 6px 12px; border-radius: 12px; background: var(--surface); border: 1px solid var(--line);
         font-weight: 600; font-size: 15px; }
 .fact small { font-size: 11px; font-weight: 600; color: var(--text-2); text-transform: uppercase; letter-spacing: .8px; }
+
+/* Embedded widget (roadmap C9): just the picture and a line, no page around it. */
+body.widget { min-height: 0; }
+body.widget::after { display: none; }
+.widget-link { display: grid; gap: 6px; padding: 8px; color: var(--text); text-decoration: none; }
+.widget-img { width: 100%; height: auto; border-radius: 12px; background: #000; display: block; }
+.embed-code { width: 100%; font-family: ui-monospace, monospace; font-size: 13px; }
+.ovation { width: 100%; border-radius: 12px; background: #000; }

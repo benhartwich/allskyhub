@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<feed xmlns="http://www.w3.org/2005/Atom" xml:lang="de">
+  <title>{{ title }}: Ereignisse am Himmel</title>
+  <id>{{ base_url }}/sky/{{ slug }}/events.atom</id>
+  <link rel="self" href="{{ base_url }}/sky/{{ slug }}/events.atom"/>
+  <link rel="alternate" type="text/html" href="{{ base_url }}/sky/{{ slug }}"/>
+  <updated>{{ updated.isoformat() }}</updated>
+  <generator uri="https://allskyhub.org">allskyhub</generator>
+  {% for e in events %}
+  <entry>
+    <title>{{ event_titles[e.kind] or e.kind }} · {{ e.start | localtime }}</title>
+    <id>{{ base_url }}/sky/{{ slug }}/events/{{ e.night_id }}/{{ e.event_id }}</id>
+    <link rel="alternate" type="text/html" href="{{ base_url }}/sky/{{ slug }}/nights/{{ e.night_id }}"/>
+    <link rel="enclosure" type="image/jpeg" href="{{ base_url }}/sky/{{ slug }}/events/{{ e.night_id }}/{{ e.event_id }}.jpg?v={{ (e.data or {}).get('image_rev', 1) }}"/>
+    <updated>{{ e.start.isoformat() }}</updated>
+    <summary>{{ event_titles[e.kind] or e.kind }} über {{ title }}, Sicherheit {{ (e.confidence * 100) | round | int }} %.</summary>
+  </entry>
+  {% endfor %}
+</feed>

@@ -14,8 +14,8 @@ import subprocess
 import sys
 import threading
 import time
-from collections.abc import Mapping
-from datetime import datetime
+from collections.abc import Callable, Mapping
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any, cast
 from zoneinfo import ZoneInfo
@@ -30,6 +30,9 @@ from allskyhub_agent.adapters.libcamera import LibcameraCamera, list_cameras
 from allskyhub_agent.adapters.network import Network, NmcliNetwork, SimNetwork
 from allskyhub_agent.adapters.sim import SimCamera, sky_radiance
 from allskyhub_agent.adapters.zwo import ZwoCamera, ZwoSettings
+from allskyhub_agent.alpaca.nina import NinaRelay
+from allskyhub_agent.alpaca.safety import SafetyConfig, SafetyMonitor
+from allskyhub_agent.alpaca.server import Alpaca, AlpacaServer, PortInUse
 from allskyhub_agent.calib.orientation import Orienter
 from allskyhub_agent.core.clock import Clock, SimClock, SystemClock
 from allskyhub_agent.core.exposure import AutoExposure
@@ -71,7 +74,16 @@ from allskyhub_agent.web.auth import LocalAuth
 from allskyhub_agent.web.calibration import LocalCalibration
 from allskyhub_agent.web.server import SettingsForm, SystemPage, UpdatePage, WebServer
 from allskyhub_agent.web.support import RecentLog, Support
-from allskyhub_protocol import DeviceSettings, FrameInfo, SetSettingsArgs, SettingSpec, Status
+from allskyhub_protocol import (
+    DeviceSettings,
+    Event,
+    EventKind,
+    FrameInfo,
+    Observatory,
+    SetSettingsArgs,
+    SettingSpec,
+    Status,
+)
 
 log = logging.getLogger(__name__)
 
@@ -411,6 +423,8 @@ def main(argv: list[str] | None = None) -> int:
         settings_file if network is not None or args.settings is not None else None
     )
     settings_lock = threading.Lock()
+    alpaca_error: list[str | None] = [None]  # SPEC §7.5, for status and the local UI
+    observatory: list[Callable[[], Observatory | None]] = [lambda: None]  # N.I.N.A., §6.3
     # Learned at night, edited in the local UI (roadmap L8) before the camera is open.
     calibration_dir = Path(args.data) / "calibration"
     sky_mask = SkyMask(calibration_dir / "skymask.png")
@@ -506,6 +520,8 @@ def main(argv: list[str] | None = None) -> int:
                 sky=sky_meter.latest if sky_meter is not None else None,
                 orientation=orienter.latest if orienter is not None else None,
                 update=update_status() if settings_path else None,
+                alpaca_error=alpaca_error[0],
+                observatory=observatory[0](),
             )
 
         def device_settings() -> DeviceSettings:
@@ -550,6 +566,19 @@ def main(argv: list[str] | None = None) -> int:
 
     calibration = LocalCalibration(sky_mask, calibration_dir / "orientation.json")
 
+    def observatory_facts() -> dict[str, Any]:
+        """SPEC §7.5 for the system page: Alpaca on/off, port or error, N.I.N.A."""
+        cur = load_settings()
+        obs = observatory[0]()
+        return {
+            "alpaca": {
+                "enabled": cur.alpaca_enabled,
+                "port": cur.alpaca_port,
+                "error": alpaca_error[0],
+            },
+            "observatory": obs.model_dump(mode="json") if obs is not None else None,
+        }
+
     def restore_backup(values: dict[str, Any], edits: dict[str, Any] | None) -> list[str]:
         """Roadmap L15: a backup's settings (only the keys this camera has) and drawn areas."""
         known = set(settings_values())
@@ -581,7 +610,7 @@ def main(argv: list[str] | None = None) -> int:
             calibration=calibration,
             public=PublicPage(hub_url, identity) if hub_url and identity is not None else None,
             system_page=SystemPage(
-                lambda: system_facts(Path(args.data)),
+                lambda: system_facts(Path(args.data)) | observatory_facts(),
                 lambda action: system_action(action, restart_requested),
             ),
             network_info=lambda: netinfo.summary() | {"country": wifi_country(settings_file)},
@@ -703,9 +732,42 @@ def main(argv: list[str] | None = None) -> int:
         time_trusted=system.time_trusted if settings_path else lambda: True,
     )
     tuned = load_settings()
+    # SPEC §7.5: the camera as safety monitor for observatory software (roadmap L16).
+    safety = SafetyMonitor(
+        SafetyConfig(tuned.safe_cloud_max / 100.0, timedelta(minutes=tuned.safe_hold_min))
+    )
+
+    def event_out(event: Event) -> None:
+        if event.kind is EventKind.LIGHTNING:
+            safety.lightning(event.start)
+        if hub is not None:
+            hub.notify_event(event)
+
+    if tuned.alpaca_enabled:
+        alpaca_id = identity.device_id if identity is not None else "local"
+        try:
+            alpaca_server = AlpacaServer(
+                Alpaca(alpaca_id, __version__, safety),
+                tuned.alpaca_port,
+                blocked=lambda: setup is not None and setup.active,
+            )
+        except PortInUse as exc:
+            log.warning("ASCOM Alpaca not started: %s", exc)
+            alpaca_error[0] = "port_in_use"
+        else:
+            alpaca_server.start()
+            alpaca_error[0] = None
+    if tuned.nina_url:
+        nina = NinaRelay(
+            tuned.nina_url,
+            tz,
+            safe=lambda: safety.is_safe(datetime.now(UTC)) if tuned.alpaca_enabled else None,
+        )
+        nina.start()
+        observatory[0] = lambda: nina.latest
     detect = DetectionWorker(
         store,
-        on_event=hub.notify_event if hub is not None else None,
+        on_event=event_out,
         cfg=tuning.meteor_config(tuned.detect_meteor),
         mask_radius_frac=profile.image_circle_frac,
         events=event_store,
@@ -724,6 +786,7 @@ def main(argv: list[str] | None = None) -> int:
         else None,
         latitude=lambda: here.lat,
         enabled=tuning.enabled(tuned),
+        on_sky=safety.observe,
     )
     detect.start()
 

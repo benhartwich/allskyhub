@@ -834,6 +834,12 @@ async function viewSystem() {
       ${hw.disk ? `<dt>Speicher</dt><dd>${fmtBytes(hw.disk.free)} frei von ${fmtBytes(hw.disk.total)}
           ${meter(hw.disk.total - hw.disk.free, hw.disk.total)}</dd>` : ""}
       ${power}
+      ${hw.alpaca ? `<dt>ASCOM Alpaca</dt><dd>${!hw.alpaca.enabled ? '<span class="muted">aus</span>'
+        : hw.alpaca.error ? `<span class="badge">Port belegt</span> <span class="muted small">Port ${hw.alpaca.port} oder 32227 nutzt schon ein anderes Programm (z. B. ASCOM Remote).</span>`
+        : `<span class="badge ok">an</span> Port ${hw.alpaca.port}`}</dd>` : ""}
+      ${hw.observatory ? `<dt>N.I.N.A.</dt><dd>${hw.observatory.connected ? '<span class="badge ok">verbunden</span>' : '<span class="badge">nicht erreichbar</span>'}
+        ${hw.observatory.target ? ` · ${esc(hw.observatory.target)}` : ""}${hw.observatory.sequence ? ` · ${Math.round(hw.observatory.sequence.progress * 100)} %` : ""}
+        ${hw.observatory.safe != null ? ` · ${hw.observatory.safe ? "sicher" : "unsicher"}` : ""}</dd>` : ""}
       <dt>Uhrzeit</dt><dd>${hw.time_trusted ? '<span class="badge ok">genau</span>' : '<span class="badge">ungenau</span>'}</dd>`;
   }, 5000);
 }

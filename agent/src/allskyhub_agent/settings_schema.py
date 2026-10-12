@@ -12,7 +12,13 @@ from typing import Any
 from pydantic import ValidationError
 
 from allskyhub_agent.profiles import Profile
-from allskyhub_agent.settings import CAMERA_CHOICES, DETECT_CHOICES, DETECTORS, AgentSettings
+from allskyhub_agent.settings import (
+    CAMERA_CHOICES,
+    DETECT_CHOICES,
+    DETECTORS,
+    AgentSettings,
+    valid_nina_url,
+)
 from allskyhub_protocol import SetSettingsArgs, SettingSpec, invalid_settings
 
 _CAMERA_LABELS = {
@@ -125,6 +131,73 @@ def _product_entries() -> list[dict[str, Any]]:
                 "voll, gehen die ältesten trotzdem früher.",
                 "en": "Older nights are deleted after the night products. If the card fills "
                 "up, the oldest go earlier anyway.",
+            },
+        },
+    ]
+
+
+def _observatory_entries() -> list[dict[str, Any]]:
+    """SPEC §7.5: the camera as safety monitor for N.I.N.A., SGP, Voyager (roadmap L16)."""
+    group = {"de": "Sternwarte", "en": "Observatory"}
+    return [
+        {
+            "key": "alpaca_enabled",
+            "type": "bool",
+            "label": {"de": "ASCOM Alpaca", "en": "ASCOM Alpaca"},
+            "group": group,
+            "help": {
+                "de": "N.I.N.A., SGP oder Voyager finden die Kamera im Netz als Safety Monitor "
+                "und Wolkensensor, ohne Plugin.",
+                "en": "N.I.N.A., SGP or Voyager find the camera on the network as safety "
+                "monitor and cloud sensor, without a plugin.",
+            },
+        },
+        {
+            "key": "alpaca_port",
+            "type": "int",
+            "label": {"de": "Alpaca-Port", "en": "Alpaca port"},
+            "group": group,
+            "min": 1024,
+            "max": 65535,
+            "step": 1,
+        },
+        {
+            "key": "safe_cloud_max",
+            "type": "int",
+            "label": {"de": "Unsicher ab Bewölkung", "en": "Unsafe from cloud cover"},
+            "group": group,
+            "unit": "%",
+            "min": 5,
+            "max": 95,
+            "step": 1,
+        },
+        {
+            "key": "safe_hold_min",
+            "type": "int",
+            "label": {"de": "Wieder sicher nach", "en": "Safe again after"},
+            "group": group,
+            "unit": "min",
+            "min": 0,
+            "max": 120,
+            "step": 1,
+            "help": {
+                "de": "So lange muss es klar bleiben (10 Punkte unter der Grenze). Nach einem "
+                "Blitz bleibt es 30 Minuten unsicher.",
+                "en": "This long it must stay clear (10 points below the limit). After "
+                "lightning it stays unsafe for 30 minutes.",
+            },
+        },
+        {
+            "key": "nina_url",
+            "type": "string",
+            "label": {"de": "N.I.N.A.-Adresse", "en": "N.I.N.A. address"},
+            "group": group,
+            "max_length": 200,
+            "help": {
+                "de": "Mit dem Plugin „Advanced API“, z. B. http://192.168.1.30:1888. Die Kamera "
+                "liest Ziel, Sequenz und letztes Bild und zeigt sie im Hub. Leer: aus.",
+                "en": 'With the "Advanced API" plugin, e.g. http://192.168.1.30:1888. The camera '
+                "reads target, sequence and last image and shows them on the hub. Empty: off.",
             },
         },
     ]
@@ -248,6 +321,7 @@ def build_schema(profile: Profile) -> list[SettingSpec]:
     )
     entries.extend(_detector_entries())
     entries.extend(_product_entries())
+    entries.extend(_observatory_entries())
     return [SettingSpec.model_validate(e) for e in entries]
 
 
@@ -264,6 +338,9 @@ def check(schema: list[SettingSpec], changes: Mapping[str, Any]) -> list[str]:
     """Invalid keys of a partial update (SPEC §6.5): the schema, then the fixed checks
     (time zone name, location pair) of `SetSettingsArgs`."""
     bad = set(invalid_settings(schema, changes))
+    nina: object = changes.get("nina_url")
+    if isinstance(nina, str) and not valid_nina_url(nina):
+        bad.add("nina_url")
     if not bad:
         try:
             SetSettingsArgs.model_validate(dict(changes))

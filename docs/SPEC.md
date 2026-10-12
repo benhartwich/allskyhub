@@ -316,6 +316,8 @@ base64url-encoded without padding.
   `last_image` `{at, filter, exposure_s, hfr, stars}`, or null; `safe` is what the
   camera's own safety monitor (§7.5) says, or null while it is off. Only these metadata
   are relayed, never N.I.N.A.'s images.
+  `alpaca_error` (null, or `port_in_use` while `alpaca_enabled` is on but the Alpaca
+  server could not start, §7.5).
   `update` (null until the updater ran, §8): `{state, version, at, code}` with `state`
   one of `up_to_date`, `downloading`, `waiting` (downloaded, waits for the day),
   `installing`, `installed`, `rolled_back`, `failed`; `version` the release it is about,

@@ -307,7 +307,12 @@ async def change_settings(
     schema, _ = settings_form.schema_of(device)
     diff, error = settings_form.changes(schema, settings_form.current_values(device), form)
     notice = None
-    if error is None:
+    if error is None and not diff:
+        # Nothing differs from what the camera reports now (e.g. the page was older than
+        # its last status): no error, the page shows the current values again.
+        notice = "Nichts zu speichern: Die Kamera hat diese Einstellungen schon."
+        form = {}
+    elif error is None:
         outcome = await camera_settings.apply(
             _registry(request), device.id, diff, settings_form.field_labels(schema)
         )

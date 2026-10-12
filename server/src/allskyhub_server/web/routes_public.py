@@ -128,6 +128,7 @@ async def sky_page(request: Request, db: DbSession, slug: str) -> Response:
             **_base(device, slug),
             "night_id": night_id,
             "products": products if sections.archive else [],
+            "video": await public.night_video(db, device, night_id) if night_id else None,
             "loop_frames": await public.loop_frames(db, device, now) if sections.loop else [],
             "events": events,
             "nights": nights if sections.archive else [],
@@ -172,6 +173,7 @@ async def sky_night(request: Request, db: DbSession, slug: str, night_id: NightI
             **_base(device, slug),
             "night_id": night_id,
             "products": await public.night_products(db, device, night_id),
+            "video": await public.night_video(db, device, night_id),
             "frames": await archive.night_frames(db, device.id, night_id),
             "events": events if sections.events else [],
             "meteors": meteor_summary(events) if sections.events else None,
@@ -194,6 +196,19 @@ async def sky_product(
     store: ImageStore = request.app.state.images
     variant = FrameVariant.FULL if full else FrameVariant.THUMB
     return _jpeg(store.product_path(device.id, night_id, name, variant), PUBLIC_CACHE)
+
+
+@router.get("/sky/{slug}/nights/{night_id}/timelapse.mp4")
+async def sky_video(request: Request, db: DbSession, slug: str, night_id: NightId) -> Response:
+    """The night's timelapse (with range requests, so players can seek), only when the
+    page shows its archive and the hub holds the file; never fetched for a visitor."""
+    device = await _device(db, slug)
+    video = await public.night_video(db, device, night_id)
+    store: ImageStore = request.app.state.images
+    path = store.product_path(device.id, night_id, video.name, FrameVariant.FULL) if video else None
+    if path is None or not path.is_file():
+        raise HTTPException(404)
+    return FileResponse(path, media_type="video/mp4", headers={"Cache-Control": ARCHIVE_CACHE})
 
 
 @router.get("/sky/{slug}/frames/{night_id}/{name}")

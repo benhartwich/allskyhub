@@ -583,7 +583,13 @@ async def _on_products(
 
     A product that was rebuilt (other size) is fetched again."""
     wanted: list[tuple[str, FrameVariant]] = []
+    oldest = (dt.datetime.now(dt.UTC) - dt.timedelta(days=public.PUBLIC_VIDEO_DAYS)).strftime(
+        "%Y%m%d"
+    )
+    recent = body.night_id >= oldest
     async with maker() as db:
+        device = await db.get(Device, conn.device_id)
+        public_video = device is not None and public.shows_videos(device)
         for item in body.products:
             row = await db.scalar(
                 select(Product).where(
@@ -611,6 +617,12 @@ async def _on_products(
             if item.thumbnail and not row.has_thumb:
                 wanted.append((item.name, FrameVariant.THUMB))
             if item.kind in FETCH_AT_ONCE and item.size <= FETCH_AT_ONCE_MAX and not row.has_full:
+                wanted.append((item.name, FrameVariant.FULL))
+            elif (
+                item.kind is ProductKind.TIMELAPSE and not row.has_full and recent and public_video
+            ):
+                # Roadmap #16: the public page shows last night's timelapse like Allsky's
+                # website; only recent nights, so an import does not upload years of video.
                 wanted.append((item.name, FrameVariant.FULL))
         await db.commit()
     for name, variant in wanted:

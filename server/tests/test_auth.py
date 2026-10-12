@@ -11,7 +11,8 @@ from tests.helpers import PASSWORD, csrf_from, invite, make_account
 
 async def test_healthz(client: httpx.AsyncClient) -> None:
     r = await client.get("/healthz")
-    assert r.json() == {"status": "ok"}
+    assert r.json()["status"] == "ok"
+    assert len(r.json()["version"]) == 7  # short commit sha of the running hub
 
 
 async def test_start_page_is_public(client: httpx.AsyncClient) -> None:

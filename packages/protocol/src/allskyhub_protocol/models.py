@@ -101,6 +101,8 @@ class SettingSpec(BaseModel):
     choices: list[SettingChoice] | None = None
     max_length: int | None = Field(default=None, ge=1, le=2000)
     nullable: bool = False
+    # A secret (SPEC §6.9): never reported, only `<key>_set`; an empty form field keeps it.
+    write_only: bool = False
 
     @model_validator(mode="after")
     def _fits_type(self) -> SettingSpec:
@@ -113,6 +115,8 @@ class SettingSpec(BaseModel):
             raise ValueError("choices exactly for choice")
         if self.max_length is not None and self.type is not SettingType.STRING:
             raise ValueError("max_length only for string")
+        if self.write_only and self.type is not SettingType.STRING:
+            raise ValueError("write_only only for string")
         if (self.type is SettingType.LOCATION) != (self.key == "location"):
             raise ValueError("the location type has the key location")
         return self

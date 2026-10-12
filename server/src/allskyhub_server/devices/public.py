@@ -21,8 +21,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from allskyhub_protocol import Observatory, PublicProfile, PublicSections, PublicState
 from allskyhub_server.models import Device, EventRecord, Frame, Product
 
-# Products shown publicly: small images only (no timelapse download for anonymous visitors).
+# Products shown publicly as images; the night's timelapse comes separately (night_video).
 PUBLIC_PRODUCTS = ("keogram.jpg", "startrails.jpg")
+# How far back the hub fetches a timelapse by itself for a public page (like Allsky's
+# morning upload to its website); older ones only when the owner opens them.
+PUBLIC_VIDEO_DAYS = 2
 
 
 # Detections worth showing to the public; the rest are measurements, not events to look at.
@@ -212,6 +215,26 @@ async def newest_products(db: AsyncSession, device: Device) -> tuple[str | None,
         .order_by(Product.name)
     )
     return night_id, list(rows)
+
+
+def shows_videos(device: Device) -> bool:
+    """The public page shows the nights' timelapses (with its archive section)."""
+    return device.public_slug is not None and profile(device).sections.archive
+
+
+async def night_video(db: AsyncSession, device: Device, night_id: str) -> Product | None:
+    """The night's timelapse, if the hub holds the full file (it is never fetched for an
+    anonymous visitor; see ``PUBLIC_VIDEO_DAYS``)."""
+    if not shows_videos(device):
+        return None
+    return await db.scalar(
+        select(Product).where(
+            Product.device_id == device.id,
+            Product.night_id == night_id,
+            Product.kind == "timelapse",
+            Product.has_full.is_(True),
+        )
+    )
 
 
 def observatory(device: Device) -> Observatory | None:

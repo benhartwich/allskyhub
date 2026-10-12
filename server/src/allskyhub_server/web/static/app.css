@@ -294,3 +294,4 @@ a[data-lightbox] { cursor: zoom-in; }
 .live > .overlay-toggle { justify-self: start; }
 [data-theme="red"] .sky-lines { stroke: rgb(255 60 60 / .55); }
 [data-theme="red"] .sky-name { fill: rgb(255 110 110 / .85); }
+.public-video { display: block; margin: 4px 0 6px; }

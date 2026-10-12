@@ -9,9 +9,13 @@
 {% block content %}
 <a class="back" href="/sky/{{ slug }}">← {{ title }}</a>
 <h1>{{ night_id | night_title }}</h1>
-{% if products %}
+{% if products or video %}
 <section class="card">
   <h2>Nachtbilder</h2>
+  {% if video %}
+  <video class="product-video public-video" src="/sky/{{ slug }}/nights/{{ night_id }}/timelapse.mp4" controls loop playsinline preload="metadata" aria-label="Zeitraffer der Nacht"></video>
+  <p class="muted small">Zeitraffer der Nacht{% if video.duration_s %} · {{ video.duration_s | mmss }}{% endif %}</p>
+  {% endif %}
   <div class="public-products">
     {% for product in products %}
     <a href="/sky/{{ slug }}/products/{{ night_id }}/{{ product.name }}?full={{ 'true' if product.has_full else 'false' }}" data-lightbox="products" data-caption="{{ 'Keogramm' if product.kind == 'keogram' else 'Sternspuren' }} · {{ night_id | night_title }}">

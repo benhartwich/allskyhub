@@ -135,3 +135,24 @@ async def answer_any(ws: Any, expected: dict[str, Any]) -> None:
     assert isinstance(env.body, Command)
     assert env.body.args == expected
     await ws.send(Envelope.wrap(Ack(ref=env.id), ts=TS).model_dump_json())
+
+
+async def test_nothing_to_save_is_a_notice(
+    app: FastAPI, client: httpx.AsyncClient, live_app: str
+) -> None:
+    """The values the camera already has (e.g. a page older than its last status)."""
+    dev = FakeDevice()
+    await paired_token(client, dev)
+    maker: async_sessionmaker[AsyncSession] = app.state.sessionmaker
+    async with maker() as db:
+        await db.execute(
+            update(Device)
+            .where(Device.id == dev.device_id)
+            .values(settings_schema=SCHEMA, last_status={"settings": CURRENT})
+        )
+        await db.commit()
+    page = (await client.get(f"/cameras/{dev.device_id}")).text
+    form = {"overlay__present": "1", "overlay": "true", "csrf_token": csrf_from(page)}
+    r = await client.post(f"/cameras/{dev.device_id}/settings", data=form)
+    assert r.status_code == 200
+    assert "Nichts zu speichern" in r.text

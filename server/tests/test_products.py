@@ -182,3 +182,48 @@ async def test_offline_camera_gives_404_for_missing_video(
     )
     store: ImageStore = app.state.images
     assert not (store.root / dev.device_id).exists()
+
+
+async def test_public_page_gets_last_nights_timelapse(
+    app: FastAPI, client: httpx.AsyncClient, live_app: str, new_client: httpx.AsyncClient
+) -> None:
+    """Roadmap #16: like Allsky's website, a public page with its archive shows the night's
+    timelapse; the hub fetches it for recent nights only (no flood after an import)."""
+    dev = FakeDevice()
+    token = await paired_token(client, dev)
+    r = await client.post(
+        f"/cameras/{dev.device_id}/public",
+        data={"enabled": "true", "csrf_token": await home_csrf(client)},
+    )
+    assert r.status_code == 303
+    page = (await client.get(f"/cameras/{dev.device_id}")).text
+    slug = page.split('href="/sky/', 1)[1].split('"', 1)[0]
+    recent = (dt.datetime.now(dt.UTC) - dt.timedelta(days=1)).strftime("%Y%m%d")
+    announced = products().model_copy(update={"night_id": recent})
+    async with device_ws(live_app, token) as ws:
+        await send(ws, announced)
+        got: set[tuple[str, FrameVariant]] = set()
+        for _ in range(6):
+            cmd = await next_command(ws)
+            args = UploadProductArgs.model_validate(cmd.args)
+            got.add((args.name, args.variant))
+        assert ("timelapse.mp4", FrameVariant.FULL) in got
+        async with httpx.AsyncClient(base_url=f"http://{live_app}") as dc:
+            r = await dc.put(
+                f"/device/v1/products/{recent}/timelapse.mp4",
+                params={"variant": "full"},
+                content=MP4,
+                headers={"Authorization": f"Bearer {token}", "Content-Type": "video/mp4"},
+            )
+            assert r.status_code == 204
+        # An old night (an import): the timelapse waits for the owner, as before.
+        await send(ws, products())
+        old = await requested(ws, 5)
+        assert ("timelapse.mp4", FrameVariant.FULL) not in old
+
+    video = await new_client.get(f"/sky/{slug}/nights/{recent}/timelapse.mp4")
+    assert video.status_code == 200
+    assert video.headers["content-type"] == "video/mp4"
+    night_page = (await new_client.get(f"/sky/{slug}/nights/{recent}")).text
+    assert f"/sky/{slug}/nights/{recent}/timelapse.mp4" in night_page
+    assert (await new_client.get(f"/sky/{slug}/nights/{NIGHT}/timelapse.mp4")).status_code == 404

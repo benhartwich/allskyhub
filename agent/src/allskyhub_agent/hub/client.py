@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
+import json
 import logging
 import threading
 import time
@@ -17,7 +18,7 @@ from contextlib import AbstractAsyncContextManager
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any, Protocol
+from typing import Any, Protocol, cast
 
 import httpx
 from pydantic import ValidationError
@@ -109,6 +110,21 @@ def default_connector(url: str, token: str) -> AbstractAsyncContextManager[WebSo
 
 class _NotPaired(Exception):
     pass
+
+
+def _unknown_command_ref(raw: str | bytes) -> str | None:
+    """The envelope id of a command that could not be parsed, else None."""
+    try:
+        data: object = json.loads(raw)
+    except ValueError:
+        return None
+    if not isinstance(data, dict):
+        return None
+    d = cast(dict[str, Any], data)
+    ref = d.get("id")
+    if d.get("type") != "command" or not isinstance(ref, str) or not ref:
+        return None
+    return ref
 
 
 def _now() -> datetime:
@@ -362,7 +378,13 @@ class HubSession:
             try:
                 env = parse_envelope(raw)
             except ValidationError:
-                log.warning("invalid message from hub")
+                ref = _unknown_command_ref(raw)
+                if ref is not None:
+                    # A command this agent does not know yet (SPEC §6.1, §6.5): say so, so the
+                    # hub does not wait for an answer.
+                    await self._send(ws, ErrorReply(ref=ref, code=ErrorCode.UNSUPPORTED))
+                else:
+                    log.warning("invalid message from hub")
                 continue
             if not isinstance(env.body, Command):
                 continue

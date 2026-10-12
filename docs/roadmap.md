@@ -65,6 +65,27 @@ it. Order:
 Not ported on purpose: the free-form module manager and file editor (fixed detectors
 instead), the website upload/remote server (the hub and its public page do that).
 
+## Cloud features (hub)
+
+Benjamin, 2026-10-12: all of them, built one after another once the local login (L1) has its
+hub side. Push needs the Firebase project; until then the same messages show on the web.
+
+| # | Item | Owner | Notes |
+|---|---|---|---|
+| C1 | "Heute Nacht": observing window from a cloud forecast (Open-Meteo), astronomical twilight and the moon (phase, rise, set), on the camera page, public page and app; evening push | hub | own sun/moon code (Meeus, low precision), no new dependency |
+| C2 | Aurora alarm that looks: push when Kp reaches the camera's latitude threshold **and** the camera reports a clear sky | hub | Kp from #16, cloud cover from `status.sky` |
+| C3 | Morning summary per camera: meteors, clear hours, best sky brightness, the night's best picture; push, later e-mail (#15) | hub | |
+| C4 | Meteor triangulation: the same meteor seen by two oriented cameras gives its path, height and radiant | hub | needs `azimuth_deg`/`altitude_deg` of both ends from the agent (SPEC change) |
+| C5 | Map of all public cameras | hub | coordinates rounded as on the public page, only where the owner shows them |
+| C6 | Satellite passes (ISS, bright satellites) as a forecast and to drop satellite trails from meteor detections | hub | TLE from CelesTrak, SGP4 |
+| C7 | Statistics per month and year: clear nights, sky brightness, meteors per shower | hub | from `sky_sample` and `event` |
+| C8 | Timelapse over a chosen period and monthly keograms from the archive | hub | thumbnails only, ffmpeg on the hub |
+| C9 | Embeddable widget and image feed for own websites, RSS/Atom for detections | hub | per public page |
+| C10 | Share a camera with family or a club (roles: viewer, admin) | hub | |
+| C11 | Export for science: meteors for IMO/GMN, prefilled fireball reports, sky brightness for Globe at Night | hub | |
+| C12 | Maintenance hints: dew or dirt on the dome, recognised from the pictures | hub | |
+| C13 | Aurora map (NOAA OVATION) on the public page | hub | |
+
 ## Needs Benjamin / hardware
 
 - First boot of the image on the spare Pi 4 (SD card ordered); test with `"camera": "sim"`.

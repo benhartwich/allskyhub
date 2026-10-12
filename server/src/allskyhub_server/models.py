@@ -121,6 +121,8 @@ class Device(Base):
     # Roadmap C2/C3: last aurora alarm, and the night whose summary went out.
     aurora_notified_at: Mapped[dt.datetime | None] = mapped_column(_tz())
     summary_night: Mapped[str | None] = mapped_column(String(8))
+    # Roadmap C14: health problems (devices/health.py keys) already reported to the owner.
+    health_notified: Mapped[list[str]] = mapped_column(JSONB, default=list, server_default="[]")
     # Opt-in public sky page (/sky/<slug>): a random slug, never the device id; switching the
     # page off drops it, so old links stop working.
     public_slug: Mapped[str | None] = mapped_column(String(32), unique=True)

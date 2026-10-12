@@ -10,6 +10,16 @@
 <div class="cam-live" hx-get="/cameras/{{ device.id }}/live" hx-trigger="load, every 5s" hx-swap="innerHTML">
   {% include "_live.html" %}
 </div>
+<div class="card health">
+  <h2>Zustand</h2>
+  {% if health %}
+  <ul class="health-list">
+    {% for p in health %}<li class="health-line {{ p.level }}">{{ p.text }}</li>{% endfor %}
+  </ul>
+  {% else %}
+  <p class="health-line ok">Alles in Ordnung: verbunden, neue Bilder, genug Speicher, Temperaturen und Uhr unauffällig.</p>
+  {% endif %}
+</div>
 {% if tonight %}{% include "_tonight.html" %}{% endif %}
 {% if last_night %}{% include "_last_night.html" %}{% endif %}
 {% if events %}

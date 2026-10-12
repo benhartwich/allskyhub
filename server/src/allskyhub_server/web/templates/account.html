@@ -21,7 +21,7 @@
   <h2>Benachrichtigungen in der App</h2>
   <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
   <label class="check"><input type="checkbox" name="notify_events" value="true" {% if user.notify_events %}checked{% endif %}> Bei neuen Ereignissen (z. B. Meteor), höchstens alle 10 Minuten pro Kamera</label>
-  <label class="check"><input type="checkbox" name="notify_offline" value="true" {% if user.notify_offline %}checked{% endif %}> Wenn eine Kamera seit 30 Minuten offline ist</label>
+  <label class="check"><input type="checkbox" name="notify_offline" value="true" {% if user.notify_offline %}checked{% endif %}> Wenn mit einer Kamera etwas nicht stimmt: seit 30 Minuten offline, keine neuen Bilder, Speicher fast voll, zu heiß, Uhr oder Update fehlerhaft</label>
   <label class="check"><input type="checkbox" name="notify_aurora" value="true" {% if user.notify_aurora %}checked{% endif %}> Polarlicht möglich: Kp-Index hoch genug für den Standort und der Himmel über der Kamera klar</label>
   <label class="check"><input type="checkbox" name="notify_summary" value="true" {% if user.notify_summary %}checked{% endif %}> Morgens eine Zusammenfassung der Nacht</label>
   <button type="submit">Speichern</button>

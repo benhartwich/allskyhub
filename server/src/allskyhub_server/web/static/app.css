@@ -274,3 +274,11 @@ table.stats { width: 100%; border-collapse: collapse; font-size: 14px; }
 table.stats th, table.stats td { padding: 8px 10px; text-align: right; border-bottom: 1px solid var(--line); white-space: nowrap; }
 table.stats th:first-child, table.stats td:first-child { text-align: left; }
 table.stats th { color: var(--text-2); font-weight: 600; }
+
+/* Camera health (roadmap C14). */
+.health-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+.health-line { display: block; padding-left: 22px; position: relative; font-size: 15px; }
+.health-line::before { content: ""; position: absolute; left: 4px; top: .5em; width: 9px; height: 9px; border-radius: 50%; }
+.health-line.ok::before { background: var(--ok); box-shadow: 0 0 10px var(--ok); }
+.health-line.warn { color: var(--warn); } .health-line.warn::before { background: var(--warn); }
+.health-line.error { color: var(--danger); } .health-line.error::before { background: var(--danger); box-shadow: 0 0 10px var(--danger); }

@@ -588,8 +588,11 @@ Alpaca in general it has no authentication, so it is meant for the local network
 It never runs in setup mode (§7.1).
 
 **Discovery.** The agent answers the Alpaca discovery broadcast on UDP port 32227: a
-datagram that starts with `alpacadiscovery1` gets the reply `{"AlpacaPort": <port>}`
-(IPv4 broadcast; IPv6 multicast `ff12::a1:9aca` if the system has IPv6).
+datagram that starts with `alpacadiscovery1` gets the reply `{"AlpacaPort": <port>}`,
+sent unicast to the sender's address and port (IPv4 broadcast; IPv6 multicast
+`ff12::a1:9aca` if the system has IPv6). If `alpaca_port` or UDP 32227 is already taken
+(for example by ASCOM Remote), the server does not start; `status` reports
+`alpaca_error` (`port_in_use`) and the local UI shows it.
 
 **Management API** (`/management/apiversions` → `[1]`, `/management/v1/description`,
 `/management/v1/configureddevices`) lists two devices with stable `UniqueID`s derived
@@ -600,16 +603,26 @@ from the device id: `SafetyMonitor` 0 and `ObservingConditions` 0, both named
 ASCOM (Platform 7, `InterfaceVersion` 3 for SafetyMonitor, 2 for ObservingConditions):
 `GET` with query parameters, `PUT` form-encoded, parameter names case-insensitive, every
 answer `{Value, ClientTransactionID, ServerTransactionID, ErrorNumber, ErrorMessage}`.
+`ClientID` and `ClientTransactionID` may come in the query or the form body;
+`ClientTransactionID` is returned unchanged (0 if missing or not an unsigned 32-bit
+number), `ServerTransactionID` counts up per process (unsigned 32-bit, wrapping).
 `connected`, `connect`, `disconnect`, `connecting`, `description`, `driverinfo`,
-`driverversion`, `interfaceversion`, `name` and `supportedactions` (empty) work for both;
-`action`, `commandblind`, `commandbool` and `commandstring` answer `0x400` (not
-implemented). A member other than these, or a property read while not connected, answers
-`0x407`.
+`driverversion`, `interfaceversion`, `name`, `supportedactions` (empty) and
+`devicestate` work for both. `devicestate` lists `[{Name, Value}]` with `IsSafe` for the
+SafetyMonitor and `CloudCover`, `SkyQuality` and `TimeSinceLastUpdate` (only those with a
+value) for ObservingConditions, plus `TimeStamp`. `action`, `commandblind`, `commandbool`
+and `commandstring` and the interface members named below as not implemented answer
+`0x400` (not implemented). A path that is not a member of the interface is answered with
+HTTP 400 and a plain-text body, as Alpaca specifies. Reading a property other than
+`connected`, `connecting` and the descriptive ones while not connected answers `0x407`
+(not connected).
 
 **SafetyMonitor `issafe`.** True only while all of these hold:
 
 - The newest frame is at most 10 minutes old and its `status.sky` has a `cloud_cover`, that is,
   it is night (sun ≤ −12°, §6.3). In the day and in twilight the monitor says unsafe.
+  This is what observatory software expects: flats and twilight work run without a safety
+  condition, and only the night's imaging waits for "safe".
 - `cloud_cover` is below `safe_cloud_max` (setting, default 30 %). To turn unsafe it has
   to be at or above that on two frames in a row; to turn safe again it has to be at least
   10 percentage points below for `safe_hold_min` minutes (setting, default 10).
@@ -622,8 +635,9 @@ Stale or missing data is unsafe; `issafe` never fails with an error once connect
 from `status.sky` (§6.3); `skybrightness`, `starfwhm` and the weather members
 (`dewpoint`, `humidity`, `pressure`, `rainrate`, `skytemperature`, `temperature`,
 `winddirection`, `windgust`, `windspeed`) answer `0x400`. While a value is not
-available (day, twilight, no frame yet) the member answers `0x40B` (invalid operation)
-rather than an invented number. `timesincelastupdate` gives the age of the newest
+available (day, twilight, no frame yet) the member answers `0x402` (value not set)
+rather than an invented number; ConformU must accept this, otherwise the implementation
+follows what ConformU expects and this section is corrected. `timesincelastupdate` gives the age of the newest
 measured frame in seconds (`-1` if none), also with an empty or matching
 `sensorname`; `sensordescription` names the measurement ("Sternzählung der
 Allsky-Kamera", "Himmelshintergrund, normiert"). `averageperiod` reads 0 and accepts

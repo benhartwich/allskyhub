@@ -374,8 +374,8 @@ class AllskyImporter:
                 raw = m.get("showers")
                 showers = [str(x) for x in cast(list[Any], raw)] if isinstance(raw, list) else []
                 report.meteors += 1
-                report.nights.add(night_id(start, self._tz))
                 if dry:
+                    report.nights.add(night_id(start, self._tz))
                     continue
                 picture = src_dir / str(m.get("file") or "")
                 event = self._events.import_event(
@@ -401,6 +401,8 @@ class AllskyImporter:
                 )
                 if event is None:
                     report.meteors -= 1
+                else:  # only nights with something new go to the hub again
+                    report.nights.add(night_id(start, self._tz))
 
     def _import_sky(self, folders: list[str], report: ImportReport, dry: bool) -> None:
         """The sky quality module's history as the sky log (SPEC §5.1) for the charts, with

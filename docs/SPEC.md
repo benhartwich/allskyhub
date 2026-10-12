@@ -273,6 +273,15 @@ base64url-encoded without padding.
   an image direction d is (north_deg − d) mod 360 when mirrored, else
   (d − north_deg) mod 360; exact at the horizon, approximate above it if the camera
   leans.
+  `observatory` (null unless observatory software is configured, §7.5): what the
+  telescope next to the camera is doing, relayed from N.I.N.A.'s Advanced API (roadmap
+  C15): `{source: "nina", at, connected, target, sequence, last_image, safe}`. `at` is
+  when the agent last read it; `connected` false means N.I.N.A. did not answer, and then
+  everything else is the last known state or null. `target` (string or null) is the
+  current target's name; `sequence` `{name, progress}` with `progress` 0..1, or null;
+  `last_image` `{at, filter, exposure_s, hfr, stars}`, or null; `safe` is what the
+  camera's own safety monitor (§7.5) says, or null while it is off. Only these metadata
+  are relayed, never N.I.N.A.'s images.
   `update` (null until the updater ran, §8): `{state, version, at, code}` with `state`
   one of `up_to_date`, `downloading`, `waiting` (downloaded, waits for the day),
   `installing`, `installed`, `rolled_back`, `failed`; `version` the release it is about,
@@ -313,6 +322,16 @@ base64url-encoded without padding.
 the meteor's midpoint, the centroid of the lit area, of the green or of the blue. The
 agent computes them with the orientation (§4.8) valid when it saves the event, so they
 stay right after a later re-solve; both are null while the camera has no orientation.
+
+A `meteor` also carries the two ends of its track for triangulation between cameras
+(roadmap C4): `start_azimuth_deg`, `start_altitude_deg`, `end_azimuth_deg`,
+`end_altitude_deg` (same orientation and nulls as above) and `track_ordered` (bool). A
+single frame does not show which way the meteor flew, so `start_*` is where it came from
+only when `track_ordered` is true (known from several frames or from its shower's
+radiant); otherwise the order is arbitrary. The meteor happened somewhere between the
+event's `start` and `end`, which are the frame's exposure (up to a minute at night), so
+the hub pairs meteors of two cameras by overlapping intervals and matching tracks, not by
+a fixed time difference.
 
 A meteor's `shower` depends on `shower_match`:
 
@@ -701,8 +720,13 @@ measured frame in seconds (`-1` if none), also with an empty or matching
 Allsky-Kamera", "Himmelshintergrund, normiert"). `averageperiod` reads 0 and accepts
 only 0 (other values `0x401`); `refresh` does nothing.
 
-Implementations are checked with ASCOM ConformU. Relaying the state of N.I.N.A. itself
-(target, sequence, last image) to the hub is a separate later section.
+Implementations are checked with ASCOM ConformU.
+
+**Relaying N.I.N.A.** With the settings `nina_url` (for example
+`http://192.168.1.30:1888`, empty = off) and `nina_api_key` (optional), the agent reads the
+state of N.I.N.A.'s Advanced API plugin every 30 s on the local network and reports it as
+`status.observatory` (§6.3). It only reads; it never controls N.I.N.A. The key is stored
+with the settings and never reported in `status.settings`.
 
 ## 8. Updates
 

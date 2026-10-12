@@ -1,0 +1,14 @@
+[project]
+name = "allskyhub-sky"
+version = "0.1.0"
+description = "allskyhub sky drawing: constellations and cardinal points mapped through a camera's fitted lens, shared by hub and camera"
+license = "Apache-2.0"
+requires-python = ">=3.11"
+dependencies = ["allskyhub-protocol"]
+
+[tool.uv.sources]
+allskyhub-protocol = { workspace = true }
+
+[build-system]
+requires = ["uv_build>=0.12,<0.13"]
+build-backend = "uv_build"

@@ -1,5 +1,5 @@
 [tool.uv.workspace]
-members = ["packages/protocol", "packages/design", "agent", "server"]
+members = ["packages/protocol", "packages/design", "packages/sky", "agent", "server"]
 
 [tool.uv]
 python-preference = "only-system"
@@ -26,7 +26,7 @@ ignore = ["S311"]
 allowed-confusables = ["–", "„", "“"]
 
 [tool.ruff.lint.isort]
-known-first-party = ["allskyhub_protocol", "allskyhub_agent", "allskyhub_server"]
+known-first-party = ["allskyhub_protocol", "allskyhub_sky", "allskyhub_agent", "allskyhub_server"]
 
 [tool.ruff.lint.per-file-ignores]
 "**/tests/**" = ["S101", "S310", "S603", "S607"]
@@ -41,7 +41,7 @@ exclude = ["**/__pycache__", ".venv", "server/migrations/versions"]
 reportMissingTypeStubs = false
 
 [tool.pytest.ini_options]
-testpaths = ["packages/protocol/tests", "packages/design/tests", "agent/tests", "server/tests"]
+testpaths = ["packages/protocol/tests", "packages/design/tests", "packages/sky/tests", "agent/tests", "server/tests"]
 addopts = "--import-mode=importlib"
 asyncio_mode = "auto"
 asyncio_default_fixture_loop_scope = "session"

@@ -32,6 +32,7 @@ from allskyhub_protocol import (
 )
 from allskyhub_server.auth.tokens import hash_token, new_token
 from allskyhub_server.models import (
+    CameraMember,
     Device,
     DeviceNonce,
     DeviceToken,
@@ -225,6 +226,8 @@ async def unpair(db: AsyncSession, device: Device) -> None:
     await db.execute(delete(SkySample).where(SkySample.device_id == device.id))
     await db.execute(delete(NightStat).where(NightStat.device_id == device.id))
     await db.execute(delete(RenderJob).where(RenderJob.device_id == device.id))
+    # Sharing belongs to the pairing too (roadmap C10).
+    await db.execute(delete(CameraMember).where(CameraMember.device_id == device.id))
     device.latest_image_at = None
     device.latest_thumb_at = None
     device.last_frame = None

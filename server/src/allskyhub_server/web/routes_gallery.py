@@ -17,6 +17,7 @@ from allskyhub_server.devices import archive, events, queries, renders, sky_char
 from allskyhub_server.devices.connections import ConnectionRegistry
 from allskyhub_server.devices.event_text import EVENT_TITLES, event_rows, meteor_summary
 from allskyhub_server.devices.images import ImageStore
+from allskyhub_server.devices.queries import Role
 from allskyhub_server.models import Device, EventRecord, RenderJob
 from allskyhub_server.web.deps import CurrentSession, DbSession, csrf_protect
 from allskyhub_server.web.render import render
@@ -29,11 +30,21 @@ EventId = Annotated[str, Path(pattern=EVENT_ID_PATTERN)]
 PRODUCT_TITLES = {"keogram": "Keogramm", "startrails": "Sternspuren", "timelapse": "Zeitraffer"}
 
 
-async def _own(db: DbSession, session: CurrentSession, device_id: str) -> Device:
-    device = await queries.owned_one(db, session.user.id, device_id)
-    if device is None:
+async def _access(
+    db: DbSession, session: SessionInfo, device_id: str, need: Role = "viewer"
+) -> tuple[Device, Role]:
+    """The camera and the user's role (roadmap C10); 404 below ``need``."""
+    found = await queries.visible_one(db, session.user.id, device_id, need)
+    if found is None:
         raise HTTPException(404)
-    return device
+    return found
+
+
+async def _own(
+    db: DbSession, session: SessionInfo, device_id: str, need: Role = "viewer"
+) -> Device:
+    """Everything in the gallery can be seen by everyone the camera is shared with."""
+    return (await _access(db, session, device_id, need))[0]
 
 
 def _registry(request: Request) -> ConnectionRegistry:
@@ -284,8 +295,8 @@ async def label_event(
     event_id: EventId,
     label: Annotated[str, Form()],
 ) -> Response:
-    """ "Kein Meteor" / "Echter Meteor" / reset; ``label`` "" clears it."""
-    device = await _own(db, session, device_id)
+    """ "Kein Meteor" / "Echter Meteor" / reset; ``label`` "" clears it (owner, admin)."""
+    device = await _own(db, session, device_id, "admin")
     await events.set_label(db, device.id, night_id, event_id, label or None)
     await db.commit()
     return RedirectResponse(f"/cameras/{device.id}/events/{night_id}/{event_id}", status_code=303)
@@ -373,6 +384,7 @@ async def _render_page(
             "default_end": (evening + dt.timedelta(hours=14)).strftime("%Y-%m-%dT%H:%M"),
             "default_from": (now.date() - dt.timedelta(days=30)).isoformat(),
             "default_to": now.date().isoformat(),
+            "role": "admin",
             **extra,
         },
         session=session,
@@ -385,7 +397,8 @@ async def renders_page(
     request: Request, db: DbSession, session: CurrentSession, device_id: str
 ) -> Response:
     """Roadmap C8: timelapse over a chosen period, keogram over several nights."""
-    return await _render_page(request, db, session, await _own(db, session, device_id))
+    device, role = await _access(db, session, device_id)
+    return await _render_page(request, db, session, device, role=role)
 
 
 @router.get("/cameras/{device_id}/renders/list")
@@ -421,7 +434,7 @@ async def render_request(
     end: Annotated[str, Form(max_length=20)] = "",
     fps: Annotated[int, Form()] = 25,
 ) -> Response:
-    device = await _own(db, session, device_id)
+    device = await _own(db, session, device_id, "admin")
     zone = _zone(device)
     try:
         if kind == "keogram":
@@ -472,7 +485,7 @@ async def render_file(
 async def render_delete(
     request: Request, db: DbSession, session: CurrentSession, device_id: str, job_id: str
 ) -> Response:
-    device = await _own(db, session, device_id)
+    device = await _own(db, session, device_id, "admin")
     job = await _job(db, device, job_id)
     if job.state == "running":
         return await _render_page(request, db, session, device, error="Läuft gerade, bitte warten.")

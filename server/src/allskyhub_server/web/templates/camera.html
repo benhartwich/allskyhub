@@ -30,7 +30,7 @@
   </div>
 </section>
 {% endif %}
-{% include "_settings_form.html" %}
+{% if role in ('owner', 'admin') %}{% include "_settings_form.html" %}{% endif %}
 <div class="card">
   <h2>Gerät</h2>
   <dl class="facts">
@@ -40,6 +40,31 @@
     <dt>Ausrichtung</dt><dd>{{ orientation or "noch nicht kalibriert (braucht eine klare Nacht)" }}</dd>
     <dt>Geräte-ID</dt><dd><code>{{ device.id }}</code></dd>
   </dl>
+</div>
+{% if role == 'owner' %}
+<div class="card" id="teilen">
+  <h2>Teilen</h2>
+  <p class="muted">Gib die Kamera für andere allskyhub-Konten frei, etwa für Familie oder Verein. „Ansehen“ zeigt Bild, Galerie, Ereignisse und Statistik; „Verwalten“ erlaubt dazu Einstellungen und das Markieren von Ereignissen. Koppeln, Entfernen, öffentliche Seite und lokaler Zugang bleiben bei dir.</p>
+  {% if members %}
+  <ul class="list">
+    {% for m in members %}
+    <li class="cam-meta"><span>{{ m.email }} · {{ 'verwalten' if m.role == 'admin' else 'ansehen' }}</span>
+      <form method="post" action="/cameras/{{ device.id }}/members/{{ m.user_id }}/remove" class="inline">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+        <button class="link">Entfernen</button>
+      </form>
+    </li>
+    {% endfor %}
+  </ul>
+  {% endif %}
+  <form method="post" action="/cameras/{{ device.id }}/members" class="stack">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <div class="grid-2">
+      <label>E-Mail-Adresse<input type="email" name="email" required autocomplete="off"></label>
+      <label>Rolle<select name="role"><option value="viewer">ansehen</option><option value="admin">verwalten</option></select></label>
+    </div>
+    <button type="submit" class="secondary">Freigeben</button>
+  </form>
 </div>
 <div class="card">
   <h2>Lokale Seite der Kamera</h2>
@@ -87,5 +112,15 @@
   <p class="muted">Entfernen trennt die Kamera von deinem Konto. Sie zeigt danach einen neuen Kopplungscode.</p>
   <button type="submit" class="danger">Kamera entfernen</button>
 </form>
+{% else %}
+<div class="card">
+  <h2>Geteilte Kamera</h2>
+  <p class="muted">Diese Kamera wurde für dich freigegeben ({{ 'verwalten' if role == 'admin' else 'ansehen' }}).</p>
+  <form method="post" action="/cameras/{{ device.id }}/members/{{ user.id }}/remove">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <button type="submit" class="secondary">Nicht mehr anzeigen</button>
+  </form>
+</div>
+{% endif %}
 </div>
 {% endblock %}

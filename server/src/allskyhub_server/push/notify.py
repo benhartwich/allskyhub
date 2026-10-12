@@ -14,7 +14,7 @@ from typing import Any, Protocol, cast
 from sqlalchemy import delete, select, update
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
-from allskyhub_server.devices import astro, night_summary, space_weather, tonight
+from allskyhub_server.devices import astro, health, night_summary, space_weather, tonight
 from allskyhub_server.devices.connections import ConnectionRegistry
 from allskyhub_server.devices.event_text import EVENT_TITLES
 from allskyhub_server.devices.events import storm_key
@@ -146,6 +146,57 @@ class Notifier:
                     ),
                 )
 
+    async def check_health(
+        self, registry: ConnectionRegistry, now: dt.datetime | None = None
+    ) -> None:
+        """Roadmap C14, one pass: tell owners (who want offline notices) about each new
+        problem of a connected camera once, and once when it is gone. Offline itself is
+        ``check_offline``."""
+        if self._sender is None:
+            return
+        now = now or _now()
+        async with self._maker() as db:
+            rows = (
+                await db.execute(
+                    select(Device, User)
+                    .join(User, User.id == Device.owner_id)
+                    .where(User.notify_offline.is_(True))
+                )
+            ).all()
+            for device, user in rows:
+                online = registry.is_online(device.id)
+                if not online:
+                    continue  # nothing new can be known; keep what was reported
+                problems = {p.key: p for p in health.check(device, online, now)}
+                before = set(device.health_notified or [])
+                new = [p for k, p in problems.items() if k not in before]
+                gone = before - problems.keys()
+                if not new and not gone:
+                    continue
+                device.health_notified = sorted(problems)
+                await db.commit()
+                for problem in new:
+                    kind = "Problem" if problem.level == "error" else "Hinweis"
+                    await self._deliver(
+                        db,
+                        user.id,
+                        Message(
+                            title=f"{device.name}: {kind}",
+                            body=problem.text,
+                            data={"camera": device.id},
+                        ),
+                    )
+                if gone and not problems:
+                    await self._deliver(
+                        db,
+                        user.id,
+                        Message(
+                            title=f"{device.name} ist wieder in Ordnung",
+                            body="Alle Prüfungen sind wieder unauffällig.",
+                            data={"camera": device.id},
+                        ),
+                    )
+
     async def aurora(self, device_id: str, kp: space_weather.KpCache) -> None:
         """Roadmap C2, after a status with a sky measurement: Kp at or above the rule of
         thumb for the camera's latitude while its own sky is clear and dark."""
@@ -249,6 +300,10 @@ class Notifier:
                 await self.check_offline(registry)
             except Exception:
                 log.exception("push: offline check failed")
+            try:
+                await self.check_health(registry)
+            except Exception:
+                log.exception("push: health check failed")
             try:
                 await self.check_morning()
             except Exception:

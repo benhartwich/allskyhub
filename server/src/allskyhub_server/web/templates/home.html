@@ -7,7 +7,7 @@
 </div>
 {% if cameras %}
 <ul class="cams">
-  {% for device, online in cameras %}
+  {% for device, online, problems in cameras %}
   <li>
     <a class="card cam" href="/cameras/{{ device.id }}">
       {% if device.latest_image_at %}
@@ -20,6 +20,7 @@
         <span class="badge {{ 'ok' if online else '' }}">{{ 'online' if online else 'offline' }}</span>
       </div>
       <span class="muted">Zuletzt gesehen {{ device.last_seen_at | age }}</span>
+      {% for p in problems if p.key != 'offline' %}<span class="health-line {{ p.level }}">{{ p.text }}</span>{% endfor %}
     </a>
   </li>
   {% endfor %}

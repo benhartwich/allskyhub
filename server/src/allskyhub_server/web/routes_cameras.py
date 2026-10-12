@@ -12,7 +12,15 @@ from pydantic import ValidationError
 from allskyhub_protocol import CloseCode, FrameVariant, SetSettingsArgs
 from allskyhub_server.auth import ratelimit
 from allskyhub_server.auth.sessions import SessionInfo
-from allskyhub_server.devices import events, night_summary, pairing, public, queries, tonight
+from allskyhub_server.devices import (
+    events,
+    health,
+    night_summary,
+    pairing,
+    public,
+    queries,
+    tonight,
+)
 from allskyhub_server.devices import settings as camera_settings
 from allskyhub_server.devices.connections import ConnectionRegistry
 from allskyhub_server.devices.event_text import EVENT_TITLES, orientation_line, update_line
@@ -52,7 +60,11 @@ async def home(request: Request, db: DbSession, session: OptionalSession) -> Res
         return render(request, "landing.html")
     devices = await queries.owned(db, session.user.id)
     registry = _registry(request)
-    cameras = [(d, registry.is_online(d.id)) for d in devices]
+    now = dt.datetime.now(dt.UTC)
+    cameras = [
+        (d, registry.is_online(d.id), health.check(d, registry.is_online(d.id), now))
+        for d in devices
+    ]
     return render(request, "home.html", {"cameras": cameras}, session=session)
 
 
@@ -110,6 +122,9 @@ async def camera(
                 forecast, device.last_status, dt.datetime.now(dt.UTC)
             ),
             "last_night": await _last_night(db, device),
+            "health": health.check(
+                device, _registry(request).is_online(device.id), dt.datetime.now(dt.UTC)
+            ),
             "online": _registry(request).is_online(device.id),
             "events": events.collapse(
                 await events.events(db, device.id, limit=200, hide_false=True)

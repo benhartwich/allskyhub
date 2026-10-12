@@ -15,7 +15,7 @@ import pytest
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 
-from allskyhub_agent.update.installer import Paths, Updater
+from allskyhub_agent.update.installer import Paths, Updater, read_request
 from allskyhub_agent.update.manifest import verify_signature
 from allskyhub_protocol.updates import is_newer
 
@@ -261,3 +261,57 @@ def test_status_reports_the_updater_state(
     assert (st.state, st.version, st.code) == (UpdateState.ROLLED_BACK, "0.2.0", "unhealthy")
     (tmp_path / "state.json").write_text('{"state": "weird"}')
     assert update_status(tmp_path / "state.json") is None
+
+
+def test_asked_to_install_now_also_at_night(
+    tmp_path: Path, key: tuple[Ed25519PrivateKey, Path]
+) -> None:
+    # Roadmap L14: "jetzt installieren" in the local UI does not wait for the day.
+    private, keys = key
+    cam = Camera(tmp_path, mode="night")
+    cam.install("0.1.0")
+    ch = Channel()
+    ch.publish(private, "0.2.0")
+    make(cam, ch, keys).run_once("now")
+    assert cam.current() == "0.2.0"
+    assert state(cam)["state"] == "installed"
+
+
+def test_asked_to_roll_back(tmp_path: Path, key: tuple[Ed25519PrivateKey, Path]) -> None:
+    private, keys = key
+    cam = Camera(tmp_path)
+    cam.install("0.1.0")
+    ch = Channel()
+    ch.publish(private, "0.2.0")
+    make(cam, ch, keys).run_once()
+    assert cam.current() == "0.2.0"
+    make(cam, ch, keys).run_once("rollback")
+    assert cam.current() == "0.1.0"
+    assert cam.running == "0.1.0"
+    st = state(cam)
+    assert (st["state"], st["version"], st["code"], st["failed_version"]) == (
+        "rolled_back", "0.2.0", "asked", "0.2.0",
+    )  # fmt: skip
+    make(cam, ch, keys).run_once()  # the timer does not put 0.2.0 back by itself
+    assert cam.current() == "0.1.0"
+
+
+def test_rollback_without_a_previous_release(
+    tmp_path: Path, key: tuple[Ed25519PrivateKey, Path]
+) -> None:
+    _, keys = key
+    cam = Camera(tmp_path)
+    cam.install("0.1.0")
+    make(cam, Channel(), keys).run_once("rollback")
+    assert cam.current() == "0.1.0"
+    assert state(cam)["code"] == "no_previous"
+
+
+def test_read_request(tmp_path: Path) -> None:
+    req = tmp_path / "update-request"
+    assert read_request(req) is None
+    req.write_text("rollback\n")
+    assert read_request(req) == "rollback"
+    assert not req.exists()  # read once
+    req.write_text("rm -rf /\n")
+    assert read_request(req) is None

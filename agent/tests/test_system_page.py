@@ -85,3 +85,24 @@ def test_routes(web: tuple[int, list[str]]) -> None:
     assert json.loads(body) == {"detail": "Nicht erlaubt."}
     assert _call(port, "/api/system/format", post=True)[0] == 404
     assert asked == ["reboot", "shutdown"]
+
+
+def test_update_facts_and_request(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    # Roadmap L14: the agent only leaves a word for the root updater.
+    from allskyhub_agent import cli
+
+    install = tmp_path / "opt"
+    for v in ("0.1.0-aaa", "0.2.0"):
+        (install / "releases" / v).mkdir(parents=True)
+    (install / "current").symlink_to(Path("releases") / "0.2.0")
+    unit = tmp_path / "allskyhub-updater.path"
+    monkeypatch.setattr(cli, "UPDATE_REQUEST", tmp_path / "update-request")
+    facts = cli.update_facts(install, unit)
+    assert (facts["release"], facts["releases"], facts["updater"]) == (
+        "0.2.0", ["0.1.0-aaa", "0.2.0"], False,
+    )  # fmt: skip
+    assert not cli.request_update("now", unit)  # no updater on this installation
+    unit.touch()
+    assert cli.request_update("rollback", unit)
+    assert (tmp_path / "update-request").read_text() == "rollback\n"
+    assert cli.update_facts(install, unit)["pending"]

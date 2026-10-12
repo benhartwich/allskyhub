@@ -35,6 +35,9 @@ from allskyhub_protocol.updates import UpdateManifest, is_newer
 
 log = logging.getLogger(__name__)
 
+# Asked for in the local UI (roadmap L14): the agent writes one of these words into a file
+# that allskyhub-updater.path watches; the updater reads and deletes it.
+REQUESTS = ("now", "rollback")
 HEALTH_TIMEOUT_S = 300.0  # a night frame can take a minute, the camera a while to open
 CHUNK = 256 * 1024
 
@@ -115,13 +118,43 @@ class Updater:
 
     # --- the run ---------------------------------------------------------------------------
 
-    def run_once(self) -> None:
+    def run_once(self, request: str | None = None) -> None:
+        """One run: from the timer (`request` None), or asked for in the local UI: "now"
+        installs a newer version also at night, "rollback" goes back to the previous one."""
         self._state = self.load_state()
         if self._state.get("state") == "installing":
             self._finish_interrupted()
-        self._update()
+        if request == "rollback":
+            self._manual_rollback()
+            return
+        self._update(at_night=request == "now")
 
-    def _update(self) -> None:
+    def _manual_rollback(self) -> None:
+        current = self.current_version()
+        previous = self._state.get("previous")
+        others = sorted(
+            (d.name for d in self.paths.releases.iterdir() if d.is_dir() and d.name != current),
+            key=_version_key,
+        ) if self.paths.releases.is_dir() else []  # fmt: skip
+        target = previous if isinstance(previous, str) and previous in others else None
+        target = target or (others[-1] if others else None)
+        if target is None:
+            self.save_state("failed", current, code="no_previous")
+            return
+        log.info("rolling back from %s to %s as asked", current, target)
+        before = self.status()
+        self.point_current(self.paths.releases / target)
+        self.restart_agent()
+        if not self.healthy(target, _frames(before) > 0):
+            log.error("version %s not healthy either, back to %s", target, current)
+            self.point_current(self.paths.releases / current)
+            self.restart_agent()
+            self.save_state("failed", target, code="unhealthy")
+            return
+        self._state["failed_version"] = current  # do not install it again by itself
+        self.save_state("rolled_back", current, code="asked", previous=target)
+
+    def _update(self, at_night: bool = False) -> None:
         current = self.current_version()
         try:
             manifest = fetch_manifest(self.http, self.manifest_url, self.paths.keys_dir)
@@ -147,7 +180,7 @@ class Updater:
             self.save_state("failed", version, code=exc.code)
             return
         before = self.status()
-        if before is not None and _mode(before) == "night":
+        if before is not None and _mode(before) == "night" and not at_night:
             self.save_state("waiting", version)  # never interrupt a night: next run
             return
         self._switch(release, version, current, was_capturing=_frames(before) > 0)
@@ -292,6 +325,26 @@ class Updater:
         for entry in self.paths.releases.iterdir():
             if entry.name not in keep and not entry.name.startswith("."):
                 shutil.rmtree(entry, ignore_errors=True)
+
+
+def _version_key(name: str) -> tuple[int, ...]:
+    """Release directories in version order ("0.1.10" after "0.1.9"); odd names first."""
+    parts: list[int] = []
+    for p in name.split("-", 1)[0].split("."):
+        if not p.isdigit():
+            return (-1,)
+        parts.append(int(p))
+    return tuple(parts)
+
+
+def read_request(path: Path) -> str | None:
+    """The local UI's request (roadmap L14), removed once read; None if there is none."""
+    try:
+        word = path.read_text(encoding="utf-8").strip()
+    except OSError:
+        return None
+    path.unlink(missing_ok=True)
+    return word if word in REQUESTS else None
 
 
 def _frames(status: dict[str, Any] | None) -> int:

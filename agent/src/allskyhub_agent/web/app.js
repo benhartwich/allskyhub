@@ -770,6 +770,7 @@ async function viewSystem() {
     <section class="card stack"><h2>Kamera und Hub</h2><dl class="facts" id="sys"></dl></section>
     <section class="card stack" id="hw" hidden><h2>Rechner</h2><dl class="facts" id="hwFacts"></dl></section>
     <section class="card stack" id="net" hidden></section>
+    <section class="card stack" id="upd" hidden></section>
     <section class="card stack" id="actions" hidden><h2>Neu starten</h2>
       <p class="muted small">Die Aufnahme läuft danach von selbst weiter. Gespeicherte Bilder bleiben erhalten.</p>
       <div class="actions">
@@ -797,6 +798,7 @@ async function viewSystem() {
     };
   }
   viewNetwork().catch(() => {});
+  viewUpdates().catch(() => {});
   every(async () => {
     const [st, setup, hw] = await Promise.all([getJSON("api/status").catch(() => null),
       getJSON("api/setup").catch(() => null), getJSON("api/system").catch(() => null)]);
@@ -832,6 +834,52 @@ async function viewSystem() {
       ${power}
       <dt>Uhrzeit</dt><dd>${hw.time_trusted ? '<span class="badge ok">genau</span>' : '<span class="badge">ungenau</span>'}</dd>`;
   }, 5000);
+}
+
+// --- Updates (L14, SPEC §8) -----------------------------------------------------------------
+const UPDATE_STATES = { up_to_date: "aktuell", downloading: "lädt herunter", waiting: "wartet auf den Tag",
+  installing: "wird installiert", installed: "installiert", rolled_back: "zurückgenommen", failed: "fehlgeschlagen" };
+const UPDATE_CODES = { unhealthy: "lief nicht sauber", asked: "auf Wunsch", no_space: "zu wenig Speicher",
+  no_previous: "keine ältere Version vorhanden", bad_signature: "Signatur ungültig", checksum: "Prüfsumme falsch",
+  bad_bundle: "Paket beschädigt" };
+
+async function viewUpdates() {
+  const box = $("upd");
+  const u = await getJSON("api/update");
+  box.hidden = false;
+  const st = u.state;
+  const others = u.releases.filter((r) => r !== u.release);
+  box.innerHTML = `<h2>Updates</h2>
+    <dl class="facts">
+      <dt>Version</dt><dd>${esc(u.release || u.version)}</dd>
+      ${st ? `<dt>Zuletzt</dt><dd>${esc(UPDATE_STATES[st.state] || st.state)}${st.version ? ` · ${esc(st.version)}` : ""}${st.code ? ` (${esc(UPDATE_CODES[st.code] || st.code)})` : ""}
+        <span class="muted small">${st.at ? fmtDateTime(st.at) : ""}</span></dd>` : ""}
+      ${others.length ? `<dt>Ältere Versionen</dt><dd>${others.map((r) => `<code>${esc(r)}</code>`).join(" ")}</dd>` : ""}
+    </dl>
+    ${u.updater ? `
+      <p class="muted small">Die Kamera sucht stündlich nach Updates und installiert sie nur am Tag. Läuft eine neue Version
+        nicht sauber, geht sie von selbst zurück.</p>
+      <div class="actions">
+        <button type="button" class="secondary" data-upd="now"${u.pending ? " disabled" : ""}>Jetzt suchen und installieren</button>
+        ${others.length ? `<button type="button" class="secondary" data-upd="rollback"${u.pending ? " disabled" : ""}>Vorige Version</button>` : ""}
+      </div>
+      ${u.pending ? `<p class="msg ok">Angefragt, der Updater ist dran …</p>` : `<p class="msg" id="updMsg" hidden></p>`}`
+      : `<p class="muted small">Auf dieser Installation werden Updates von Hand eingespielt.</p>`}`;
+  for (const b of box.querySelectorAll("[data-upd]")) {
+    b.onclick = async () => {
+      const word = b.dataset.upd;
+      const ask = word === "now" ? "Jetzt nach einem Update suchen und es gleich installieren, auch nachts? Die Aufnahme pausiert dabei kurz."
+        : "Zur vorigen Version zurückgehen? Die jetzige wird dann nicht von selbst wieder installiert.";
+      if (!confirm(ask)) return;
+      const r = await fetch("api/update/" + word, { method: "POST" });
+      if (r.status === 401) { location.href = "local-login"; return; }
+      if (r.ok) { viewUpdates(); return; }
+      const m = $("updMsg");
+      m.textContent = (await r.json().catch(() => ({}))).detail || "Hat nicht geklappt.";
+      m.className = "msg error";
+      m.hidden = false;
+    };
+  }
 }
 
 // --- Network (L13) ----------------------------------------------------------------------

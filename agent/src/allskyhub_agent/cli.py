@@ -64,15 +64,18 @@ from allskyhub_agent.setup.controller import NetworkRequest, SetupController
 from allskyhub_agent.setup.setup_file import DEFAULT_PATH as SETUP_FILE_PATH
 from allskyhub_agent.setup.setup_file import apply_once as apply_setup_file
 from allskyhub_agent.store.images import ImageStore
-from allskyhub_agent.update.installer import Paths, Updater
+from allskyhub_agent.update.installer import Paths, Updater, read_request
 from allskyhub_agent.update.status import update_status
 from allskyhub_agent.web.archive import LocalArchive
 from allskyhub_agent.web.auth import LocalAuth
 from allskyhub_agent.web.calibration import LocalCalibration
-from allskyhub_agent.web.server import SettingsForm, SystemPage, WebServer
+from allskyhub_agent.web.server import SettingsForm, SystemPage, UpdatePage, WebServer
 from allskyhub_protocol import DeviceSettings, FrameInfo, SetSettingsArgs, SettingSpec, Status
 
 log = logging.getLogger(__name__)
+
+# Written by the agent, read by the root updater (roadmap L14).
+UPDATE_REQUEST = Path("/var/lib/allskyhub-agent/update-request")
 
 
 def _parser() -> argparse.ArgumentParser:
@@ -115,6 +118,8 @@ def _parser() -> argparse.ArgumentParser:
     upd.add_argument("--state", type=Path, default=Path("/var/lib/allskyhub-updater/state.json"))
     upd.add_argument("--work", type=Path, default=Path("/var/cache/allskyhub-updater"))
     upd.add_argument("--agent-status", default="http://127.0.0.1:8080/api/status")
+    upd.add_argument("--request", type=Path, default=UPDATE_REQUEST,
+                     help="request from the local UI: now or rollback (roadmap L14)")  # fmt: skip
     run = sub.add_parser("run", help="capture frames")
     run.add_argument("--frames", type=int, default=None, help="stop after N frames")
     run.add_argument("--data", type=Path, required=True, help="data directory")
@@ -202,6 +207,49 @@ def run_import(args: argparse.Namespace) -> int:
     return 0
 
 
+INSTALL_DIR = Path("/opt/allskyhub-agent")
+UPDATER_PATH_UNIT = Path("/etc/systemd/system/allskyhub-updater.path")
+
+
+def update_facts(
+    install_dir: Path = INSTALL_DIR, path_unit: Path = UPDATER_PATH_UNIT
+) -> dict[str, Any]:
+    """Roadmap L14: the running version, the installed releases and the updater's state."""
+    releases = install_dir / "releases"
+    try:
+        current: str | None = (install_dir / "current").readlink().name
+    except OSError:
+        current = None
+    try:
+        names = sorted(d.name for d in releases.iterdir() if d.is_dir())
+    except OSError:
+        names = []
+    state = update_status()
+    return {
+        "version": __version__,
+        "release": current,
+        "releases": names,
+        "state": state.model_dump(mode="json") if state is not None else None,
+        "updater": path_unit.exists(),
+        "pending": UPDATE_REQUEST.exists(),
+    }
+
+
+def request_update(word: str, path_unit: Path = UPDATER_PATH_UNIT) -> bool:
+    """Leave the request for allskyhub-updater.path; False without an updater."""
+    if not path_unit.exists():
+        return False
+    try:
+        tmp = UPDATE_REQUEST.with_suffix(".tmp")
+        tmp.write_text(word + "\n", encoding="utf-8")
+        tmp.replace(UPDATE_REQUEST)
+    except OSError:
+        log.exception("cannot leave the update request")
+        return False
+    log.info("update %s requested in the local UI", word)
+    return True
+
+
 def wifi_country(settings_file: Path) -> str | None:
     """The radio country the image's root helper set (SPEC §7.1), for the Wi-Fi form."""
     try:
@@ -276,7 +324,7 @@ def run_update(args: argparse.Namespace) -> int:
             sleep=time.sleep,
             monotonic=time.monotonic,
             fallback_version=__version__,
-        ).run_once()
+        ).run_once(read_request(args.request))
     return 0
 
 
@@ -513,6 +561,7 @@ def main(argv: list[str] | None = None) -> int:
                 lambda action: system_action(action, restart_requested),
             ),
             network_info=lambda: netinfo.summary() | {"country": wifi_country(settings_file)},
+            update_page=UpdatePage(update_facts, request_update),
         )
         web.start()
         print(f"web UI on http://{host}:{web.port}/")

@@ -32,6 +32,8 @@ Routes:
     GET  /api/network/wifi    visible Wi-Fi networks, only where the agent manages the network
     POST /api/network/wifi    {ssid, password?, country} → 202 {will_join}; as in setup mode,
                               a failed join opens the setup network (SPEC §7.1)
+    GET  /api/update          version, installed releases, the updater's state (roadmap L14)
+    POST /api/update/<now|rollback>   ask the root updater → 202, or 404 without one
     GET  /api/system          CPU, memory, disk, power warnings, uptime (roadmap L12)
     POST /api/system/<action> restart (the agent), reboot, shutdown → 202, or 503 {detail}
     POST /api/public          {enabled?, profile?} → the new state, 422 {detail} with the
@@ -148,6 +150,15 @@ class WifiBody(BaseModel):
 
 
 @dataclass(frozen=True)
+class UpdatePage:
+    """Roadmap L14: what is installed, and asking the updater (SPEC §8)."""
+
+    facts: Callable[[], dict[str, Any]]
+    # Leaves "now" or "rollback" for the updater; False where there is no updater.
+    request: Callable[[str], bool]
+
+
+@dataclass(frozen=True)
 class SystemPage:
     """The local UI's system page (roadmap L12)."""
 
@@ -210,6 +221,7 @@ def make_handler(
     public: PublicPage | None = None,
     system_page: SystemPage | None = None,
     network_info: Callable[[], dict[str, Any]] | None = None,
+    update_page: UpdatePage | None = None,
 ) -> type[BaseHTTPRequestHandler]:
     page = _page()
     login_page = _page("login.html")
@@ -527,6 +539,11 @@ def make_handler(
                     self._json(HTTPStatus.NOT_FOUND, {"detail": _NOT_MANAGED})
                     return
                 self._json(HTTPStatus.OK, [asdict(n) for n in setup.networks()])
+            elif path == "/api/update":
+                if update_page is None:
+                    self._text(HTTPStatus.NOT_FOUND, "not found")
+                    return
+                self._json(HTTPStatus.OK, update_page.facts())
             elif path == "/api/system":
                 if system_page is None:
                     self._text(HTTPStatus.NOT_FOUND, "not found")
@@ -596,6 +613,17 @@ def make_handler(
                 self._post_calibration(path)
             elif path == "/api/network/wifi":
                 self._post_wifi()
+            elif path in ("/api/update/now", "/api/update/rollback"):
+                if self._read_body() is None:
+                    return
+                word = path.rsplit("/", 1)[1]
+                if update_page is None or not update_page.request(word):
+                    self._json(
+                        HTTPStatus.NOT_FOUND,
+                        {"detail": "Auf dieser Installation gibt es keinen Updater."},
+                    )
+                    return
+                self._json(HTTPStatus.ACCEPTED, {"requested": word})
             elif m := _SYSTEM_ACTION.match(path):
                 if system_page is None:
                     self._text(HTTPStatus.NOT_FOUND, "not found")
@@ -773,6 +801,7 @@ class WebServer:
         public: PublicPage | None = None,
         system_page: SystemPage | None = None,
         network_info: Callable[[], dict[str, Any]] | None = None,
+        update_page: UpdatePage | None = None,
     ) -> None:
         net = ipaddress.ip_network(setup_net) if setup_net else _SETUP_NET
         handler = make_handler(
@@ -789,6 +818,7 @@ class WebServer:
             public,
             system_page,
             network_info,
+            update_page,
         )
         self._httpd = ThreadingHTTPServer((host, port), handler)
         self._httpd.daemon_threads = True

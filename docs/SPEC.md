@@ -799,6 +799,11 @@ report healthy within a timeout.
   mode. Healthy means the local `/api/status` (§7) reports the new `version`, and
   `frames` > 0 if the old one captured, within 5 min; else it switches back and skips
   that version. A power cut between switch and check is finished on the next run.
+- **Asked for in the local UI** (roadmap L14): the agent writes `now` or `rollback` into
+  `/var/lib/allskyhub-agent/update-request`; `allskyhub-updater.path` starts the updater,
+  which reads and deletes it. `now` checks at once and installs also at night;
+  `rollback` switches to the previous installed release with the same health check and
+  marks the current one as not to be installed again by itself.
 - Details and key handling: `docs/updates.md`.
 
 ## 9. Milestones

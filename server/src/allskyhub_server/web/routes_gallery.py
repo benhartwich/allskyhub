@@ -2,13 +2,14 @@
 
 from __future__ import annotations
 
+import datetime as dt
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, Form, HTTPException, Path, Query, Request
 from fastapi.responses import JSONResponse, RedirectResponse, Response
 
 from allskyhub_protocol import EVENT_ID_PATTERN, FrameVariant
-from allskyhub_server.devices import archive, events, queries, sky_chart
+from allskyhub_server.devices import archive, events, queries, sky_chart, stats
 from allskyhub_server.devices.connections import ConnectionRegistry
 from allskyhub_server.devices.event_text import EVENT_TITLES, event_rows, meteor_summary
 from allskyhub_server.models import Device, EventRecord
@@ -317,5 +318,21 @@ async def storm_page(
             "storm": events.Storm(storm, flashes),
             "event_titles": EVENT_TITLES,
         },
+        session=session,
+    )
+
+
+@router.get("/cameras/{device_id}/stats")
+async def statistics(
+    request: Request, db: DbSession, session: CurrentSession, device_id: str, year: int = 0
+) -> Response:
+    """Roadmap C7: clear nights, sky brightness and detections per month."""
+    device = await _own(db, session, device_id)
+    this_year = dt.datetime.now(dt.UTC).year
+    chosen = year if 2000 <= year <= this_year + 1 else this_year
+    return render(
+        request,
+        "stats.html",
+        {"device": device, "stats": await stats.year(db, device.id, chosen)},
         session=session,
     )

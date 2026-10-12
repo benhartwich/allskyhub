@@ -312,3 +312,25 @@ class SkySample(Base):
     stars: Mapped[int | None] = mapped_column(Integer)
     # Retention counts from arrival at the hub (privacy policy, like thumbnails).
     created_at: Mapped[dt.datetime] = mapped_column(_tz(), server_default=func.now(), index=True)
+
+
+class NightStat(Base):
+    """One night of a camera in numbers (roadmap C7), kept after the samples and events
+    expire, so statistics reach back years. Removed with the pairing."""
+
+    __tablename__ = "night_stat"
+
+    device_id: Mapped[str] = mapped_column(
+        ForeignKey("device.id", ondelete="CASCADE"), primary_key=True
+    )
+    night_id: Mapped[str] = mapped_column(String(8), primary_key=True)
+    clear_hours: Mapped[float | None] = mapped_column(Float)
+    best_sqm: Mapped[float | None] = mapped_column(Float)
+    meteors: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+    # Radiant-matched meteors per shower (German names), plus "sporadisch".
+    showers: Mapped[dict[str, int]] = mapped_column(JSONB, default=dict, server_default="{}")
+    aurora: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+    storms: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+    updated_at: Mapped[dt.datetime] = mapped_column(
+        _tz(), server_default=func.now(), onupdate=func.now()
+    )

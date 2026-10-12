@@ -13,7 +13,7 @@ from dataclasses import dataclass, field
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from allskyhub_server.devices.event_text import EVENT_TITLES, meteor_summary
+from allskyhub_server.devices.event_text import EVENT_TITLES, meteor_summary, shower_name
 from allskyhub_server.devices.events import storm_key
 from allskyhub_server.models import EventRecord, SkySample
 
@@ -26,6 +26,10 @@ _BEST_ORDER = ("aurora", "nlc", "meteor", "lightning")
 class NightSummary:
     night_id: str
     meteors: str | None = None  # "3 Meteore: 2 Perseiden, 1 sporadisch"
+    meteor_count: int = 0
+    showers: dict[str, int] = field(default_factory=dict[str, int])  # radiant matches
+    aurora: int = 0
+    storms: int = 0
     others: list[str] = field(default_factory=list[str])  # "1 Polarlicht", "1 Gewitter"
     clear_hours: float | None = None
     best_sqm: float | None = None
@@ -78,11 +82,22 @@ async def summarize(db: AsyncSession, device_id: str, night_id: str) -> NightSum
         )
     )
     summary.meteors = meteor_summary(events)
+    for e in events:
+        if e.kind != "meteor":
+            continue
+        summary.meteor_count += 1
+        if e.data.get("shower_match") == "radiant":
+            shower = e.data.get("shower")
+            name = shower_name(shower) if isinstance(shower, str) and shower else "sporadisch"
+            summary.showers[name] = summary.showers.get(name, 0) + 1
     for kind, (one, many) in _OTHER_NAMES.items():
         n = sum(e.kind == kind for e in events)
+        if kind == "aurora":
+            summary.aurora = n
         if n:
             summary.others.append(_plural(n, one, many))
     storms = {storm_key(e) or e.event_id for e in events if e.kind == "lightning"}
+    summary.storms = len(storms)
     if storms:
         summary.others.append(_plural(len(storms), "Gewitter", "Gewitter"))
     for kind in _BEST_ORDER:

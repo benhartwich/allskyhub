@@ -12,6 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from allskyhub_protocol import FrameVariant
 from allskyhub_server.auth.accounts import DEFAULT_EVENT_KEEP_DAYS
 from allskyhub_server.auth.sessions import IDLE_TIMEOUT
+from allskyhub_server.devices import stats
 from allskyhub_server.devices.images import ImageStore
 from allskyhub_server.models import (
     AppToken,
@@ -43,6 +44,8 @@ async def purge(
 ) -> None:
     """Delete everything that has expired. Commits."""
     now = now or dt.datetime.now(dt.UTC)
+    # Roadmap C7: keep each night in numbers before its samples and events expire.
+    await stats.refresh(db, now)
     await _purge_frames(db, store, settings, now)
     await _purge_products(db, store, settings, now)
     await _purge_events(db, store, settings, now)

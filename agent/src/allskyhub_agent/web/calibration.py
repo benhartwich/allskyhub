@@ -8,6 +8,7 @@ If north is not where the tree line says it is, the solve is wrong.
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from datetime import datetime
 from pathlib import Path
 from typing import Any
@@ -15,8 +16,10 @@ from typing import Any
 import cv2
 import numpy as np
 
+import allskyhub_sky
 from allskyhub_agent.calib.orientation import read_orientation
 from allskyhub_agent.process.skymask import SkyMask, parse_edits
+from allskyhub_protocol import Lens
 
 MAX_SIDE = 2000  # the shade image is drawn at most this large
 _POINTS = (("N", 0.0), ("O", 90.0), ("S", 180.0), ("W", 270.0))
@@ -24,9 +27,15 @@ _LABEL_ALT = 8.0  # the letters sit a little above the horizon, inside the image
 
 
 class LocalCalibration:
-    def __init__(self, sky_mask: SkyMask, orientation_path: Path) -> None:
+    def __init__(
+        self,
+        sky_mask: SkyMask,
+        orientation_path: Path,
+        location: Callable[[], tuple[float, float] | None] = lambda: None,
+    ) -> None:
         self._mask = sky_mask
         self._orientation = orientation_path
+        self.location = location
 
     def info(self) -> dict[str, Any]:
         """`GET /api/calibration`: the mask's state, the drawn areas and the orientation
@@ -75,6 +84,32 @@ class LocalCalibration:
             ],
         }
         return out
+
+    def sky_overlay(
+        self, at: datetime, location: tuple[float, float] | None
+    ) -> dict[str, Any] | None:
+        """Constellations and N/O/S/W for an image taken `at` (roadmap L11), drawn the same
+        way as on the hub (`packages/sky`), in pixels of the solved frame; None without a
+        solve with a frame size or without a location."""
+        kept = read_orientation(self._orientation)
+        if kept is None or location is None:
+            return None
+        sol = kept[0]
+        lens = Lens(cx=sol.cx, cy=sol.cy, a1=sol.a1, a3=sol.a3, tilt_east_deg=sol.tilt_east,
+                    tilt_north_deg=sol.tilt_north, width=sol.width, height=sol.height)  # fmt: skip
+        if not allskyhub_sky.usable(lens):
+            return None
+        ov = allskyhub_sky.overlay(
+            lens, sol.rot % 360.0, sol.flip < 0, location[0], location[1], at
+        )
+        return {
+            "width": ov.width,
+            "height": ov.height,
+            "font": ov.font,
+            "paths": ov.paths,
+            "names": [{"x": n.x, "y": n.y, "text": n.text} for n in ov.names],
+            "cardinals": [{"x": c.x, "y": c.y, "text": c.text} for c in ov.cardinals],
+        }
 
     def shade_png(self, width: int, height: int) -> bytes | None:
         """A transparent PNG of this size that darkens everything that is not sky; None

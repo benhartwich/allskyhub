@@ -12,6 +12,8 @@
 .overlay .ov-text, .overlay .ov-compass { fill: var(--text); font-family: var(--body); font-weight: 600;
   paint-order: stroke; stroke: rgba(0, 0, 0, .75); stroke-width: 4px; }
 .overlay .ov-compass { font-family: var(--display); font-weight: 700; }
+.overlay .ov-sky path { stroke: var(--accent); stroke-opacity: .55; }
+.overlay .ov-sky text { fill: var(--accent); fill-opacity: .85; font-family: var(--body); }
 [data-ov].active { border-color: var(--accent); color: var(--accent); }
 .facts { margin-top: 12px; }
 

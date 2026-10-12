@@ -23,6 +23,7 @@ Routes:
     POST /api/settings        partial JSON object → 202, or 400 {detail, fields}
     GET  /api/calibration     sky mask state, drawn areas, orientation overlay (roadmap L8)
     GET  /api/skymask.png?w=&h=   transparent shade over everything that is not sky
+    GET  /api/sky-overlay?at=     constellations and N/O/S/W for an image (roadmap L11)
     POST /api/calibration/mask      {exclude, include} drawn areas → the new state
     POST /api/calibration/relearn   drop the learned mask → the new state
     GET  /api/public          the public page on the hub {enabled, url, profile, online}
@@ -562,6 +563,25 @@ def make_handler(
                     self._text(HTTPStatus.NOT_FOUND, "no camera yet")
                     return
                 self._json(HTTPStatus.OK, calibration.info())
+            elif path == "/api/sky-overlay":
+                raw_at = self._query().get("at", "")
+                try:
+                    at = (
+                        datetime.fromisoformat(raw_at.replace("Z", "+00:00"))
+                        if raw_at
+                        else datetime.now(UTC)
+                    )
+                except ValueError:
+                    at = None
+                ov = (
+                    calibration.sky_overlay(at, calibration.location())
+                    if calibration is not None and at is not None and at.tzinfo is not None
+                    else None
+                )
+                if ov is None:
+                    self._text(HTTPStatus.NOT_FOUND, "no orientation or location")
+                else:
+                    self._json(HTTPStatus.OK, ov)
             elif path == "/api/skymask.png":
                 png = (
                     calibration.shade_png(self._int("w", 960), self._int("h", 540))

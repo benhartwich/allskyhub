@@ -7,6 +7,7 @@ requires-python = ">=3.11"
 dependencies = [
   "allskyhub-design",
   "allskyhub-protocol",
+  "allskyhub-sky",
   "cryptography>=46",  # Argon2id.verify_phc_encoded (SPEC §7.4)
   "httpx>=0.27",
   "ifaddr>=0.2",
@@ -23,6 +24,7 @@ allskyhub-agent = "allskyhub_agent.cli:main"
 [tool.uv.sources]
 allskyhub-design = { workspace = true }
 allskyhub-protocol = { workspace = true }
+allskyhub-sky = { workspace = true }
 
 [build-system]
 requires = ["uv_build>=0.12,<0.13"]

@@ -564,7 +564,13 @@ def main(argv: list[str] | None = None) -> int:
             setup = SetupController(network, identity.device_id, on_joined=joined)
             threading.Thread(target=setup.run, args=(stop_bg,), name="setup", daemon=True).start()
 
-    calibration = LocalCalibration(sky_mask, calibration_dir / "orientation.json")
+    def where() -> tuple[float, float] | None:
+        cur = load_settings()
+        if cur.latitude is not None and cur.longitude is not None:
+            return cur.latitude, cur.longitude
+        return (args.lat, args.lon) if args.lat is not None and args.lon is not None else None
+
+    calibration = LocalCalibration(sky_mask, calibration_dir / "orientation.json", where)
 
     def observatory_facts() -> dict[str, Any]:
         """SPEC §7.5 for the system page: Alpaca on/off, port or error, N.I.N.A."""

@@ -97,7 +97,7 @@ def test_web_routes(server: tuple[str, Runner]) -> None:
     base, runner = server
     status, body, ctype = _get(base + "/")
     assert status == 200
-    assert b"allskyhub camera" in body
+    assert b"allskyhub-Kamera" in body
     assert ctype.startswith("text/html")
 
     with pytest.raises(urllib.error.HTTPError) as exc:

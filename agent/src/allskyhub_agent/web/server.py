@@ -50,6 +50,7 @@ from pathlib import Path
 from typing import Any, cast
 from urllib.parse import parse_qs, unquote, urlencode
 
+import allskyhub_design
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_validator
 
 from allskyhub_agent.adapters.network import SETUP_ADDRESS
@@ -129,6 +130,15 @@ _FILE = re.compile(r"^/files/(\d{8})/(?:(products|events)/)?([A-Za-z0-9_.-]+)$")
 _TYPES = {".jpg": "image/jpeg", ".mp4": "video/mp4"}
 _RANGE = re.compile(r"^bytes=(\d*)-(\d*)$")
 _LOOPBACK = {"127.0.0.1", "::1", "::ffff:127.0.0.1"}
+# The page's own files and the shared look (packages/design); open like the login page.
+_ASSETS = {
+    "/app.js": ("app.js", "text/javascript; charset=utf-8"),
+    "/app.css": ("app.css", "text/css; charset=utf-8"),
+    "/theme.js": ("theme.js", "text/javascript; charset=utf-8"),
+    "/favicon.svg": ("favicon.svg", "image/svg+xml"),
+}
+_DESIGN = "/static/design/"
+_DESIGN_TYPES = {".css": "text/css; charset=utf-8", ".woff2": "font/woff2", ".svg": "image/svg+xml"}
 # Routes that answer without a session on a paired camera (SPEC §7.4).
 _OPEN = {
     "/api/setup",
@@ -136,6 +146,7 @@ _OPEN = {
     "/local-login/start",
     "/local-login/callback",
     "/local-login/code",
+    *_ASSETS,
 }
 
 
@@ -153,6 +164,7 @@ def make_handler(
     page = _page()
     login_page = _page("login.html")
     callback_page = _page("callback.html")
+    assets = {path: (_page(name), ctype) for path, (name, ctype) in _ASSETS.items()}
 
     class Handler(BaseHTTPRequestHandler):
         server_version = "allskyhub-agent"
@@ -175,6 +187,17 @@ def make_handler(
             self.send_header("Cache-Control", "no-store")
             self.end_headers()
             self.wfile.write(body)
+
+        def _design(self, name: str) -> None:
+            """A file of the shared look (packages/design), the same as the hub serves."""
+            try:
+                file = allskyhub_design.path(name)
+                body = file.read_bytes()
+            except (KeyError, OSError):
+                self._text(HTTPStatus.NOT_FOUND, "not found")
+                return
+            ctype = _DESIGN_TYPES.get(file.suffix, "application/octet-stream")
+            self._send(HTTPStatus.OK, body, ctype)
 
         def _query(self) -> dict[str, str]:
             q = self.path.split("?", 1)[1] if "?" in self.path else ""
@@ -339,7 +362,7 @@ def make_handler(
             self._send(HTTPStatus.SEE_OTHER, b"", "text/plain", (("Location", location), *headers))
 
         def _login_needed(self, path: str) -> bool:
-            if auth is None or not auth.paired or path in _OPEN:
+            if auth is None or not auth.paired or path in _OPEN or path.startswith(_DESIGN):
                 return False
             return not auth.valid(self._cookie(SESSION_COOKIE))
 
@@ -413,7 +436,12 @@ def make_handler(
             if self._login_needed(path):
                 self._refuse(path)
                 return
-            if path == "/local-login":
+            if path in assets:
+                body, ctype = assets[path]
+                self._send(HTTPStatus.OK, body, ctype)
+            elif path.startswith(_DESIGN):
+                self._design(path.removeprefix(_DESIGN))
+            elif path == "/local-login":
                 self._send(HTTPStatus.OK, login_page, "text/html; charset=utf-8")
             elif path == "/local-login/start":
                 self._login_start()

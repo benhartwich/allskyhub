@@ -1,7 +1,10 @@
-"""When to notify whom (roadmap #6, C2, C3): new detections, cameras that went offline,
-aurora while the camera's sky is clear, and the morning summary of a night.
+"""When to notify whom (roadmap #6, C1, C2, C3, #15): new detections, cameras that went
+offline or have a problem, aurora while the camera's sky is clear, the morning summary of
+a night and, in the evening, a clear night ahead.
 
-Off unless ``fcm_service_account_file`` is set, and per user only what they switched on.
+Push needs ``fcm_service_account_file``; e-mail needs ``smtp_host`` and the user's
+``notify_by_mail``. Single detections go by push only (a meteor night would flood the
+inbox; they are in the morning summary). Per user only what they switched on.
 """
 
 from __future__ import annotations
@@ -39,6 +42,10 @@ SKY_FRESH = dt.timedelta(minutes=20)
 CLEAR_BELOW = 0.3
 # Roadmap C3: the summary goes out this long after sunrise, and not after local noon.
 SUMMARY_AFTER_SUNRISE = dt.timedelta(minutes=30)
+# Roadmap C1: the evening notice goes out from this long before sunset until dusk, when
+# the forecast has a good stretch of at least this length.
+TONIGHT_BEFORE_SUNSET = dt.timedelta(hours=1)
+TONIGHT_MIN_CLEAR = dt.timedelta(hours=2)
 
 
 class PushSender(Protocol):
@@ -57,21 +64,52 @@ class Notifier:
         self._storms_notified: set[str] = set()
         # Set by the app: the dome hint (roadmap C12) compares with the cloud forecast.
         self.forecast: ForecastCache | None = None
-        # Set by the app: e-mail for long outages (roadmap #15, C14).
+        # Set by the app: e-mail (roadmap #15, C14) and the hub's address for links in it.
         self.mailer: Mailer | None = None
+        self.base_url = ""
 
     @property
     def enabled(self) -> bool:
+        """Push is possible (the app shows its switches only then)."""
         return self._sender is not None
 
-    async def _deliver(self, db: AsyncSession, user_id: object, message: Message) -> None:
-        if self._sender is None:
-            return
-        tokens = list(await db.scalars(select(PushToken.token).where(PushToken.user_id == user_id)))
-        dead = await self._sender.send(tokens, message)
-        if dead:
-            await db.execute(delete(PushToken).where(PushToken.token.in_(dead)))
-            await db.commit()
+    @property
+    def _mail(self) -> bool:
+        return self.mailer is not None and self.mailer.enabled
+
+    @property
+    def _active(self) -> bool:
+        return self._sender is not None or self._mail
+
+    async def _deliver(
+        self, db: AsyncSession, user: User, message: Message, *, by_mail: bool = True
+    ) -> None:
+        """Push to the user's phones; also e-mail if allowed for this kind and wanted."""
+        if self._sender is not None:
+            tokens = list(
+                await db.scalars(select(PushToken.token).where(PushToken.user_id == user.id))
+            )
+            dead = await self._sender.send(tokens, message)
+            if dead:
+                await db.execute(delete(PushToken).where(PushToken.token.in_(dead)))
+                await db.commit()
+        if by_mail and user.notify_by_mail and self.mailer is not None and self._mail:
+            await self.mailer.send(self._as_mail(user.email, message))
+
+    def _as_mail(self, to: str, message: Message) -> Mail:
+        camera, night = message.data.get("camera"), message.data.get("night")
+        path = f"/cameras/{camera}" if camera else "/"
+        if camera and night:
+            path += f"/nights/{night}"
+        base = self.base_url.rstrip("/")
+        return Mail(
+            to=to,
+            subject=f"allskyhub: {message.title}",
+            body=(
+                f"{message.title}\n\n{message.body}\n\n{base}{path}\n\n"
+                f"Welche Nachrichten per E-Mail kommen, stellst du unter {base}/account ein.\n"
+            ),
+        )
 
     async def event(self, device_id: str, event_id: str) -> None:
         """A new detection (not a resent one). Called in its own task."""
@@ -111,7 +149,7 @@ class Notifier:
                 title = "Gewitter" if storm else EVENT_TITLES.get(event.kind, event.kind)
                 await self._deliver(
                     db,
-                    user.id,
+                    user,
                     Message(
                         title=f"{title} über {device.name}",
                         body=f"Erkannt um {event.start.astimezone(_zone()).strftime('%H:%M')} Uhr.",
@@ -121,6 +159,7 @@ class Notifier:
                             "event": event.event_id,
                         },
                     ),
+                    by_mail=False,
                 )
         except Exception:
             log.exception("push: event notification failed")
@@ -149,14 +188,16 @@ class Notifier:
                     update(Device).where(Device.id == device.id).values(offline_notified_at=_now())
                 )
                 await db.commit()
+                # By e-mail only after hours (check_offline_mail): short outages are common.
                 await self._deliver(
                     db,
-                    user.id,
+                    user,
                     Message(
                         title=f"{device.name} ist offline",
                         body="Die Kamera hat sich seit 30 Minuten nicht gemeldet.",
                         data={"camera": device.id},
                     ),
+                    by_mail=False,
                 )
 
     async def check_health(
@@ -165,7 +206,7 @@ class Notifier:
         """Roadmap C14, one pass: tell owners (who want offline notices) about each new
         problem of a connected camera once, and once when it is gone. Offline itself is
         ``check_offline``."""
-        if self._sender is None:
+        if not self._active:
             return
         now = now or _now()
         async with self._maker() as db:
@@ -193,7 +234,7 @@ class Notifier:
                     kind = "Problem" if problem.level == "error" else "Hinweis"
                     await self._deliver(
                         db,
-                        user.id,
+                        user,
                         Message(
                             title=f"{device.name}: {kind}",
                             body=problem.text,
@@ -203,7 +244,7 @@ class Notifier:
                 if gone and not problems:
                     await self._deliver(
                         db,
-                        user.id,
+                        user,
                         Message(
                             title=f"{device.name} ist wieder in Ordnung",
                             body="Alle Prüfungen sind wieder unauffällig.",
@@ -214,7 +255,7 @@ class Notifier:
     async def unsafe(self, device_id: str) -> None:
         """Roadmap C15: the camera's safety monitor turned unsafe while N.I.N.A. is
         connected; owners with problem notices get it once per change."""
-        if self._sender is None:
+        if not self._active:
             return
         try:
             async with self._maker() as db:
@@ -230,7 +271,7 @@ class Notifier:
                 device, user = row
                 await self._deliver(
                     db,
-                    user.id,
+                    user,
                     Message(
                         title=f"{device.name}: Himmel unsicher",
                         body="Wolken, Regen oder Gewitter: Das Teleskop sollte jetzt pausieren.",
@@ -243,7 +284,7 @@ class Notifier:
     async def aurora(self, device_id: str, kp: space_weather.KpCache) -> None:
         """Roadmap C2, after a status with a sky measurement: Kp at or above the rule of
         thumb for the camera's latitude while its own sky is clear and dark."""
-        if self._sender is None:
+        if not self._active:
             return
         now = _now()
         try:
@@ -283,7 +324,7 @@ class Notifier:
                 kp_text = f"{forecast.now:.1f}".replace(".", ",")
                 await self._deliver(
                     db,
-                    user.id,
+                    user,
                     Message(
                         title=f"Polarlicht möglich über {device.name}",
                         body=f"Kp {kp_text} (hier ab etwa {need:.0f}) und der Himmel ist klar.",
@@ -296,7 +337,7 @@ class Notifier:
     async def check_morning(self, now: dt.datetime | None = None) -> None:
         """Roadmap C3, one pass: send each camera's summary of the night once, in the
         morning after sunrise at the camera."""
-        if self._sender is None:
+        if not self._active:
             return
         now = now or _now()
         async with self._maker() as db:
@@ -333,8 +374,50 @@ class Notifier:
                     data["event"] = summary.best.event_id
                 await self._deliver(
                     db,
-                    user.id,
+                    user,
                     Message(title=f"Die Nacht über {device.name}", body=summary.line(), data=data),
+                )
+
+    async def check_tonight(self, now: dt.datetime | None = None) -> None:
+        """Roadmap C1, one pass: in the evening (from an hour before sunset until dusk) tell
+        owners once per night and camera when the forecast has a clear, dark stretch of
+        at least ``TONIGHT_MIN_CLEAR``. Nothing on cloudy nights."""
+        if not self._active or self.forecast is None:
+            return
+        now = now or _now()
+        async with self._maker() as db:
+            rows = (
+                await db.execute(
+                    select(Device, User)
+                    .join(User, User.id == Device.owner_id)
+                    .where(User.notify_tonight.is_(True))
+                )
+            ).all()
+            for device, user in rows:
+                result = await tonight.for_device(self.forecast, device.last_status, now)
+                if result is None or result.night.sunset is None:
+                    continue
+                night, sunset = result.night, result.night.sunset
+                night_id = sunset.astimezone(result.zone).strftime("%Y%m%d")
+                if device.tonight_night == night_id or now < sunset - TONIGHT_BEFORE_SUNSET:
+                    continue
+                device.tonight_night = night_id
+                await db.commit()
+                if night.dusk is None or now > night.dusk or result.best is None:
+                    continue
+                if result.best[1] - result.best[0] < TONIGHT_MIN_CLEAR:
+                    continue
+                moon = (
+                    f"Mond: {result.moon_phase}, {night.moon_illumination * 100:.0f} % beleuchtet."
+                )
+                await self._deliver(
+                    db,
+                    user,
+                    Message(
+                        title=f"Heute Nacht klar über {device.name}",
+                        body=f"{result.summary} {moon}",
+                        data={"camera": device.id},
+                    ),
                 )
 
     async def check_offline_mail(
@@ -395,6 +478,10 @@ class Notifier:
                 await self.check_morning()
             except Exception:
                 log.exception("push: morning summary failed")
+            try:
+                await self.check_tonight()
+            except Exception:
+                log.exception("push: evening notice failed")
             await asyncio.sleep(OFFLINE_CHECK.total_seconds())
 
 

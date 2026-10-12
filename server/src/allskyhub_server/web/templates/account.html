@@ -16,14 +16,17 @@
   <button type="submit">Speichern</button>
 </form>
 
-{% if push_available %}
+{% if push_available or mail_enabled %}
 <form method="post" action="/account/notifications" class="card stack">
-  <h2>Benachrichtigungen in der App</h2>
+  <h2>Benachrichtigungen</h2>
+  <p class="muted small">{% if push_available %}In der App, sobald sie dort erlaubt sind{% if mail_enabled %}, und auf Wunsch per E-Mail{% endif %}.{% else %}Per E-Mail an {{ user.email }}, wenn du das unten einschaltest.{% endif %}</p>
   <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-  <label class="check"><input type="checkbox" name="notify_events" value="true" {% if user.notify_events %}checked{% endif %}> Bei neuen Ereignissen (z. B. Meteor), höchstens alle 10 Minuten pro Kamera</label>
-  <label class="check"><input type="checkbox" name="notify_offline" value="true" {% if user.notify_offline %}checked{% endif %}> Wenn mit einer Kamera etwas nicht stimmt: seit 30 Minuten offline, keine neuen Bilder, Speicher fast voll, zu heiß, Uhr oder Update fehlerhaft</label>
+  {% if push_available %}<label class="check"><input type="checkbox" name="notify_events" value="true" {% if user.notify_events %}checked{% endif %}> Bei neuen Ereignissen (z. B. Meteor), höchstens alle 10 Minuten pro Kamera <span class="muted">(nur in der App)</span></label>{% endif %}
+  <label class="check"><input type="checkbox" name="notify_offline" value="true" {% if user.notify_offline %}checked{% endif %}> Wenn mit einer Kamera etwas nicht stimmt: offline, keine neuen Bilder, Speicher fast voll, zu heiß, Uhr oder Update fehlerhaft{% if mail_enabled %} <span class="muted">(offline per E-Mail erst nach 6 Stunden)</span>{% endif %}</label>
   <label class="check"><input type="checkbox" name="notify_aurora" value="true" {% if user.notify_aurora %}checked{% endif %}> Polarlicht möglich: Kp-Index hoch genug für den Standort und der Himmel über der Kamera klar</label>
   <label class="check"><input type="checkbox" name="notify_summary" value="true" {% if user.notify_summary %}checked{% endif %}> Morgens eine Zusammenfassung der Nacht</label>
+  <label class="check"><input type="checkbox" name="notify_tonight" value="true" {% if user.notify_tonight %}checked{% endif %}> Abends, wenn die Nacht klar wird (mindestens 2 Stunden klar und dunkel laut Vorhersage)</label>
+  {% if mail_enabled %}<label class="check"><input type="checkbox" name="notify_by_mail" value="true" {% if user.notify_by_mail %}checked{% endif %}> <strong>Auch per E-Mail</strong> an {{ user.email }}</label>{% endif %}
   <button type="submit">Speichern</button>
 </form>
 {% endif %}

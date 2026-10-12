@@ -62,6 +62,10 @@ class User(Base):
     notify_aurora: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
     # Roadmap C3: a summary of each camera's night in the morning.
     notify_summary: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
+    # Roadmap C1: in the evening, when the night ahead looks clear.
+    notify_tonight: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
+    # Roadmap #15: the notifications above (all but single detections) also by e-mail.
+    notify_by_mail: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
     created_at: Mapped[dt.datetime] = mapped_column(_tz(), server_default=func.now())
 
 
@@ -121,6 +125,8 @@ class Device(Base):
     # Roadmap C2/C3: last aurora alarm, and the night whose summary went out.
     aurora_notified_at: Mapped[dt.datetime | None] = mapped_column(_tz())
     summary_night: Mapped[str | None] = mapped_column(String(8))
+    # Roadmap C1: the night whose evening notice was decided (sent or not).
+    tonight_night: Mapped[str | None] = mapped_column(String(8))
     # Roadmap #15: when the owner got an e-mail about this outage (long offline).
     offline_mailed_at: Mapped[dt.datetime | None] = mapped_column(_tz())
     # Roadmap C14: health problems (devices/health.py keys) already reported to the owner.

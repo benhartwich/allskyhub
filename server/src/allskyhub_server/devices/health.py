@@ -8,10 +8,15 @@ when it appears (and once when it is gone).
 from __future__ import annotations
 
 import datetime as dt
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from typing import Any, Literal, cast
 
-from allskyhub_server.models import Device
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from allskyhub_server.devices.tonight import ForecastCache
+from allskyhub_server.models import Device, SkySample
 
 OFFLINE_AFTER = dt.timedelta(minutes=30)
 # No new picture for this long while connected: capture is stuck or the camera is gone.
@@ -82,3 +87,59 @@ def check(device: Device, online: bool, now: dt.datetime) -> list[Problem]:
     if update.get("state") in ("failed", "rolled_back"):
         problems.append(Problem("update", "warn", "Das letzte Software-Update ist fehlgeschlagen."))
     return problems
+
+
+# Roadmap C12: the forecast says clear, the camera has seen next to nothing for this long.
+DOME_WINDOW = dt.timedelta(hours=2)
+DOME_MIN_SAMPLES = 6
+DOME_CAMERA_CLOUDY = 0.8
+DOME_FORECAST_CLEAR = 20  # % cloud cover
+
+
+def dome_hint(
+    samples: Sequence[tuple[dt.datetime, float | None]],
+    forecast: Mapping[dt.datetime, int],
+    now: dt.datetime,
+) -> Problem | None:
+    """Dew, frost or dirt on the dome: the camera's sky measurements (time, cloud cover) of
+    the last two hours all say overcast while the forecast for those hours says clear."""
+    recent = [(t, c) for t, c in samples if now - t <= DOME_WINDOW and c is not None]
+    if len(recent) < DOME_MIN_SAMPLES:
+        return None
+    if any(c < DOME_CAMERA_CLOUDY for _, c in recent):
+        return None
+    hours = {t.replace(minute=0, second=0, microsecond=0) for t, _ in recent}
+    if not hours or any(forecast.get(h, 100) > DOME_FORECAST_CLEAR for h in hours):
+        return None
+    return Problem(
+        "dome",
+        "warn",
+        "Die Vorhersage meldet klaren Himmel, die Kamera sieht seit zwei Stunden fast "
+        "keine Sterne: Kuppel beschlagen, vereist oder verschmutzt?",
+    )
+
+
+async def full_check(
+    db: AsyncSession,
+    device: Device,
+    online: bool,
+    now: dt.datetime,
+    forecast: ForecastCache | None,
+) -> list[Problem]:
+    """``check`` plus the dome hint, which needs the sky samples and the forecast."""
+    problems = check(device, online, now)
+    if not online or forecast is None or (device.last_frame or {}).get("mode") != "night":
+        return problems
+    settings: dict[str, Any] = (device.last_status or {}).get("settings") or {}
+    lat, lon = settings.get("latitude"), settings.get("longitude")
+    if not isinstance(lat, int | float) or not isinstance(lon, int | float):
+        return problems
+    rows = await db.execute(
+        select(SkySample.at, SkySample.cloud_cover).where(
+            SkySample.device_id == device.id, SkySample.at >= now - DOME_WINDOW
+        )
+    )
+    samples = [(at, cloud) for at, cloud in rows.all()]
+    hours = {h.at: h.clouds for h in await forecast.get(float(lat), float(lon))}
+    hint = dome_hint(samples, hours, now)
+    return [*problems, hint] if hint else problems

@@ -165,6 +165,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             else None
         )
         app.state.notifier = Notifier(app.state.sessionmaker, sender)
+        app.state.notifier.forecast = app.state.forecast
         app.state.renderer = Renderer(app.state.sessionmaker, app.state.images, settings)
         tasks = [cleanup, asyncio.create_task(app.state.renderer.run_forever())]
         if sender is not None:

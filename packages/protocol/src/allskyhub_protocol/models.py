@@ -219,6 +219,24 @@ class SkyMetrics(BaseModel):
     stars: int | None = Field(default=None, ge=0)
 
 
+class Lens(BaseModel):
+    """The fitted lens of a plate solve (SPEC §4.8, §6.3), in pixels of a width x height
+    frame: r = a1·t + a3·t³ with t = zenith angle / 90°, centred on (cx, cy), after the
+    tilt of the camera axis toward east and north. No bounds on purpose: a bad value must
+    not cost the whole status; users check plausibility (width/height 0 = unknown)."""
+
+    model_config = ConfigDict(extra="ignore", frozen=True)
+
+    cx: float
+    cy: float
+    a1: float
+    a3: float
+    tilt_east_deg: float
+    tilt_north_deg: float
+    width: int
+    height: int
+
+
 class Orientation(BaseModel):
     """The image's orientation from a plate solve, reported in `status` (SPEC §6.3, §4.8)."""
 
@@ -229,6 +247,7 @@ class Orientation(BaseModel):
     solved_at: AwareDatetime
     stars: int = Field(ge=0)
     rms_deg: float = Field(ge=0)
+    lens: Lens | None = None  # optional, for drawing the sky onto the image
 
 
 class ObservatorySequence(BaseModel):

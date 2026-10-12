@@ -13,7 +13,9 @@ from allskyhub_protocol import (
     EventKind,
     FrameInfo,
     Hello,
+    Lens,
     Mode,
+    Orientation,
     parse_envelope,
 )
 
@@ -343,3 +345,15 @@ def test_write_only_setting() -> None:
         SettingSpec.model_validate(
             {"key": "x", "type": "int", "label": "X", "group": "G", "write_only": True}
         )
+
+
+def test_orientation_lens_is_optional() -> None:
+    """SPEC §6.3: older agents send no lens; unknown fields in it are ignored."""
+    base = {"north_deg": 12.5, "mirrored": True, "solved_at": "2026-10-15T20:00:00Z",
+            "stars": 40, "rms_deg": 0.3}  # fmt: skip
+    assert Orientation.model_validate(base).lens is None
+    lens = {"cx": 960.0, "cy": 540.0, "a1": 600.0, "a3": -20.0, "tilt_east_deg": 0.4,
+            "tilt_north_deg": -0.2, "width": 1920, "height": 1080, "k5": 1}  # fmt: skip
+    parsed = Orientation.model_validate({**base, "lens": lens})
+    assert parsed.lens == Lens(cx=960.0, cy=540.0, a1=600.0, a3=-20.0, tilt_east_deg=0.4,
+                               tilt_north_deg=-0.2, width=1920, height=1080)  # fmt: skip

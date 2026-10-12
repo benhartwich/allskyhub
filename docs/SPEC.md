@@ -153,6 +153,20 @@ window, and only a clear winner (≥ 12 stars, ≤ 0.6° RMS, no close rival) is
 At most 3 tries a night, solved again after 7 days; the result is kept in
 `<data>/calibration/orientation.json` and reported in `status` (§6.3).
 
+The fitted lens maps a direction (alt, az) to a pixel (x, y) of the solved frame:
+
+1. Tilt: the camera axis leans `tilt_east_deg` toward east and `tilt_north_deg` toward
+   north. With τ = √(tilt_east² + tilt_north²) and φ = atan2(tilt_east, tilt_north), the
+   axis is a = (sin τ·sin φ, sin τ·cos φ, cos τ) in (east, north, up); the direction
+   v = (cos alt·sin az, cos alt·cos az, sin alt) is rotated by τ about k = a × (0, 0, 1)
+   / |a × (0, 0, 1)| (Rodrigues), giving alt′, az′. Without tilt alt′ = alt, az′ = az.
+2. t = (90° − alt′) / 90°, r = a1·t + a3·t³.
+3. ang = north_deg − az′ when `mirrored`, else north_deg + az′;
+   x = cx + r·sin ang, y = cy − r·cos ang.
+
+`cx`, `cy`, `a1`, `a3` are pixels of a `width` × `height` frame; for another size of the
+same frame (thumbnails, the latest image) they scale with the width.
+
 ## 5. Products (M4)
 
 ### 5.1 Frame index
@@ -289,6 +303,10 @@ base64url-encoded without padding.
   an image direction d is (north_deg − d) mod 360 when mirrored, else
   (d − north_deg) mod 360; exact at the horizon, approximate above it if the camera
   leans.
+  `lens` (optional, may be missing from older agents): `{cx, cy, a1, a3, tilt_east_deg,
+  tilt_north_deg, width, height}`, the fitted lens of §4.8 for drawing the sky onto the
+  image (constellations on the public page); `width`/`height` 0 means the frame size is
+  unknown and the lens must not be used.
   `observatory` (null unless observatory software is configured, §7.5): what the
   telescope next to the camera is doing, relayed from N.I.N.A.'s Advanced API (roadmap
   C15): `{source: "nina", at, connected, target, sequence, last_image, safe}`. `at` is

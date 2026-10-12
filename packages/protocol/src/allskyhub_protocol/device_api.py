@@ -169,7 +169,15 @@ CameraChoice = Literal["auto", "zwo-asi678mc", "rpi-hq", "sim"]
 
 
 class SetSettingsArgs(_Model):
-    """`args` of the `set_settings` command (SPEC §6.5): only the given keys change."""
+    """`args` of the `set_settings` command (SPEC §6.5): only the given keys change.
+
+    The fixed keys are checked here; further keys from the device's settings schema come
+    as extra fields (JSON scalars) and are checked with `invalid_settings` (SPEC §6.9)."""
+
+    model_config = ConfigDict(extra="allow", frozen=True)
+    __pydantic_extra__: dict[str, str | int | float | bool | None] = Field(  # pyright: ignore[reportIncompatibleVariableOverride]
+        init=False
+    )
 
     latitude: float | None = Field(default=None, ge=-90, le=90)
     longitude: float | None = Field(default=None, ge=-180, le=180)

@@ -6,6 +6,7 @@ body model; `Envelope.wrap()` builds one from a body, `parse_envelope()` reads o
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from datetime import UTC, datetime
 from enum import StrEnum
 from typing import Any, ClassVar, Literal, cast
@@ -28,6 +29,106 @@ class Mode(StrEnum):
     NIGHT = "night"
 
 
+class SettingType(StrEnum):
+    """Kind of a setting in the settings schema (SPEC §6.9)."""
+
+    NUMBER = "number"
+    INT = "int"
+    BOOL = "bool"
+    CHOICE = "choice"
+    STRING = "string"
+    LOCATION = "location"  # latitude + longitude, key "location"
+
+
+class SettingChoice(BaseModel):
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    value: str = Field(min_length=1, max_length=40)
+    label: str = Field(min_length=1, max_length=60)
+
+
+class SettingSpec(BaseModel):
+    """One entry of `hello.settings_schema` (SPEC §6.9)."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    key: str = Field(pattern=r"^[a-z][a-z0-9_]{0,39}$")
+    type: SettingType
+    label: str = Field(min_length=1, max_length=60)
+    group: str = Field(min_length=1, max_length=40)
+    help: str | None = Field(default=None, max_length=300)
+    unit: str | None = Field(default=None, max_length=10)
+    min: float | None = None
+    max: float | None = None
+    step: float | None = Field(default=None, gt=0)
+    choices: list[SettingChoice] | None = None
+    max_length: int | None = Field(default=None, ge=1, le=2000)
+    nullable: bool = False
+
+    @model_validator(mode="after")
+    def _fits_type(self) -> SettingSpec:
+        numeric = self.type in (SettingType.NUMBER, SettingType.INT)
+        if not numeric and (self.min, self.max, self.step) != (None, None, None):
+            raise ValueError("min, max and step only for number and int")
+        if self.min is not None and self.max is not None and self.min > self.max:
+            raise ValueError("min > max")
+        if (self.type is SettingType.CHOICE) != bool(self.choices):
+            raise ValueError("choices exactly for choice")
+        if self.max_length is not None and self.type is not SettingType.STRING:
+            raise ValueError("max_length only for string")
+        if (self.type is SettingType.LOCATION) != (self.key == "location"):
+            raise ValueError("the location type has the key location")
+        return self
+
+
+def _invalid_value(spec: SettingSpec, v: object) -> bool:
+    if v is None:
+        return not spec.nullable
+    match spec.type:
+        case SettingType.BOOL:
+            return not isinstance(v, bool)
+        case SettingType.INT | SettingType.NUMBER:
+            if isinstance(v, bool) or not isinstance(v, int | float):
+                return True
+            if spec.type is SettingType.INT and not float(v).is_integer():
+                return True
+            return (spec.min is not None and v < spec.min) or (
+                spec.max is not None and v > spec.max
+            )
+        case SettingType.CHOICE:
+            return v not in {c.value for c in spec.choices or []}
+        case SettingType.STRING:
+            return not isinstance(v, str) or len(v) > (spec.max_length or 200)
+        case SettingType.LOCATION:
+            return True  # set through latitude and longitude
+
+
+def invalid_settings(schema: list[SettingSpec], values: Mapping[str, object]) -> list[str]:
+    """The keys of a partial `set_settings` object the schema does not allow (SPEC §6.9),
+    sorted; empty if all are fine."""
+    specs = {s.key: s for s in schema}
+    bad: set[str] = set()
+    if "location" in specs:
+        lat, lon = values.get("latitude"), values.get("longitude")
+        if ("latitude" in values) != ("longitude" in values):
+            bad.update(k for k in ("latitude", "longitude") if k in values)
+        elif "latitude" in values:
+            for k, v, lim in (("latitude", lat, 90), ("longitude", lon, 180)):
+                ok = v is None and specs["location"].nullable
+                ok = ok or (
+                    not isinstance(v, bool) and isinstance(v, int | float) and -lim <= v <= lim
+                )
+                if not ok:
+                    bad.add(k)
+    for k, v in values.items():
+        if k in ("latitude", "longitude") and "location" in specs:
+            continue
+        spec = specs.get(k)
+        if spec is None or _invalid_value(spec, v):
+            bad.add(k)
+    return sorted(bad)
+
+
 class Hello(_Body):
     """First message after connecting (SPEC §6.3)."""
 
@@ -36,12 +137,18 @@ class Hello(_Body):
     profile: str
     agent_version: str
     capabilities: list[str] = Field(default_factory=list[str])
+    # SPEC §6.9: the settings form for web, app and local UI; empty for old agents.
+    settings_schema: list[SettingSpec] = Field(default_factory=list[SettingSpec])
 
 
 class DeviceSettings(BaseModel):
-    """The device's current settings, reported in `status` (SPEC §6.3)."""
+    """The device's current settings, reported in `status` (SPEC §6.3). Further keys from
+    the settings schema (SPEC §6.9) come as extra fields, JSON scalars only."""
 
-    model_config = ConfigDict(extra="forbid", frozen=True)
+    model_config = ConfigDict(extra="allow", frozen=True)
+    __pydantic_extra__: dict[str, str | int | float | bool | None] = Field(  # pyright: ignore[reportIncompatibleVariableOverride]
+        init=False
+    )
 
     latitude: float | None = None
     longitude: float | None = None

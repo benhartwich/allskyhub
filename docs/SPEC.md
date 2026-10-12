@@ -244,10 +244,13 @@ base64url-encoded without padding.
 
 ### 6.3 Device → hub
 
-- `hello`: device id, profile, agent version, capabilities.
+- `hello`: device id, profile, agent version, capabilities, and `settings_schema`
+  (§6.9): the settings this device has, so that the hub's web UI, the app and the local UI
+  build the same settings form from it.
 - `status`: mode, last exposure/gain/mean, temperatures, disk, uptime, `time_trusted`
-  (§4.4), and `settings` (`{latitude, longitude, timezone, camera, day_delay_s,
-  night_delay_s}`, location null until known) for the app's settings screen, and
+  (§4.4), and `settings`, the current value of every key in `settings_schema` (§6.9;
+  at least `{latitude, longitude, timezone, camera, day_delay_s, night_delay_s}`,
+  location null until known), and
   `sky` (null until the first frame is measured): `{at, night_id, cloud_cover, sqm_mag,
   stars}` measured on the newest frame. `at` is that frame's `captured_at` and
   `night_id` its night (§4.5); status repeats the last `sky` until a new frame is
@@ -334,11 +337,13 @@ night (§6.7).
 `upload_frame`, `upload_product`, `upload_event`, `local_access`. Each command is acknowledged with `ack` or `error` (`code` one of
 `not_found`, `invalid_args`, `unsupported`, `failed`).
 
-**`set_settings`** with a partial object: `latitude` and `longitude` (both or neither),
-`timezone` (IANA), `camera` (`auto`, `zwo-asi678mc`, `rpi-hq`, `sim`), `day_delay_s` and
-`night_delay_s` (0..3600 s between frames). Only the given keys change; an unknown key or
-an invalid value changes nothing and is answered with `error` `invalid_args` naming the
-fields. On success the device stores the settings, answers `ack` and restarts its
+**`set_settings`** with a partial object of keys from `settings_schema` (§6.9), for
+example `latitude` and `longitude` (both or neither), `timezone` (IANA), `camera`
+(`auto`, `zwo-asi678mc`, `rpi-hq`, `sim`), `day_delay_s` and `night_delay_s` (0..3600 s
+between frames). Only the given keys change; an unknown key or a value the schema does
+not allow changes nothing and is answered with `error` `invalid_args`, whose `message`
+names the fields, comma-separated. The device validates; the hub may check against the
+schema first to show errors at once. On success the device stores the settings, answers `ack` and restarts its
 capture with them; its WebSocket reconnects within about 15 s.
 
 **`upload_frame`** `{night_id, name, variant}` with `variant` `full` (default) or
@@ -422,6 +427,40 @@ state.
 unknown key, a wrong type or a text that is too long is answered with 422 and a German
 sentence in `detail` that the local UI shows as it is. Models: `PublicProfile`,
 `PublicState`, `PublicUpdate` in `allskyhub_protocol.device_api`.
+
+### 6.9 Settings schema
+
+The device describes its settings in `hello.settings_schema`, a list in display order.
+The hub's web UI, the app and the local UI (§7) render their settings forms only from
+this list, so a new setting needs a new agent but no new hub or app. The hub keeps the
+newest schema per device; while a device is offline its last schema and `status.settings`
+are shown read-only.
+
+Each entry:
+
+| Field | Meaning |
+|---|---|
+| `key` | name in `status.settings` and `set_settings`, `^[a-z][a-z0-9_]{0,39}$` |
+| `type` | `number`, `int`, `bool`, `choice`, `string` or `location` |
+| `label` | German label, ≤ 60 characters |
+| `group` | German section heading, ≤ 40 characters; entries of one group are shown together, groups in order of first appearance |
+| `help` | optional German sentence under the field, ≤ 300 characters |
+| `unit` | optional unit shown after the value (`s`, `ms`, `%`, `°`), ≤ 10 characters |
+| `min`, `max`, `step` | `number` and `int` only, optional; values outside `min`..`max` are `invalid_args` |
+| `choices` | `choice` only: `[{value, label}]`, `value` a string, `label` German |
+| `max_length` | `string` only, default 200 |
+| `nullable` | the value may be `null` ("not set"); default false |
+
+Values in `status.settings` and `set_settings`: JSON number for `number`, integer for
+`int`, boolean for `bool`, one of the `choices` values for `choice`, string for `string`.
+`location` is the one compound type: the entry has the key `location` and stands for the
+two keys `latitude` (−90..90) and `longitude` (−180..180), which are reported and set
+together as before; the forms show it as a map with a coordinate field.
+
+`settings_schema` may be empty for an old agent; the hub then shows the fixed fields
+listed under `set_settings` (§6.5). The hub must accept `settings_schema` and further keys
+in `status.settings` before agents send them (deploy the hub first). Models:
+`SettingSpec`, `SettingChoice`, `SettingType` in `allskyhub_protocol.models`.
 
 ## 7. Local web UI
 

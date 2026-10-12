@@ -1,4 +1,5 @@
-"""Small SVG line charts of a night's sky measurements for the web UI (no JavaScript).
+"""Small SVG line charts for the web UI (no JavaScript): a night's sky measurements and
+the camera's own state over time (exposure, gain, temperatures, disk).
 
 Only numbers go into the SVG; missing values (``None``) become gaps, never zeros.
 """
@@ -8,10 +9,11 @@ from __future__ import annotations
 import datetime as dt
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
+from typing import Any
 
 from markupsafe import Markup
 
-from allskyhub_server.models import SkySample
+from allskyhub_server.models import StatusSample
 
 WIDTH, HEIGHT, PAD = 600, 120, 4
 
@@ -20,7 +22,7 @@ WIDTH, HEIGHT, PAD = 600, 120, 4
 class Series:
     title: str
     unit: str
-    value: Callable[[SkySample], float | None]
+    value: Callable[[Any], float | None]
     low: float
     high: float
     # Higher is better (darker sky) for SQM; the chart shows it upward either way.
@@ -35,6 +37,19 @@ SERIES = (
     Series("Sterne", "", lambda s: None if s.stars is None else float(s.stars), 0, 0,
            "chart-stars"),
 )  # fmt: skip
+
+
+def _exposure(s: StatusSample) -> float | None:
+    return None if s.exposure_us is None else s.exposure_us / 1e6
+
+
+STATUS_SERIES = (
+    Series("Belichtung", "s", _exposure, 0, 0, "chart-exposure", "{:.3g}"),
+    Series("Gain", "", lambda s: s.gain, 0, 0, "chart-gain"),
+    Series("Sensor", "°C", lambda s: s.sensor_temp_c, 0, 40, "chart-temp", "{:.1f}"),
+    Series("Prozessor", "°C", lambda s: s.cpu_temp_c, 20, 80, "chart-cpu", "{:.0f}"),
+    Series("Speicher frei", "%", lambda s: s.disk_free_pct, 0, 100, "chart-disk"),
+)
 
 
 @dataclass(frozen=True)
@@ -60,14 +75,14 @@ def _segments(
     return [seg for seg in segments if seg]
 
 
-def charts(samples: Sequence[SkySample]) -> list[Chart]:
-    """One chart per series that has at least one value in this night."""
+def charts(samples: Sequence[Any], series_list: Sequence[Series] = SERIES) -> list[Chart]:
+    """One chart per series that has at least one value; ``samples`` have an ``at``."""
     if not samples:
         return []
     start, end = samples[0].at, samples[-1].at
     span = max((end - start).total_seconds(), 1.0)
     result: list[Chart] = []
-    for series in SERIES:
+    for series in series_list:
         points = [(s.at, series.value(s)) for s in samples]
         values = [v for _, v in points if v is not None]
         if not values:

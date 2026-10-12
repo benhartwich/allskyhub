@@ -397,3 +397,22 @@ class MeteorPair(Base):
     length_km: Mapped[float] = mapped_column(Float)
     convergence_deg: Mapped[float] = mapped_column(Float)
     created_at: Mapped[dt.datetime] = mapped_column(_tz(), server_default=func.now())
+
+
+class StatusSample(Base):
+    """The camera's state every few minutes (SPEC §6.3 status), for the charts of exposure,
+    gain, temperatures and disk. Kept like thumbnails; removed with the pairing."""
+
+    __tablename__ = "status_sample"
+
+    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid7)
+    device_id: Mapped[str] = mapped_column(ForeignKey("device.id", ondelete="CASCADE"))
+    at: Mapped[dt.datetime] = mapped_column(_tz())
+    mode: Mapped[str | None] = mapped_column(String(8))
+    exposure_us: Mapped[int | None] = mapped_column(BigInteger)
+    gain: Mapped[float | None] = mapped_column(Float)
+    sensor_temp_c: Mapped[float | None] = mapped_column(Float)
+    cpu_temp_c: Mapped[float | None] = mapped_column(Float)
+    disk_free_pct: Mapped[float | None] = mapped_column(Float)
+
+    __table_args__ = (Index("ix_status_sample_device_id_at", "device_id", "at"),)

@@ -15,7 +15,7 @@ from typing import Annotated, Any
 from fastapi import APIRouter, HTTPException, Path, Query, Request, WebSocket
 from fastapi.responses import Response
 from pydantic import ValidationError
-from sqlalchemy import select, update
+from sqlalchemy import func, select, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from starlette.websockets import WebSocketDisconnect, WebSocketState
@@ -52,7 +52,15 @@ from allskyhub_server.devices.connections import Connection, ConnectionRegistry
 from allskyhub_server.devices.events import image_rev
 from allskyhub_server.devices.images import JPEG_MAGIC, ImageStore
 from allskyhub_server.devices.space_weather import KpCache
-from allskyhub_server.models import Device, EventRecord, Frame, Product, SkySample, User
+from allskyhub_server.models import (
+    Device,
+    EventRecord,
+    Frame,
+    Product,
+    SkySample,
+    StatusSample,
+    User,
+)
 from allskyhub_server.push.notify import Notifier
 from allskyhub_server.settings import Settings
 from allskyhub_server.web.deps import DbSession, SettingsDep, client_ip
@@ -397,6 +405,36 @@ async def device_ws(websocket: WebSocket) -> None:
         log.info("device disconnected", extra={"device_id": info.device_id})
 
 
+# A chart point every five minutes is plenty; status comes about every minute.
+STATUS_SAMPLE_EVERY = dt.timedelta(minutes=5)
+
+
+async def _store_status(
+    maker: async_sessionmaker[AsyncSession], device_id: str, status: Status
+) -> None:
+    """Keep the camera's state for the charts (exposure, gain, temperatures, disk)."""
+    now = _now()
+    async with maker() as db:
+        last = await db.scalar(
+            select(func.max(StatusSample.at)).where(StatusSample.device_id == device_id)
+        )
+        if last is not None and now - last < STATUS_SAMPLE_EVERY:
+            return
+        db.add(
+            StatusSample(
+                device_id=device_id,
+                at=now,
+                mode=status.mode.value,
+                exposure_us=status.exposure_us,
+                gain=status.gain,
+                sensor_temp_c=status.sensor_temp_c,
+                cpu_temp_c=status.cpu_temp_c,
+                disk_free_pct=status.disk_free_pct,
+            )
+        )
+        await db.commit()
+
+
 async def _safe(maker: async_sessionmaker[AsyncSession], device_id: str) -> bool | None:
     """The last reported ``status.observatory.safe`` (SPEC §6.3), or None."""
     async with maker() as db:
@@ -449,6 +487,7 @@ async def _handle(
     elif isinstance(body, Status):
         before = await _safe(maker, conn.device_id)
         await _touch(maker, conn.device_id, last_status=body.model_dump(mode="json"))
+        await _store_status(maker, conn.device_id, body)
         # Roadmap C15: tell the owner when the sky turns unsafe for the telescope.
         if before is True and body.observatory is not None and body.observatory.safe is False:
             _background(notifier.unsafe(conn.device_id))

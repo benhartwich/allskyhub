@@ -44,6 +44,7 @@ from allskyhub_server.models import (
     Product,
     RenderJob,
     SkySample,
+    StatusSample,
 )
 
 NONCE_TTL = dt.timedelta(minutes=5)
@@ -225,6 +226,7 @@ async def unpair(db: AsyncSession, device: Device) -> None:
     await db.execute(delete(Product).where(Product.device_id == device.id))
     await db.execute(delete(EventRecord).where(EventRecord.device_id == device.id))
     await db.execute(delete(SkySample).where(SkySample.device_id == device.id))
+    await db.execute(delete(StatusSample).where(StatusSample.device_id == device.id))
     await db.execute(delete(NightStat).where(NightStat.device_id == device.id))
     await db.execute(delete(RenderJob).where(RenderJob.device_id == device.id))
     await db.execute(

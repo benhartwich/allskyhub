@@ -12,9 +12,10 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from allskyhub_protocol import FrameVariant
+from allskyhub_server.devices import sky_chart
 from allskyhub_server.devices.connections import ConnectionRegistry
 from allskyhub_server.devices.images import ImageStore
-from allskyhub_server.models import EventRecord, Frame, Product, SkySample
+from allskyhub_server.models import EventRecord, Frame, Product, SkySample, StatusSample
 
 NIGHT_ID = r"^\d{8}$"
 FRAME_NAME = r"^[A-Za-z0-9._-]{1,128}$"
@@ -136,5 +137,41 @@ async def night_sky(db: AsyncSession, device_id: str, night_id: str) -> list[Sky
         select(SkySample)
         .where(SkySample.device_id == device_id, SkySample.night_id == night_id)
         .order_by(SkySample.at)
+    )
+    return list(rows)
+
+
+async def recent_charts(
+    db: AsyncSession, device_id: str, since: dt.datetime
+) -> list[sky_chart.Chart]:
+    """Sky and camera charts since ``since`` (camera page: the last 24 hours)."""
+    sky = list(
+        await db.scalars(
+            select(SkySample)
+            .where(SkySample.device_id == device_id, SkySample.at >= since)
+            .order_by(SkySample.at)
+        )
+    )
+    state = list(
+        await db.scalars(
+            select(StatusSample)
+            .where(StatusSample.device_id == device_id, StatusSample.at >= since)
+            .order_by(StatusSample.at)
+        )
+    )
+    return sky_chart.charts(sky) + sky_chart.charts(state, sky_chart.STATUS_SERIES)
+
+
+async def night_status(
+    db: AsyncSession, device_id: str, start: dt.datetime, end: dt.datetime
+) -> list[StatusSample]:
+    rows = await db.scalars(
+        select(StatusSample)
+        .where(
+            StatusSample.device_id == device_id,
+            StatusSample.at >= start,
+            StatusSample.at < end,
+        )
+        .order_by(StatusSample.at)
     )
     return list(rows)

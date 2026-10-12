@@ -91,7 +91,11 @@ async def night(
             "device": device,
             "night_id": night_id,
             "frames": await archive.night_frames(db, device.id, night_id),
-            "sky_charts": sky_chart.charts(await archive.night_sky(db, device.id, night_id)),
+            "sky_charts": sky_chart.charts(await archive.night_sky(db, device.id, night_id))
+            + sky_chart.charts(
+                await archive.night_status(db, device.id, *_night_window(device, night_id)),
+                sky_chart.STATUS_SERIES,
+            ),
             "products": await archive.night_products(db, device.id, night_id),
             "events": events.collapse(night_events),
             "meteors": meteor_summary(night_events),
@@ -376,6 +380,13 @@ async def statistics(
         {"device": device, "stats": await stats.year(db, device.id, chosen)},
         session=session,
     )
+
+
+def _night_window(device: Device, night_id: str) -> tuple[dt.datetime, dt.datetime]:
+    """Local noon of the evening to noon of the next day (SPEC §4.5 night id)."""
+    zone = _zone(device)
+    evening = dt.datetime.strptime(night_id, "%Y%m%d").replace(hour=12, tzinfo=zone)
+    return evening.astimezone(dt.UTC), (evening + dt.timedelta(days=1)).astimezone(dt.UTC)
 
 
 def _zone(device: Device) -> ZoneInfo:

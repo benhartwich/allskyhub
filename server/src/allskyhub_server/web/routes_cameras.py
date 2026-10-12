@@ -14,6 +14,7 @@ from allskyhub_protocol import CloseCode, FrameVariant
 from allskyhub_server.auth import ratelimit
 from allskyhub_server.auth.sessions import SessionInfo
 from allskyhub_server.devices import (
+    archive,
     events,
     health,
     night_summary,
@@ -161,6 +162,7 @@ async def _camera_context(
         "settings_reported": bool(current),
         "role": role,
         "observatory": public.observatory(device),
+        "charts": await archive.recent_charts(db, device.id, now - dt.timedelta(hours=24)),
         "members": await sharing.members(db, device.id) if role == "owner" else [],
         **extra,
     }

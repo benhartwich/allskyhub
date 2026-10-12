@@ -16,6 +16,8 @@ from allskyhub_server.auth.sessions import SessionInfo
 from allskyhub_server.devices import (
     archive,
     events,
+    meteor_pairs,
+    public,
     queries,
     renders,
     science,
@@ -89,7 +91,11 @@ async def night(
             "device": device,
             "night_id": night_id,
             "frames": await archive.night_frames(db, device.id, night_id),
-            "sky_charts": sky_chart.charts(await archive.night_sky(db, device.id, night_id)),
+            "sky_charts": sky_chart.charts(await archive.night_sky(db, device.id, night_id))
+            + sky_chart.charts(
+                await archive.night_status(db, device.id, *_night_window(device, night_id)),
+                sky_chart.STATUS_SERIES,
+            ),
             "products": await archive.night_products(db, device.id, night_id),
             "events": events.collapse(night_events),
             "meteors": meteor_summary(night_events),
@@ -246,6 +252,16 @@ async def event_page(
 ) -> Response:
     device = await _own(db, session, device_id)
     event = await _event(db, device, night_id, event_id)
+    seen_too: list[dict[str, object]] = []
+    for pair, other in await meteor_pairs.for_event(db, device.id, event.event_id):
+        own = other.owner_id == device.owner_id
+        other_event = pair.event_b if pair.device_a == device.id else pair.event_a
+        seen_too.append({
+            "pair": pair,
+            "name": other.name if own else public.title(other),
+            "link": (f"/cameras/{other.id}/events/{other_event[7:15]}/{other_event}" if own
+                     else f"/sky/{other.public_slug}" if other.public_slug else None),
+        })  # fmt: skip
     return render(
         request,
         "event.html",
@@ -254,6 +270,7 @@ async def event_page(
             "event": event,
             "state": await _event_state(request, device, event),
             "rows": event_rows(event),
+            "seen_too": seen_too,
             "fireball": science.fireball_facts(event),
             "fireball_form": science.FIREBALL_FORM,
             "event_titles": EVENT_TITLES,
@@ -363,6 +380,13 @@ async def statistics(
         {"device": device, "stats": await stats.year(db, device.id, chosen)},
         session=session,
     )
+
+
+def _night_window(device: Device, night_id: str) -> tuple[dt.datetime, dt.datetime]:
+    """Local noon of the evening to noon of the next day (SPEC §4.5 night id)."""
+    zone = _zone(device)
+    evening = dt.datetime.strptime(night_id, "%Y%m%d").replace(hour=12, tzinfo=zone)
+    return evening.astimezone(dt.UTC), (evening + dt.timedelta(days=1)).astimezone(dt.UTC)
 
 
 def _zone(device: Device) -> ZoneInfo:

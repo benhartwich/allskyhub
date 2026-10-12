@@ -183,3 +183,8 @@ table.stats th { color: var(--text-2); font-weight: 600; }
 .progress .p90 { width: 90%; }
 .progress .p95 { width: 95%; }
 .progress .p100 { width: 100%; }
+.chart-exposure polyline { stroke: #f2c06b; } .chart-exposure circle { fill: #f2c06b; }
+.chart-gain polyline { stroke: #b48cff; } .chart-gain circle { fill: #b48cff; }
+.chart-temp polyline { stroke: #ff9bd2; } .chart-temp circle { fill: #ff9bd2; }
+.chart-cpu polyline { stroke: #ff7a93; } .chart-cpu circle { fill: #ff7a93; }
+.chart-disk polyline { stroke: #8fe3ff; } .chart-disk circle { fill: #8fe3ff; }

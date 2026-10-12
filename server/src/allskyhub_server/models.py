@@ -373,3 +373,46 @@ class CameraMember(Base):
     )
     role: Mapped[str] = mapped_column(String(10))
     created_at: Mapped[dt.datetime] = mapped_column(_tz(), server_default=func.now())
+
+
+class MeteorPair(Base):
+    """One meteor seen by two cameras and its trajectory (roadmap C4). ``a`` is the device
+    with the smaller id. Kept after the events expire; removed with either pairing."""
+
+    __tablename__ = "meteor_pair"
+    __table_args__ = (UniqueConstraint("device_a", "event_a", "device_b", "event_b"),)
+
+    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid7)
+    device_a: Mapped[str] = mapped_column(ForeignKey("device.id", ondelete="CASCADE"), index=True)
+    event_a: Mapped[str] = mapped_column(String(64))
+    device_b: Mapped[str] = mapped_column(ForeignKey("device.id", ondelete="CASCADE"), index=True)
+    event_b: Mapped[str] = mapped_column(String(64))
+    at: Mapped[dt.datetime] = mapped_column(_tz())
+    high_lat: Mapped[float] = mapped_column(Float)
+    high_lon: Mapped[float] = mapped_column(Float)
+    high_km: Mapped[float] = mapped_column(Float)
+    low_lat: Mapped[float] = mapped_column(Float)
+    low_lon: Mapped[float] = mapped_column(Float)
+    low_km: Mapped[float] = mapped_column(Float)
+    length_km: Mapped[float] = mapped_column(Float)
+    convergence_deg: Mapped[float] = mapped_column(Float)
+    created_at: Mapped[dt.datetime] = mapped_column(_tz(), server_default=func.now())
+
+
+class StatusSample(Base):
+    """The camera's state every few minutes (SPEC §6.3 status), for the charts of exposure,
+    gain, temperatures and disk. Kept like thumbnails; removed with the pairing."""
+
+    __tablename__ = "status_sample"
+
+    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid7)
+    device_id: Mapped[str] = mapped_column(ForeignKey("device.id", ondelete="CASCADE"))
+    at: Mapped[dt.datetime] = mapped_column(_tz())
+    mode: Mapped[str | None] = mapped_column(String(8))
+    exposure_us: Mapped[int | None] = mapped_column(BigInteger)
+    gain: Mapped[float | None] = mapped_column(Float)
+    sensor_temp_c: Mapped[float | None] = mapped_column(Float)
+    cpu_temp_c: Mapped[float | None] = mapped_column(Float)
+    disk_free_pct: Mapped[float | None] = mapped_column(Float)
+
+    __table_args__ = (Index("ix_status_sample_device_id_at", "device_id", "at"),)

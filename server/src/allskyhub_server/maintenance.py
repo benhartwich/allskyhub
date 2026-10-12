@@ -26,6 +26,7 @@ from allskyhub_server.models import (
     Product,
     RateLimit,
     SkySample,
+    StatusSample,
     User,
     WebSession,
 )
@@ -53,6 +54,11 @@ async def purge(
     await db.execute(
         delete(SkySample).where(
             SkySample.created_at < now - dt.timedelta(days=settings.keep_thumb_days)
+        )
+    )
+    await db.execute(
+        delete(StatusSample).where(
+            StatusSample.at < now - dt.timedelta(days=settings.keep_thumb_days)
         )
     )
     await db.execute(

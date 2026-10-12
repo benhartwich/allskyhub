@@ -1,10 +1,11 @@
-"""Build server/.../devices/data/constellations.json from d3-celestial (BSD-3-Clause).
+"""Build packages/sky/src/allskyhub_sky/data/constellations.json from d3-celestial (BSD-3-Clause).
 
 Inputs: `constellations.lines.json` and `constellations.json` from the npm package
 d3-celestial (data/). Output: {"lines": {abbr: [[[ra, dec], ...], ...]}, "names":
 {abbr: [german name, ra, dec, rank]}}, J2000, degrees, ra 0..360, rounded to 0.01°.
 
-    uv run python tools/sky/build_constellations.py lines.json names.json > .../constellations.json
+    uv run python tools/sky/build_constellations.py lines.json names.json \
+        > packages/sky/src/allskyhub_sky/data/constellations.json
 """
 
 from __future__ import annotations

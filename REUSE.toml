@@ -22,9 +22,10 @@ path = "packages/protocol/**"
 SPDX-FileCopyrightText = "2026 Benjamin Hartwich"
 SPDX-License-Identifier = "Apache-2.0"
 
-# The shared look of hub and camera (CSS, star field): permissive like the protocol.
+# The shared look of hub and camera (CSS, star field) and the shared sky drawing:
+# permissive like the protocol.
 [[annotations]]
-path = "packages/design/**"
+path = ["packages/design/**", "packages/sky/**"]
 SPDX-FileCopyrightText = "2026 Benjamin Hartwich"
 SPDX-License-Identifier = "Apache-2.0"
 
@@ -62,6 +63,6 @@ SPDX-FileCopyrightText = "Natural Earth (public domain), via world-atlas (Mike B
 SPDX-License-Identifier = "LicenseRef-NaturalEarth-PublicDomain"
 
 [[annotations]]
-path = "server/src/allskyhub_server/devices/data/constellations.json"
+path = "packages/sky/src/allskyhub_sky/data/constellations.json"
 SPDX-FileCopyrightText = "2015 Olaf Frohn (d3-celestial)"
 SPDX-License-Identifier = "BSD-3-Clause"

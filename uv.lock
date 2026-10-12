@@ -1,5 +1,5 @@
 version = 1
-revision = 5
+revision = 3
 requires-python = ">=3.11"
 resolution-markers = [
     "python_full_version >= '3.14'",
@@ -13,6 +13,7 @@ members = [
     "allskyhub-design",
     "allskyhub-protocol",
     "allskyhub-server",
+    "allskyhub-sky",
 ]
 
 [manifest.dependency-groups]
@@ -94,6 +95,7 @@ dependencies = [
     { name = "alembic" },
     { name = "allskyhub-design" },
     { name = "allskyhub-protocol" },
+    { name = "allskyhub-sky" },
     { name = "argon2-cffi" },
     { name = "asyncpg" },
     { name = "cryptography" },
@@ -113,6 +115,7 @@ requires-dist = [
     { name = "alembic", specifier = ">=1.16" },
     { name = "allskyhub-design", editable = "packages/design" },
     { name = "allskyhub-protocol", editable = "packages/protocol" },
+    { name = "allskyhub-sky", editable = "packages/sky" },
     { name = "argon2-cffi", specifier = ">=25.1" },
     { name = "asyncpg", specifier = ">=0.30" },
     { name = "cryptography", specifier = ">=44" },
@@ -126,6 +129,17 @@ requires-dist = [
     { name = "sqlalchemy", extras = ["asyncio"], specifier = ">=2.0.43" },
     { name = "uvicorn", extras = ["standard"], specifier = ">=0.37" },
 ]
+
+[[package]]
+name = "allskyhub-sky"
+version = "0.1.0"
+source = { editable = "packages/sky" }
+dependencies = [
+    { name = "allskyhub-protocol" },
+]
+
+[package.metadata]
+requires-dist = [{ name = "allskyhub-protocol", editable = "packages/protocol" }]
 
 [[package]]
 name = "annotated-doc"

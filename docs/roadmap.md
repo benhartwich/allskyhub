@@ -58,7 +58,7 @@ them most:
 | L6 | Sky: charts per night for sky quality (SQM/Bortle), cloud cover, exposure/gain, sensor temperature | agent | Allsky "Charts"; `status.sky` history |
 | L7 | Camera settings: location (map), time zone, day/night delay, exposure and gain limits, white balance, flip/rotation, JPEG quality | agent | Allsky "Allsky Settings" reduced to what the agent uses; extends `AgentSettings`, same validation as `set_settings`, the hub sees changes in `status` |
 | L8 | ✅ Detection and image setup: detectors on/off and sensitivity, sky-mask editor, orientation check (north, plate-solve result) | agent | replaces Allsky's module manager; no free-form modules. Done: detector levels in the settings schema (hub shows them too), drawn exclude/include areas, horizon and compass from the plate solve over the live image |
-| L9 | Night products: which ones, timelapse fps/quality, retention | agent | |
+| L9 | ✅ Night products: which ones, timelapse fps/quality, retention | agent | settings `product_keogram/startrails/timelapse`, `timelapse_fps`, `timelapse_quality` (CRF 28/23/19), `keep_days`; the import takes over Allsky's `daystokeep` |
 | L10 | Public page management (`GET/PUT /device/v1/public`) | agent + hub | spec PR by the hub session; read-only when the hub is unreachable |
 | L11 | Overlay: on/off and fields (time, exposure, temperature, stars/constellations) | agent | simple version of the Allsky overlay editor |
 | L12 | System: CPU temperature/load, RAM, disk, uptime, camera, hub connection; restart agent, reboot, shut down | agent | Allsky "System"; needs a narrow root path (polkit) like the Wi-Fi country |

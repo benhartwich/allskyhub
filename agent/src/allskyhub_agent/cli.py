@@ -45,13 +45,18 @@ from allskyhub_agent.importer.backlog import BACKLOG_NAME, Backlog
 from allskyhub_agent.live import LiveState
 from allskyhub_agent.process.hotpixels import HotPixels
 from allskyhub_agent.process.skymask import SkyMask
-from allskyhub_agent.products.build import NightProducts, build_night, night_products
+from allskyhub_agent.products.build import (
+    NightProducts,
+    ProductConfig,
+    build_night,
+    night_products,
+)
 from allskyhub_agent.products.worker import ProductWorker
 from allskyhub_agent.profiles import Profile, get_profile, with_night_limits
 from allskyhub_agent.runner import Location, LoopConfig, Runner
 from allskyhub_agent.services import HubManager, run_announcer
 from allskyhub_agent.settings import DEFAULT_PATH as SETTINGS_PATH
-from allskyhub_agent.settings import AgentSettings
+from allskyhub_agent.settings import TIMELAPSE_CRF, AgentSettings
 from allskyhub_agent.settings_schema import build_schema
 from allskyhub_agent.setup.controller import NetworkRequest, SetupController
 from allskyhub_agent.setup.setup_file import DEFAULT_PATH as SETUP_FILE_PATH
@@ -174,11 +179,22 @@ def run_import(args: argparse.Namespace) -> int:
     if args.dry_run:
         return 0
     if args.settings and not current.has_location and allsky.latitude is not None:
-        new = current.with_updates(
+        current = current.with_updates(
             latitude=allsky.latitude, longitude=allsky.longitude, camera=allsky.camera
         )
-        new.save(args.settings)
+        current.save(args.settings)
         print(f"location {allsky.latitude}, {allsky.longitude} saved in {args.settings}")
+    # Retention (SPEC §4.5) must not delete what was just taken over: at least as long as
+    # Allsky kept its nights, and long enough for the oldest imported one.
+    nights = store.nights()
+    if args.settings and nights:
+        oldest = datetime.strptime(nights[-1], "%Y%m%d").replace(tzinfo=tz)
+        age = (datetime.now(tz) - oldest).days + 1
+        keep = min(3650, max(current.keep_days, allsky.days_to_keep or 0, age))
+        if keep > current.keep_days:
+            current.with_values({"keep_days": keep}).save(args.settings)
+            print(f"keeping nights for {keep} days now (was {current.keep_days}); "
+                  "restart the agent to apply it")  # fmt: skip
     # SPEC §6.7: the running agent announces these nights to the hub, one per second.
     Backlog(data / BACKLOG_NAME).add(sorted(r.nights), owner)
     return 0
@@ -586,7 +602,19 @@ def main(argv: list[str] | None = None) -> int:
             if announced is not None:
                 hub.notify_products(announced)
 
-    products = ProductWorker(store, on_done=products_done)
+    night_cfg = load_settings()
+    products = ProductWorker(
+        store,
+        ProductConfig(
+            timelapse_fps=night_cfg.timelapse_fps,
+            timelapse_crf=TIMELAPSE_CRF[night_cfg.timelapse_quality],
+            keogram=night_cfg.product_keogram,
+            startrails=night_cfg.product_startrails,
+            timelapse=night_cfg.product_timelapse,
+        ),
+        on_done=products_done,
+        keep_days=night_cfg.keep_days,
+    )
     products.start()
 
     def show(f: FrameInfo) -> None:

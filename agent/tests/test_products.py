@@ -209,3 +209,12 @@ def test_unreadable_frames_are_skipped(tmp_path: Path, bad: bytes) -> None:
     keo = keogram(paths, ProductConfig())
     assert keo is not None
     assert keo.shape[1] == 1
+
+
+def test_products_switched_off(tmp_path: Path) -> None:
+    # Roadmap L9: only the products the owner wants.
+    store, _ = _simulate_night(tmp_path)
+    result = build_night(store, "20261006", ProductConfig(keogram=False, timelapse=False))
+    assert result.built == [STARTRAILS]
+    assert result.skipped == {KEOGRAM: "switched off", TIMELAPSE: "switched off"}
+    assert not (tmp_path / "images" / "20261006" / KEOGRAM).exists()

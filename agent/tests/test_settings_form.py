@@ -44,6 +44,12 @@ def test_values_report_every_key_and_fit_device_settings() -> None:
         "detect_aurora": "normal",
         "detect_lightning": "normal",
         "detect_nlc": "normal",
+        "product_keogram": True,
+        "product_startrails": True,
+        "product_timelapse": True,
+        "timelapse_fps": 25,
+        "timelapse_quality": "normal",
+        "keep_days": 14,
     }
 
 
@@ -116,3 +122,18 @@ def test_local_settings_api() -> None:
         assert stored == [{"wb_b": 60, "night_max_gain": None}]
     finally:
         web.stop()
+
+
+def test_night_product_and_retention_settings(tmp_path: Path) -> None:
+    # Roadmap L9, SPEC §4.5.
+    schema = build_schema(get_profile("zwo-asi678mc"))
+    assert check(schema, {"keep_days": 60, "timelapse_fps": 30, "product_keogram": False}) == []
+    assert check(schema, {"keep_days": 0}) == ["keep_days"]
+    assert check(schema, {"timelapse_quality": "huge"}) == ["timelapse_quality"]
+    path = tmp_path / "settings.json"
+    AgentSettings().with_values(
+        {"keep_days": 60, "product_timelapse": False, "timelapse_quality": "high"}
+    ).save(path)
+    s = AgentSettings.load(path)
+    assert (s.keep_days, s.product_timelapse, s.timelapse_quality) == (60, False, "high")
+    assert (s.product_keogram, s.timelapse_fps) == (True, 25)

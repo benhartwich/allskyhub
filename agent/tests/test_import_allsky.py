@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import argparse
 import json
 import sqlite3
 from datetime import UTC, datetime
@@ -11,10 +12,12 @@ from zoneinfo import ZoneInfo
 import numpy as np
 from PIL import Image as PILImage
 
+from allskyhub_agent.cli import run_import
 from allskyhub_agent.detect.events import EventStore
 from allskyhub_agent.importer.allsky import AllskyImporter, AllskySettings, coordinate
 from allskyhub_agent.importer.backlog import Backlog
 from allskyhub_agent.products.build import night_products
+from allskyhub_agent.settings import AgentSettings
 from allskyhub_agent.store.images import ImageStore
 from allskyhub_protocol import EventKind, Mode
 
@@ -165,3 +168,20 @@ def test_backlog_keeps_nights_until_done(tmp_path: Path) -> None:
     b.done("20261011")
     assert b.next() is None
     assert not (tmp_path / "hub_backlog.json").exists()
+
+
+def test_import_keeps_what_it_took_over(tmp_path: Path) -> None:
+    # SPEC §4.5: retention must not delete the imported nights the next morning.
+    home = make_allsky(tmp_path)
+    settings = json.loads((home / "config" / "settings.json").read_text())
+    (home / "config" / "settings.json").write_text(json.dumps(settings | {"daystokeep": 60}))
+    data = tmp_path / "data"
+    data.mkdir()
+    path = tmp_path / "settings.json"
+    AgentSettings(timezone="Europe/Vienna").save(path)
+    args = argparse.Namespace(source=home, data=data, settings=path, tz=None, profile=None,
+                              copy=False, nights=None, dry_run=False)  # fmt: skip
+    assert run_import(args) == 0
+    s = AgentSettings.load(path)
+    assert s.keep_days >= 60  # Allsky's 60, or more if the oldest night is older
+    assert s.latitude == 48.13601

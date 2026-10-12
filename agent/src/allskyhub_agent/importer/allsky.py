@@ -66,6 +66,7 @@ class AllskySettings:
     camera_name: str
     lens: str
     computer: str
+    days_to_keep: int | None = None  # None: Allsky keeps every night ("0")
 
     @classmethod
     def load(cls, allsky_home: Path) -> AllskySettings:
@@ -75,6 +76,7 @@ class AllskySettings:
             raw = {}
         d = cast(dict[str, Any], raw) if isinstance(raw, dict) else {}
         angle = d.get("angle")
+        keep = d.get("daystokeep")
         cam = _CAMERAS.get((str(d.get("cameratype", "")), str(d.get("cameramodel", ""))))
         return cls(
             latitude=coordinate(d.get("latitude")),
@@ -86,6 +88,7 @@ class AllskySettings:
             camera_name=str(d.get("camera") or ""),
             lens=str(d.get("lens") or ""),
             computer=str(d.get("computer") or ""),
+            days_to_keep=int(keep) if isinstance(keep, int | float) and keep > 0 else None,
         )
 
 

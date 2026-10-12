@@ -106,7 +106,9 @@ the hub treats frames from a device with `time_trusted: false` as possibly misda
 Frames are stored as JPEG under `<data>/images/<night-id>/` with a thumbnail. The
 *night id* is the date of the evening the night started: frames before local noon
 belong to the previous day's id, so a whole night lands in one folder. Retention is
-by days (default 14, after the night products) and by free disk space: every 10 minutes the oldest nights are removed until at least 10 % of the disk is free; the current night is never removed.
+by days (setting `keep_days`, §6.9, default 14, after the night products; an import of an
+existing installation raises it to that installation's retention and to the age of its
+oldest night) and by free disk space: every 10 minutes the oldest nights are removed until at least 10 % of the disk is free; the current night is never removed.
 
 ### 4.6 Hot pixels
 
@@ -166,6 +168,9 @@ has a cloud cover or sky brightness, for the local charts (§7).
 At dawn, when the mode switches from night to day, the agent builds three products from
 that night's frames (frames with mode `night` in the night id's index) in a background
 worker; capture never waits for it.
+Each can be switched off (`product_keogram`, `product_startrails`, `product_timelapse`,
+§6.9); the timelapse takes `timelapse_fps` (default 25) and `timelapse_quality`
+(`small`, `normal`, `high`).
 
 - **Keogram** `keogram.jpg`: one column per frame, cut along the vertical line through
   the image centre (a 3-pixel-wide band, averaged), in capture order; height scaled to

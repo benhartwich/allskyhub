@@ -9,12 +9,20 @@ from __future__ import annotations
 
 import base64
 import hashlib
+import json
 import re
 from enum import StrEnum
 from typing import Literal
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    ValidationError,
+    field_validator,
+    model_validator,
+)
 
 # SPEC §6.2: lowercase RFC 4648 base32 of 16 bytes, without padding.
 DEVICE_ID_PATTERN = r"^[a-z2-7]{26}$"
@@ -111,10 +119,19 @@ class TokenRequest(_Model):
     signature: str = Field(pattern=_B64URL)
 
 
+class HubKey(_Model):
+    """One of the hub's Ed25519 keys for local logins (SPEC §6.2 step 6)."""
+
+    kid: str = Field(pattern=r"^[A-Za-z0-9_-]{1,32}$")
+    public_key: str = Field(pattern=_B64URL, min_length=43, max_length=43)
+
+
 class TokenResponse(_Model):
     access_token: str
     token_type: Literal["bearer"] = "bearer"  # noqa: S105
     expires_in: int = Field(gt=0)
+    # SPEC §6.2 step 6: the agent replaces its stored list with every answer.
+    hub_keys: list[HubKey] = Field(default_factory=list[HubKey])
 
 
 class FrameVariant(StrEnum):
@@ -193,3 +210,123 @@ class CloseCode:
     REAUTH = 4401  # token expired or invalid: get a new one, reconnect
     UNPAIRED = 4403  # device no longer paired: register again (SPEC §6.2)
     REPLACED = 4409  # a newer connection of the same device took over
+
+
+# SPEC §6.5 local_access: the lowest Argon2id parameters the device accepts.
+ARGON2_MIN_MEMORY_KIB = 19456
+ARGON2_MIN_TIME = 2
+_ARGON2 = re.compile(r"^\$argon2id\$v=19\$m=(\d+),t=(\d+),p=(\d+)\$[A-Za-z0-9+/]+\$[A-Za-z0-9+/]+$")
+
+
+class LocalAccessArgs(_Model):
+    """`args` of the `local_access` command (SPEC §6.5): the offline code's verifier."""
+
+    verifier: str | None = Field(max_length=512)
+
+    @field_validator("verifier")
+    @classmethod
+    def _argon2id(cls, v: str | None) -> str | None:
+        if v is None:
+            return v
+        match = _ARGON2.fullmatch(v)
+        if match is None:
+            raise ValueError("not an Argon2id PHC string")
+        if int(match[1]) < ARGON2_MIN_MEMORY_KIB or int(match[2]) < ARGON2_MIN_TIME:
+            raise ValueError("Argon2id parameters too weak")
+        return v
+
+
+# SPEC §7.4 B: 12 characters from the pairing alphabet, shown as XXXX-XXXX-XXXX.
+OFFLINE_CODE_LENGTH = 12
+
+
+def normalize_offline_code(code: str) -> str:
+    """Upper-case, without spaces and hyphens, like a pairing code."""
+    return normalize_pairing_code(code)
+
+
+# SPEC §7.4 A step 4: the assertion lives at most this long.
+LOCAL_LOGIN_MAX_AGE_S = 60
+
+
+class LocalLoginClaims(_Model):
+    """Payload of a local-login assertion (SPEC §7.4 A step 4)."""
+
+    kid: str = Field(pattern=r"^[A-Za-z0-9_-]{1,32}$")
+    aud: str = Field(pattern=DEVICE_ID_PATTERN)
+    sub: str = Field(min_length=1, max_length=64)
+    nonce: str = Field(pattern=_B64URL, min_length=16, max_length=128)
+    iat: int
+    exp: int
+
+    @model_validator(mode="after")
+    def _short(self) -> LocalLoginClaims:
+        if not 0 < self.exp - self.iat <= LOCAL_LOGIN_MAX_AGE_S:
+            raise ValueError("exp must be at most 60 s after iat")
+        return self
+
+
+def local_login_signing_payload(payload: str) -> bytes:
+    """SPEC §7.4 A step 4: the bytes the hub signs, ``payload`` being the base64url part."""
+    return f"allskyhub-v1\nlocal-login\n{payload}".encode()
+
+
+def encode_local_login_claims(claims: LocalLoginClaims) -> str:
+    """The base64url payload part of an assertion."""
+    return b64url(json.dumps(claims.model_dump(), separators=(",", ":")).encode())
+
+
+def split_local_login_assertion(assertion: str) -> tuple[str, LocalLoginClaims, bytes]:
+    """``<payload>.<signature>`` → (payload part, claims, raw signature). Checks the form
+    only; the caller verifies the signature with ``local_login_signing_payload(payload)``
+    and the hub key ``claims.kid``. Raises ``ValueError``."""
+    if len(assertion) > 2048 or assertion.count(".") != 1:
+        raise ValueError("not an assertion")
+    payload, signature = assertion.split(".")
+    try:
+        claims = LocalLoginClaims.model_validate_json(b64url_decode(payload))
+    except ValidationError as exc:
+        raise ValueError("invalid claims") from exc
+    return payload, claims, b64url_decode(signature)
+
+
+class PublicSections(_Model):
+    """Which parts of the public page are shown (SPEC §6.8)."""
+
+    live: bool = True
+    loop: bool = True
+    archive: bool = True
+    events: bool = True
+    sky: bool = True
+    aurora: bool = True
+
+
+class PublicProfile(_Model):
+    """What the owner writes about the camera (SPEC §6.8); empty strings are not shown."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True, str_strip_whitespace=True)
+
+    title: str = Field(default="", max_length=100)
+    location_label: str = Field(default="", max_length=200)
+    show_coordinates: bool = False
+    camera: str = Field(default="", max_length=200)
+    lens: str = Field(default="", max_length=200)
+    computer: str = Field(default="", max_length=200)
+    owner: str = Field(default="", max_length=200)
+    notes: str = Field(default="", max_length=2000)
+    sections: PublicSections = Field(default_factory=PublicSections)
+
+
+class PublicState(_Model):
+    """Answer of `GET` and `PUT /device/v1/public` (SPEC §6.8)."""
+
+    enabled: bool
+    url: str | None
+    profile: PublicProfile
+
+
+class PublicUpdate(_Model):
+    """Body of `PUT /device/v1/public` (SPEC §6.8): `profile` replaces the whole profile."""
+
+    enabled: bool | None = None
+    profile: PublicProfile | None = None

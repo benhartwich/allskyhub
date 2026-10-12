@@ -233,6 +233,7 @@ class CommandName(StrEnum):
     UPLOAD_FRAME = "upload_frame"
     UPLOAD_PRODUCT = "upload_product"
     UPLOAD_EVENT = "upload_event"
+    LOCAL_ACCESS = "local_access"
 
 
 class Command(_Body):

@@ -79,3 +79,76 @@ def test_upload_frame_command_roundtrip() -> None:
 def test_upload_frame_rejects_path_tricks() -> None:
     with pytest.raises(ValidationError):
         UploadFrameArgs(night_id="20261006", name="../etc/passwd")
+
+
+def test_token_response_hub_keys_default_empty() -> None:
+    """SPEC §6.2 step 6: older hubs send no hub_keys."""
+    from allskyhub_protocol import HubKey, TokenResponse
+
+    token = "t"  # noqa: S105 - a test value
+    assert TokenResponse(access_token=token, expires_in=3600).hub_keys == []
+    key = HubKey(kid="k1", public_key="A" * 43)
+    assert TokenResponse(access_token=token, expires_in=1, hub_keys=[key]).hub_keys == [key]
+    with pytest.raises(ValidationError):
+        HubKey(kid="k1", public_key="short")
+
+
+def test_local_access_verifier() -> None:
+    """SPEC §6.5 local_access: Argon2id at least m=19456, t=2, or null."""
+    from allskyhub_protocol import LocalAccessArgs
+
+    good = "$argon2id$v=19$m=19456,t=2,p=1$c2FsdHNhbHQ$aGFzaGhhc2hoYXNo"
+    assert LocalAccessArgs(verifier=good).verifier == good
+    assert LocalAccessArgs(verifier=None).verifier is None
+    for bad in (
+        "$argon2id$v=19$m=4096,t=2,p=1$c2FsdA$aGFzaA",
+        "$argon2id$v=19$m=19456,t=1,p=1$c2FsdA$aGFzaA",
+        "$argon2i$v=19$m=19456,t=2,p=1$c2FsdA$aGFzaA",
+        "plain",
+    ):
+        with pytest.raises(ValidationError):
+            LocalAccessArgs(verifier=bad)
+
+
+def test_local_login_assertion_roundtrip() -> None:
+    """SPEC §7.4 A step 4: payload.signature, Ed25519 over the fixed prefix."""
+    from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
+
+    from allskyhub_protocol import (
+        LocalLoginClaims,
+        b64url,
+        encode_local_login_claims,
+        local_login_signing_payload,
+        split_local_login_assertion,
+    )
+
+    key = Ed25519PrivateKey.generate()
+    claims = LocalLoginClaims(
+        kid="k1", aud="a" * 26, sub="user-1", nonce="n" * 43, iat=1000, exp=1060
+    )
+    payload = encode_local_login_claims(claims)
+    assert local_login_signing_payload(payload).startswith(b"allskyhub-v1\nlocal-login\n")
+    assertion = f"{payload}.{b64url(key.sign(local_login_signing_payload(payload)))}"
+    part, parsed, signature = split_local_login_assertion(assertion)
+    assert parsed == claims
+    key.public_key().verify(signature, local_login_signing_payload(part))
+    for bad in ("x", "a.b.c", f"{payload}.!", f"{b64url(b'{}')}.{b64url(b'x')}"):
+        with pytest.raises(ValueError, match=r"not|invalid"):
+            split_local_login_assertion(bad)
+    with pytest.raises(ValidationError):
+        LocalLoginClaims(kid="k1", aud="a" * 26, sub="u", nonce="n" * 43, iat=0, exp=61)
+
+
+def test_public_profile_limits() -> None:
+    """SPEC §6.8: defaults, length limits, unknown keys."""
+    from allskyhub_protocol import PublicProfile, PublicUpdate
+
+    p = PublicProfile()
+    assert p.sections.live
+    assert not p.show_coordinates
+    assert PublicProfile(title="  Lanzenberg ").title == "Lanzenberg"
+    with pytest.raises(ValidationError):
+        PublicProfile(title="x" * 101)
+    with pytest.raises(ValidationError):
+        PublicProfile.model_validate({"colour": "red"})
+    assert PublicUpdate().enabled is None

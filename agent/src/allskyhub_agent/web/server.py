@@ -6,6 +6,8 @@ never waits for it. Until pairing exists (SPEC §6.2) it is meant for the local 
 Routes:
     GET  /                    the page
     GET  /api/status          JSON snapshot of the live state
+    GET  /api/health          {version, frames, frame: {mode, captured_at}}, open: the
+                              updater's health check and the watchdog (SPEC §8)
     GET  /api/live.jpg        latest frame, scaled
     GET  /api/crop.jpg        latest frame, 1:1 centre crop (focus mode only)
     GET  /api/setup           device id, hub, pairing code, setup mode (SPEC §6.2, §7, §7.1)
@@ -23,6 +25,7 @@ Routes:
     POST /api/settings        partial JSON object → 202, or 400 {detail, fields}
     GET  /api/calibration     sky mask state, drawn areas, orientation overlay (roadmap L8)
     GET  /api/skymask.png?w=&h=   transparent shade over everything that is not sky
+    GET  /api/sky-overlay?at=     constellations and N/O/S/W for an image (roadmap L11)
     POST /api/calibration/mask      {exclude, include} drawn areas → the new state
     POST /api/calibration/relearn   drop the learned mask → the new state
     GET  /api/public          the public page on the hub {enabled, url, profile, online}
@@ -204,6 +207,7 @@ _DESIGN_TYPES = {".css": "text/css; charset=utf-8", ".woff2": "font/woff2", ".sv
 # Routes that answer without a session on a paired camera (SPEC §7.4).
 _OPEN = {
     "/api/setup",
+    "/api/health",
     "/local-login",
     "/local-login/start",
     "/local-login/callback",
@@ -562,6 +566,25 @@ def make_handler(
                     self._text(HTTPStatus.NOT_FOUND, "no camera yet")
                     return
                 self._json(HTTPStatus.OK, calibration.info())
+            elif path == "/api/sky-overlay":
+                raw_at = self._query().get("at", "")
+                try:
+                    at = (
+                        datetime.fromisoformat(raw_at.replace("Z", "+00:00"))
+                        if raw_at
+                        else datetime.now(UTC)
+                    )
+                except ValueError:
+                    at = None
+                ov = (
+                    calibration.sky_overlay(at, calibration.location())
+                    if calibration is not None and at is not None and at.tzinfo is not None
+                    else None
+                )
+                if ov is None:
+                    self._text(HTTPStatus.NOT_FOUND, "no orientation or location")
+                else:
+                    self._json(HTTPStatus.OK, ov)
             elif path == "/api/skymask.png":
                 png = (
                     calibration.shade_png(self._int("w", 960), self._int("h", 540))
@@ -574,6 +597,8 @@ def make_handler(
                     self._send(HTTPStatus.OK, png, "image/png")
             elif path == "/api/status":
                 self._json(HTTPStatus.OK, live.status())
+            elif path == "/api/health":
+                self._json(HTTPStatus.OK, live.health())
             elif path == "/api/setup":
                 if pairing is None:
                     self._text(HTTPStatus.NOT_FOUND, "no hub configured")

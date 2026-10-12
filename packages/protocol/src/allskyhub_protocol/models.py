@@ -325,6 +325,8 @@ class Status(_Body):
     update: UpdateStatus | None = None
     # SPEC §6.3: N.I.N.A.'s state (roadmap C15), null unless configured.
     observatory: Observatory | None = None
+    # SPEC §7.5: why the Alpaca server does not run although it is switched on.
+    alpaca_error: str | None = Field(default=None, max_length=40)
 
 
 class FrameInfo(_Body):

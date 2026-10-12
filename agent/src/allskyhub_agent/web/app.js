@@ -61,11 +61,21 @@ document.addEventListener("keydown", (e) => {
 const loadPref = (k) => { try { return localStorage.getItem("ash-ov-" + k) !== "0"; } catch { return true; } };
 const savePref = (k, on) => { try { localStorage.setItem("ash-ov-" + k, on ? "1" : "0"); } catch { /* private mode */ } };
 
-function overlaySvg(f, orientation, ov, w, h, fixedColours = false) {
+function overlaySvg(f, orientation, ov, w, h, fixedColours = false, sky = null) {
   const H = w ? 1000 * h / w : 562.5;
   const fs = 22;  // in viewBox units: about 2 % of the width
   const cls = fixedColours ? ' fill="#fff" stroke="rgba(0,0,0,.75)" stroke-width="4" paint-order="stroke"' : "";
   let out = "";
+  if (ov.stars && sky) {
+    // Pixels of the solved frame, scaled to the drawing's 1000 units wide.
+    const k = 1000 / sky.width;
+    const line = fixedColours ? ' stroke="rgba(160,190,255,.7)"' : "";
+    const label = fixedColours ? ' fill="rgba(200,215,255,.9)"' : "";
+    out += `<g class="ov-sky" transform="scale(${k.toFixed(5)})">
+      ${sky.paths.map((d) => `<path d="${d}" fill="none" stroke-width="${(1.6 / k).toFixed(2)}"${line}/>`).join("")}
+      ${sky.names.map((n) => `<text x="${n.x}" y="${n.y}" font-size="${sky.font}" text-anchor="middle"${label}>${esc(n.text)}</text>`).join("")}
+    </g>`;
+  }
   if (ov.data && f) {
     const at = new Date(f.captured_at);
     const lines = [
@@ -120,6 +130,7 @@ function viewLive() {
       <div class="row">
         <button type="button" class="secondary small" data-ov="data" aria-pressed="false">Daten</button>
         <button type="button" class="secondary small" data-ov="compass" aria-pressed="false">Himmelsrichtungen</button>
+        <button type="button" class="secondary small" data-ov="stars" aria-pressed="false" hidden>Sternbilder</button>
         <button type="button" class="secondary small" id="ovSave">Mit Overlay speichern</button>
       </div>
       <dl class="facts" id="facts"><dt>Bild</dt><dd>Warte auf das erste Bild …</dd></dl>
@@ -152,7 +163,18 @@ function viewLive() {
   let lastFrame = null;
   let orientation = null;
   getJSON("api/calibration").then((c) => { orientation = c.orientation; drawOverlay(); }).catch(() => {});
-  const ov = { data: loadPref("data"), compass: loadPref("compass") };
+  const ov = { data: loadPref("data"), compass: loadPref("compass"), stars: loadPref("stars") };
+  let sky = null;  // constellations for the shown frame (packages/sky, as on the hub)
+  let skyFor = null;
+  const loadSky = () => {
+    if (!lastFrame || lastFrame.captured_at === skyFor) return;
+    skyFor = lastFrame.captured_at;
+    getJSON("api/sky-overlay?at=" + encodeURIComponent(lastFrame.captured_at)).then((s) => {
+      sky = s;
+      document.querySelector('[data-ov="stars"]').hidden = false;
+      drawOverlay();
+    }).catch(() => {});
+  };
   for (const b of document.querySelectorAll("[data-ov]")) {
     const key = b.dataset.ov;
     const sync = () => { b.classList.toggle("active", ov[key]); b.setAttribute("aria-pressed", String(ov[key])); };
@@ -163,12 +185,12 @@ function viewLive() {
   const drawOverlay = () => {
     const img = $("live"), svg = $("liveOverlay");
     if (!img || !svg) return;
-    svg.innerHTML = overlaySvg(lastFrame, orientation, ov, img.naturalWidth, img.naturalHeight);
+    svg.innerHTML = overlaySvg(lastFrame, orientation, ov, img.naturalWidth, img.naturalHeight, false, sky);
     if (img.naturalWidth) svg.setAttribute("viewBox", `0 0 1000 ${(1000 * img.naturalHeight / img.naturalWidth).toFixed(1)}`);
   };
   $("live").addEventListener("load", drawOverlay);
-  $("ovSave").onclick = () => saveWithOverlay($("live"), overlaySvg(lastFrame, orientation, { data: true, compass: ov.compass },
-    $("live").naturalWidth, $("live").naturalHeight, true), lastFrame);
+  $("ovSave").onclick = () => saveWithOverlay($("live"), overlaySvg(lastFrame, orientation,
+    { data: true, compass: ov.compass, stars: ov.stars }, $("live").naturalWidth, $("live").naturalHeight, true, sky), lastFrame);
   $("live").onclick = () => lightbox([{ src: $("live").src, caption: "Aktuelles Bild" }], 0);
   const render = (s) => {
     $("version").textContent = s.version;
@@ -179,6 +201,7 @@ function viewLive() {
     if (s.frame) {
       const f = s.frame;
       lastFrame = f;
+      loadSky();
       $("facts").innerHTML = `
         <dt>Aufgenommen</dt><dd>${fmtTime(f.captured_at)}</dd>
         <dt>Modus</dt><dd>${f.mode === "night" ? "Nacht" : "Tag"}</dd>
@@ -834,6 +857,12 @@ async function viewSystem() {
       ${hw.disk ? `<dt>Speicher</dt><dd>${fmtBytes(hw.disk.free)} frei von ${fmtBytes(hw.disk.total)}
           ${meter(hw.disk.total - hw.disk.free, hw.disk.total)}</dd>` : ""}
       ${power}
+      ${hw.alpaca ? `<dt>ASCOM Alpaca</dt><dd>${!hw.alpaca.enabled ? '<span class="muted">aus</span>'
+        : hw.alpaca.error ? `<span class="badge">Port belegt</span> <span class="muted small">Port ${hw.alpaca.port} oder 32227 nutzt schon ein anderes Programm (z. B. ASCOM Remote).</span>`
+        : `<span class="badge ok">an</span> Port ${hw.alpaca.port}`}</dd>` : ""}
+      ${hw.observatory ? `<dt>N.I.N.A.</dt><dd>${hw.observatory.connected ? '<span class="badge ok">verbunden</span>' : '<span class="badge">nicht erreichbar</span>'}
+        ${hw.observatory.target ? ` · ${esc(hw.observatory.target)}` : ""}${hw.observatory.sequence ? ` · ${Math.round(hw.observatory.sequence.progress * 100)} %` : ""}
+        ${hw.observatory.safe != null ? ` · ${hw.observatory.safe ? "sicher" : "unsicher"}` : ""}</dd>` : ""}
       <dt>Uhrzeit</dt><dd>${hw.time_trusted ? '<span class="badge ok">genau</span>' : '<span class="badge">ungenau</span>'}</dd>`;
   }, 5000);
 }

@@ -10,6 +10,9 @@ EnvironmentFile=/etc/allskyhub-agent/allskyhub-agent.env
 ExecStart=/opt/allskyhub-agent/current/.venv/bin/allskyhub-agent $ALLSKYHUB_AGENT_ARGS
 Restart=always
 RestartSec=5
+# SPEC §8.1: the agent pings while frames keep coming; a hung capture is restarted.
+WatchdogSec=5min
+NotifyAccess=main
 StateDirectory=allskyhub-agent
 StateDirectoryMode=0750
 NoNewPrivileges=yes

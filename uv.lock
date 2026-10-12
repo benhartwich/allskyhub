@@ -1,5 +1,5 @@
 version = 1
-revision = 3
+revision = 5
 requires-python = ">=3.11"
 resolution-markers = [
     "python_full_version >= '3.14'",
@@ -46,6 +46,7 @@ source = { editable = "agent" }
 dependencies = [
     { name = "allskyhub-design" },
     { name = "allskyhub-protocol" },
+    { name = "allskyhub-sky" },
     { name = "cryptography" },
     { name = "httpx" },
     { name = "ifaddr" },
@@ -61,6 +62,7 @@ dependencies = [
 requires-dist = [
     { name = "allskyhub-design", editable = "packages/design" },
     { name = "allskyhub-protocol", editable = "packages/protocol" },
+    { name = "allskyhub-sky", editable = "packages/sky" },
     { name = "cryptography", specifier = ">=46" },
     { name = "httpx", specifier = ">=0.27" },
     { name = "ifaddr", specifier = ">=0.2" },

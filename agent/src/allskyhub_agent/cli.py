@@ -10,12 +10,13 @@ from __future__ import annotations
 import argparse
 import logging
 import os
+import socket
 import subprocess
 import sys
 import threading
 import time
-from collections.abc import Mapping
-from datetime import datetime
+from collections.abc import Callable, Mapping
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any, cast
 from zoneinfo import ZoneInfo
@@ -30,6 +31,9 @@ from allskyhub_agent.adapters.libcamera import LibcameraCamera, list_cameras
 from allskyhub_agent.adapters.network import Network, NmcliNetwork, SimNetwork
 from allskyhub_agent.adapters.sim import SimCamera, sky_radiance
 from allskyhub_agent.adapters.zwo import ZwoCamera, ZwoSettings
+from allskyhub_agent.alpaca.nina import NinaRelay
+from allskyhub_agent.alpaca.safety import SafetyConfig, SafetyMonitor
+from allskyhub_agent.alpaca.server import Alpaca, AlpacaServer, PortInUse
 from allskyhub_agent.calib.orientation import Orienter
 from allskyhub_agent.core.clock import Clock, SimClock, SystemClock
 from allskyhub_agent.core.exposure import AutoExposure
@@ -66,12 +70,28 @@ from allskyhub_agent.setup.setup_file import apply_once as apply_setup_file
 from allskyhub_agent.store.images import ImageStore
 from allskyhub_agent.update.installer import Paths, Updater, read_request
 from allskyhub_agent.update.status import STATE_FILE, update_status
+from allskyhub_agent.watchdog import (
+    Heartbeat,
+    WatchState,
+    decide,
+    usb_camera_devices,
+    usb_reset,
+)
 from allskyhub_agent.web.archive import LocalArchive
 from allskyhub_agent.web.auth import LocalAuth
 from allskyhub_agent.web.calibration import LocalCalibration
 from allskyhub_agent.web.server import SettingsForm, SystemPage, UpdatePage, WebServer
 from allskyhub_agent.web.support import RecentLog, Support
-from allskyhub_protocol import DeviceSettings, FrameInfo, SetSettingsArgs, SettingSpec, Status
+from allskyhub_protocol import (
+    DeviceSettings,
+    Event,
+    EventKind,
+    FrameInfo,
+    Observatory,
+    SetSettingsArgs,
+    SettingSpec,
+    Status,
+)
 
 log = logging.getLogger(__name__)
 
@@ -118,9 +138,14 @@ def _parser() -> argparse.ArgumentParser:
     upd.add_argument("--keys", type=Path, default=Path("/etc/allskyhub-agent/update-keys"))
     upd.add_argument("--state", type=Path, default=Path("/var/lib/allskyhub-updater/state.json"))
     upd.add_argument("--work", type=Path, default=Path("/var/cache/allskyhub-updater"))
-    upd.add_argument("--agent-status", default="http://127.0.0.1:8080/api/status")
+    upd.add_argument("--agent-status", default="http://127.0.0.1:8080/api/health")
     upd.add_argument("--request", type=Path, default=UPDATE_REQUEST,
                      help="request from the local UI: now or rollback (roadmap L14)")  # fmt: skip
+    wd = sub.add_parser("watchdog", help="one watchdog check (root, SPEC §8.1)")
+    wd.add_argument("--state", type=Path, default=Path("/var/lib/allskyhub-watchdog/state.json"))
+    wd.add_argument("--agent-health", default="http://127.0.0.1:8080/api/health")
+    wd.add_argument("--updater-state", type=Path, default=STATE_FILE)
+    wd.add_argument("--dry-run", action="store_true", help="only print what it would do")
     run = sub.add_parser("run", help="capture frames")
     run.add_argument("--frames", type=int, default=None, help="stop after N frames")
     run.add_argument("--data", type=Path, required=True, help="data directory")
@@ -308,6 +333,64 @@ def system_action(action: str, restart: threading.Event) -> str | None:
     return None
 
 
+def network_ok() -> bool:
+    """The local network works: the default gateway answers a ping, or DNS resolves.
+    Deliberately not the hub (SPEC §8.1)."""
+    gw = netinfo.default_gateway()
+    if gw is not None:
+        res = subprocess.run(  # noqa: S603 - fixed arguments
+            ["ping", "-c", "1", "-W", "3", gw],  # noqa: S607 - ping from PATH
+            capture_output=True, check=False, timeout=10,
+        )  # fmt: skip
+        if res.returncode == 0:
+            return True
+    try:
+        socket.getaddrinfo("pool.ntp.org", 123)
+    except OSError:
+        return False
+    return True
+
+
+def restart_agent() -> None:
+    subprocess.run(
+        ["systemctl", "restart", "allskyhub-agent.service"],  # noqa: S607 - systemctl from PATH
+        check=False, timeout=120,
+    )  # fmt: skip
+
+
+def run_watchdog(args: argparse.Namespace) -> int:
+    """One check from allskyhub-watchdog.timer, as root (SPEC §8.1, roadmap L17)."""
+    logging.basicConfig(level=logging.INFO, format="%(levelname)s %(name)s: %(message)s")
+    logging.getLogger("httpx").setLevel(logging.WARNING)
+    try:
+        r = httpx.get(args.agent_health, timeout=10)
+        health: object = r.json() if r.status_code == 200 else None
+    except (httpx.HTTPError, ValueError):
+        health = None
+    frames = cast(dict[str, Any], health).get("frames") if isinstance(health, dict) else None
+    upd = update_status(args.updater_state)
+    busy = upd is not None and upd.state.value in ("installing", "downloading")
+    st = WatchState.load(args.state)
+    action = decide(st, datetime.now(UTC), frames if isinstance(frames, int) else None,
+                    network_ok(), busy)  # fmt: skip
+    if action is not None:
+        log.warning("watchdog: %s (frames %s since %s, network down since %s)", action,
+                    st.frames, st.frames_changed, st.net_down_since)  # fmt: skip
+    if args.dry_run:
+        print(action or "nothing to do")
+        return 0
+    st.save(args.state)
+    if action == "restart":
+        restart_agent()
+    elif action == "usb_reset":
+        n = usb_reset(usb_camera_devices())
+        log.warning("watchdog: reset %d USB camera(s)", n)
+        restart_agent()
+    elif action == "reboot":
+        subprocess.run(["systemctl", "reboot"], check=False, timeout=60)  # noqa: S607 - systemctl from PATH
+    return 0
+
+
 def run_update(args: argparse.Namespace) -> int:
     """One updater run (SPEC §8), started by allskyhub-updater.timer as root."""
     logging.basicConfig(level=logging.INFO, format="%(levelname)s %(name)s: %(message)s")
@@ -375,6 +458,8 @@ def main(argv: list[str] | None = None) -> int:
     tz = ZoneInfo(args.tz or "UTC")
     if args.cmd == "update":
         return run_update(args)
+    if args.cmd == "watchdog":
+        return run_watchdog(args)
     if args.cmd == "products":
         result = build_night(ImageStore(args.data, tz), args.night)
         print(f"night {result.night_id}: {result.frames} night frames, built {result.built}")
@@ -411,6 +496,8 @@ def main(argv: list[str] | None = None) -> int:
         settings_file if network is not None or args.settings is not None else None
     )
     settings_lock = threading.Lock()
+    alpaca_error: list[str | None] = [None]  # SPEC §7.5, for status and the local UI
+    observatory: list[Callable[[], Observatory | None]] = [lambda: None]  # N.I.N.A., §6.3
     # Learned at night, edited in the local UI (roadmap L8) before the camera is open.
     calibration_dir = Path(args.data) / "calibration"
     sky_mask = SkyMask(calibration_dir / "skymask.png")
@@ -506,6 +593,8 @@ def main(argv: list[str] | None = None) -> int:
                 sky=sky_meter.latest if sky_meter is not None else None,
                 orientation=orienter.latest if orienter is not None else None,
                 update=update_status() if settings_path else None,
+                alpaca_error=alpaca_error[0],
+                observatory=observatory[0](),
             )
 
         def device_settings() -> DeviceSettings:
@@ -548,7 +637,26 @@ def main(argv: list[str] | None = None) -> int:
             setup = SetupController(network, identity.device_id, on_joined=joined)
             threading.Thread(target=setup.run, args=(stop_bg,), name="setup", daemon=True).start()
 
-    calibration = LocalCalibration(sky_mask, calibration_dir / "orientation.json")
+    def where() -> tuple[float, float] | None:
+        cur = load_settings()
+        if cur.latitude is not None and cur.longitude is not None:
+            return cur.latitude, cur.longitude
+        return (args.lat, args.lon) if args.lat is not None and args.lon is not None else None
+
+    calibration = LocalCalibration(sky_mask, calibration_dir / "orientation.json", where)
+
+    def observatory_facts() -> dict[str, Any]:
+        """SPEC §7.5 for the system page: Alpaca on/off, port or error, N.I.N.A."""
+        cur = load_settings()
+        obs = observatory[0]()
+        return {
+            "alpaca": {
+                "enabled": cur.alpaca_enabled,
+                "port": cur.alpaca_port,
+                "error": alpaca_error[0],
+            },
+            "observatory": obs.model_dump(mode="json") if obs is not None else None,
+        }
 
     def restore_backup(values: dict[str, Any], edits: dict[str, Any] | None) -> list[str]:
         """Roadmap L15: a backup's settings (only the keys this camera has) and drawn areas."""
@@ -581,7 +689,7 @@ def main(argv: list[str] | None = None) -> int:
             calibration=calibration,
             public=PublicPage(hub_url, identity) if hub_url and identity is not None else None,
             system_page=SystemPage(
-                lambda: system_facts(Path(args.data)),
+                lambda: system_facts(Path(args.data)) | observatory_facts(),
                 lambda action: system_action(action, restart_requested),
             ),
             network_info=lambda: netinfo.summary() | {"country": wifi_country(settings_file)},
@@ -703,9 +811,42 @@ def main(argv: list[str] | None = None) -> int:
         time_trusted=system.time_trusted if settings_path else lambda: True,
     )
     tuned = load_settings()
+    # SPEC §7.5: the camera as safety monitor for observatory software (roadmap L16).
+    safety = SafetyMonitor(
+        SafetyConfig(tuned.safe_cloud_max / 100.0, timedelta(minutes=tuned.safe_hold_min))
+    )
+
+    def event_out(event: Event) -> None:
+        if event.kind is EventKind.LIGHTNING:
+            safety.lightning(event.start)
+        if hub is not None:
+            hub.notify_event(event)
+
+    if tuned.alpaca_enabled:
+        alpaca_id = identity.device_id if identity is not None else "local"
+        try:
+            alpaca_server = AlpacaServer(
+                Alpaca(alpaca_id, __version__, safety),
+                tuned.alpaca_port,
+                blocked=lambda: setup is not None and setup.active,
+            )
+        except PortInUse as exc:
+            log.warning("ASCOM Alpaca not started: %s", exc)
+            alpaca_error[0] = "port_in_use"
+        else:
+            alpaca_server.start()
+            alpaca_error[0] = None
+    if tuned.nina_url:
+        nina = NinaRelay(
+            tuned.nina_url,
+            tz,
+            safe=lambda: safety.is_safe(datetime.now(UTC)) if tuned.alpaca_enabled else None,
+        )
+        nina.start()
+        observatory[0] = lambda: nina.latest
     detect = DetectionWorker(
         store,
-        on_event=hub.notify_event if hub is not None else None,
+        on_event=event_out,
         cfg=tuning.meteor_config(tuned.detect_meteor),
         mask_radius_frac=profile.image_circle_frac,
         events=event_store,
@@ -724,6 +865,7 @@ def main(argv: list[str] | None = None) -> int:
         else None,
         latitude=lambda: here.lat,
         enabled=tuning.enabled(tuned),
+        on_sky=safety.observe,
     )
     detect.start()
 
@@ -753,6 +895,8 @@ def main(argv: list[str] | None = None) -> int:
                 hub.notify_products(announced)
 
     night_cfg = load_settings()
+    # SPEC §8.1: systemd restarts the agent if frames stop (WatchdogSec in the unit).
+    Heartbeat(lambda: int(cast(int, live.status()["frames"]))).start()
     products = ProductWorker(
         store,
         ProductConfig(

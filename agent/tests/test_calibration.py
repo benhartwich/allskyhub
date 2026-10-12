@@ -7,6 +7,7 @@ import urllib.error
 import urllib.request
 from collections.abc import Iterator
 from dataclasses import asdict
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 from zoneinfo import ZoneInfo
@@ -174,3 +175,16 @@ def test_draw_save_and_relearn(web: tuple[int, Path]) -> None:
     status, info = _call(port, "/api/calibration/relearn", {})
     assert status == 200
     assert not (cal / "skymask.png").exists()
+
+
+def test_sky_overlay(web: tuple[int, Path]) -> None:
+    # Roadmap L11: the same constellations as on the hub (packages/sky), for an image's time.
+    port, cal = web
+    assert _call(port, "/api/sky-overlay?at=2026-10-12T21:00:00Z")[0] == 404  # no location
+    calibration = LocalCalibration(SkyMask(cal / "skymask.png"), cal / "orientation.json",
+                                   lambda: (48.14, 14.39))  # fmt: skip
+    ov = calibration.sky_overlay(datetime(2026, 10, 12, 21, 0, tzinfo=UTC), (48.14, 14.39))
+    assert ov is not None
+    assert (ov["width"], ov["height"]) == (W, H)
+    assert ov["paths"]
+    assert [c["text"] for c in ov["cardinals"]] == ["N", "O", "S", "W"]

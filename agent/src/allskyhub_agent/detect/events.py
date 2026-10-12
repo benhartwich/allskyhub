@@ -39,7 +39,7 @@ from allskyhub_agent.detect.nlc import NlcDetector, NlcUpdate
 from allskyhub_agent.detect.sky import SkyMeter
 from allskyhub_agent.process.skymask import SkyMask
 from allskyhub_agent.store.images import THUMB_WIDTH, ImageStore
-from allskyhub_protocol import Event, EventKind, FrameInfo, Mode, event_id
+from allskyhub_protocol import Event, EventKind, FrameInfo, Mode, SkyMetrics, event_id
 
 log = logging.getLogger(__name__)
 
@@ -393,8 +393,10 @@ class DetectionWorker:
         nlc: NlcDetector | None = None,
         latitude: Callable[[], float | None] | None = None,
         enabled: Mapping[str, bool] | None = None,
+        on_sky: Callable[[SkyMetrics], None] | None = None,
     ) -> None:
         self._store = store
+        self._on_sky = on_sky  # the Alpaca safety monitor (SPEC §7.5) sees every measurement
         # Detectors switched off in the settings (roadmap L8) never see a frame.
         self._on = dict.fromkeys(("meteor", "lightning", "aurora"), True) | dict(enabled or {})
         self.events = events or EventStore(store)
@@ -491,6 +493,8 @@ class DetectionWorker:
         metrics = self._sky.measure(job.frame, rgb) if self._sky is not None else None
         if metrics is not None and (metrics.cloud_cover, metrics.sqm_mag) != (None, None):
             self._store.append_sky(metrics)
+        if metrics is not None and self._on_sky is not None:
+            self._on_sky(metrics)
         cloud = metrics.cloud_cover if metrics is not None else None
         if self._orienter is not None:
             self._orienter.consider(job.frame, job.path, metrics)

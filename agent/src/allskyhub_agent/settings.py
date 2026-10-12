@@ -19,7 +19,24 @@ DETECT_CHOICES = ("off", "low", "normal", "high")
 # Night products (roadmap L9): x264 CRF per quality.
 TIMELAPSE_CRF = {"small": 28, "normal": 23, "high": 19}
 DEFAULT_KEEP_DAYS = 14
-_PRODUCT_SWITCHES = ("product_keogram", "product_startrails", "product_timelapse")
+_PRODUCT_SWITCHES = ("product_keogram", "product_startrails", "product_timelapse", "alpaca_enabled")
+# Whole numbers the schema bounds (settings_schema.py); load() and with_values() keep them.
+_INT_RANGES = {
+    "keep_days": (1, 3650),
+    "timelapse_fps": (1, 60),
+    "alpaca_port": (1024, 65535),
+    "safe_cloud_max": (5, 95),
+    "safe_hold_min": (0, 120),
+}
+
+
+def valid_nina_url(url: str) -> bool:
+    """Empty (off) or an http(s) address with a host (SPEC §7.5)."""
+    u = url.strip()
+    if not u:
+        return True
+    head, sep, rest = u.partition("://")
+    return sep == "://" and head in ("http", "https") and bool(rest.split("/", 1)[0])
 
 
 def valid_timezone(name: str) -> bool:
@@ -59,6 +76,12 @@ class AgentSettings:
     product_timelapse: bool = True
     timelapse_fps: int = 25
     timelapse_quality: str = "normal"
+    # ASCOM Alpaca for observatory software (SPEC §7.5, roadmap L16).
+    alpaca_enabled: bool = False
+    alpaca_port: int = 11111
+    safe_cloud_max: int = 30  # %
+    safe_hold_min: int = 10
+    nina_url: str = ""  # N.I.N.A.'s Advanced API, e.g. http://192.168.1.30:1888; "" = off
 
     @property
     def has_location(self) -> bool:
@@ -121,13 +144,15 @@ class AgentSettings:
         later.update(
             {
                 k: d[k]
-                for k in ("keep_days", "timelapse_fps")
+                for k in _INT_RANGES
                 if isinstance(d.get(k), int) and not isinstance(d.get(k), bool)
             }
         )
         later.update({k: d[k] for k in _PRODUCT_SWITCHES if isinstance(d.get(k), bool)})
         if d.get("timelapse_quality") in TIMELAPSE_CRF:
             later["timelapse_quality"] = d["timelapse_quality"]
+        if isinstance(d.get("nina_url"), str):
+            later["nina_url"] = d["nina_url"]
         location_ok = (
             isinstance(lat, int | float)
             and isinstance(lon, int | float)
@@ -169,15 +194,17 @@ class AgentSettings:
         for k in DETECTORS:
             if values.get(f"detect_{k}") in DETECT_CHOICES:
                 extra[f"detect_{k}"] = values[f"detect_{k}"]
-        for k, hi in (("keep_days", 3650), ("timelapse_fps", 60)):
+        for k, (lo, hi) in _INT_RANGES.items():
             v = values.get(k)
-            if isinstance(v, int) and not isinstance(v, bool) and 1 <= v <= hi:
+            if isinstance(v, int) and not isinstance(v, bool) and lo <= v <= hi:
                 extra[k] = v
         for k in _PRODUCT_SWITCHES:
             if isinstance(values.get(k), bool):
                 extra[k] = values[k]
         if values.get("timelapse_quality") in TIMELAPSE_CRF:
             extra["timelapse_quality"] = values["timelapse_quality"]
+        if isinstance(values.get("nina_url"), str) and valid_nina_url(values["nina_url"]):
+            extra["nina_url"] = values["nina_url"].strip()
         return replace(s, **extra)
 
     def save(self, path: Path) -> None:

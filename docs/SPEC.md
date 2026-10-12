@@ -182,6 +182,13 @@ The agent opens an outbound WebSocket (`wss://<hub>/device/v1/ws`, default hub
 `allskyhub.org`) and uses HTTPS for registration, tokens and uploads (§6.6). Every
 WebSocket message is an envelope `{v: 1, type, id, ts, body}`.
 
+**Compatible changes.** Within v1 either side may add optional fields to any message,
+request or answer. Receivers ignore fields they do not know, so a hub can be newer than
+its cameras and the other way round. Only where a person's input is checked (the public
+profile, §6.8) is an unknown key an error. A new message type or command is announced in
+`capabilities` (§6.3) or simply not used against an older peer. Cameras in the field may
+run an older agent for a long time, so a hub must never require a new field from them.
+
 The WebSocket upgrade and every upload carry `Authorization: Bearer <access_token>`
 (§6.2, step 5). The hub closes the WebSocket with:
 

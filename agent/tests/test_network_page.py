@@ -57,7 +57,7 @@ def test_wifi() -> None:
 def web() -> Iterator[tuple[int, SetupController]]:
     net = SimNetwork(passwords={"Home": "secretpw"})
     setup = SetupController(net, "k44i7rl6cuaek5yufvr7oh3c5i")
-    info = {"hostname": "allsky", "interfaces": [], "wifi": None}
+    info: dict[str, Any] = {"hostname": "allsky", "interfaces": [], "wifi": None}
     server = WebServer(LiveState(), "127.0.0.1", 0, setup=setup, network_info=lambda: info)
     server.start()
     yield server.port, setup

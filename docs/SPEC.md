@@ -147,7 +147,8 @@ At most 3 tries a night, solved again after 7 days; the result is kept in
 Every stored frame is appended to `<data>/images/<night-id>/frames.jsonl`, one JSON
 object per line: the frame's metadata (§4.4, the `frame` message body). Products and
 the hub's gallery read it instead of decoding every image. A missing or damaged line is
-skipped.
+skipped. Next to it, `sky.jsonl` keeps the `sky` measurement (§6.3) of every frame that
+has a cloud cover or sky brightness, for the local charts (§7).
 
 ### 5.2 Night products
 

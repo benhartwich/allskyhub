@@ -56,6 +56,7 @@ from allskyhub_agent.setup.setup_file import apply_once as apply_setup_file
 from allskyhub_agent.store.images import ImageStore
 from allskyhub_agent.update.installer import Paths, Updater
 from allskyhub_agent.update.status import update_status
+from allskyhub_agent.web.archive import LocalArchive
 from allskyhub_agent.web.auth import LocalAuth
 from allskyhub_agent.web.server import SettingsForm, WebServer
 from allskyhub_protocol import DeviceSettings, FrameInfo, SetSettingsArgs, SettingSpec, Status
@@ -375,6 +376,7 @@ def main(argv: list[str] | None = None) -> int:
             settings_form=SettingsForm(current_schema, settings_values, change_settings)
             if settings_path
             else None,
+            archive=LocalArchive(store, event_store),
         )
         web.start()
         print(f"web UI on http://{host}:{web.port}/")

@@ -4,6 +4,7 @@
 <a class="back" href="/cameras/{{ device.id }}/gallery">← Galerie</a>
 <h1>Zeitraffer & Keogramme</h1>
 <p class="lead">Aus den Vorschaubildern des Archivs (etwa eines pro Minute, 30 Tage lang), auf dem Hub erstellt. Fertige Dateien bleiben 7 Tage.</p>
+{% if role != 'viewer' %}
 <div class="grid-2 render-forms">
   <form method="post" action="/cameras/{{ device.id }}/renders" class="card stack">
     <h2>Zeitraffer</h2>
@@ -25,6 +26,7 @@
     <button type="submit">Keogramm erstellen</button>
   </form>
 </div>
+{% endif %}
 <section class="stack">
   <h2>Aufträge</h2>
   {% include "_render_jobs.html" %}

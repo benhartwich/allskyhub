@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import datetime as dt
+import uuid
 from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, Form, HTTPException, Request
@@ -20,12 +21,14 @@ from allskyhub_server.devices import (
     public,
     queries,
     settings_form,
+    sharing,
     tonight,
 )
 from allskyhub_server.devices import settings as camera_settings
 from allskyhub_server.devices.connections import ConnectionRegistry
 from allskyhub_server.devices.event_text import EVENT_TITLES, orientation_line, update_line
 from allskyhub_server.devices.images import ImageStore
+from allskyhub_server.devices.queries import Role
 from allskyhub_server.devices.tonight import ForecastCache
 from allskyhub_server.models import Device
 from allskyhub_server.web.deps import (
@@ -46,6 +49,16 @@ def _registry(request: Request) -> ConnectionRegistry:
     return registry
 
 
+async def _visible(
+    db: DbSession, session: SessionInfo, device_id: str, need: Role = "viewer"
+) -> tuple[Device, Role]:
+    """Roadmap C10: shared cameras; 404 below ``need``."""
+    found = await queries.visible_one(db, session.user.id, device_id, need)
+    if found is None:
+        raise HTTPException(404)
+    return found
+
+
 async def _own_device(db: DbSession, session: SessionInfo, device_id: str) -> Device:
     """404 for unknown devices and devices of other accounts alike."""
     device = await queries.owned_one(db, session.user.id, device_id)
@@ -59,12 +72,11 @@ async def home(request: Request, db: DbSession, session: OptionalSession) -> Res
     """Signed in: the user's cameras. Otherwise the public start page."""
     if session is None:
         return render(request, "landing.html")
-    devices = await queries.owned(db, session.user.id)
     registry = _registry(request)
     now = dt.datetime.now(dt.UTC)
     cameras = [
-        (d, registry.is_online(d.id), health.check(d, registry.is_online(d.id), now))
-        for d in devices
+        (d, registry.is_online(d.id), health.check(d, registry.is_online(d.id), now), role)
+        for d, role in await queries.visible(db, session.user.id)
     ]
     return render(request, "home.html", {"cameras": cameras}, session=session)
 
@@ -112,10 +124,9 @@ async def pair(
 async def camera(
     request: Request, db: DbSession, session: CurrentSession, device_id: str
 ) -> Response:
-    device = await _own_device(db, session, device_id)
-    return render(
-        request, "camera.html", await _camera_context(request, db, device), session=session
-    )
+    device, role = await _visible(db, session, device_id)
+    context = await _camera_context(request, db, device, role=role)
+    return render(request, "camera.html", context, session=session)
 
 
 async def _camera_context(
@@ -123,6 +134,7 @@ async def _camera_context(
     db: DbSession,
     device: Device,
     form: dict[str, str] | None = None,
+    role: Role = "owner",
     **extra: object,
 ) -> dict[str, object]:
     forecast: ForecastCache = request.app.state.forecast
@@ -145,6 +157,8 @@ async def _camera_context(
         "orientation": orientation_line(device.last_status),
         "update": update_line(device.last_status),
         "settings_reported": bool(current),
+        "role": role,
+        "members": await sharing.members(db, device.id) if role == "owner" else [],
         **extra,
     }
 
@@ -164,7 +178,7 @@ async def live_fragment(
 ) -> Response:
     """Polled by the camera page while it is open: marks the device as watched, so the hub
     asks for every frame (SPEC §6.5)."""
-    device = await _own_device(db, session, device_id)
+    device, _ = await _visible(db, session, device_id)
     registry = _registry(request)
     registry.touch_live(device.id)
     return render(
@@ -179,7 +193,7 @@ async def live_fragment(
 async def image(
     request: Request, db: DbSession, session: CurrentSession, device_id: str, variant: FrameVariant
 ) -> Response:
-    device = await _own_device(db, session, device_id)
+    device, _ = await _visible(db, session, device_id)
     store: ImageStore = request.app.state.images
     path = store.path(device.id, variant)
     if not path.is_file():
@@ -280,8 +294,9 @@ SAVED = "Gespeichert. Die Kamera startet die Aufnahme neu und meldet sich gleich
 async def change_settings(
     request: Request, db: DbSession, session: CurrentSession, device_id: str
 ) -> Response:
-    """SPEC §6.5 ``set_settings`` from the web UI, form from the schema (§6.9)."""
-    device = await _own_device(db, session, device_id)
+    """SPEC §6.5 ``set_settings`` from the web UI, form from the schema (§6.9); owner and
+    admins (roadmap C10)."""
+    device, role = await _visible(db, session, device_id, "admin")
     form = {k: v for k, v in (await request.form()).items() if isinstance(v, str)}
     schema, _ = settings_form.schema_of(device)
     diff, error = settings_form.changes(schema, settings_form.current_values(device), form)
@@ -295,7 +310,46 @@ async def change_settings(
             notice = (
                 "Gespeichert. Die Kamera startet die Aufnahme neu und meldet sich gleich wieder."
             )
-    context = await _camera_context(request, db, device, form, error=error, notice=notice)
+    context = await _camera_context(
+        request, db, device, form, role=role, error=error, notice=notice
+    )
     return render(
         request, "camera.html", context, session=session, status_code=200 if error is None else 400
     )
+
+
+@router.post("/cameras/{device_id}/members")
+async def share(
+    request: Request,
+    db: DbSession,
+    session: CurrentSession,
+    device_id: str,
+    email: Annotated[str, Form(max_length=254)],
+    role: Annotated[str, Form(max_length=10)] = "viewer",
+) -> Response:
+    """Roadmap C10: share the camera with an existing account (owner only)."""
+    device = await _own_device(db, session, device_id)
+    try:
+        await sharing.add(db, device, email, role)
+    except sharing.SharingError as exc:
+        # Nothing was written; no rollback (it would expire the loaded device).
+        context = await _camera_context(request, db, device, error=str(exc))
+        return render(request, "camera.html", context, session=session, status_code=400)
+    await db.commit()
+    return RedirectResponse(f"/cameras/{device.id}#teilen", status_code=303)
+
+
+@router.post("/cameras/{device_id}/members/{user_id}/remove")
+async def unshare(
+    db: DbSession, session: CurrentSession, device_id: str, user_id: uuid.UUID
+) -> Response:
+    """The owner removes someone, or a member leaves the camera."""
+    if user_id == session.user.id:
+        device, _ = await _visible(db, session, device_id)
+        await sharing.remove(db, device.id, user_id)
+        await db.commit()
+        return RedirectResponse("/", status_code=303)
+    device = await _own_device(db, session, device_id)
+    await sharing.remove(db, device.id, user_id)
+    await db.commit()
+    return RedirectResponse(f"/cameras/{device.id}#teilen", status_code=303)

@@ -45,12 +45,14 @@ async def test_status_is_kept_every_five_minutes(
     assert rows[0].sensor_temp_c == 12.5
 
     page = (await client.get(f"/cameras/{dev.device_id}")).text
-    assert "Verlauf (24 Stunden)" in page
-    for title in ("Belichtung", "Gain", "Sensor", "Prozessor", "Speicher frei"):
-        assert f"<strong>{title}</strong>" in page, title
-    assert "zuletzt 20 s" in page
+    # The viewer (charts.js) draws the last 24 hours, the camera's state included.
+    assert 'data-default="24"' in page
+    assert "data-status" in page
+    data = (await client.get(f"/cameras/{dev.device_id}/charts/data", params={"hours": 24})).json()
+    assert data["status"]["exposure"][-1] == 20.0
 
     night = dt.datetime.now(dt.UTC).astimezone(dt.timezone(dt.timedelta(hours=1)))
     night_id = (night - dt.timedelta(hours=12)).strftime("%Y%m%d")
     night_page = (await client.get(f"/cameras/{dev.device_id}/nights/{night_id}")).text
-    assert "<strong>Belichtung</strong>" in night_page
+    assert f'data-default="{night_id}"' in night_page  # the viewer, camera state included
+    assert "data-status" in night_page

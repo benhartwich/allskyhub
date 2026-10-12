@@ -1,6 +1,11 @@
 {% extends "base.html" %}
 {% block title %}{{ night_id | night_title }} · {{ title }}{% endblock %}
-{% block head %}<link rel="stylesheet" href="{{ asset('public.css') }}">{% endblock %}
+{% block head %}
+  <link rel="stylesheet" href="{{ asset('public.css') }}">
+  <link rel="stylesheet" href="{{ asset('uplot.min.css') }}">
+  <script src="{{ asset('uplot.min.js') }}" defer></script>
+  <script src="{{ asset('charts.js') }}" defer></script>
+{% endblock %}
 {% block content %}
 <a class="back" href="/sky/{{ slug }}">← {{ title }}</a>
 <h1>{{ night_id | night_title }}</h1>
@@ -32,14 +37,9 @@
 </section>
 {% endif %}
 {% if sky_charts %}
-<section class="card sky-charts">
+<section class="stack">
   <h2>Himmelsqualität</h2>
-  {% for c in sky_charts %}
-  <figure>
-    <figcaption><strong>{{ c.title }}</strong> <span class="muted">zuletzt {{ c.latest }} {{ c.unit }} · Skala {{ c.low }}–{{ c.high }}</span></figcaption>
-    {{ c.svg }}
-  </figure>
-  {% endfor %}
+  {% with data_url = "/sky/" ~ slug ~ "/charts/data", with_status = false, compact = true, default_range = night_id, full_url = "/sky/" ~ slug ~ "/charts?night=" ~ night_id %}{% include "_chart_viewer.html" %}{% endwith %}
 </section>
 {% endif %}
 {% if frames %}

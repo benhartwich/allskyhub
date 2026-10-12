@@ -24,7 +24,7 @@ from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
 
 from allskyhub_server.app import create_app
-from allskyhub_server.devices.space_weather import KpCache
+from allskyhub_server.devices.space_weather import KpCache, OvationCache
 from allskyhub_server.devices.tonight import ForecastCache
 from allskyhub_server.models import Base
 from allskyhub_server.settings import Settings
@@ -94,12 +94,22 @@ async def app(settings: Settings, engine: AsyncEngine) -> AsyncIterator[FastAPI]
     application = create_app(settings)
     # No requests to NOAA from tests: a fixed Kp forecast for today and tomorrow.
     application.state.kp = KpCache(httpx.AsyncClient(transport=httpx.MockTransport(_kp_answer)))
+    application.state.ovation = OvationCache(
+        httpx.AsyncClient(transport=httpx.MockTransport(_ovation_answer))
+    )
     # Nor to Open-Meteo: clear skies everywhere.
     application.state.forecast = ForecastCache(
         httpx.AsyncClient(transport=httpx.MockTransport(_forecast_answer))
     )
     async with application.router.lifespan_context(application):
         yield application
+
+
+OVATION_JPEG = b"\xff\xd8\xff\xe0ovation"
+
+
+def _ovation_answer(request: httpx.Request) -> httpx.Response:
+    return httpx.Response(200, content=OVATION_JPEG)
 
 
 def _kp_answer(request: httpx.Request) -> httpx.Response:

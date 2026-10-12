@@ -65,6 +65,9 @@ systemctl restart allskyhub-server.service
 curl -s https://allskyhub.org/healthz
 ```
 
+`/healthz` antwortet mit `{"status": "ok", "version": "<kurzer Commit>"}`; die Version muss
+nach dem Deploy dem Stand von `git log -1` entsprechen.
+
 Geräte verbinden sich nach dem Neustart von selbst wieder (SPEC §6.1).
 
 ## Konten (nur auf Einladung)

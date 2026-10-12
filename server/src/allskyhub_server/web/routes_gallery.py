@@ -21,6 +21,7 @@ from allskyhub_server.devices import (
     queries,
     renders,
     science,
+    series,
     sky_chart,
     stats,
     tonight,
@@ -380,6 +381,56 @@ async def statistics(
         {"device": device, "stats": await stats.year(db, device.id, chosen)},
         session=session,
     )
+
+
+NIGHT_PATTERN = r"^\d{8}$"
+
+
+@router.get("/cameras/{device_id}/charts")
+async def charts_page(
+    request: Request, db: DbSession, session: CurrentSession, device_id: str
+) -> Response:
+    """The measurement viewer: sky values and the camera's own state over a chosen range."""
+    device = await _own(db, session, device_id)
+    return render(
+        request,
+        "charts.html",
+        {
+            "device": device,
+            "data_url": f"/cameras/{device.id}/charts/data",
+            "nights_url": f"/cameras/{device.id}/charts/nights",
+            "back_url": f"/cameras/{device.id}",
+            "back_title": device.name,
+            "with_status": True,
+        },
+        session=session,
+    )
+
+
+@router.get("/cameras/{device_id}/charts/data")
+async def charts_data(
+    db: DbSession,
+    session: CurrentSession,
+    device_id: str,
+    night: Annotated[str | None, Query(pattern=NIGHT_PATTERN)] = None,
+    hours: int | None = None,
+) -> JSONResponse:
+    device = await _own(db, session, device_id)
+    rng = await series.resolve(db, device, night, hours, dt.datetime.now(dt.UTC))
+    data = await series.load(db, device, rng, with_status=True, public=False)
+    return JSONResponse(data, headers={"Cache-Control": "private, no-store"})
+
+
+@router.get("/cameras/{device_id}/charts/nights")
+async def charts_nights(
+    db: DbSession, session: CurrentSession, device_id: str, year: int = 0
+) -> JSONResponse:
+    """Roadmap C7 over a year: darkest sky and clear hours per night, with the moon."""
+    device = await _own(db, session, device_id)
+    this_year = dt.datetime.now(dt.UTC).year
+    chosen = year if 2000 <= year <= this_year + 1 else this_year
+    data = await series.nights(db, device, chosen)
+    return JSONResponse(data, headers={"Cache-Control": "private, no-store"})
 
 
 def _night_window(device: Device, night_id: str) -> tuple[dt.datetime, dt.datetime]:

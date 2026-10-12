@@ -58,9 +58,11 @@ async def test_sky_samples_stored_charted_and_purged(
     assert nights[0]["sky"] == 3
 
     page = (await client.get(f"/cameras/{dev.device_id}/nights/{NIGHT}")).text
-    assert "Himmel in dieser Nacht" in page
-    assert page.count('class="sky-chart') == 3
-    assert "zuletzt 20.80 mag" in page
+    assert "Messwerte dieser Nacht" in page
+    assert f'data-default="{NIGHT}"' in page
+    charts = await client.get(f"/cameras/{dev.device_id}/charts/data", params={"night": NIGHT})
+    data = charts.json()
+    assert data["sky"]["sqm"][-1] == 20.8
     assert "Himmelsdaten" in (await client.get(f"/cameras/{dev.device_id}/gallery")).text
 
     async with app.state.sessionmaker() as db:

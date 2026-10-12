@@ -1,14 +1,27 @@
 {% extends "base.html" %}
 {% block title %}{{ device.name }} · allskyhub{% endblock %}
+{% block head %}
+  <link rel="stylesheet" href="{{ asset('uplot.min.css') }}">
+  <script src="{{ asset('uplot.min.js') }}" defer></script>
+  <script src="{{ asset('charts.js') }}" defer></script>
+{% endblock %}
 {% block content %}
 <a class="back" href="/">← Meine Kameras</a>
 <div class="page-head">
   <h1>{{ device.name }}</h1>
-  <span class="actions"><a class="button small secondary" href="/cameras/{{ device.id }}/stats">Statistik</a><a class="button small" href="/cameras/{{ device.id }}/gallery">Galerie</a></span>
+  <span class="actions"><a class="button small secondary" href="/cameras/{{ device.id }}/charts">Messdaten</a><a class="button small secondary" href="/cameras/{{ device.id }}/stats">Statistik</a><a class="button small" href="/cameras/{{ device.id }}/gallery">Galerie</a></span>
 </div>
 <div class="cam-page">
+<div class="cam-left">
 <div class="cam-live" hx-get="/cameras/{{ device.id }}/live" hx-trigger="load, every 5s" hx-swap="innerHTML">
   {% include "_live.html" %}
+</div>
+{% if charts %}
+<section class="stack cam-charts">
+  <h2>Verlauf</h2>
+  {% with data_url = "/cameras/" ~ device.id ~ "/charts/data", with_status = true, compact = true, default_range = "24", full_url = "/cameras/" ~ device.id ~ "/charts" %}{% include "_chart_viewer.html" %}{% endwith %}
+</section>
+{% endif %}
 </div>
 <div class="card health">
   <h2>Zustand</h2>
@@ -23,18 +36,6 @@
 {% if observatory %}{% include "_observatory.html" %}{% endif %}
 {% if tonight %}{% include "_tonight.html" %}{% endif %}
 {% if last_night %}{% include "_last_night.html" %}{% endif %}
-{% if charts %}
-<div class="card sky-charts">
-  <h2>Verlauf (24 Stunden)</h2>
-  {% for c in charts %}
-  <figure>
-    <figcaption><strong>{{ c.title }}</strong> <span class="muted">zuletzt {{ c.latest }} {{ c.unit }} · Skala {{ c.low }}–{{ c.high }}</span></figcaption>
-    {{ c.svg }}
-  </figure>
-  {% endfor %}
-  <p class="muted small">Bewölkung, Himmelshelligkeit und Sterne misst die Kamera nur bei Nacht.</p>
-</div>
-{% endif %}
 {% if events %}
 <section class="card">
   <div class="page-head"><h2>Letzte Ereignisse</h2><a href="/cameras/{{ device.id }}/events">Alle</a></div>

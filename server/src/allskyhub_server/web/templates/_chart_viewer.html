@@ -1,0 +1,32 @@
+{# The measurement viewer (charts.js); needs data_url, with_status, optional compact and full_url. #}
+<div class="chart-viewer{{ ' compact' if compact }}" data-charts data-src="{{ data_url }}"{% if default_range %} data-default="{{ default_range }}"{% endif %}{% if with_status %} data-status{% endif %}{% if compact %} data-compact{% endif %}>
+  <div class="card chart-controls">
+    <div class="chart-range" role="group" aria-label="Zeitraum">
+      <span class="chart-night">
+        <button type="button" class="secondary small" data-night-step="-1" aria-label="Nacht davor">‹</button>
+        <button type="button" class="small" data-range="night">Nacht</button>
+        <button type="button" class="secondary small" data-night-step="1" aria-label="Nacht danach">›</button>
+        <input type="date" data-night-pick aria-label="Nacht wählen">
+      </span>
+      <button type="button" class="secondary small" data-range="24">24 h</button>
+      <button type="button" class="secondary small" data-range="72">3 Tage</button>
+      <button type="button" class="secondary small" data-range="168">7 Tage</button>
+      <button type="button" class="secondary small" data-range="720">30 Tage</button>
+    </div>
+    <div class="chart-options">
+      <label class="check"><input type="checkbox" data-overlay="twilight" checked> Dämmerung</label>
+      <label class="check"><input type="checkbox" data-overlay="moon" checked> Mond</label>
+      <label class="check"><input type="checkbox" data-overlay="sun"> Sonne</label>
+      <button type="button" class="secondary small" data-reset-zoom hidden>Zoom zurücksetzen</button>
+      {% if compact %}
+      {% if full_url %}<a class="button small secondary" href="{{ full_url }}">Alle Messdaten</a>{% endif %}
+      {% else %}
+      <button type="button" class="secondary small" data-export="csv">CSV</button>
+      <button type="button" class="secondary small" data-export="png">PNG</button>
+      {% endif %}
+    </div>
+    <p class="chart-meta muted small" data-chart-meta aria-live="polite">Lade Messdaten …</p>
+  </div>
+  <div class="chart-panels" data-panels></div>
+  <noscript><p class="card muted">Die Messdaten brauchen JavaScript.</p></noscript>
+</div>

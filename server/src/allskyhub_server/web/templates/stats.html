@@ -4,6 +4,7 @@
 <a class="back" href="/cameras/{{ device.id }}">← {{ device.name }}</a>
 <div class="page-head">
   <h1>Statistik {{ stats.year }}</h1>
+  <a class="button small secondary" href="/cameras/{{ device.id }}/charts">Messdaten</a>
   <a class="button small secondary" href="/cameras/{{ device.id }}/export">Daten exportieren</a>
   {% if stats.years | length > 1 %}
   <nav class="actions" aria-label="Jahr">

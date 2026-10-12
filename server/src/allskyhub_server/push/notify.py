@@ -27,6 +27,7 @@ log = logging.getLogger(__name__)
 
 # At most one event notification per camera in this time: aircraft and bursts would spam.
 EVENT_QUIET = dt.timedelta(minutes=10)
+EVENT_TOO_OLD = dt.timedelta(hours=6)
 OFFLINE_AFTER = dt.timedelta(minutes=30)
 OFFLINE_CHECK = dt.timedelta(minutes=5)
 # Roadmap #15: a long outage also by e-mail, once.
@@ -91,6 +92,10 @@ class Notifier:
                     return
                 device, user, event = row
                 if not user.notify_events or event.label == "false_positive":
+                    return
+                # Old detections (an import, a camera that was offline for long) are news
+                # no more: no push for them.
+                if now - event.start > EVENT_TOO_OLD or (event.data or {}).get("imported"):
                     return
                 storm = storm_key(event)
                 if storm is not None:

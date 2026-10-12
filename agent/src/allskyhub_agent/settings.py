@@ -13,6 +13,9 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 DEFAULT_PATH = Path("/var/lib/allskyhub-agent/settings.json")
 DEFAULT_HUB = "https://allskyhub.org"
 CAMERA_CHOICES = ("auto", "zwo-asi678mc", "rpi-hq", "sim")
+# Per detector (roadmap L8): off, or how readily it reports (detect/tuning.py).
+DETECTORS = ("meteor", "aurora", "lightning", "nlc")
+DETECT_CHOICES = ("off", "low", "normal", "high")
 
 
 def valid_timezone(name: str) -> bool:
@@ -41,6 +44,10 @@ class AgentSettings:
     wb_r: int | None = None
     wb_b: int | None = None
     jpeg_quality: int = 90
+    detect_meteor: str = "normal"
+    detect_aurora: str = "normal"
+    detect_lightning: str = "normal"
+    detect_nlc: str = "normal"
 
     @property
     def has_location(self) -> bool:
@@ -94,6 +101,12 @@ class AgentSettings:
             for k in ("night_max_exposure_s", "night_max_gain", "wb_r", "wb_b", "jpeg_quality")
             if isinstance(d.get(k), int | float) and not isinstance(d.get(k), bool)
         }
+        detect = {
+            f"detect_{k}": d[f"detect_{k}"]
+            for k in DETECTORS
+            if d.get(f"detect_{k}") in DETECT_CHOICES
+        }
+        later.update(detect)
         location_ok = (
             isinstance(lat, int | float)
             and isinstance(lon, int | float)
@@ -132,6 +145,9 @@ class AgentSettings:
                 extra[key] = None if v is None else (float(v) if key.endswith("_s") else int(v))
         if values.get("jpeg_quality") is not None:
             extra["jpeg_quality"] = int(values["jpeg_quality"])
+        for k in DETECTORS:
+            if values.get(f"detect_{k}") in DETECT_CHOICES:
+                extra[f"detect_{k}"] = values[f"detect_{k}"]
         return replace(s, **extra)
 
     def save(self, path: Path) -> None:

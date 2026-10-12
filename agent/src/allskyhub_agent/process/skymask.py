@@ -9,6 +9,11 @@ cloudy night alike, and leaves out the overlay text in the corners.
 
 The mask is relearned every night and kept on disk. Until there is one, everything uses
 the profile's image circle as before.
+
+On top of it the owner can draw areas in the local UI (roadmap L8): `exclude` polygons are
+never sky (a lamp, a roof the night did not catch), `include` polygons always are. They
+are kept apart from the learned mask, in fractions of the frame, so a new night's mask
+keeps them.
 """
 
 # OpenCV's type stubs leave many return types unknown; the numbers are checked here.
@@ -16,11 +21,14 @@ the profile's image circle as before.
 
 from __future__ import annotations
 
+import json
 import logging
+import os
 import threading
-from dataclasses import dataclass
-from datetime import datetime
+from dataclasses import dataclass, field
+from datetime import UTC, datetime
 from pathlib import Path
+from typing import Any, cast
 
 import cv2
 import numpy as np
@@ -32,6 +40,60 @@ Gray = npt.NDArray[np.uint8]
 Mask = npt.NDArray[np.bool_]
 
 WORK_WIDTH = 960  # the mask is learned and stored at this width
+MAX_POLYGONS = 30
+MAX_POINTS = 200
+
+Polygon = tuple[tuple[float, float], ...]  # (x, y) as fractions of width and height
+
+
+@dataclass(frozen=True)
+class MaskEdits:
+    exclude: tuple[Polygon, ...] = field(default=())
+    include: tuple[Polygon, ...] = field(default=())
+
+    @property
+    def empty(self) -> bool:
+        return not self.exclude and not self.include
+
+    def to_json(self) -> dict[str, list[list[list[float]]]]:
+        return {
+            "exclude": [[[x, y] for x, y in poly] for poly in self.exclude],
+            "include": [[[x, y] for x, y in poly] for poly in self.include],
+        }
+
+
+def parse_edits(raw: object) -> MaskEdits | None:
+    """`{exclude: [[[x, y], ...], ...], include: [...]}` with 3 to MAX_POINTS points per
+    polygon, coordinates 0..1; None if it is anything else."""
+    if not isinstance(raw, dict):
+        return None
+    d = cast("dict[str, Any]", raw)
+    if set(d) - {"exclude", "include"}:
+        return None
+    out: dict[str, tuple[Polygon, ...]] = {}
+    for key in ("exclude", "include"):
+        polys: object = d.get(key, [])
+        if not isinstance(polys, list):
+            return None
+        polys = cast("list[Any]", polys)
+        parsed: list[Polygon] = []
+        for poly in polys:
+            if not isinstance(poly, list) or not 3 <= len(cast("list[Any]", poly)) <= MAX_POINTS:
+                return None
+            pts: list[tuple[float, float]] = []
+            for pt in cast("list[Any]", poly):
+                if not isinstance(pt, list) or len(cast("list[Any]", pt)) != 2:
+                    return None
+                x, y = cast("list[Any]", pt)
+                ok = all(isinstance(v, int | float) and not isinstance(v, bool) for v in (x, y))
+                if not ok or not (0 <= x <= 1 and 0 <= y <= 1):
+                    return None
+                pts.append((round(float(x), 5), round(float(y), 5)))
+            parsed.append(tuple(pts))
+        out[key] = tuple(parsed)
+    if len(out["exclude"]) + len(out["include"]) > MAX_POLYGONS:
+        return None
+    return MaskEdits(out["exclude"], out["include"])
 
 
 @dataclass(frozen=True)
@@ -46,11 +108,18 @@ class SkyMaskConfig:
 
 
 class SkyMask:
-    def __init__(self, path: Path, cfg: SkyMaskConfig | None = None) -> None:
+    def __init__(
+        self, path: Path, cfg: SkyMaskConfig | None = None, fallback_frac: float | None = None
+    ) -> None:
         self._path = path
+        self._edits_path = path.with_name(path.stem + "_edits.json")
         self._cfg = cfg or SkyMaskConfig()
         self._lock = threading.Lock()
         self._mask: Mask | None = None  # at WORK_WIDTH
+        self._edits = MaskEdits()
+        # The image circle (as in core.metering.circle_mask) that drawn areas edit while
+        # no mask is learned yet; None: the whole frame.
+        self.fallback_frac = fallback_frac
         self._scaled: dict[tuple[int, int], Mask] = {}
         self.version = 0  # incremented whenever the mask changes
         self._night: str | None = None
@@ -61,11 +130,59 @@ class SkyMask:
         self._load()
 
     def _load(self) -> None:
+        try:
+            edits = parse_edits(json.loads(self._edits_path.read_text(encoding="utf-8")))
+        except (OSError, ValueError):
+            edits = None
+        if edits is not None:
+            self._edits = edits
         if not self._path.is_file():
             return
         img = cv2.imread(str(self._path), cv2.IMREAD_GRAYSCALE)
         if img is not None:
             self._set(np.asarray(img, dtype=np.uint8) > 127)
+
+    @property
+    def learned(self) -> bool:
+        with self._lock:
+            return self._mask is not None
+
+    @property
+    def learned_at(self) -> datetime | None:
+        try:
+            return datetime.fromtimestamp(self._path.stat().st_mtime, UTC)
+        except OSError:
+            return None
+
+    @property
+    def edits(self) -> MaskEdits:
+        with self._lock:
+            return self._edits
+
+    def set_edits(self, edits: MaskEdits) -> None:
+        """Keep the drawn areas and use them from the next frame on."""
+        self._edits_path.parent.mkdir(parents=True, exist_ok=True)
+        tmp = self._edits_path.with_suffix(".tmp")
+        with tmp.open("w", encoding="utf-8") as f:
+            json.dump(edits.to_json(), f)
+            f.flush()
+            os.fsync(f.fileno())
+        tmp.replace(self._edits_path)
+        with self._lock:
+            self._edits = edits
+            self._scaled = {}
+            self.version += 1
+        log.info("sky mask: %d excluded, %d included area(s) drawn", len(edits.exclude),
+                 len(edits.include))  # fmt: skip
+
+    def forget(self) -> None:
+        """Drop the learned mask; the next clear night learns a new one."""
+        self._path.unlink(missing_ok=True)
+        with self._lock:
+            self._mask = None
+            self._scaled = {}
+            self._built_for = None
+            self.version += 1
 
     def _set(self, mask: Mask) -> None:
         with self._lock:
@@ -74,17 +191,37 @@ class SkyMask:
             self.version += 1
 
     def get(self, height: int, width: int) -> Mask | None:
-        """The mask for a frame of this size, None until one was learned."""
+        """The mask for a frame of this size with the drawn areas, None while there is
+        neither a learned mask nor a drawn area."""
         with self._lock:
-            if self._mask is None:
+            if self._mask is None and self._edits.empty:
                 return None
             m = self._scaled.get((height, width))
             if m is None:
-                small = self._mask.astype(np.uint8) * 255
-                big = cv2.resize(small, (width, height), interpolation=cv2.INTER_NEAREST)
-                m = np.asarray(big, dtype=np.uint8) > 127
+                m = self._compose(height, width)
                 self._scaled[(height, width)] = m
             return m
+
+    def _compose(self, height: int, width: int) -> Mask:
+        if self._mask is not None:
+            small = self._mask.astype(np.uint8) * 255
+            base = cv2.resize(small, (width, height), interpolation=cv2.INTER_NEAREST)
+            m = np.asarray(base, dtype=np.uint8) > 127
+        elif self.fallback_frac is not None:
+            yy, xx = np.mgrid[0:height, 0:width]
+            r = min(width, height) * self.fallback_frac
+            m = (xx - width / 2) ** 2 + (yy - height / 2) ** 2 <= r * r
+        else:
+            m = np.ones((height, width), dtype=np.bool_)
+        if self._edits.empty:
+            return m
+        out = m.astype(np.uint8)
+        scale = np.array([width, height], dtype=np.float64)
+        for polys, value in ((self._edits.exclude, 0), (self._edits.include, 1)):
+            for poly in polys:
+                pts = np.round(np.asarray(poly, dtype=np.float64) * scale).astype(np.int32)
+                cv2.fillPoly(out, [pts], value)
+        return out > 0
 
     def observe(
         self, at: datetime, night_id: str, sun_elevation: float, image: npt.NDArray[np.uint8]

@@ -12,7 +12,7 @@ from typing import Any
 from pydantic import ValidationError
 
 from allskyhub_agent.profiles import Profile
-from allskyhub_agent.settings import CAMERA_CHOICES, AgentSettings
+from allskyhub_agent.settings import CAMERA_CHOICES, DETECT_CHOICES, DETECTORS, AgentSettings
 from allskyhub_protocol import SetSettingsArgs, SettingSpec, invalid_settings
 
 _CAMERA_LABELS = {
@@ -21,6 +21,54 @@ _CAMERA_LABELS = {
     "rpi-hq": "Raspberry Pi HQ",
     "sim": "Simuliert (Test)",
 }
+
+_LEVEL_LABELS = {
+    "off": {"de": "Aus", "en": "Off"},
+    "low": {"de": "Nur deutliche", "en": "Only clear ones"},
+    "normal": {"de": "Normal", "en": "Normal"},
+    "high": {"de": "Auch schwache", "en": "Faint ones too"},
+}
+_DETECTOR_TEXT = {
+    "meteor": (
+        "Meteore",
+        "Meteors",
+        "Flugzeuge und Satelliten werden aussortiert.",
+        "Aircraft and satellites are left out.",
+    ),
+    "aurora": (
+        "Polarlicht",
+        "Aurora",
+        "Grünes Leuchten tief am Himmel Richtung Pol.",
+        "Green glow low in the sky toward the pole.",
+    ),
+    "lightning": (
+        "Blitze",
+        "Lightning",
+        "Ein großer Teil des Himmels hellt kurz auf.",
+        "A large part of the sky lights up briefly.",
+    ),
+    "nlc": (
+        "Leuchtende Nachtwolken",
+        "Noctilucent clouds",
+        "Im Sommer in der Dämmerung; braucht die Ausrichtung.",
+        "In summer twilight; needs the orientation.",
+    ),
+}
+
+
+def _detector_entries() -> list[dict[str, Any]]:
+    return [
+        {
+            "key": f"detect_{k}",
+            "type": "choice",
+            "label": {"de": de, "en": en},
+            "group": {"de": "Erkennung", "en": "Detection"},
+            "choices": [{"value": c, "label": _LEVEL_LABELS[c]} for c in DETECT_CHOICES],
+            "help": {"de": help_de, "en": help_en},
+        }
+        for k in DETECTORS
+        for de, en, help_de, help_en in [_DETECTOR_TEXT[k]]
+    ]
 
 
 def build_schema(profile: Profile) -> list[SettingSpec]:
@@ -139,6 +187,7 @@ def build_schema(profile: Profile) -> list[SettingSpec]:
             },
         }
     )
+    entries.extend(_detector_entries())
     return [SettingSpec.model_validate(e) for e in entries]
 
 

@@ -128,6 +128,17 @@ the frame is not used. It is relearned every night, kept in
 `<data>/calibration/skymask.png`, and used for metering (§4.3), the detections and the
 sky values in `status` (§6.3); until there is one, the profile's image circle is used.
 
+The owner can draw areas in the local UI (roadmap L8), kept in
+`<data>/calibration/skymask_edits.json` as `{exclude, include}`, each a list of polygons
+of 3–200 `[x, y]` points in fractions of the frame (at most 30 polygons). `exclude` is never
+sky, `include` always is; they apply on top of the learned mask (or, until there is one,
+the image circle) from the next frame on and survive relearning.
+
+Each detector has a level in the settings (§6.9): `detect_meteor`, `detect_aurora`,
+`detect_lightning`, `detect_nlc`, one of `off`, `low`, `normal` (default), `high`. `off`
+runs no detection of that kind; the other levels move only the threshold that separates
+faint events from false alarms.
+
 ### 4.8 Orientation
 
 The agent plate-solves a clear frame (sun ≤ −18°, sky meter ≤ 10 % cloud and ≥ 150

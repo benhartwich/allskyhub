@@ -9,7 +9,7 @@ from __future__ import annotations
 import logging
 import queue
 import threading
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
@@ -392,8 +392,11 @@ class DetectionWorker:
         orienter: Orienter | None = None,
         nlc: NlcDetector | None = None,
         latitude: Callable[[], float | None] | None = None,
+        enabled: Mapping[str, bool] | None = None,
     ) -> None:
         self._store = store
+        # Detectors switched off in the settings (roadmap L8) never see a frame.
+        self._on = dict.fromkeys(("meteor", "lightning", "aurora"), True) | dict(enabled or {})
         self.events = events or EventStore(store)
         self._on_event = on_event
         self._meteor = MeteorDetector(cfg, mask, mask_radius_frac)
@@ -492,9 +495,12 @@ class DetectionWorker:
         if self._orienter is not None:
             self._orienter.consider(job.frame, job.path, metrics)
         gray = to_gray(rgb)
-        self._emit(self._meteor.feed(job.frame, gray, job.path))
-        self._emit_lightning(self._lightning.feed(job.frame, gray, job.path))
-        self._emit_aurora(self._aurora.feed(job.frame, rgb, job.path, cloud))
+        if self._on["meteor"]:
+            self._emit(self._meteor.feed(job.frame, gray, job.path))
+        if self._on["lightning"]:
+            self._emit_lightning(self._lightning.feed(job.frame, gray, job.path))
+        if self._on["aurora"]:
+            self._emit_aurora(self._aurora.feed(job.frame, rgb, job.path, cloud))
         if self._nlc is not None:
             self._emit_nlc(self._nlc.feed(job.frame, rgb, job.path))
 

@@ -47,6 +47,26 @@ select.night-select { max-width: 260px; }
 .field.bad input, .field.bad select { border-color: var(--danger); }
 .pair { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
 
+.mask-stage { position: relative; line-height: 0; cursor: crosshair; touch-action: manipulation;
+  border-radius: calc(var(--radius) - 8px); overflow: hidden; background: #000; }
+.mask-stage img, .mask-stage svg { width: 100%; height: auto; display: block; }
+.mask-stage #maskShade, .mask-stage svg { position: absolute; inset: 0; height: 100%; pointer-events: none; }
+.mask-stage .ring { fill: none; stroke: rgba(255, 255, 255, .35); stroke-width: 2;
+  vector-effect: non-scaling-stroke; }
+.mask-stage .ring.horizon { stroke: var(--warn); stroke-width: 2.5; }
+.mask-stage .zenith { fill: var(--warn); }
+.mask-stage .compass { fill: var(--text); font: 700 54px var(--display); text-anchor: middle;
+  dominant-baseline: middle; paint-order: stroke; stroke: rgba(0, 0, 0, .7); stroke-width: 6px; }
+.mask-stage .area { stroke-width: 2.5; vector-effect: non-scaling-stroke; }
+.mask-stage .area.exclude { fill: var(--danger); fill-opacity: .3; stroke: var(--danger); }
+.mask-stage .area.include { fill: var(--ok); fill-opacity: .3; stroke: var(--ok); }
+.mask-stage .area.open { fill: none; stroke-dasharray: 6 4; }
+.mask-stage .vertex { fill: var(--text); stroke: #000; stroke-width: 1.5; vector-effect: non-scaling-stroke; }
+.mask-stage .vertex.first { fill: var(--accent); }
+.areas { list-style: none; padding: 0; margin: 0; display: flex; flex-wrap: wrap; gap: 8px; }
+.areas li { display: flex; gap: 6px; align-items: center; }
+[data-draw].active, #maskGrid.active { border-color: var(--accent); color: var(--accent); }
+
 #lightbox { max-width: min(1200px, 96vw); width: 96vw; padding: 12px; border: 1px solid var(--line);
   border-radius: var(--radius); background: var(--bg); color: var(--text); }
 #lightbox::backdrop { background: rgba(0, 0, 0, .85); }

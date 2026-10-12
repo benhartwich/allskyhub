@@ -21,6 +21,10 @@ Routes:
          /files/<n>/events/<id>.jpg[?thumb=1]   stored files, with Range for the video
     GET  /api/settings        {schema, values} for the settings form (SPEC §6.9)
     POST /api/settings        partial JSON object → 202, or 400 {detail, fields}
+    GET  /api/calibration     sky mask state, drawn areas, orientation overlay (roadmap L8)
+    GET  /api/skymask.png?w=&h=   transparent shade over everything that is not sky
+    POST /api/calibration/mask      {exclude, include} drawn areas → the new state
+    POST /api/calibration/relearn   drop the learned mask → the new state
     GET  /local-login         login page (SPEC §7.4)
     GET  /local-login/start   single sign-on: nonce cookie, redirect to the hub
     GET  /local-login/callback   page that posts the assertion from the fragment
@@ -66,9 +70,11 @@ from allskyhub_agent.web.auth import (
     SESSION_TTL_S,
     LocalAuth,
 )
+from allskyhub_agent.web.calibration import LocalCalibration
 from allskyhub_protocol import SettingSpec
 
 _MAX_BODY = 4096
+_MAX_MASK_BODY = 256 * 1024  # 30 polygons of 200 points as JSON
 _SETUP_NET = ipaddress.ip_network(f"{SETUP_ADDRESS}/24", strict=False)
 
 
@@ -160,6 +166,7 @@ def make_handler(
     time_trusted: Callable[[], bool] = lambda: True,
     settings_form: SettingsForm | None = None,
     archive: LocalArchive | None = None,
+    calibration: LocalCalibration | None = None,
 ) -> type[BaseHTTPRequestHandler]:
     page = _page()
     login_page = _page("login.html")
@@ -310,9 +317,9 @@ def make_handler(
                 return True
             return False
 
-        def _read_body(self) -> bytes | None:
+        def _read_body(self, limit: int = _MAX_BODY) -> bytes | None:
             length = int(self.headers.get("Content-Length") or 0)
-            if length > _MAX_BODY:
+            if length > limit:
                 self._text(HTTPStatus.REQUEST_ENTITY_TOO_LARGE, "too large")
                 return None
             return self.rfile.read(length)
@@ -465,6 +472,21 @@ def make_handler(
                         "values": settings_form.values(),
                     },
                 )
+            elif path == "/api/calibration":
+                if calibration is None:
+                    self._text(HTTPStatus.NOT_FOUND, "no camera yet")
+                    return
+                self._json(HTTPStatus.OK, calibration.info())
+            elif path == "/api/skymask.png":
+                png = (
+                    calibration.shade_png(self._int("w", 960), self._int("h", 540))
+                    if calibration is not None
+                    else None
+                )
+                if png is None:
+                    self._text(HTTPStatus.NOT_FOUND, "no sky mask yet")
+                else:
+                    self._send(HTTPStatus.OK, png, "image/png")
             elif path == "/api/status":
                 self._json(HTTPStatus.OK, live.status())
             elif path == "/api/setup":
@@ -510,6 +532,8 @@ def make_handler(
                 self._post_settings()
             elif path == "/api/focus":
                 self._post_focus()
+            elif path in ("/api/calibration/mask", "/api/calibration/relearn"):
+                self._post_calibration(path)
             elif path == "/api/setup/network":
                 self._post_network()
             else:
@@ -535,6 +559,25 @@ def make_handler(
                 return
             # SPEC §6.5: stored; the capture restarts with the new settings in a moment.
             self._json(HTTPStatus.ACCEPTED, {"restarting": True})
+
+        def _post_calibration(self, path: str) -> None:
+            if calibration is None:
+                self._text(HTTPStatus.NOT_FOUND, "no camera yet")
+                return
+            raw = self._read_body(_MAX_MASK_BODY)
+            if raw is None:
+                return
+            if path.endswith("/relearn"):
+                calibration.forget_mask()
+            else:
+                try:
+                    body: object = json.loads(raw)
+                except ValueError:
+                    body = None
+                if not calibration.set_edits(body):
+                    self._json(HTTPStatus.BAD_REQUEST, {"detail": "invalid", "fields": ["areas"]})
+                    return
+            self._json(HTTPStatus.OK, calibration.info())
 
         def _post_focus(self) -> None:
             raw = self._read_body()
@@ -601,10 +644,20 @@ class WebServer:
         time_trusted: Callable[[], bool] = lambda: True,
         settings_form: SettingsForm | None = None,
         archive: LocalArchive | None = None,
+        calibration: LocalCalibration | None = None,
     ) -> None:
         net = ipaddress.ip_network(setup_net) if setup_net else _SETUP_NET
         handler = make_handler(
-            live, pairing, setup, net, settings, auth, time_trusted, settings_form, archive
+            live,
+            pairing,
+            setup,
+            net,
+            settings,
+            auth,
+            time_trusted,
+            settings_form,
+            archive,
+            calibration,
         )
         self._httpd = ThreadingHTTPServer((host, port), handler)
         self._httpd.daemon_threads = True

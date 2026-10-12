@@ -647,7 +647,8 @@ again.
 
 **Unpaired**, nothing changes: no login. **Paired**, every page and API of the local UI
 needs a local session, except `GET /api/setup` (no secrets; the app's onboarding polls
-it), the login routes below and the static files. There are two ways to log in; both
+it), `GET /api/health` (version and frame count for the updater and the watchdog, §8),
+the login routes below and the static files. There are two ways to log in; both
 open the same session.
 
 **A: with the allskyhub account (single sign-on through the hub).**
@@ -798,7 +799,8 @@ report healthy within a timeout.
   switched with one rename.
 - **Updater:** a root systemd timer (10 min after boot, then hourly). Only newer
   versions, only with a valid signature and checksum, only while the agent reports day
-  mode. Healthy means the local `/api/status` (§7) reports the new `version`, and
+  mode. Healthy means the local `/api/health` (§7; open without a login, only `version`,
+  `frames` and the newest frame's `mode` and `captured_at`) reports the new `version`, and
   `frames` > 0 if the old one captured, within 5 min; else it switches back and skips
   that version. A power cut between switch and check is finished on the next run.
 - **Asked for in the local UI** (roadmap L14): the agent writes `now` or `rollback` into
@@ -807,6 +809,26 @@ report healthy within a timeout.
   `rollback` switches to the previous installed release with the same health check and
   marks the current one as not to be installed again by itself.
 - Details and key handling: `docs/updates.md`.
+
+### 8.1 Watchdog
+
+The camera keeps itself working without anyone at it (roadmap L17). Capture never
+depends on the hub (rule 1), so nothing here reacts to the hub being unreachable.
+
+- **Agent:** runs under a systemd watchdog (`WatchdogSec=5min`) and pings it only while
+  frames keep coming (a new frame within 10 minutes, or within 20 minutes of starting while
+  it looks for the camera). A hung capture is restarted by systemd.
+- **Watchdog check:** `allskyhub-watchdog.timer` runs `allskyhub-agent watchdog` as root
+  every 5 minutes. It reads `GET /api/health` (§7) and escalates while the frame count does
+  not rise: after 20 minutes restart the agent, after 35 minutes (and 15 after that restart)
+  reset the ZWO camera on USB (`authorized` 0 → 1) and restart, after 60 minutes reboot, at
+  most once every 6 hours. Once frames come again the ladder starts anew. If the local
+  network (the default gateway answers a ping, or DNS resolves) has been unreachable for 3
+  hours on a camera that had a network before, it reboots, with the same 6-hour limit. It
+  does nothing while the updater switches versions (§8). State in
+  `/var/lib/allskyhub-watchdog/state.json`.
+- **Hardware:** systemd drives the Raspberry Pi's hardware watchdog
+  (`RuntimeWatchdogSec=15s`), so a hung system resets itself.
 
 ## 9. Milestones
 

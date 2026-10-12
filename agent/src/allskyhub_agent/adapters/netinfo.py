@@ -70,6 +70,14 @@ def interfaces(
     return out
 
 
+def default_gateway(route_json: str | None = None) -> str | None:
+    """The default route's gateway address, None without one."""
+    routes = _json(
+        route_json if route_json is not None else _run("ip", "-j", "route", "show", "default")
+    )
+    return next((str(r["gateway"]) for r in routes if r.get("gateway")), None)
+
+
 def wifi(nmcli_out: str | None = None) -> dict[str, Any] | None:
     """The joined Wi-Fi `{ssid, signal}` (signal 0..100), None without one."""
     out = (

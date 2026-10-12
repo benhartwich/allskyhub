@@ -93,6 +93,17 @@ class LiveState:
         with self._lock:
             return self._s.crop_jpeg
 
+    def health(self) -> dict[str, object]:
+        """For root helpers on the camera, without a login (SPEC §8): nothing private."""
+        with self._lock:
+            s = self._s
+            frame = (
+                {"mode": s.frame.mode.value, "captured_at": s.frame.captured_at.isoformat()}
+                if s.frame
+                else None
+            )
+            return {"version": __version__, "frames": s.frames, "frame": frame}
+
     def status(self) -> dict[str, object]:
         """Snapshot for the local web UI (not a protocol message)."""
         with self._lock:

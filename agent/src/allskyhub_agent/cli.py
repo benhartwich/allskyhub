@@ -10,6 +10,7 @@ from __future__ import annotations
 import argparse
 import logging
 import os
+import socket
 import subprocess
 import sys
 import threading
@@ -69,6 +70,13 @@ from allskyhub_agent.setup.setup_file import apply_once as apply_setup_file
 from allskyhub_agent.store.images import ImageStore
 from allskyhub_agent.update.installer import Paths, Updater, read_request
 from allskyhub_agent.update.status import STATE_FILE, update_status
+from allskyhub_agent.watchdog import (
+    Heartbeat,
+    WatchState,
+    decide,
+    usb_camera_devices,
+    usb_reset,
+)
 from allskyhub_agent.web.archive import LocalArchive
 from allskyhub_agent.web.auth import LocalAuth
 from allskyhub_agent.web.calibration import LocalCalibration
@@ -130,9 +138,14 @@ def _parser() -> argparse.ArgumentParser:
     upd.add_argument("--keys", type=Path, default=Path("/etc/allskyhub-agent/update-keys"))
     upd.add_argument("--state", type=Path, default=Path("/var/lib/allskyhub-updater/state.json"))
     upd.add_argument("--work", type=Path, default=Path("/var/cache/allskyhub-updater"))
-    upd.add_argument("--agent-status", default="http://127.0.0.1:8080/api/status")
+    upd.add_argument("--agent-status", default="http://127.0.0.1:8080/api/health")
     upd.add_argument("--request", type=Path, default=UPDATE_REQUEST,
                      help="request from the local UI: now or rollback (roadmap L14)")  # fmt: skip
+    wd = sub.add_parser("watchdog", help="one watchdog check (root, SPEC §8.1)")
+    wd.add_argument("--state", type=Path, default=Path("/var/lib/allskyhub-watchdog/state.json"))
+    wd.add_argument("--agent-health", default="http://127.0.0.1:8080/api/health")
+    wd.add_argument("--updater-state", type=Path, default=STATE_FILE)
+    wd.add_argument("--dry-run", action="store_true", help="only print what it would do")
     run = sub.add_parser("run", help="capture frames")
     run.add_argument("--frames", type=int, default=None, help="stop after N frames")
     run.add_argument("--data", type=Path, required=True, help="data directory")
@@ -320,6 +333,64 @@ def system_action(action: str, restart: threading.Event) -> str | None:
     return None
 
 
+def network_ok() -> bool:
+    """The local network works: the default gateway answers a ping, or DNS resolves.
+    Deliberately not the hub (SPEC §8.1)."""
+    gw = netinfo.default_gateway()
+    if gw is not None:
+        res = subprocess.run(  # noqa: S603 - fixed arguments
+            ["ping", "-c", "1", "-W", "3", gw],  # noqa: S607 - ping from PATH
+            capture_output=True, check=False, timeout=10,
+        )  # fmt: skip
+        if res.returncode == 0:
+            return True
+    try:
+        socket.getaddrinfo("pool.ntp.org", 123)
+    except OSError:
+        return False
+    return True
+
+
+def restart_agent() -> None:
+    subprocess.run(
+        ["systemctl", "restart", "allskyhub-agent.service"],  # noqa: S607 - systemctl from PATH
+        check=False, timeout=120,
+    )  # fmt: skip
+
+
+def run_watchdog(args: argparse.Namespace) -> int:
+    """One check from allskyhub-watchdog.timer, as root (SPEC §8.1, roadmap L17)."""
+    logging.basicConfig(level=logging.INFO, format="%(levelname)s %(name)s: %(message)s")
+    logging.getLogger("httpx").setLevel(logging.WARNING)
+    try:
+        r = httpx.get(args.agent_health, timeout=10)
+        health: object = r.json() if r.status_code == 200 else None
+    except (httpx.HTTPError, ValueError):
+        health = None
+    frames = cast(dict[str, Any], health).get("frames") if isinstance(health, dict) else None
+    upd = update_status(args.updater_state)
+    busy = upd is not None and upd.state.value in ("installing", "downloading")
+    st = WatchState.load(args.state)
+    action = decide(st, datetime.now(UTC), frames if isinstance(frames, int) else None,
+                    network_ok(), busy)  # fmt: skip
+    if action is not None:
+        log.warning("watchdog: %s (frames %s since %s, network down since %s)", action,
+                    st.frames, st.frames_changed, st.net_down_since)  # fmt: skip
+    if args.dry_run:
+        print(action or "nothing to do")
+        return 0
+    st.save(args.state)
+    if action == "restart":
+        restart_agent()
+    elif action == "usb_reset":
+        n = usb_reset(usb_camera_devices())
+        log.warning("watchdog: reset %d USB camera(s)", n)
+        restart_agent()
+    elif action == "reboot":
+        subprocess.run(["systemctl", "reboot"], check=False, timeout=60)  # noqa: S607 - systemctl from PATH
+    return 0
+
+
 def run_update(args: argparse.Namespace) -> int:
     """One updater run (SPEC §8), started by allskyhub-updater.timer as root."""
     logging.basicConfig(level=logging.INFO, format="%(levelname)s %(name)s: %(message)s")
@@ -387,6 +458,8 @@ def main(argv: list[str] | None = None) -> int:
     tz = ZoneInfo(args.tz or "UTC")
     if args.cmd == "update":
         return run_update(args)
+    if args.cmd == "watchdog":
+        return run_watchdog(args)
     if args.cmd == "products":
         result = build_night(ImageStore(args.data, tz), args.night)
         print(f"night {result.night_id}: {result.frames} night frames, built {result.built}")
@@ -822,6 +895,8 @@ def main(argv: list[str] | None = None) -> int:
                 hub.notify_products(announced)
 
     night_cfg = load_settings()
+    # SPEC §8.1: systemd restarts the agent if frames stop (WatchdogSec in the unit).
+    Heartbeat(lambda: int(cast(int, live.status()["frames"]))).start()
     products = ProductWorker(
         store,
         ProductConfig(

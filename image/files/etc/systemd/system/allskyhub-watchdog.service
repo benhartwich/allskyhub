@@ -1,0 +1,12 @@
+# SPEC §8.1 (roadmap L17): one check; restart the agent, reset the USB camera or reboot when
+# no frames come for a long time, reboot after hours without the local network. Root,
+# because it restarts services, touches USB devices and reboots. Never because of the hub.
+[Unit]
+Description=allskyhub watchdog check
+After=allskyhub-agent.service
+
+[Service]
+Type=oneshot
+ExecStart=/opt/allskyhub-agent/current/.venv/bin/allskyhub-agent watchdog
+StateDirectory=allskyhub-watchdog
+TimeoutStartSec=5min

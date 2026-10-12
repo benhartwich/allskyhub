@@ -6,6 +6,8 @@ never waits for it. Until pairing exists (SPEC §6.2) it is meant for the local 
 Routes:
     GET  /                    the page
     GET  /api/status          JSON snapshot of the live state
+    GET  /api/health          {version, frames, frame: {mode, captured_at}}, open: the
+                              updater's health check and the watchdog (SPEC §8)
     GET  /api/live.jpg        latest frame, scaled
     GET  /api/crop.jpg        latest frame, 1:1 centre crop (focus mode only)
     GET  /api/setup           device id, hub, pairing code, setup mode (SPEC §6.2, §7, §7.1)
@@ -205,6 +207,7 @@ _DESIGN_TYPES = {".css": "text/css; charset=utf-8", ".woff2": "font/woff2", ".sv
 # Routes that answer without a session on a paired camera (SPEC §7.4).
 _OPEN = {
     "/api/setup",
+    "/api/health",
     "/local-login",
     "/local-login/start",
     "/local-login/callback",
@@ -594,6 +597,8 @@ def make_handler(
                     self._send(HTTPStatus.OK, png, "image/png")
             elif path == "/api/status":
                 self._json(HTTPStatus.OK, live.status())
+            elif path == "/api/health":
+                self._json(HTTPStatus.OK, live.health())
             elif path == "/api/setup":
                 if pairing is None:
                     self._text(HTTPStatus.NOT_FOUND, "no hub configured")

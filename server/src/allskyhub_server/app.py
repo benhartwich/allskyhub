@@ -41,7 +41,7 @@ from allskyhub_server.web import (
 )
 from allskyhub_server.web.deps import LoginRequiredError
 from allskyhub_server.web.render import render
-from allskyhub_server.web.templating import STATIC_DIR
+from allskyhub_server.web.templating import DESIGN_DIR, STATIC_DIR
 
 access_log = logging.getLogger("allskyhub_server.access")
 
@@ -198,6 +198,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.add_middleware(AccessLogMiddleware)
     _install_error_handlers(app)
 
+    app.mount("/static/design", CachedStaticFiles(directory=DESIGN_DIR), name="design")
     app.mount("/static", CachedStaticFiles(directory=STATIC_DIR), name="static")
     app.include_router(routes_auth.router)
     app.include_router(routes_account.router)

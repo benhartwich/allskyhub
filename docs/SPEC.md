@@ -607,6 +607,11 @@ Endpoints, only reachable from the setup network:
   no internet, so only the offline code works. Without a session nobody nearby can move
   the camera to another network or another hub. A camera without an offline code can be
   reached again on its old network, through Ethernet or with a setup file (§7.3).
+- **Another Wi-Fi from the normal network** (roadmap L13): where the agent manages the
+  network, the local UI can also switch the Wi-Fi without setup mode: `GET /api/network/wifi`
+  (as above) and `POST /api/network/wifi` with `{ssid, password?, country}` only, never
+  hub or location, the same checks, `202 {will_join}`, and the same fallback to setup mode
+  if joining fails. Once paired both need a local session (§7.4).
 
 ### 7.2 Discovery
 

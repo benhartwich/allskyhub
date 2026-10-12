@@ -23,6 +23,7 @@ from zoneinfo import ZoneInfo
 import httpx
 
 from allskyhub_agent import __version__, settings_schema, system
+from allskyhub_agent.adapters import netinfo
 from allskyhub_agent.adapters.asi_sdk import AsiError, AsiSdk
 from allskyhub_agent.adapters.camera import Camera, CameraError
 from allskyhub_agent.adapters.libcamera import LibcameraCamera, list_cameras
@@ -199,6 +200,15 @@ def run_import(args: argparse.Namespace) -> int:
     # SPEC §6.7: the running agent announces these nights to the hub, one per second.
     Backlog(data / BACKLOG_NAME).add(sorted(r.nights), owner)
     return 0
+
+
+def wifi_country(settings_file: Path) -> str | None:
+    """The radio country the image's root helper set (SPEC §7.1), for the Wi-Fi form."""
+    try:
+        code = (settings_file.parent / "wifi-country").read_text().strip().upper()
+    except OSError:
+        return None
+    return code if len(code) == 2 and code.isalpha() else None
 
 
 def system_facts(data: Path) -> dict[str, Any]:
@@ -502,6 +512,7 @@ def main(argv: list[str] | None = None) -> int:
                 lambda: system_facts(Path(args.data)),
                 lambda action: system_action(action, restart_requested),
             ),
+            network_info=lambda: netinfo.summary() | {"country": wifi_country(settings_file)},
         )
         web.start()
         print(f"web UI on http://{host}:{web.port}/")

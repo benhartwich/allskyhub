@@ -28,6 +28,10 @@ Routes:
     GET  /api/public          the public page on the hub {enabled, url, profile, online}
                               (SPEC §6.8, roadmap L10); the last known state with
                               online false while the hub is unreachable, else 503
+    GET  /api/network         interfaces, addresses, joined Wi-Fi, managed (roadmap L13)
+    GET  /api/network/wifi    visible Wi-Fi networks, only where the agent manages the network
+    POST /api/network/wifi    {ssid, password?, country} → 202 {will_join}; as in setup mode,
+                              a failed join opens the setup network (SPEC §7.1)
     GET  /api/system          CPU, memory, disk, power warnings, uptime (roadmap L12)
     POST /api/system/<action> restart (the agent), reboot, shutdown → 202, or 503 {detail}
     POST /api/public          {enabled?, profile?} → the new state, 422 {detail} with the
@@ -87,6 +91,20 @@ _MAX_PUBLIC_BODY = 16 * 1024  # the profile's texts are at most about 3 000 char
 _SETUP_NET = ipaddress.ip_network(f"{SETUP_ADDRESS}/24", strict=False)
 
 
+def _ssid_bytes(v: str) -> str:
+    if len(v.encode()) > 32:
+        raise ValueError("ssid has more than 32 bytes")
+    return v
+
+
+def _wpa_password(v: str | None) -> str | None:
+    if v is None or v == "":
+        return None
+    if not 8 <= len(v) <= 63:
+        raise ValueError("password must have 8 to 63 characters")
+    return v
+
+
 class SetupNetworkBody(BaseModel):
     """`POST /api/setup/network` (SPEC §7.1)."""
 
@@ -109,21 +127,24 @@ class SetupNetworkBody(BaseModel):
             raise ValueError("unknown time zone")
         return v
 
-    @field_validator("ssid")
-    @classmethod
-    def _ssid_bytes(cls, v: str) -> str:
-        if len(v.encode()) > 32:
-            raise ValueError("ssid has more than 32 bytes")
-        return v
+    _ssid = field_validator("ssid")(_ssid_bytes)
+    _password = field_validator("password")(_wpa_password)
 
-    @field_validator("password")
-    @classmethod
-    def _password(cls, v: str | None) -> str | None:
-        if v is None or v == "":
-            return None
-        if not 8 <= len(v) <= 63:
-            raise ValueError("password must have 8 to 63 characters")
-        return v
+
+_NOT_MANAGED = "Das Netzwerk wird auf dieser Installation nicht von der Kamera verwaltet."
+
+
+class WifiBody(BaseModel):
+    """`POST /api/network/wifi` (roadmap L13): only the Wi-Fi, never hub or location."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    ssid: str = Field(min_length=1)
+    password: str | None = None
+    country: str = Field(pattern=r"^[A-Za-z]{2}$")
+
+    _ssid = field_validator("ssid")(_ssid_bytes)
+    _password = field_validator("password")(_wpa_password)
 
 
 @dataclass(frozen=True)
@@ -188,6 +209,7 @@ def make_handler(
     calibration: LocalCalibration | None = None,
     public: PublicPage | None = None,
     system_page: SystemPage | None = None,
+    network_info: Callable[[], dict[str, Any]] | None = None,
 ) -> type[BaseHTTPRequestHandler]:
     page = _page()
     login_page = _page("login.html")
@@ -495,6 +517,16 @@ def make_handler(
                 )
             elif path == "/api/public":
                 self._public(None)
+            elif path == "/api/network":
+                if network_info is None:
+                    self._text(HTTPStatus.NOT_FOUND, "not found")
+                    return
+                self._json(HTTPStatus.OK, network_info() | {"managed": setup is not None})
+            elif path == "/api/network/wifi":
+                if setup is None:
+                    self._json(HTTPStatus.NOT_FOUND, {"detail": _NOT_MANAGED})
+                    return
+                self._json(HTTPStatus.OK, [asdict(n) for n in setup.networks()])
             elif path == "/api/system":
                 if system_page is None:
                     self._text(HTTPStatus.NOT_FOUND, "not found")
@@ -562,6 +594,8 @@ def make_handler(
                 self._post_focus()
             elif path in ("/api/calibration/mask", "/api/calibration/relearn"):
                 self._post_calibration(path)
+            elif path == "/api/network/wifi":
+                self._post_wifi()
             elif m := _SYSTEM_ACTION.match(path):
                 if system_page is None:
                     self._text(HTTPStatus.NOT_FOUND, "not found")
@@ -667,6 +701,25 @@ def make_handler(
                 return
             self._json(HTTPStatus.OK, live.status())
 
+        def _post_wifi(self) -> None:
+            """Roadmap L13: another Wi-Fi from the normal network, like setup mode's join
+            but never another hub or location (those stay with the settings)."""
+            if setup is None:
+                self._json(HTTPStatus.NOT_FOUND, {"detail": _NOT_MANAGED})
+                return
+            raw = self._read_body()
+            if raw is None:
+                return
+            try:
+                body = WifiBody.model_validate_json(raw)
+            except ValidationError as exc:
+                fields = sorted({".".join(str(p) for p in e["loc"]) for e in exc.errors()})
+                self._json(HTTPStatus.BAD_REQUEST, {"detail": "invalid", "fields": fields})
+                return
+            req = NetworkRequest(body.ssid, body.password, body.country.upper(), None)
+            setup.request_network(req, time.monotonic())
+            self._json(HTTPStatus.ACCEPTED, {"will_join": body.ssid})
+
         def _post_network(self) -> None:
             if setup is None or not self._from_setup_network():
                 self._text(HTTPStatus.FORBIDDEN, "only in setup mode")
@@ -719,6 +772,7 @@ class WebServer:
         calibration: LocalCalibration | None = None,
         public: PublicPage | None = None,
         system_page: SystemPage | None = None,
+        network_info: Callable[[], dict[str, Any]] | None = None,
     ) -> None:
         net = ipaddress.ip_network(setup_net) if setup_net else _SETUP_NET
         handler = make_handler(
@@ -734,6 +788,7 @@ class WebServer:
             calibration,
             public,
             system_page,
+            network_info,
         )
         self._httpd = ThreadingHTTPServer((host, port), handler)
         self._httpd.daemon_threads = True

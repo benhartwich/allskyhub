@@ -769,6 +769,7 @@ async function viewSystem() {
   page.innerHTML = `<h1>System</h1>
     <section class="card stack"><h2>Kamera und Hub</h2><dl class="facts" id="sys"></dl></section>
     <section class="card stack" id="hw" hidden><h2>Rechner</h2><dl class="facts" id="hwFacts"></dl></section>
+    <section class="card stack" id="net" hidden></section>
     <section class="card stack" id="actions" hidden><h2>Neu starten</h2>
       <p class="muted small">Die Aufnahme läuft danach von selbst weiter. Gespeicherte Bilder bleiben erhalten.</p>
       <div class="actions">
@@ -795,6 +796,7 @@ async function viewSystem() {
       m.hidden = false;
     };
   }
+  viewNetwork().catch(() => {});
   every(async () => {
     const [st, setup, hw] = await Promise.all([getJSON("api/status").catch(() => null),
       getJSON("api/setup").catch(() => null), getJSON("api/system").catch(() => null)]);
@@ -830,6 +832,57 @@ async function viewSystem() {
       ${power}
       <dt>Uhrzeit</dt><dd>${hw.time_trusted ? '<span class="badge ok">genau</span>' : '<span class="badge">ungenau</span>'}</dd>`;
   }, 5000);
+}
+
+// --- Network (L13) ----------------------------------------------------------------------
+async function viewNetwork() {
+  const box = $("net");
+  const n = await getJSON("api/network");
+  box.hidden = false;
+  const iface = (i) => `<dt>${i.kind === "wifi" ? "WLAN" : "LAN"} <span class="muted small">${esc(i.name)}</span></dt>
+    <dd>${i.up ? (i.addresses.length ? i.addresses.map((a) => `<code>${esc(a.split("/")[0])}</code>`).join(" ") : "verbunden, keine Adresse")
+      : '<span class="muted">nicht verbunden</span>'}${i.default ? ' <span class="badge ok">Internet</span>' : ""}</dd>`;
+  box.innerHTML = `<h2>Netzwerk</h2>
+    <dl class="facts">
+      <dt>Name im Netz</dt><dd><code>${esc(n.hostname)}.local</code></dd>
+      ${n.wifi ? `<dt>WLAN</dt><dd>${esc(n.wifi.ssid)}${n.wifi.signal != null ? ` · Signal ${n.wifi.signal} %` : ""}</dd>` : ""}
+      ${n.interfaces.map(iface).join("")}
+    </dl>
+    ${n.managed ? `
+      <form class="form stack" id="wifiForm" novalidate>
+        <fieldset><legend>Anderes WLAN</legend>
+          <div class="field"><label for="wifiSsid">Netz</label>
+            <select id="wifiSsid" name="ssid"><option value="">Suche …</option></select></div>
+          <div class="field"><label for="wifiPw">Passwort</label>
+            <input id="wifiPw" name="password" type="password" autocomplete="off" placeholder="leer bei offenem Netz"></div>
+          <div class="field"><label for="wifiCountry">Land (Funkregeln)</label>
+            <input id="wifiCountry" name="country" maxlength="2" value="${esc(n.country || "AT")}"></div>
+        </fieldset>
+      </form>
+      <p class="muted small">Klappt die Verbindung nicht, öffnet die Kamera nach 2 Minuten ihr eigenes WLAN
+        <code>allskyhub-…</code>, über das du sie mit der App wieder einrichtest.</p>
+      <div class="actions"><button type="button" id="wifiJoin">Verbinden</button></div>
+      <p class="msg" id="wifiMsg" hidden></p>`
+      : `<p class="muted small">Das Netzwerk verwaltet auf dieser Installation das Betriebssystem, nicht die Kamera.</p>`}`;
+  if (!n.managed) return;
+  const say = (t, good) => { const m = $("wifiMsg"); m.textContent = t; m.className = "msg " + (good ? "ok" : "error"); m.hidden = false; };
+  getJSON("api/network/wifi").then((nets) => {
+    $("wifiSsid").innerHTML = nets.length
+      ? nets.map((w) => `<option value="${esc(w.ssid)}"${n.wifi && w.ssid === n.wifi.ssid ? " selected" : ""}>${esc(w.ssid)} (${w.signal} %${w.secure ? ", gesichert" : ""})</option>`).join("")
+      : `<option value="">Keine Netze gefunden</option>`;
+  }).catch(() => { $("wifiSsid").innerHTML = `<option value="">Suche fehlgeschlagen</option>`; });
+  $("wifiJoin").onclick = async () => {
+    const f = $("wifiForm").elements;
+    if (!f.ssid.value) { say("Bitte ein Netz wählen.", false); return; }
+    if (!confirm(`Mit „${f.ssid.value}“ verbinden? Die Kamera ist danach nur noch in diesem Netz erreichbar.`)) return;
+    const r = await fetch("api/network/wifi", { method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ ssid: f.ssid.value, password: f.password.value || null, country: f.country.value }) });
+    if (r.status === 401) { location.href = "local-login"; return; }
+    if (r.ok) { say(`Die Kamera wechselt zu „${f.ssid.value}“. Diese Seite ist jetzt nicht mehr erreichbar.`, true); return; }
+    const err = await r.json().catch(() => ({}));
+    const names = { password: "Passwort (8 bis 63 Zeichen)", country: "Land (zwei Buchstaben)", ssid: "Netz" };
+    say("Nicht übernommen: " + ((err.fields || []).map((k) => names[k] || k).join(", ") || err.detail || "ungültig") + ".", false);
+  };
 }
 
 // --- router -------------------------------------------------------------------------

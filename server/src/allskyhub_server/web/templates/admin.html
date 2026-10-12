@@ -1,0 +1,55 @@
+{% extends "base.html" %}
+{% block title %}Admin · allskyhub{% endblock %}
+{% block content %}
+<div class="page-head"><h1>Admin</h1></div>
+
+<section class="card stack">
+  <h2>Version</h2>
+  <dl class="facts">
+    <dt>Läuft</dt><dd><code>{{ running[:7] if running else 'unbekannt' }}</code></dd>
+    {% if upstream %}
+    <dt>main auf GitHub</dt><dd><a href="{{ upstream.ci_url }}"><code>{{ upstream.sha[:7] }}</code></a></dd>
+    <dt>CI</dt><dd class="{{ 'ok' if upstream.ci == 'success' else 'warn' }}">{{ {'success': 'grün', 'failure': 'rot', 'pending': 'läuft noch', 'unknown': 'unbekannt'}[upstream.ci] }}</dd>
+    {% endif %}
+  </dl>
+  {% if upstream_error %}<p class="msg error">{{ upstream_error }}</p>{% endif %}
+  {% if upstream and upstream.commits %}
+  <h3>Neu seit der laufenden Version ({{ upstream.ahead }})</h3>
+  <ul class="commit-list">
+    {% for c in upstream.commits[:30] %}
+    <li><a href="https://github.com/{{ repo }}/commit/{{ c.sha }}"><code>{{ c.sha[:7] }}</code></a> {{ c.title }}{% if c.at %} <span class="muted small">· {{ c.at | localtime }}</span>{% endif %}</li>
+    {% endfor %}
+  </ul>
+  {% elif upstream %}
+  <p class="muted">Der Server ist auf dem neuesten Stand.</p>
+  {% endif %}
+
+  <div id="deploy-job">{% include "_deploy_job.html" %}</div>
+
+  {% if upstream and upstream.commits and not job.busy %}
+  <form method="post" action="/admin/deploy" class="stack">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <input type="hidden" name="sha" value="{{ upstream.sha }}">
+    <label>Passwort zur Bestätigung<input type="password" name="password" autocomplete="current-password" required></label>
+    <p class="muted small">Holt <code>{{ upstream.sha[:7] }}</code> von main, führt die Migrationen aus und startet den Hub neu. Kameras verbinden sich danach von selbst wieder. Schlägt die Migration fehl, bleibt die alte Version.</p>
+    <button type="submit"{% if upstream.ci != 'success' %} disabled title="Erst wenn die CI grün ist"{% endif %}>Jetzt deployen</button>
+  </form>
+  {% endif %}
+</section>
+
+<section class="card stack">
+  <h2>Server</h2>
+  <dl class="facts">
+    <dt>Konten</dt><dd>{{ users }}</dd>
+    <dt>Gekoppelte Kameras</dt><dd>{{ cameras }}</dd>
+    <dt>Speicher frei</dt><dd class="{{ 'warn' if disk_free_pct < 15 }}">{{ '%.1f' | format(disk_free_gb) | replace('.', ',') }} GB ({{ disk_free_pct | round | int }} %)</dd>
+    <dt>E-Mail</dt><dd>{{ 'eingerichtet' if mail_enabled else 'aus' }}</dd>
+  </dl>
+  {% if mail_enabled %}
+  <form method="post" action="/admin/mail-test" class="inline">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <button type="submit" class="secondary small">Testmail an mich</button>
+  </form>
+  {% endif %}
+</section>
+{% endblock %}

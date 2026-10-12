@@ -33,7 +33,7 @@ sudo -u postgres psql -c "CREATE ROLE allskyhub_server LOGIN PASSWORD '…'"
 sudo -u postgres createdb -O allskyhub_server allskyhub
 # Env-Datei aus deploy/allskyhub-server.env.example anlegen, Passwort eintragen.
 
-sudo -u allskyhub-server env $(xargs < /etc/allskyhub-server/allskyhub-server.env) \
+sudo -u allskyhub-server bash -c 'set -a; . /etc/allskyhub-server/allskyhub-server.env; exec "$@"' _ \
   .venv/bin/allskyhub-server migrate
 cp deploy/systemd/allskyhub-server.* /etc/systemd/system/
 cp deploy/logrotate/allskyhub-nginx /etc/logrotate.d/   # nginx-Logs 14 Tage (Datenschutzerklärung)
@@ -56,19 +56,47 @@ Anmeldung nicht (sichere Cookies, Origin-Prüfung gegen `https://allskyhub.org`)
 
 ## Aktualisieren
 
+Am einfachsten über die Admin-Seite (unten). Von Hand, als root:
+
 ```bash
 cd /opt/allskyhub-server && git pull --ff-only
 uv sync --frozen --no-dev --package allskyhub-server
-sudo -u allskyhub-server env $(xargs < /etc/allskyhub-server/allskyhub-server.env) \
+sudo -u allskyhub-server bash -c 'set -a; . /etc/allskyhub-server/allskyhub-server.env; exec "$@"' _ \
   .venv/bin/allskyhub-server migrate
 systemctl restart allskyhub-server.service
 curl -s https://allskyhub.org/healthz
 ```
 
+Die Env-Datei wird mit `.` eingelesen, nicht mit `env $(xargs < …)`: Werte mit Leerzeichen
+(etwa `MAIL_FROM="allskyhub <no-reply@…>"`, in Anführungszeichen) zerfallen sonst.
+
 `/healthz` antwortet mit `{"status": "ok", "version": "<kurzer Commit>"}`; die Version muss
 nach dem Deploy dem Stand von `git log -1` entsprechen.
 
 Geräte verbinden sich nach dem Neustart von selbst wieder (SPEC §6.1).
+
+## Admin-Seite und Deploy per Knopf
+
+`/admin` sehen nur Konten aus `ALLSKYHUB_SERVER_ADMIN_EMAILS` (Komma-getrennt), alle anderen
+bekommen 404. Die Seite zeigt die laufende Version, die neuen Commits auf `main` und deren
+CI (GitHub-API, eine Minute gecacht), freien Speicher und einen Mail-Test.
+
+„Jetzt deployen“ geht nur bei grüner CI und mit dem Passwort. Der Hub selbst hat keine
+Rechte dafür: Er legt `/var/lib/allskyhub-server/deploy/request` mit dem gezeigten Commit
+ab. `allskyhub-deploy.path` startet dann `deploy/admin/allskyhub-deploy.sh` als root. Das
+Skript holt genau diesen Commit, wenn er noch `origin/main` ist (nur Fast-Forward, kein
+anderer Stand), führt `uv sync` und die Migrationen aus und startet den Hub neu. Danach
+prüft es `/healthz`. Schlägt etwas vor dem Neustart fehl, setzt es den Checkout zurück.
+Status und Protokoll stehen auf der Admin-Seite.
+
+```bash
+# in die Env-Datei: ALLSKYHUB_SERVER_ADMIN_EMAILS=mail@example.org
+cp deploy/systemd/allskyhub-deploy.* /etc/systemd/system/
+systemctl daemon-reload && systemctl enable --now allskyhub-deploy.path
+systemctl restart allskyhub-server
+```
+
+Protokoll auch im Journal: `journalctl -u allskyhub-deploy`.
 
 ## Konten (nur auf Einladung)
 
@@ -76,7 +104,7 @@ Es gibt keine offene Registrierung. Alle Befehle als Dienstbenutzer mit der Env-
 
 ```bash
 cd /opt/allskyhub-server
-alias ash='sudo -u allskyhub-server env $(xargs < /etc/allskyhub-server/allskyhub-server.env) .venv/bin/allskyhub-server'
+alias ash='sudo -u allskyhub-server bash -c '\''set -a; . /etc/allskyhub-server/allskyhub-server.env; exec "$@"'\'' _ .venv/bin/allskyhub-server'
 ash invite name@example.org            # gibt den Einladungslink aus (7 Tage, einmal verwendbar)
 ash users                              # Konten und Anzahl ihrer Kameras
 ash set-password name@example.org      # neues Passwort, beendet alle Sitzungen
@@ -108,8 +136,8 @@ Wiederherstellen in eine leere Datenbank, als Rolle des Hubs (sonst gehören die
 ```bash
 systemctl stop allskyhub-server.service allskyhub-server.socket
 sudo -u postgres dropdb allskyhub && sudo -u postgres createdb -O allskyhub_server allskyhub
-gunzip -c allskyhub-latest.sql.gz | sudo -u allskyhub-server env $(xargs < /etc/allskyhub-server/allskyhub-server.env) \
-  sh -c 'psql "$ALLSKYHUB_SERVER_DATABASE_URL"'
+gunzip -c allskyhub-latest.sql.gz | sudo -u allskyhub-server \
+  bash -c 'set -a; . /etc/allskyhub-server/allskyhub-server.env; psql "$ALLSKYHUB_SERVER_DATABASE_URL"'
 systemctl start allskyhub-server.socket
 ```
 

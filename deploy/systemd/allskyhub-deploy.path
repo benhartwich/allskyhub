@@ -1,0 +1,9 @@
+[Unit]
+Description=allskyhub: watch for deploy requests from the admin page
+
+[Path]
+PathExists=/var/lib/allskyhub-server/deploy/request
+Unit=allskyhub-deploy.service
+
+[Install]
+WantedBy=paths.target

@@ -244,7 +244,7 @@ Edit it: the database password and `ALLSKYHUB_SERVER_BASE_URL` (your domain, wit
 `server/src/allskyhub_server/settings.py`.
 
 ```bash
-alias ash='sudo -u allskyhub-server env $(xargs < /etc/allskyhub-server/allskyhub-server.env) /opt/allskyhub-server/.venv/bin/allskyhub-server'
+alias ash='sudo -u allskyhub-server bash -c '\''set -a; . /etc/allskyhub-server/allskyhub-server.env; exec "$@"'\'' _ /opt/allskyhub-server/.venv/bin/allskyhub-server'
 ash migrate
 ```
 

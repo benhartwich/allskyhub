@@ -18,6 +18,7 @@ from sqlalchemy import text
 from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
 from allskyhub_server import maintenance
+from allskyhub_server.admin.deploy import GitHub
 from allskyhub_server.api import app as app_api
 from allskyhub_server.api import device as device_api
 from allskyhub_server.auth.hub_keys import HubKeys
@@ -37,6 +38,7 @@ from allskyhub_server.settings import Settings, get_settings
 from allskyhub_server.version import short as version
 from allskyhub_server.web import (
     routes_account,
+    routes_admin,
     routes_auth,
     routes_cameras,
     routes_gallery,
@@ -237,6 +239,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.state.hub_keys = HubKeys(settings.key_dir)
     app.state.forecast = ForecastCache()
     app.state.tles = TleCache()
+    app.state.github = GitHub(settings.deploy_repo)
     app.add_middleware(CustomDomainMiddleware, hosts=app.state.hosts)
     app.add_middleware(AccessLogMiddleware)
     _install_error_handlers(app)
@@ -250,6 +253,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(routes_legal.router)
     app.include_router(routes_public.router)
     app.include_router(routes_local.router)
+    app.include_router(routes_admin.router)
     app.include_router(device_api.router)
     app.include_router(app_api.router)
 

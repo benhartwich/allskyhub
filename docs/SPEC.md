@@ -106,7 +106,9 @@ the hub treats frames from a device with `time_trusted: false` as possibly misda
 Frames are stored as JPEG under `<data>/images/<night-id>/` with a thumbnail. The
 *night id* is the date of the evening the night started: frames before local noon
 belong to the previous day's id, so a whole night lands in one folder. Retention is
-by days (default 14, after the night products) and by free disk space: every 10 minutes the oldest nights are removed until at least 10 % of the disk is free; the current night is never removed.
+by days (setting `keep_days`, §6.9, default 14, after the night products; an import of an
+existing installation raises it to that installation's retention and to the age of its
+oldest night) and by free disk space: every 10 minutes the oldest nights are removed until at least 10 % of the disk is free; the current night is never removed.
 
 ### 4.6 Hot pixels
 
@@ -127,6 +129,17 @@ with holes filled, give the mask. A mask covering less than 20 % or more than 97
 the frame is not used. It is relearned every night, kept in
 `<data>/calibration/skymask.png`, and used for metering (§4.3), the detections and the
 sky values in `status` (§6.3); until there is one, the profile's image circle is used.
+
+The owner can draw areas in the local UI (roadmap L8), kept in
+`<data>/calibration/skymask_edits.json` as `{exclude, include}`, each a list of polygons
+of 3–200 `[x, y]` points in fractions of the frame (at most 30 polygons). `exclude` is never
+sky, `include` always is; they apply on top of the learned mask (or, until there is one,
+the image circle) from the next frame on and survive relearning.
+
+Each detector has a level in the settings (§6.9): `detect_meteor`, `detect_aurora`,
+`detect_lightning`, `detect_nlc`, one of `off`, `low`, `normal` (default), `high`. `off`
+runs no detection of that kind; the other levels move only the threshold that separates
+faint events from false alarms.
 
 ### 4.8 Orientation
 
@@ -155,6 +168,9 @@ has a cloud cover or sky brightness, for the local charts (§7).
 At dawn, when the mode switches from night to day, the agent builds three products from
 that night's frames (frames with mode `night` in the night id's index) in a background
 worker; capture never waits for it.
+Each can be switched off (`product_keogram`, `product_startrails`, `product_timelapse`,
+§6.9); the timelapse takes `timelapse_fps` (default 25) and `timelapse_quality`
+(`small`, `normal`, `high`).
 
 - **Keogram** `keogram.jpg`: one column per frame, cut along the vertical line through
   the image centre (a 3-pixel-wide band, averaged), in capture order; height scaled to

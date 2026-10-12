@@ -37,6 +37,17 @@ class OrientationConfig:
     resolve_after: timedelta = timedelta(days=7)
 
 
+def read_orientation(path: Path) -> tuple[Solution, datetime] | None:
+    """The kept solution and when it was solved, None if there is none (yet)."""
+    try:
+        raw = json.loads(path.read_text(encoding="utf-8"))
+        sol = Solution(**{k: v for k, v in raw.items() if k != "solved_at"})
+        at = datetime.fromisoformat(raw["solved_at"])
+    except (OSError, ValueError, TypeError, KeyError, AttributeError):
+        return None
+    return sol, at
+
+
 class Orienter:
     def __init__(
         self,
@@ -60,13 +71,9 @@ class Orienter:
         self._load()
 
     def _load(self) -> None:
-        try:
-            raw = json.loads(self._path.read_text(encoding="utf-8"))
-            sol = Solution(**{k: v for k, v in raw.items() if k != "solved_at"})
-            at = datetime.fromisoformat(raw["solved_at"])
-        except (OSError, ValueError, TypeError, KeyError):
-            return
-        self._solution, self._solved_at = sol, at
+        kept = read_orientation(self._path)
+        if kept is not None:
+            self._solution, self._solved_at = kept
 
     @property
     def solution(self) -> Solution | None:

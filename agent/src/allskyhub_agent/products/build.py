@@ -42,6 +42,11 @@ class ProductConfig:
     keogram_max_height: int = 1080
     timelapse_fps: int = 25
     timelapse_max_width: int = 1920
+    timelapse_crf: int = 23  # x264: lower is better and larger
+    # Which products to build (roadmap L9).
+    keogram: bool = True
+    startrails: bool = True
+    timelapse: bool = True
     ffmpeg: str = "ffmpeg"
 
 
@@ -146,7 +151,8 @@ def timelapse(paths: list[Path], out: Path, cfg: ProductConfig) -> str | None:
         exe, "-hide_banner", "-loglevel", "error", "-y",
         "-f", "concat", "-safe", "0", "-i", str(list_path),
         "-vf", scale, "-r", str(cfg.timelapse_fps),
-        "-c:v", "libx264", "-preset", "veryfast", "-crf", "23", "-pix_fmt", "yuv420p",
+        "-c:v", "libx264", "-preset", "veryfast", "-crf", str(cfg.timelapse_crf),
+        "-pix_fmt", "yuv420p",
         "-movflags", "+faststart", str(tmp),
     ]  # fmt: skip
     try:
@@ -175,16 +181,20 @@ def build_night(store: ImageStore, night: str, cfg: ProductConfig | None = None)
     paths = [p for p, _ in present]
     thumbs = folder / "thumbnails"
 
-    keo = keogram(paths, cfg)
-    if keo is None:
+    keo = keogram(paths, cfg) if cfg.keogram else None
+    if not cfg.keogram:
+        result.skipped[KEOGRAM] = "switched off"
+    elif keo is None:
         result.skipped[KEOGRAM] = "no readable frames"
     else:
         _save_jpeg(keo, folder / KEOGRAM)
         _thumbnail(keo, thumbs / KEOGRAM)
         result.built.append(KEOGRAM)
 
-    st = startrails([(p, f.mean) for p, f in present], cfg)
-    if st is None:
+    st = startrails([(p, f.mean) for p, f in present], cfg) if cfg.startrails else None
+    if not cfg.startrails:
+        result.skipped[STARTRAILS] = "switched off"
+    elif st is None:
         result.skipped[STARTRAILS] = (
             f"fewer than {cfg.startrails_min_frames} frames darker than {cfg.startrails_max_mean}"
         )
@@ -193,7 +203,7 @@ def build_night(store: ImageStore, night: str, cfg: ProductConfig | None = None)
         _thumbnail(st, thumbs / STARTRAILS)
         result.built.append(STARTRAILS)
 
-    reason = timelapse(paths, folder / TIMELAPSE, cfg)
+    reason = timelapse(paths, folder / TIMELAPSE, cfg) if cfg.timelapse else "switched off"
     if reason is not None:
         result.skipped[TIMELAPSE] = reason
     else:

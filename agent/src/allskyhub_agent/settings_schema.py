@@ -12,7 +12,7 @@ from typing import Any
 from pydantic import ValidationError
 
 from allskyhub_agent.profiles import Profile
-from allskyhub_agent.settings import CAMERA_CHOICES, AgentSettings
+from allskyhub_agent.settings import CAMERA_CHOICES, DETECT_CHOICES, DETECTORS, AgentSettings
 from allskyhub_protocol import SetSettingsArgs, SettingSpec, invalid_settings
 
 _CAMERA_LABELS = {
@@ -21,6 +21,113 @@ _CAMERA_LABELS = {
     "rpi-hq": "Raspberry Pi HQ",
     "sim": "Simuliert (Test)",
 }
+
+_LEVEL_LABELS = {
+    "off": {"de": "Aus", "en": "Off"},
+    "low": {"de": "Nur deutliche", "en": "Only clear ones"},
+    "normal": {"de": "Normal", "en": "Normal"},
+    "high": {"de": "Auch schwache", "en": "Faint ones too"},
+}
+_DETECTOR_TEXT = {
+    "meteor": (
+        "Meteore",
+        "Meteors",
+        "Flugzeuge und Satelliten werden aussortiert.",
+        "Aircraft and satellites are left out.",
+    ),
+    "aurora": (
+        "Polarlicht",
+        "Aurora",
+        "Grünes Leuchten tief am Himmel Richtung Pol.",
+        "Green glow low in the sky toward the pole.",
+    ),
+    "lightning": (
+        "Blitze",
+        "Lightning",
+        "Ein großer Teil des Himmels hellt kurz auf.",
+        "A large part of the sky lights up briefly.",
+    ),
+    "nlc": (
+        "Leuchtende Nachtwolken",
+        "Noctilucent clouds",
+        "Im Sommer in der Dämmerung; braucht die Ausrichtung.",
+        "In summer twilight; needs the orientation.",
+    ),
+}
+
+
+def _detector_entries() -> list[dict[str, Any]]:
+    return [
+        {
+            "key": f"detect_{k}",
+            "type": "choice",
+            "label": {"de": de, "en": en},
+            "group": {"de": "Erkennung", "en": "Detection"},
+            "choices": [{"value": c, "label": _LEVEL_LABELS[c]} for c in DETECT_CHOICES],
+            "help": {"de": help_de, "en": help_en},
+        }
+        for k in DETECTORS
+        for de, en, help_de, help_en in [_DETECTOR_TEXT[k]]
+    ]
+
+
+def _product_entries() -> list[dict[str, Any]]:
+    group = {"de": "Nachtprodukte", "en": "Night products"}
+    switches = [
+        {"key": key, "type": "bool", "label": {"de": de, "en": en}, "group": group}
+        for key, de, en in (
+            ("product_keogram", "Keogramm", "Keogram"),
+            ("product_startrails", "Sternspuren", "Star trails"),
+            ("product_timelapse", "Zeitraffer", "Timelapse"),
+        )
+    ]
+    return [
+        *switches,
+        {
+            "key": "timelapse_fps",
+            "type": "int",
+            "label": {"de": "Zeitraffer: Bilder pro Sekunde", "en": "Timelapse frames per second"},
+            "group": group,
+            "min": 1,
+            "max": 60,
+            "step": 1,
+            "help": {
+                "de": "Mehr ergibt einen kürzeren, flüssigeren Film.",
+                "en": "More gives a shorter, smoother film.",
+            },
+        },
+        {
+            "key": "timelapse_quality",
+            "type": "choice",
+            "label": {"de": "Zeitraffer: Qualität", "en": "Timelapse quality"},
+            "group": group,
+            "choices": [
+                {"value": "small", "label": {"de": "Klein", "en": "Small"}},
+                {"value": "normal", "label": {"de": "Normal", "en": "Normal"}},
+                {"value": "high", "label": {"de": "Hoch", "en": "High"}},
+            ],
+            "help": {
+                "de": "Höher braucht mehr Speicher und Upload. Gilt ab der nächsten Nacht.",
+                "en": "Higher needs more storage and upload. Applies from the next night on.",
+            },
+        },
+        {
+            "key": "keep_days",
+            "type": "int",
+            "label": {"de": "Nächte aufbewahren", "en": "Keep nights"},
+            "group": {"de": "Speicher", "en": "Storage"},
+            "unit": "d",
+            "min": 1,
+            "max": 3650,
+            "step": 1,
+            "help": {
+                "de": "Ältere Nächte werden nach den Nachtprodukten gelöscht. Wird die Karte "
+                "voll, gehen die ältesten trotzdem früher.",
+                "en": "Older nights are deleted after the night products. If the card fills "
+                "up, the oldest go earlier anyway.",
+            },
+        },
+    ]
 
 
 def build_schema(profile: Profile) -> list[SettingSpec]:
@@ -139,6 +246,8 @@ def build_schema(profile: Profile) -> list[SettingSpec]:
             },
         }
     )
+    entries.extend(_detector_entries())
+    entries.extend(_product_entries())
     return [SettingSpec.model_validate(e) for e in entries]
 
 

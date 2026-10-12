@@ -13,6 +13,13 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 DEFAULT_PATH = Path("/var/lib/allskyhub-agent/settings.json")
 DEFAULT_HUB = "https://allskyhub.org"
 CAMERA_CHOICES = ("auto", "zwo-asi678mc", "rpi-hq", "sim")
+# Per detector (roadmap L8): off, or how readily it reports (detect/tuning.py).
+DETECTORS = ("meteor", "aurora", "lightning", "nlc")
+DETECT_CHOICES = ("off", "low", "normal", "high")
+# Night products (roadmap L9): x264 CRF per quality.
+TIMELAPSE_CRF = {"small": 28, "normal": 23, "high": 19}
+DEFAULT_KEEP_DAYS = 14
+_PRODUCT_SWITCHES = ("product_keogram", "product_startrails", "product_timelapse")
 
 
 def valid_timezone(name: str) -> bool:
@@ -41,6 +48,17 @@ class AgentSettings:
     wb_r: int | None = None
     wb_b: int | None = None
     jpeg_quality: int = 90
+    detect_meteor: str = "normal"
+    detect_aurora: str = "normal"
+    detect_lightning: str = "normal"
+    detect_nlc: str = "normal"
+    # Night products and retention (roadmap L9, SPEC §4.5, §5.2).
+    keep_days: int = DEFAULT_KEEP_DAYS
+    product_keogram: bool = True
+    product_startrails: bool = True
+    product_timelapse: bool = True
+    timelapse_fps: int = 25
+    timelapse_quality: str = "normal"
 
     @property
     def has_location(self) -> bool:
@@ -94,6 +112,22 @@ class AgentSettings:
             for k in ("night_max_exposure_s", "night_max_gain", "wb_r", "wb_b", "jpeg_quality")
             if isinstance(d.get(k), int | float) and not isinstance(d.get(k), bool)
         }
+        detect = {
+            f"detect_{k}": d[f"detect_{k}"]
+            for k in DETECTORS
+            if d.get(f"detect_{k}") in DETECT_CHOICES
+        }
+        later.update(detect)
+        later.update(
+            {
+                k: d[k]
+                for k in ("keep_days", "timelapse_fps")
+                if isinstance(d.get(k), int) and not isinstance(d.get(k), bool)
+            }
+        )
+        later.update({k: d[k] for k in _PRODUCT_SWITCHES if isinstance(d.get(k), bool)})
+        if d.get("timelapse_quality") in TIMELAPSE_CRF:
+            later["timelapse_quality"] = d["timelapse_quality"]
         location_ok = (
             isinstance(lat, int | float)
             and isinstance(lon, int | float)
@@ -132,6 +166,18 @@ class AgentSettings:
                 extra[key] = None if v is None else (float(v) if key.endswith("_s") else int(v))
         if values.get("jpeg_quality") is not None:
             extra["jpeg_quality"] = int(values["jpeg_quality"])
+        for k in DETECTORS:
+            if values.get(f"detect_{k}") in DETECT_CHOICES:
+                extra[f"detect_{k}"] = values[f"detect_{k}"]
+        for k, hi in (("keep_days", 3650), ("timelapse_fps", 60)):
+            v = values.get(k)
+            if isinstance(v, int) and not isinstance(v, bool) and 1 <= v <= hi:
+                extra[k] = v
+        for k in _PRODUCT_SWITCHES:
+            if isinstance(values.get(k), bool):
+                extra[k] = values[k]
+        if values.get("timelapse_quality") in TIMELAPSE_CRF:
+            extra["timelapse_quality"] = values["timelapse_quality"]
         return replace(s, **extra)
 
     def save(self, path: Path) -> None:

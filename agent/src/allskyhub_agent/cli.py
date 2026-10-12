@@ -33,6 +33,7 @@ from allskyhub_agent.calib.orientation import Orienter
 from allskyhub_agent.core.clock import Clock, SimClock, SystemClock
 from allskyhub_agent.core.exposure import AutoExposure
 from allskyhub_agent.core.sun import sun_elevation
+from allskyhub_agent.detect import tuning
 from allskyhub_agent.detect.events import DetectionWorker, EventStore
 from allskyhub_agent.detect.nlc import NlcDetector
 from allskyhub_agent.detect.sky import SkyConfig, SkyMeter
@@ -44,13 +45,18 @@ from allskyhub_agent.importer.backlog import BACKLOG_NAME, Backlog
 from allskyhub_agent.live import LiveState
 from allskyhub_agent.process.hotpixels import HotPixels
 from allskyhub_agent.process.skymask import SkyMask
-from allskyhub_agent.products.build import NightProducts, build_night, night_products
+from allskyhub_agent.products.build import (
+    NightProducts,
+    ProductConfig,
+    build_night,
+    night_products,
+)
 from allskyhub_agent.products.worker import ProductWorker
 from allskyhub_agent.profiles import Profile, get_profile, with_night_limits
 from allskyhub_agent.runner import Location, LoopConfig, Runner
 from allskyhub_agent.services import HubManager, run_announcer
 from allskyhub_agent.settings import DEFAULT_PATH as SETTINGS_PATH
-from allskyhub_agent.settings import AgentSettings
+from allskyhub_agent.settings import TIMELAPSE_CRF, AgentSettings
 from allskyhub_agent.settings_schema import build_schema
 from allskyhub_agent.setup.controller import NetworkRequest, SetupController
 from allskyhub_agent.setup.setup_file import DEFAULT_PATH as SETUP_FILE_PATH
@@ -60,6 +66,7 @@ from allskyhub_agent.update.installer import Paths, Updater
 from allskyhub_agent.update.status import update_status
 from allskyhub_agent.web.archive import LocalArchive
 from allskyhub_agent.web.auth import LocalAuth
+from allskyhub_agent.web.calibration import LocalCalibration
 from allskyhub_agent.web.server import SettingsForm, WebServer
 from allskyhub_protocol import DeviceSettings, FrameInfo, SetSettingsArgs, SettingSpec, Status
 
@@ -172,11 +179,22 @@ def run_import(args: argparse.Namespace) -> int:
     if args.dry_run:
         return 0
     if args.settings and not current.has_location and allsky.latitude is not None:
-        new = current.with_updates(
+        current = current.with_updates(
             latitude=allsky.latitude, longitude=allsky.longitude, camera=allsky.camera
         )
-        new.save(args.settings)
+        current.save(args.settings)
         print(f"location {allsky.latitude}, {allsky.longitude} saved in {args.settings}")
+    # Retention (SPEC §4.5) must not delete what was just taken over: at least as long as
+    # Allsky kept its nights, and long enough for the oldest imported one.
+    nights = store.nights()
+    if args.settings and nights:
+        oldest = datetime.strptime(nights[-1], "%Y%m%d").replace(tzinfo=tz)
+        age = (datetime.now(tz) - oldest).days + 1
+        keep = min(3650, max(current.keep_days, allsky.days_to_keep or 0, age))
+        if keep > current.keep_days:
+            current.with_values({"keep_days": keep}).save(args.settings)
+            print(f"keeping nights for {keep} days now (was {current.keep_days}); "
+                  "restart the agent to apply it")  # fmt: skip
     # SPEC §6.7: the running agent announces these nights to the hub, one per second.
     Backlog(data / BACKLOG_NAME).add(sorted(r.nights), owner)
     return 0
@@ -283,6 +301,9 @@ def main(argv: list[str] | None = None) -> int:
         settings_file if network is not None or args.settings is not None else None
     )
     settings_lock = threading.Lock()
+    # Learned at night, edited in the local UI (roadmap L8) before the camera is open.
+    calibration_dir = Path(args.data) / "calibration"
+    sky_mask = SkyMask(calibration_dir / "skymask.png")
 
     def load_settings() -> AgentSettings:
         with settings_lock:
@@ -434,6 +455,7 @@ def main(argv: list[str] | None = None) -> int:
             if settings_path
             else None,
             archive=LocalArchive(store, event_store),
+            calibration=LocalCalibration(sky_mask, calibration_dir / "orientation.json"),
         )
         web.start()
         print(f"web UI on http://{host}:{web.port}/")
@@ -523,27 +545,35 @@ def main(argv: list[str] | None = None) -> int:
     schema_box[0] = build_schema(profile)
     profile = with_night_limits(profile, load_settings())
     sky_meter = SkyMeter(SkyConfig(sqm_offset=profile.sqm_offset), profile.image_circle_frac)
-    sky_mask = SkyMask(Path(args.data) / "calibration" / "skymask.png")
+    sky_mask.fallback_frac = profile.image_circle_frac
     here = loc
     orienter = Orienter(
         Path(args.data) / "calibration" / "orientation.json",
         location=lambda: (here.lat, here.lon),
         time_trusted=system.time_trusted if settings_path else lambda: True,
     )
+    tuned = load_settings()
     detect = DetectionWorker(
         store,
         on_event=hub.notify_event if hub is not None else None,
+        cfg=tuning.meteor_config(tuned.detect_meteor),
         mask_radius_frac=profile.image_circle_frac,
         events=event_store,
+        lightning_cfg=tuning.lightning_config(tuned.detect_lightning),
         sky=sky_meter,
+        aurora_cfg=tuning.aurora_config(tuned.detect_aurora),
         sky_mask=sky_mask,
         orienter=orienter,
         nlc=NlcDetector(
             orientation=lambda: orienter.solution,
             location=lambda: (here.lat, here.lon),
             sky_mask=sky_mask.get,
-        ),
+            cfg=tuning.nlc_config(tuned.detect_nlc),
+        )
+        if tuned.detect_nlc != "off"
+        else None,
         latitude=lambda: here.lat,
+        enabled=tuning.enabled(tuned),
     )
     detect.start()
 
@@ -572,7 +602,19 @@ def main(argv: list[str] | None = None) -> int:
             if announced is not None:
                 hub.notify_products(announced)
 
-    products = ProductWorker(store, on_done=products_done)
+    night_cfg = load_settings()
+    products = ProductWorker(
+        store,
+        ProductConfig(
+            timelapse_fps=night_cfg.timelapse_fps,
+            timelapse_crf=TIMELAPSE_CRF[night_cfg.timelapse_quality],
+            keogram=night_cfg.product_keogram,
+            startrails=night_cfg.product_startrails,
+            timelapse=night_cfg.product_timelapse,
+        ),
+        on_done=products_done,
+        keep_days=night_cfg.keep_days,
+    )
     products.start()
 
     def show(f: FrameInfo) -> None:

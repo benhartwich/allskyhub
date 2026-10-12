@@ -414,7 +414,9 @@ function message(t, good) {
 async function viewSettings() {
   page.innerHTML = `<h1>Einstellungen</h1><div class="card stack"><form class="form" id="settingsForm" novalidate></form>
     <div class="actions"><button type="button" id="saveBtn">Speichern</button></div>
-    <p class="msg" id="settingsMsg" hidden></p></div>`;
+    <p class="msg" id="settingsMsg" hidden></p></div>
+    <section class="card stack" id="calibration" hidden></section>`;
+  viewCalibration().catch(() => {});
   let data;
   try { data = await getJSON("api/settings"); } catch {
     $("settingsForm").innerHTML = `<p class="empty">Diese Kamera speichert keine Einstellungen.</p>`;
@@ -452,6 +454,147 @@ async function viewSettings() {
     }
     message("Nicht gespeichert: " + (names.join(", ") || "ungültige Eingabe") + ".", false);
   };
+}
+
+// --- Sky mask and orientation (L8) ----------------------------------------------------
+// The live image with everything that is not sky shaded red. Tap points to draw an area,
+// tap the first point again (or "Fläche fertig") to close it. Coordinates are fractions
+// of the image, so they fit every frame size.
+async function viewCalibration() {
+  const box = $("calibration");
+  let info = await getJSON("api/calibration");
+  let areas = { exclude: info.edits.exclude.slice(), include: info.edits.include.slice() };
+  let drawing = null;  // {kind, points}
+  let showGrid = true;
+  box.hidden = false;
+  box.innerHTML = `
+    <h2>Himmelsmaske und Ausrichtung</h2>
+    <p class="muted small" id="maskState"></p>
+    <div class="mask-stage" id="maskStage">
+      <img id="maskImg" alt="Aktuelles Bild">
+      <img id="maskShade" alt="" hidden>
+      <svg id="maskSvg" viewBox="0 0 1000 562.5" aria-hidden="true"></svg>
+    </div>
+    <div class="row">
+      <button type="button" class="secondary small" data-draw="exclude">Bereich ausschließen</button>
+      <button type="button" class="secondary small" data-draw="include">Bereich einschließen</button>
+      <button type="button" class="secondary small" id="maskDone" hidden>Fläche fertig</button>
+      <button type="button" class="secondary small" id="maskUndo" hidden>Punkt zurück</button>
+      <button type="button" class="secondary small active" id="maskGrid" aria-pressed="true">Horizont und Himmelsrichtungen</button>
+    </div>
+    <ul class="areas" id="maskAreas"></ul>
+    <div class="actions">
+      <button type="button" id="maskSave">Maske speichern</button>
+      <button type="button" class="secondary" id="maskRelearn">Maske neu lernen</button>
+    </div>
+    <p class="msg" id="maskMsg" hidden></p>
+    <dl class="facts" id="orientFacts"></dl>`;
+  const img = $("maskImg"), shade = $("maskShade"), svg = $("maskSvg");
+  const say = (t, good) => { const m = $("maskMsg"); m.textContent = t; m.className = "msg " + (good ? "ok" : "error"); m.hidden = false; };
+  // The drawing has the image's aspect, so letters and circles are not stretched.
+  let VH = 1000 * 9 / 16;
+  const X = (x) => (x * 1000).toFixed(1), Y = (y) => (y * VH).toFixed(1);
+  const pts = (list) => list.map(([x, y]) => `${X(x)},${Y(y)}`).join(" ");
+  const refreshShade = () => {
+    if (!img.naturalWidth) return;
+    VH = 1000 * img.naturalHeight / img.naturalWidth;
+    svg.setAttribute("viewBox", `0 0 1000 ${VH.toFixed(1)}`);
+    draw();
+    shade.onerror = () => { shade.hidden = true; };
+    shade.onload = () => { shade.hidden = false; };
+    shade.src = `api/skymask.png?w=${img.naturalWidth}&h=${img.naturalHeight}&t=${Date.now()}`;
+  };
+  const draw = () => {
+    const o = info.orientation && info.orientation.overlay;
+    let out = "";
+    if (o && showGrid) {
+      out += `<polyline class="ring horizon" points="${pts(o.horizon)}"/>`;
+      out += o.rings.map((r) => `<polyline class="ring" points="${pts(r)}"/>`).join("");
+      out += `<circle class="zenith" cx="${X(o.zenith[0])}" cy="${Y(o.zenith[1])}" r="6"/>`;
+      out += o.points.map((p) => `<text class="compass" x="${X(p.x)}" y="${Y(p.y)}">${p.label}</text>`).join("");
+    }
+    for (const kind of ["exclude", "include"]) {
+      out += areas[kind].map((a) => `<polygon class="area ${kind}" points="${pts(a)}"/>`).join("");
+    }
+    if (drawing) {
+      out += `<polyline class="area ${drawing.kind} open" points="${pts(drawing.points)}"/>`;
+      out += drawing.points.map(([x, y], i) => `<circle class="vertex${i ? "" : " first"}" cx="${X(x)}" cy="${Y(y)}" r="${i ? 7 : 11}"/>`).join("");
+    }
+    svg.innerHTML = out;
+    $("maskDone").hidden = $("maskUndo").hidden = !drawing;
+    for (const b of box.querySelectorAll("[data-draw]")) b.classList.toggle("active", !!drawing && drawing.kind === b.dataset.draw);
+    $("maskAreas").innerHTML = ["exclude", "include"].flatMap((kind) => areas[kind].map((a, i) => `
+      <li><span class="badge ${kind === "exclude" ? "" : "ok"}">${kind === "exclude" ? "Ausgeschlossen" : "Eingeschlossen"} ${i + 1}</span>
+        <button type="button" class="secondary small" data-remove="${kind}:${i}" aria-label="Bereich entfernen">Entfernen</button></li>`)).join("");
+    for (const b of $("maskAreas").querySelectorAll("[data-remove]")) {
+      b.onclick = () => { const [k, i] = b.dataset.remove.split(":"); areas[k].splice(Number(i), 1); draw(); };
+    }
+  };
+  const describe = () => {
+    $("maskState").textContent = info.mask_learned_at
+      ? `Gelernt am ${fmtDateTime(info.mask_learned_at)}. Rot: zählt nicht als Himmel (Bäume, Dächer, Rand). Die Kamera lernt die Maske jede klare Nacht neu, gezeichnete Bereiche bleiben.`
+      : "Noch keine Maske gelernt, das passiert in der ersten Nacht. Bis dahin gilt der Bildkreis des Objektivs; gezeichnete Bereiche gelten sofort.";
+    const o = info.orientation;
+    $("orientFacts").innerHTML = o ? `
+      <dt>Norden</dt><dd>${o.north_deg}° im Bild (im Uhrzeigersinn von oben)${o.mirrored ? ", gespiegelt" : ""}</dd>
+      <dt>Ausgerichtet</dt><dd>${fmtDateTime(o.solved_at)} mit ${o.stars} Sternen, Abweichung ${o.rms_deg.toFixed(2)}°</dd>
+      <dt>Prüfen</dt><dd class="muted small">Stimmt N mit der Wirklichkeit überein und liegt die gelbe Linie auf dem Horizont? Sonst ist die Ausrichtung falsch; sie wird nach 7 Tagen neu bestimmt.</dd>`
+      : `<dt>Ausrichtung</dt><dd>Noch nicht bestimmt. Die Kamera findet sie selbst in einer klaren, mondlosen Nacht anhand der Sterne.</dd>`;
+  };
+  const at = (e) => {
+    const r = img.getBoundingClientRect();
+    return [Math.min(1, Math.max(0, (e.clientX - r.left) / r.width)), Math.min(1, Math.max(0, (e.clientY - r.top) / r.height))];
+  };
+  const finish = () => {
+    if (drawing && drawing.points.length >= 3) areas[drawing.kind].push(drawing.points);
+    drawing = null;
+    draw();
+  };
+  $("maskStage").onclick = (e) => {
+    if (!drawing) return;
+    const p = at(e);
+    const first = drawing.points[0];
+    const r = img.getBoundingClientRect();
+    if (first && drawing.points.length >= 3 && Math.hypot((p[0] - first[0]) * r.width, (p[1] - first[1]) * r.height) < 18) { finish(); return; }
+    drawing.points.push(p.map((v) => Math.round(v * 1e4) / 1e4));
+    draw();
+  };
+  for (const b of box.querySelectorAll("[data-draw]")) {
+    b.onclick = () => { drawing = drawing && drawing.kind === b.dataset.draw ? null : { kind: b.dataset.draw, points: [] }; draw(); };
+  }
+  $("maskDone").onclick = finish;
+  $("maskUndo").onclick = () => { if (drawing) { drawing.points.pop(); draw(); } };
+  $("maskGrid").onclick = (e) => {
+    showGrid = !showGrid;
+    e.target.classList.toggle("active", showGrid);
+    e.target.setAttribute("aria-pressed", String(showGrid));
+    draw();
+  };
+  const post = async (url, body) => {
+    const r = await fetch(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+    if (r.status === 401) { location.href = "local-login"; return null; }
+    return r.ok ? r.json() : null;
+  };
+  $("maskSave").onclick = async () => {
+    if (drawing) finish();
+    const next = await post("api/calibration/mask", areas);
+    if (!next) { say("Nicht gespeichert.", false); return; }
+    info = next;
+    say("Gespeichert. Gilt ab dem nächsten Bild für Belichtung, Erkennung und Himmelswerte.", true);
+    describe(); draw(); refreshShade();
+  };
+  $("maskRelearn").onclick = async () => {
+    if (!confirm("Gelernte Maske verwerfen? Die Kamera lernt in der nächsten klaren Nacht eine neue. Gezeichnete Bereiche bleiben.")) return;
+    const next = await post("api/calibration/relearn", {});
+    if (!next) { say("Hat nicht geklappt.", false); return; }
+    info = next;
+    say("Verworfen. Bis zur nächsten Nacht gilt der Bildkreis.", true);
+    describe(); draw(); refreshShade();
+  };
+  img.onload = refreshShade;
+  img.src = "api/live.jpg?t=" + Date.now();
+  describe();
+  draw();
 }
 
 // --- System -------------------------------------------------------------------------

@@ -358,3 +358,18 @@ class RenderJob(Base):
     size: Mapped[int | None] = mapped_column(BigInteger)
     created_at: Mapped[dt.datetime] = mapped_column(_tz(), server_default=func.now())
     finished_at: Mapped[dt.datetime | None] = mapped_column(_tz())
+
+
+class CameraMember(Base):
+    """A camera shared with another account (roadmap C10): ``viewer`` or ``admin``."""
+
+    __tablename__ = "camera_member"
+
+    device_id: Mapped[str] = mapped_column(
+        ForeignKey("device.id", ondelete="CASCADE"), primary_key=True
+    )
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("user_account.id", ondelete="CASCADE"), primary_key=True, index=True
+    )
+    role: Mapped[str] = mapped_column(String(10))
+    created_at: Mapped[dt.datetime] = mapped_column(_tz(), server_default=func.now())

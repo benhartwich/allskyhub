@@ -1,0 +1,33 @@
+{% extends "base.html" %}
+{% block title %}Öffentliche Seite · {{ device.name }}{% endblock %}
+{% block head %}<link rel="stylesheet" href="{{ asset('public.css') }}">{% endblock %}
+{% block content %}
+<a class="back" href="/cameras/{{ device.id }}">← {{ device.name }}</a>
+<h1>Öffentliche Seite</h1>
+<form method="post" action="/cameras/{{ device.id }}/public/edit" class="stack">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+  <div class="card stack">
+    <h2>Texte</h2>
+    <label>Titel<input name="title" maxlength="100" value="{{ profile.title }}" placeholder="{{ device.name }}"></label>
+    <label>Ort<input name="location_label" maxlength="200" value="{{ profile.location_label }}" placeholder="z. B. Hofkirchen im Traunkreis, Österreich"></label>
+    <label class="check"><input type="checkbox" name="show_coordinates"{% if profile.show_coordinates %} checked{% endif %}> Koordinaten zeigen (auf 0,1° gerundet, etwa 10 km)</label>
+    <div class="grid-2">
+      <label>Kamera<input name="camera" maxlength="200" value="{{ profile.camera }}" placeholder="ZWO ASI678MC"></label>
+      <label>Objektiv<input name="lens" maxlength="200" value="{{ profile.lens }}" placeholder="2,5 mm f/1.2"></label>
+    </div>
+    <div class="grid-2">
+      <label>Rechner<input name="computer" maxlength="200" value="{{ profile.computer }}" placeholder="Raspberry Pi 4, 8 GB"></label>
+      <label>Betrieben von<input name="owner" maxlength="200" value="{{ profile.owner }}"></label>
+    </div>
+    <label>Notizen<textarea name="notes" maxlength="2000" rows="4">{{ profile.notes }}</textarea></label>
+  </div>
+  <div class="card stack">
+    <h2>Abschnitte</h2>
+    {% for key, label in sections.items() %}
+    <label class="check"><input type="checkbox" name="section_{{ key }}"{% if profile.sections[key] %} checked{% endif %}> {{ label }}</label>
+    {% endfor %}
+    <p class="muted">Vollbilder aus dem Archiv und Zeitraffer bleiben privat; sie müssten erst von deiner Kamera geholt werden.</p>
+  </div>
+  <button type="submit">Speichern</button>
+</form>
+{% endblock %}

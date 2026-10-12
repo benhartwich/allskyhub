@@ -23,6 +23,7 @@ from allskyhub_server.api import device as device_api
 from allskyhub_server.db import create_engine, create_sessionmaker
 from allskyhub_server.devices.connections import ConnectionRegistry
 from allskyhub_server.devices.images import ImageStore
+from allskyhub_server.devices.space_weather import KpCache
 from allskyhub_server.push.fcm import Sender
 from allskyhub_server.push.notify import Notifier
 from allskyhub_server.settings import Settings, get_settings
@@ -184,6 +185,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.state.settings = settings
     app.state.connections = ConnectionRegistry()
     app.state.images = ImageStore(settings.image_dir)
+    app.state.kp = KpCache()
     app.add_middleware(AccessLogMiddleware)
     _install_error_handlers(app)
 

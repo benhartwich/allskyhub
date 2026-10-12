@@ -131,9 +131,13 @@ async def notifications(
     session: CurrentSession,
     notify_events: Annotated[bool, Form()] = False,
     notify_offline: Annotated[bool, Form()] = False,
+    notify_aurora: Annotated[bool, Form()] = False,
+    notify_summary: Annotated[bool, Form()] = False,
 ) -> Response:
-    """Push notifications in the app (roadmap #6), each off until switched on."""
+    """Push notifications in the app (roadmap #6, C2, C3), each off until switched on."""
     session.user.notify_events = notify_events
     session.user.notify_offline = notify_offline
+    session.user.notify_aurora = notify_aurora
+    session.user.notify_summary = notify_summary
     await db.commit()
     return _page(request, session, notice="Gespeichert.")

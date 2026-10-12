@@ -1,0 +1,24 @@
+{# Roadmap C1: observing window of the coming night; `tonight` from devices/tonight.py. #}
+{% set n = tonight.night %}
+<div class="card tonight">
+  <div class="cam-meta"><h2>Heute Nacht</h2><span class="badge{{ ' ok' if tonight.best }}">{{ 'klar' if tonight.best else 'eher nicht' }}</span></div>
+  <p class="tonight-summary">{{ tonight.summary }}</p>
+  {% if tonight.hours %}
+  <ol class="night-bars" aria-label="Bewölkung pro Stunde">
+    {% for h in tonight.hours %}
+    {% set level = 'none' if h.clouds is none else ('c0' if h.clouds < 10 else ('c1' if h.clouds < 30 else ('c2' if h.clouds < 60 else ('c3' if h.clouds < 85 else 'c4')))) %}
+    <li class="{{ level }}{{ ' good' if h.good }}" title="{{ tonight.fmt(h.at) }} Uhr: {{ '–' if h.clouds is none else h.clouds ~ ' % Wolken' }}{{ ', Mond über dem Horizont' if h.moon_up }}">
+      <span class="bar"></span>
+      <small>{{ tonight.fmt(h.at)[:2] }}</small>
+      {% if h.moon_up %}<span class="moon" aria-hidden="true">☾</span>{% endif %}
+    </li>
+    {% endfor %}
+  </ol>
+  {% endif %}
+  <dl class="facts">
+    <dt>Sonne</dt><dd>unter {{ tonight.fmt(n.sunset) }}, auf {{ tonight.fmt(n.sunrise) }} Uhr</dd>
+    <dt>Dunkel</dt><dd>{% if n.dusk and n.dawn %}{{ tonight.fmt(n.dusk) }} – {{ tonight.fmt(n.dawn) }} Uhr{% else %}nicht astronomisch dunkel{% endif %}</dd>
+    <dt>Mond</dt><dd>{{ tonight.moon_phase }}, {{ (n.moon_illumination * 100) | round | int }} % beleuchtet{% for name, t in tonight.moon_events %} · {{ name }} {{ tonight.fmt(t) }}{% endfor %}</dd>
+  </dl>
+  <p class="muted small">Wolken: Open-Meteo. Gut ist eine Stunde mit weniger als 30 % Wolken, ohne hellen Mond am Himmel.</p>
+</div>

@@ -310,6 +310,8 @@ class PublicSections(_Model):
     events: bool = True
     sky: bool = True
     aurora: bool = True
+    # SPEC §6.8: what the telescope next to the camera does (roadmap C15), opt-in.
+    observatory: bool = False
 
 
 class PublicProfile(_Model):

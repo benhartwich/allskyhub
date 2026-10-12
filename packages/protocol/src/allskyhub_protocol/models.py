@@ -231,6 +231,38 @@ class Orientation(BaseModel):
     rms_deg: float = Field(ge=0)
 
 
+class ObservatorySequence(BaseModel):
+    model_config = ConfigDict(extra="ignore", frozen=True)
+
+    name: str | None = Field(default=None, max_length=200)
+    progress: float = Field(ge=0, le=1)
+
+
+class ObservatoryImage(BaseModel):
+    model_config = ConfigDict(extra="ignore", frozen=True)
+
+    at: AwareDatetime | None = None
+    filter: str | None = Field(default=None, max_length=40)
+    exposure_s: float | None = Field(default=None, ge=0)
+    hfr: float | None = Field(default=None, ge=0)
+    stars: int | None = Field(default=None, ge=0)
+
+
+class Observatory(BaseModel):
+    """What the telescope next to the camera does, relayed from N.I.N.A. (SPEC §6.3, C15).
+    Metadata only, never images."""
+
+    model_config = ConfigDict(extra="ignore", frozen=True)
+
+    source: str = Field(default="nina", max_length=20)
+    at: AwareDatetime
+    connected: bool
+    target: str | None = Field(default=None, max_length=200)
+    sequence: ObservatorySequence | None = None
+    last_image: ObservatoryImage | None = None
+    safe: bool | None = None
+
+
 class UpdateState(StrEnum):
     """The updater's last state (SPEC §8)."""
 
@@ -272,6 +304,8 @@ class Status(_Body):
     sky: SkyMetrics | None = None
     orientation: Orientation | None = None
     update: UpdateStatus | None = None
+    # SPEC §6.3: N.I.N.A.'s state (roadmap C15), null unless configured.
+    observatory: Observatory | None = None
 
 
 class FrameInfo(_Body):

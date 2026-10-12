@@ -160,6 +160,7 @@ async def _camera_context(
         "update": update_line(device.last_status),
         "settings_reported": bool(current),
         "role": role,
+        "observatory": public.observatory(device),
         "members": await sharing.members(db, device.id) if role == "owner" else [],
         **extra,
     }
@@ -243,6 +244,7 @@ PUBLIC_SECTIONS = {
     "sky": "Himmelsqualität (Wolken, SQM, Sterne)",
     "aurora": "Polarlicht-Aussichten (Kp-Index)",
     "archive": "Nachtarchiv mit Keogramm und Sternspuren",
+    "observatory": "Was das Teleskop gerade aufnimmt (N.I.N.A.: Ziel, Sequenz, letztes Bild)",
 }
 
 

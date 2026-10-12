@@ -27,6 +27,11 @@
     <label>{{ f.label }}{% if s.unit %} ({{ s.unit }}){% endif %}
       <input name="{{ s.key }}" inputmode="{{ 'numeric' if s.type == 'int' else 'decimal' }}" value="{{ f.value }}"{% if s.min is not none %} data-min="{{ s.min }}"{% endif %}{% if s.max is not none %} data-max="{{ s.max }}"{% endif %}>
     </label>
+    {% elif s.write_only %}
+    <label>{{ f.label }}
+      <input type="password" name="{{ s.key }}" maxlength="{{ s.max_length or 200 }}" autocomplete="off" placeholder="{{ 'gesetzt – leer lassen zum Behalten' if f.is_set else 'nicht gesetzt' }}">
+    </label>
+    {% if f.is_set %}<label class="check"><input type="checkbox" name="{{ s.key }}__clear" value="1"> {{ f.label }} löschen</label>{% endif %}
     {% else %}
     <label>{{ f.label }}{% if s.unit %} ({{ s.unit }}){% endif %}
       <input name="{{ s.key }}" maxlength="{{ s.max_length or 200 }}" value="{{ f.value }}">

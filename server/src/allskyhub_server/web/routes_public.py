@@ -96,6 +96,7 @@ async def sky_page(request: Request, db: DbSession, slug: str) -> Response:
             "sky_charts": charts,
             "kp": kp,
             "tonight": night,
+            "observatory": public.observatory(device) if sections.observatory else None,
             "today": now.date(),
             "kp_needed": space_weather.needed_kp(lat) if lat is not None else None,
             "hemisphere": "south" if lat is not None and lat < 0 else "north",

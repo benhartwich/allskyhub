@@ -771,6 +771,7 @@ async function viewSystem() {
     <section class="card stack" id="hw" hidden><h2>Rechner</h2><dl class="facts" id="hwFacts"></dl></section>
     <section class="card stack" id="net" hidden></section>
     <section class="card stack" id="upd" hidden></section>
+    <section class="card stack" id="support" hidden></section>
     <section class="card stack" id="actions" hidden><h2>Neu starten</h2>
       <p class="muted small">Die Aufnahme läuft danach von selbst weiter. Gespeicherte Bilder bleiben erhalten.</p>
       <div class="actions">
@@ -799,6 +800,7 @@ async function viewSystem() {
   }
   viewNetwork().catch(() => {});
   viewUpdates().catch(() => {});
+  viewSupport().catch(() => {});
   every(async () => {
     const [st, setup, hw] = await Promise.all([getJSON("api/status").catch(() => null),
       getJSON("api/setup").catch(() => null), getJSON("api/system").catch(() => null)]);
@@ -834,6 +836,50 @@ async function viewSystem() {
       ${power}
       <dt>Uhrzeit</dt><dd>${hw.time_trusted ? '<span class="badge ok">genau</span>' : '<span class="badge">ungenau</span>'}</dd>`;
   }, 5000);
+}
+
+// --- Log, support, backup (L15) ------------------------------------------------------------
+async function viewSupport() {
+  const box = $("support");
+  const log = await getJSON("api/logs?lines=300");
+  box.hidden = false;
+  box.innerHTML = `<h2>Protokoll und Support</h2>
+    <details><summary>Protokoll der Kamera (letzte ${log.lines.length} ${log.lines.length === 1 ? "Zeile" : "Zeilen"})</summary>
+      <pre class="log" id="logBox"></pre>
+      <div class="actions"><button type="button" class="secondary small" id="logRefresh">Aktualisieren</button></div>
+    </details>
+    <p class="muted small">Das Support-Paket enthält Protokoll, Versionen, System- und Netzwerkdaten, Einstellungen und
+      die Kalibrierung, aber keine Schlüssel, Passwörter oder Bilder. Hänge es an deine Frage an.</p>
+    <div class="actions"><a class="button secondary" href="api/support.zip" download>Support-Paket herunterladen</a></div>
+    <h3>Sicherung</h3>
+    <p class="muted small">Einstellungen und gezeichnete Maskenbereiche, zum Beispiel für eine neue SD-Karte.</p>
+    <div class="actions">
+      <a class="button secondary" href="api/backup.json" download>Sicherung herunterladen</a>
+      <label class="button secondary" for="restoreFile">Sicherung einspielen</label>
+      <input type="file" id="restoreFile" accept="application/json,.json" hidden>
+    </div>
+    <p class="msg" id="restoreMsg" hidden></p>`;
+  const show = (lines) => {
+    const pre = $("logBox");
+    pre.textContent = lines.join("\n");
+    pre.scrollTop = pre.scrollHeight;
+  };
+  show(log.lines);
+  $("logRefresh").onclick = async () => show((await getJSON("api/logs?lines=300")).lines);
+  $("restoreFile").onchange = async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    const m = $("restoreMsg");
+    const say = (t, good) => { m.textContent = t; m.className = "msg " + (good ? "ok" : "error"); m.hidden = false; };
+    if (!confirm(`Sicherung „${file.name}“ einspielen? Die jetzigen Einstellungen werden ersetzt.`)) { e.target.value = ""; return; }
+    const r = await fetch("api/restore", { method: "POST", headers: { "Content-Type": "application/json" }, body: await file.text() });
+    e.target.value = "";
+    if (r.status === 401) { location.href = "local-login"; return; }
+    if (r.ok) { say("Eingespielt. Die Kamera startet die Aufnahme neu …", true); return; }
+    const err = await r.json().catch(() => ({}));
+    say((err.fields || []).includes("backup") ? "Das ist keine Sicherung dieser Kamera-Software."
+      : "Nicht eingespielt, ungültig: " + (err.fields || []).join(", ") + ".", false);
+  };
 }
 
 // --- Updates (L14, SPEC §8) -----------------------------------------------------------------

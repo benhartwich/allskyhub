@@ -34,6 +34,10 @@ Routes:
                               a failed join opens the setup network (SPEC §7.1)
     GET  /api/update          version, installed releases, the updater's state (roadmap L14)
     POST /api/update/<now|rollback>   ask the root updater → 202, or 404 without one
+    GET  /api/logs?lines=N    the agent's recent log lines (roadmap L15)
+    GET  /api/support.zip     support bundle: log, versions, facts, settings, calibration
+    GET  /api/backup.json     settings and drawn sky-mask areas
+    POST /api/restore         a backup → 202 (the capture restarts), or 400 {detail, fields}
     GET  /api/system          CPU, memory, disk, power warnings, uptime (roadmap L12)
     POST /api/system/<action> restart (the agent), reboot, shutdown → 202, or 503 {detail}
     POST /api/public          {enabled?, profile?} → the new state, 422 {detail} with the
@@ -85,6 +89,7 @@ from allskyhub_agent.web.auth import (
     LocalAuth,
 )
 from allskyhub_agent.web.calibration import LocalCalibration
+from allskyhub_agent.web.support import Support
 from allskyhub_protocol import SettingSpec
 
 _MAX_BODY = 4096
@@ -222,6 +227,7 @@ def make_handler(
     system_page: SystemPage | None = None,
     network_info: Callable[[], dict[str, Any]] | None = None,
     update_page: UpdatePage | None = None,
+    support: Support | None = None,
 ) -> type[BaseHTTPRequestHandler]:
     page = _page()
     login_page = _page("login.html")
@@ -539,6 +545,8 @@ def make_handler(
                     self._json(HTTPStatus.NOT_FOUND, {"detail": _NOT_MANAGED})
                     return
                 self._json(HTTPStatus.OK, [asdict(n) for n in setup.networks()])
+            elif path in ("/api/logs", "/api/support.zip", "/api/backup.json"):
+                self._support_get(path)
             elif path == "/api/update":
                 if update_page is None:
                     self._text(HTTPStatus.NOT_FOUND, "not found")
@@ -613,6 +621,8 @@ def make_handler(
                 self._post_calibration(path)
             elif path == "/api/network/wifi":
                 self._post_wifi()
+            elif path == "/api/restore":
+                self._restore()
             elif path in ("/api/update/now", "/api/update/rollback"):
                 if self._read_body() is None:
                     return
@@ -729,6 +739,49 @@ def make_handler(
                 return
             self._json(HTTPStatus.OK, live.status())
 
+        def _support_get(self, path: str) -> None:
+            if support is None:
+                self._text(HTTPStatus.NOT_FOUND, "not found")
+                return
+            stamp = datetime.now(UTC).strftime("%Y%m%d-%H%M%S")
+            if path == "/api/logs":
+                n = max(1, min(self._int("lines", 300), 2000))
+                self._json(HTTPStatus.OK, {"lines": support.log.lines(n)})
+            elif path == "/api/support.zip":
+                save = (
+                    (
+                        "Content-Disposition",
+                        f'attachment; filename="allskyhub-support-{stamp}.zip"',
+                    ),
+                )
+                self._send(HTTPStatus.OK, support.bundle(), "application/zip", save)
+            else:
+                save = (
+                    (
+                        "Content-Disposition",
+                        f'attachment; filename="allskyhub-backup-{stamp}.json"',
+                    ),
+                )
+                body = json.dumps(support.backup(), indent=2).encode()
+                self._send(HTTPStatus.OK, body, "application/json", save)
+
+        def _restore(self) -> None:
+            if support is None:
+                self._text(HTTPStatus.NOT_FOUND, "not found")
+                return
+            raw = self._read_body(_MAX_MASK_BODY)
+            if raw is None:
+                return
+            try:
+                body: object = json.loads(raw)
+            except ValueError:
+                body = None
+            bad = support.apply(body)
+            if bad:
+                self._json(HTTPStatus.BAD_REQUEST, {"detail": "invalid", "fields": bad})
+                return
+            self._json(HTTPStatus.ACCEPTED, {"restarting": True})
+
         def _post_wifi(self) -> None:
             """Roadmap L13: another Wi-Fi from the normal network, like setup mode's join
             but never another hub or location (those stay with the settings)."""
@@ -802,6 +855,7 @@ class WebServer:
         system_page: SystemPage | None = None,
         network_info: Callable[[], dict[str, Any]] | None = None,
         update_page: UpdatePage | None = None,
+        support: Support | None = None,
     ) -> None:
         net = ipaddress.ip_network(setup_net) if setup_net else _SETUP_NET
         handler = make_handler(
@@ -819,6 +873,7 @@ class WebServer:
             system_page,
             network_info,
             update_page,
+            support,
         )
         self._httpd = ThreadingHTTPServer((host, port), handler)
         self._httpd.daemon_threads = True

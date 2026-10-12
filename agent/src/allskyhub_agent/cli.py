@@ -46,7 +46,7 @@ from allskyhub_agent.importer.allsky import AllskyImporter, AllskySettings
 from allskyhub_agent.importer.backlog import BACKLOG_NAME, Backlog
 from allskyhub_agent.live import LiveState
 from allskyhub_agent.process.hotpixels import HotPixels
-from allskyhub_agent.process.skymask import SkyMask
+from allskyhub_agent.process.skymask import SkyMask, parse_edits
 from allskyhub_agent.products.build import (
     NightProducts,
     ProductConfig,
@@ -65,11 +65,12 @@ from allskyhub_agent.setup.setup_file import DEFAULT_PATH as SETUP_FILE_PATH
 from allskyhub_agent.setup.setup_file import apply_once as apply_setup_file
 from allskyhub_agent.store.images import ImageStore
 from allskyhub_agent.update.installer import Paths, Updater, read_request
-from allskyhub_agent.update.status import update_status
+from allskyhub_agent.update.status import STATE_FILE, update_status
 from allskyhub_agent.web.archive import LocalArchive
 from allskyhub_agent.web.auth import LocalAuth
 from allskyhub_agent.web.calibration import LocalCalibration
 from allskyhub_agent.web.server import SettingsForm, SystemPage, UpdatePage, WebServer
+from allskyhub_agent.web.support import RecentLog, Support
 from allskyhub_protocol import DeviceSettings, FrameInfo, SetSettingsArgs, SettingSpec, Status
 
 log = logging.getLogger(__name__)
@@ -230,14 +231,22 @@ def update_facts(
         "release": current,
         "releases": names,
         "state": state.model_dump(mode="json") if state is not None else None,
-        "updater": path_unit.exists(),
-        "pending": UPDATE_REQUEST.exists(),
+        "updater": _exists(path_unit),
+        "pending": _exists(UPDATE_REQUEST),
     }
+
+
+def _exists(path: Path) -> bool:
+    """Path.exists() raises on a directory this user may not read (other installations)."""
+    try:
+        return path.exists()
+    except OSError:
+        return False
 
 
 def request_update(word: str, path_unit: Path = UPDATER_PATH_UNIT) -> bool:
     """Leave the request for allskyhub-updater.path; False without an updater."""
-    if not path_unit.exists():
+    if not _exists(path_unit):
         return False
     try:
         tmp = UPDATE_REQUEST.with_suffix(".tmp")
@@ -376,6 +385,8 @@ def main(argv: list[str] | None = None) -> int:
     # The running agent logs to the journal too; httpx would add a line per request.
     logging.basicConfig(level=logging.INFO, format="%(levelname)s %(name)s: %(message)s")
     logging.getLogger("httpx").setLevel(logging.WARNING)
+    recent_log = RecentLog()  # for the local UI (roadmap L15)
+    logging.getLogger().addHandler(recent_log)
 
     live = LiveState()
     store = ImageStore(args.data, tz)
@@ -537,6 +548,19 @@ def main(argv: list[str] | None = None) -> int:
             setup = SetupController(network, identity.device_id, on_joined=joined)
             threading.Thread(target=setup.run, args=(stop_bg,), name="setup", daemon=True).start()
 
+    calibration = LocalCalibration(sky_mask, calibration_dir / "orientation.json")
+
+    def restore_backup(values: dict[str, Any], edits: dict[str, Any] | None) -> list[str]:
+        """Roadmap L15: a backup's settings (only the keys this camera has) and drawn areas."""
+        known = set(settings_values())
+        bad = [] if edits is None or parse_edits(edits) is not None else ["skymask_edits"]
+        if bad:
+            return bad
+        if edits is not None:
+            calibration.set_edits(edits)
+        changes = {k: v for k, v in values.items() if k in known}
+        return change_settings(changes, "a backup") if changes else []
+
     web: WebServer | None = None
     if args.http:
         host, _, port = str(args.http).rpartition(":")
@@ -554,7 +578,7 @@ def main(argv: list[str] | None = None) -> int:
             if settings_path
             else None,
             archive=LocalArchive(store, event_store),
-            calibration=LocalCalibration(sky_mask, calibration_dir / "orientation.json"),
+            calibration=calibration,
             public=PublicPage(hub_url, identity) if hub_url and identity is not None else None,
             system_page=SystemPage(
                 lambda: system_facts(Path(args.data)),
@@ -562,6 +586,26 @@ def main(argv: list[str] | None = None) -> int:
             ),
             network_info=lambda: netinfo.summary() | {"country": wifi_country(settings_file)},
             update_page=UpdatePage(update_facts, request_update),
+            support=Support(
+                log=recent_log,
+                facts={
+                    "version": lambda: __version__,
+                    "update": update_facts,
+                    "system": lambda: system_facts(Path(args.data)),
+                    "network": netinfo.summary,
+                    "status": live.status,
+                    "calibration": lambda: calibration.info(),
+                },
+                files={
+                    "orientation.json": calibration_dir / "orientation.json",
+                    "skymask.png": calibration_dir / "skymask.png",
+                    "skymask_edits.json": calibration_dir / "skymask_edits.json",
+                    "updater-state.json": STATE_FILE,
+                },
+                settings=settings_values,
+                mask_edits=lambda: sky_mask.edits.to_json(),
+                restore=restore_backup,
+            ),
         )
         web.start()
         print(f"web UI on http://{host}:{web.port}/")

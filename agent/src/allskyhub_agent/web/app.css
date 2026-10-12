@@ -73,6 +73,11 @@ select.night-select { max-width: 260px; }
 .areas li { display: flex; gap: 6px; align-items: center; }
 [data-draw].active, #maskGrid.active { border-color: var(--accent); color: var(--accent); }
 
+pre.log { max-height: 420px; overflow: auto; margin: 8px 0; padding: 12px; border-radius: 12px;
+  background: rgba(0, 0, 0, .35); border: 1px solid var(--line); font-size: 12px; line-height: 1.45;
+  white-space: pre-wrap; word-break: break-word; }
+label.button { cursor: pointer; }
+
 #lightbox { max-width: min(1200px, 96vw); width: 96vw; padding: 12px; border: 1px solid var(--line);
   border-radius: var(--radius); background: var(--bg); color: var(--text); }
 #lightbox::backdrop { background: rgba(0, 0, 0, .85); }

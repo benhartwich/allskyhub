@@ -365,6 +365,8 @@ answers `ack`, or `error` with `not_found` if the event has no picture or it is 
 
 **`local_access`** `{verifier}`: the verifier of the camera's offline code (§7.4), a PHC
 string `$argon2id$v=19$m=19456,t=2,p=1$<salt>$<hash>`, or `null` to remove it. The device
+answers `error` `invalid_args` for any other algorithm and for parameters below m=19456,
+t=2. The device
 stores it (replacing an older one), drops all local sessions that were opened with the
 offline code, and answers `ack`. The hub sends it when the owner creates or removes the
 code and, until the device has acknowledged it, again after every `hello`. The hub never
@@ -409,7 +411,9 @@ manages it in the hub's web UI and, through these endpoints, in the camera's loc
 `null` while it is off. `PUT /device/v1/public` with `{enabled?, profile?}`: `enabled`
 switches the page (switching off makes the old address invalid at once; switching on
 again gives a new one); `profile`, if given, replaces the whole profile, and missing
-fields take their defaults. The answer is the new state.
+fields take their defaults. A `PUT` with only `profile` leaves `enabled` and the address
+unchanged, and one with only `enabled` leaves the profile unchanged. The answer is the new
+state.
 
 `profile`: `title` (≤ 100 characters), `location_label`, `camera`, `lens`, `computer`,
 `owner` (each ≤ 200), `notes` (≤ 2000), all strings, empty = not shown;
@@ -516,16 +520,23 @@ open the same session.
    made (monotonic clock) for 5 minutes, sets it as cookie `ash_login_nonce` (HttpOnly,
    SameSite=Lax, Max-Age 300) and redirects to
    `<hub>/cameras/<device_id>/local-login?return=<base>&nonce=<nonce>`, where `<base>` is
-   the absolute URL under which the browser reached the local UI (scheme, host, port and
-   path prefix, for example `https://cam.example.org/hub/`).
+   the absolute URL under which the browser reached the local UI, ending in `/` (for
+   example `https://cam.example.org/hub/`). The agent builds it from the `Host` header and
+   the connection's scheme. Only when the connection comes from 127.0.0.1 or ::1 (a
+   reverse proxy on the same machine) does it take the scheme from `X-Forwarded-Proto`
+   and a path prefix from `X-Forwarded-Prefix`. Without a prefix header the path is `/`.
 2. The hub requires a web login (and returns to this step afterwards) and that the
    camera belongs to the account; otherwise 404. `return` must be an absolute `http` or
    `https` URL without user info, query or fragment, at most 500 characters. The hub
    shows the camera's name and the target origin and asks for confirmation (any origin is
    allowed, since cameras sit behind addresses the hub cannot know).
-3. After confirmation the hub answers with a page that sends a form `POST` to
-   `<base>local-login/callback` with the field `assertion` (a button, which the hub's own
-   script may press). The assertion never appears in a URL.
+3. After confirmation the hub navigates the browser top-level to
+   `<base>local-login/callback#assertion=<assertion>`. Because it is in the fragment, the
+   assertion reaches no server and no log. The agent answers this GET with a small page
+   whose own script reads the fragment, removes it with `history.replaceState` and sends
+   it same-origin as a form `POST` to `<base>local-login/callback` (field `assertion`).
+   That request carries the `SameSite=Lax` nonce cookie. A cross-site POST from the hub
+   would not carry it.
 4. The assertion is `<payload>.<signature>`: `payload` is the base64url-encoded JSON
    `{kid, aud, sub, nonce, iat, exp}` (`aud` the device id, `sub` the user id, `iat` and
    `exp` Unix seconds, `exp` at most 60 s after `iat`); `signature` is base64url of the
@@ -542,12 +553,15 @@ as `XXXX-XXXX-XXXX`, then only replaceable or removable. The hub sends the camer
 Argon2id verifier (`local_access`, §6.5), deliberately not anything derived from the
 account password, so a stolen camera allows no offline attack on it. The local login
 form takes the code with or without hyphens, in any case. The agent allows 5 failed
-attempts per 15 minutes in total and then refuses until that time has passed.
+attempts per 15 minutes in total and then refuses until that time has passed. This is
+deliberate: someone who can reach the local UI (for example through a public reverse
+proxy) can block the offline code for a while. The lockout does not affect login A.
 
 **Session.** Cookie `ash_session` with 32 random bytes, HttpOnly, SameSite=Lax, Max-Age 30
 days, `Secure` when the request came over HTTPS (also `X-Forwarded-Proto: https` from a
-reverse proxy on the same machine). The agent stores only a hash of it, with the way of
-login and the time. Logging out deletes it.
+connection from 127.0.0.1 or ::1, as for `<base>`). The agent stores only a hash of it,
+with the way of login and the time, persistently in its data directory (mode 0600), so
+sessions survive restarts and updates. Logging out deletes it.
 
 **Unpairing.** When the hub says the device is no longer paired (close code 4403 or
 `paired: false`), the agent deletes all sessions, the offline verifier and the hub keys.

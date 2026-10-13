@@ -126,3 +126,32 @@ async def test_retention_drops_full_images_first_then_frames(
     assert not (store.root / dev.device_id / "20261006").exists()
     # The latest image (a hard link) survives the archive clean-up.
     assert store.path(dev.device_id, FrameVariant.THUMB).exists()
+
+
+async def test_bad_frames_stay_out_of_the_archive(
+    app: FastAPI, client: httpx.AsyncClient, live_app: str
+) -> None:
+    """SPEC §4.9: a bad frame is fetched only for the live view, never as a thumbnail."""
+    dev = FakeDevice()
+    token = await paired_token(client, dev)
+    maker: async_sessionmaker[AsyncSession] = app.state.sessionmaker
+    bright = frame_info("image-bright.jpg").model_copy(update={"bad": "bright", "mean": 0.95})
+    async with device_ws(live_app, token) as ws:
+        await send(ws, bright)  # full and thumbnail would both be due
+        with pytest.raises(TimeoutError):
+            await asyncio.wait_for(ws.recv(), 0.3)
+        # Someone watches live: the full image comes, still no thumbnail.
+        app.state.connections.touch_live(dev.device_id)
+        await send(ws, frame_info("image-dark.jpg").model_copy(update={"bad": "dark"}))
+        [live] = await _upload_requested(live_app, token, ws, 1)
+        assert (live.name, live.variant) == ("image-dark.jpg", FrameVariant.FULL)
+        with pytest.raises(TimeoutError):
+            await asyncio.wait_for(ws.recv(), 0.3)
+    async with maker() as db:
+        from sqlalchemy import select
+
+        rows = (await db.execute(select(Frame.name, Frame.has_full, Frame.has_thumb))).all()
+    assert rows == [("image-dark.jpg", True, False)]  # a row, so retention removes it
+    auth = await _app_auth(client, (await owner_email(app, dev.device_id)))
+    nights = (await client.get(f"/api/v1/cameras/{dev.device_id}/nights", headers=auth)).json()
+    assert nights == []

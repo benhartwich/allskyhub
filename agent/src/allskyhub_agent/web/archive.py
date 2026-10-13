@@ -6,7 +6,9 @@ sky log come from the data directory (SPEC §4.5, §5).
 
 from __future__ import annotations
 
+import json
 import re
+import shutil
 from collections.abc import Callable
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
@@ -17,10 +19,12 @@ from allskyhub_agent.detect.labels import Labels
 from allskyhub_agent.products.build import night_products, product_path
 from allskyhub_agent.products.day import MINI
 from allskyhub_agent.products.keolapse import keolapse
-from allskyhub_agent.store.images import ImageStore
-from allskyhub_protocol import EventLabel, FrameInfo
+from allskyhub_agent.store.images import ImageStore, night_id
+from allskyhub_protocol import EventLabel, FrameInfo, NightDeleted
 
 LOOP_WINDOW = timedelta(hours=1)
+DELETED_NAME = "deleted-nights.json"
+DELETED_KEEP = timedelta(days=60)
 MAX_FRAMES = 2000  # one night at 15 s pauses; the UI pages through more
 
 
@@ -31,7 +35,9 @@ class LocalArchive:
         events: EventStore | None = None,
         labels: Labels | None = None,
         on_label: Callable[[EventLabel], None] | None = None,
+        on_deleted: Callable[[NightDeleted], None] | None = None,
     ) -> None:
+        self._on_deleted = on_deleted
         self._store = store
         self._events = events
         self._labels = labels
@@ -185,6 +191,47 @@ class LocalArchive:
         if self._events is None:
             return None
         return self._events.image_path(night, eid, thumbnail)
+
+    # --- deleting a night (SPEC §7, archive maintenance) ----------------------------------
+    def delete_night(self, night: str, now: datetime) -> str | None:
+        """Remove a whole night; None when done, else `current` or `not_found`."""
+        if not (night.isdigit() and len(night) == 8):
+            return "not_found"
+        if night == night_id(now, self._store.local_tz):
+            return "current"
+        folder = self._store.night_dir(night)
+        if not folder.is_dir():
+            return "not_found"
+        shutil.rmtree(folder, ignore_errors=True)
+        deleted = self._deleted()
+        deleted[night] = now.isoformat()
+        tmp = self._root / (DELETED_NAME + ".tmp")
+        tmp.write_text(json.dumps(deleted), encoding="utf-8")
+        tmp.replace(self._root / DELETED_NAME)
+        if self._on_deleted is not None:
+            self._on_deleted(NightDeleted(night_id=night))
+        return None
+
+    def _deleted(self) -> dict[str, str]:
+        try:
+            raw: object = json.loads((self._root / DELETED_NAME).read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            return {}
+        if not isinstance(raw, dict):
+            return {}
+        return {str(k): str(v) for k, v in cast("dict[str, Any]", raw).items()}
+
+    def deleted_nights(self, now: datetime) -> list[NightDeleted]:
+        """Nights deleted in the last 60 days, sent again after every hello."""
+        out: list[NightDeleted] = []
+        for night, at in self._deleted().items():
+            try:
+                when = datetime.fromisoformat(at)
+            except ValueError:
+                continue
+            if now - when <= DELETED_KEEP:
+                out.append(NightDeleted(night_id=night))
+        return out
 
 
 def _frame_of(frames: list[FrameInfo], at: datetime) -> str | None:

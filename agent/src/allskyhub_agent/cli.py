@@ -87,6 +87,7 @@ from allskyhub_agent.watchdog import (
 from allskyhub_agent.web.archive import LocalArchive
 from allskyhub_agent.web.auth import LocalAuth
 from allskyhub_agent.web.calibration import LocalCalibration
+from allskyhub_agent.web.check import CheckFacts
 from allskyhub_agent.web.server import SettingsForm, SystemPage, TlsSetup, UpdatePage, WebServer
 from allskyhub_agent.web.support import RecentLog, Support
 from allskyhub_agent.web.tls import Certificates
@@ -96,6 +97,7 @@ from allskyhub_protocol import (
     EventKind,
     EventLabel,
     FrameInfo,
+    Mode,
     Observatory,
     SetSettingsArgs,
     SettingSpec,
@@ -380,8 +382,9 @@ def run_watchdog(args: argparse.Namespace) -> int:
     upd = update_status(args.updater_state)
     busy = upd is not None and upd.state.value in ("installing", "downloading")
     st = WatchState.load(args.state)
+    paused = isinstance(health, dict) and cast(dict[str, Any], health).get("paused") is True
     action = decide(st, datetime.now(UTC), frames if isinstance(frames, int) else None,
-                    network_ok(), busy)  # fmt: skip
+                    network_ok(), busy, paused)  # fmt: skip
     if action is not None:
         log.warning("watchdog: %s (frames %s since %s, network down since %s)", action,
                     st.frames, st.frames_changed, st.net_down_since)  # fmt: skip
@@ -482,7 +485,7 @@ def main(argv: list[str] | None = None) -> int:
     recent_log = RecentLog()  # for the local UI (roadmap L15)
     logging.getLogger().addHandler(recent_log)
 
-    live = LiveState()
+    live = LiveState(Path(args.data) / "capture-paused")
     store = ImageStore(args.data, tz)
     pairing: PairingState | None = None
     local_auth: LocalAuth | None = None
@@ -595,14 +598,20 @@ def main(argv: list[str] | None = None) -> int:
 
         def status() -> Status | None:
             f = live.last_frame()
-            if f is None:
+            if f is None and not live.paused:
                 return None
+            # Paused since before a restart (SPEC §4.1): no frame yet, the hub must still
+            # learn about the pause.
+            mode = f.mode if f is not None else (
+                Mode.NIGHT if loc is not None and sun_elevation(datetime.now(UTC), loc.lat,
+                                                                loc.lon) < -6 else Mode.DAY
+            )  # fmt: skip
             return Status(
-                mode=f.mode,
-                exposure_us=f.exposure_us,
-                gain=f.gain,
-                mean=f.mean,
-                sensor_temp_c=f.sensor_temp_c,
+                mode=mode,
+                exposure_us=f.exposure_us if f is not None else 0,
+                gain=f.gain if f is not None else 0.0,
+                mean=f.mean if f is not None else 0.0,
+                sensor_temp_c=f.sensor_temp_c if f is not None else None,
                 cpu_temp_c=system.cpu_temp_c(),
                 disk_free_pct=system.disk_free_pct(args.data),
                 uptime_s=system.uptime_s(),
@@ -612,6 +621,7 @@ def main(argv: list[str] | None = None) -> int:
                 orientation=orienter.latest if orienter is not None else None,
                 update=update_status() if settings_path else None,
                 alpaca_error=alpaca_error[0],
+                capture_paused=live.paused,
                 observatory=observatory[0](),
             )
 
@@ -635,7 +645,7 @@ def main(argv: list[str] | None = None) -> int:
             settings_schema=current_schema if settings_path else None,
             backlog=Backlog(args.data / BACKLOG_NAME),
             night_events=event_store.night_events,
-            resend=lambda: [*labels.all()],
+            resend=lambda: [*labels.all(), *LocalArchive(store).deleted_nights(datetime.now(UTC))],
             on_label=label_from_hub,
         )
         hub.start(hub_url)
@@ -723,6 +733,7 @@ def main(argv: list[str] | None = None) -> int:
                 event_store,
                 labels,
                 on_label=lambda lab: hub.notify_message(lab) if hub is not None else None,
+                on_deleted=lambda gone: hub.notify_message(gone) if hub is not None else None,
             ),
             calibration=calibration,
             public=PublicPage(hub_url, identity) if hub_url and identity is not None else None,
@@ -758,6 +769,17 @@ def main(argv: list[str] | None = None) -> int:
                 on_change=lambda: threading.Timer(2.0, restart_requested.set).start(),
             ),
             tls_context=tls_context,
+            check=CheckFacts(
+                power=system.power_flags,
+                time_trusted=system.time_trusted,
+                disk_free_pct=lambda: system.disk_free_pct(Path(args.data)),
+                last_frame=live.last_frame,
+                paused=lambda: live.paused,
+                calibration=calibration.info,
+                hub=(lambda: (pairing.info().paired, pairing.info().connected))
+                if pairing is not None
+                else None,
+            ),
         )
         web.start()
         if web.tls_port is not None:
@@ -999,7 +1021,7 @@ def main(argv: list[str] | None = None) -> int:
 
     night_cfg = load_settings()
     # SPEC §8.1: systemd restarts the agent if frames stop (WatchdogSec in the unit).
-    Heartbeat(lambda: int(cast(int, live.status()["frames"]))).start()
+    Heartbeat(lambda: int(cast(int, live.status()["frames"])), paused=lambda: live.paused).start()
     products = ProductWorker(
         store,
         ProductConfig(

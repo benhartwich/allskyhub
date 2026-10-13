@@ -9,6 +9,8 @@ from __future__ import annotations
 import io
 import threading
 from dataclasses import dataclass
+from datetime import UTC, datetime
+from pathlib import Path
 
 from PIL import Image as PILImage
 
@@ -35,12 +37,16 @@ class _State:
     sharpness_max: float | None = None
     focus_mode: bool = False
     frames: int = 0
+    paused: bool = False
 
 
 class LiveState:
-    def __init__(self) -> None:
+    def __init__(self, paused_file: Path | None = None) -> None:
         self._lock = threading.Lock()
         self._s = _State()
+        # SPEC §4.1: a pause survives restarts until resumed.
+        self._paused_file = paused_file
+        self._s.paused = paused_file is not None and paused_file.exists()
 
     # --- written by the capture loop -------------------------------------------------
     def publish(self, info: FrameInfo, image: Image, sharpness: float) -> None:
@@ -77,6 +83,27 @@ class LiveState:
             if not on:
                 self._s.crop_jpeg = None
 
+    @property
+    def paused(self) -> bool:
+        with self._lock:
+            return self._s.paused
+
+    def set_paused(self, on: bool) -> None:
+        """Pause or resume capture (SPEC §4.1), kept across restarts."""
+        with self._lock:
+            self._s.paused = on
+        f = self._paused_file
+        if f is None:
+            return
+        try:
+            if on:
+                f.parent.mkdir(parents=True, exist_ok=True)
+                f.write_text(datetime.now(UTC).isoformat() + "\n")
+            else:
+                f.unlink(missing_ok=True)
+        except OSError:
+            pass  # still paused for this run
+
     def reset_max(self) -> None:
         with self._lock:
             self._s.sharpness_max = None
@@ -102,7 +129,10 @@ class LiveState:
                 if s.frame
                 else None
             )
-            return {"version": __version__, "frames": s.frames, "frame": frame}
+            out: dict[str, object] = {"version": __version__, "frames": s.frames, "frame": frame}
+            if s.paused:
+                out["paused"] = True  # the watchdog does not count a pause as a stall
+            return out
 
     def status(self) -> dict[str, object]:
         """Snapshot for the local web UI (not a protocol message)."""
@@ -112,6 +142,7 @@ class LiveState:
                 "version": __version__,  # the updater's health check (SPEC §8)
                 "frames": s.frames,
                 "focus_mode": s.focus_mode,
+                "paused": s.paused,
                 "sharpness": s.sharpness,
                 "sharpness_max": s.sharpness_max,
                 "frame": s.frame.model_dump(mode="json") if s.frame else None,

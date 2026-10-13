@@ -187,6 +187,7 @@ function viewLive() {
         <button type="button" class="secondary small" id="ovSave">Mit Overlay speichern</button>
       </div>
       <dl class="facts" id="facts"><dt>Bild</dt><dd>Warte auf das erste Bild …</dd></dl>
+      <p class="msg warn" id="pausedMsg" hidden>Aufnahme pausiert. <a href="#system">Unter System fortsetzen</a>.</p>
     </section>
     <section class="card stack">
       <h2>Die letzte Stunde</h2>
@@ -271,6 +272,7 @@ function viewLive() {
       $("best").textContent = s.sharpness_max != null ? Math.round(s.sharpness_max) : "–";
       $("bar").style.width = (s.sharpness_max ? Math.min(100, 100 * s.sharpness / s.sharpness_max) : 0) + "%";
     }
+    $("pausedMsg").hidden = !s.paused;
     if (s.frames !== lastFrames) {
       lastFrames = s.frames;
       $("live").src = "api/live.jpg?n=" + s.frames;
@@ -374,7 +376,21 @@ async function viewNight(night) {
       <div class="actions"><button type="button" class="secondary" id="less" hidden>Frühere laden</button></div>
       <div class="thumbs" id="thumbs"></div>
       <div class="actions"><button type="button" class="secondary" id="more" hidden>Spätere laden</button>
-        <button type="button" class="secondary" id="bad" hidden aria-pressed="false"></button></div></section>`;
+        <button type="button" class="secondary" id="bad" hidden aria-pressed="false"></button></div></section>
+    <section class="card stack"><h2>Nacht löschen</h2>
+      <p class="muted small">Löscht alle Bilder, Produkte und Ereignisse dieser Nacht, hier und auf dem Hub. Das lässt sich nicht rückgängig machen.</p>
+      <div class="actions"><button type="button" class="danger" id="delNight">Nacht löschen</button></div>
+      <p class="msg" id="delMsg" hidden></p></section>`;
+  $("delNight").onclick = async () => {
+    if (!confirm(`Die Nacht vom ${fmtNight(night)} wirklich löschen? Alle Bilder, Produkte und Ereignisse gehen verloren, auch auf dem Hub.`)) return;
+    const r = await fetch(`api/nights/${night}/delete`, { method: "POST" });
+    if (r.status === 401) { location.href = "local-login"; return; }
+    const m = $("delMsg");
+    m.hidden = false;
+    if (r.ok) { location.hash = "#archiv"; return; }
+    m.className = "msg error";
+    m.textContent = r.status === 409 ? "Die laufende Nacht kann nicht gelöscht werden." : "Hat nicht geklappt.";
+  };
   const nights = await getJSON("api/nights");
   const n = nights.find((x) => x.night_id === night);
   const names = { keogram: "Keogramm", startrails: "Sternspuren", timelapse: "Zeitraffer",
@@ -999,6 +1015,10 @@ const meter = (used, total) => `<div class="row"><div class="bar"><div style="wi
 
 async function viewSystem() {
   page.innerHTML = `<h1>System</h1>
+    <section class="card stack" id="check" hidden></section>
+    <section class="card stack" id="capture"><h2>Aufnahme</h2>
+      <p class="muted small" id="capState">…</p>
+      <div class="actions"><button type="button" class="secondary" id="capToggle" hidden></button></div></section>
     <section class="card stack"><h2>Kamera und Hub</h2><dl class="facts" id="sys"></dl></section>
     <section class="card stack" id="hw" hidden><h2>Rechner</h2><dl class="facts" id="hwFacts"></dl></section>
     <section class="card stack" id="net" hidden></section>
@@ -1031,6 +1051,8 @@ async function viewSystem() {
       m.hidden = false;
     };
   }
+  viewCheck().catch(() => {});
+  viewCapture().catch(() => {});
   viewNetwork().catch(() => {});
   viewTls().catch(() => {});
   viewUpdates().catch(() => {});
@@ -1079,6 +1101,38 @@ async function viewSystem() {
 }
 
 // --- Log, support, backup (L15) ------------------------------------------------------------
+// SPEC §7: the camera check as a traffic light.
+const CHECK_NAMES = { power: "Stromversorgung", clock: "Uhrzeit", disk: "Speicher", frames: "Aufnahme",
+  mask: "Himmelsmaske", orientation: "Ausrichtung", hub: "Hub" };
+async function viewCheck() {
+  const items = await getJSON("api/check");
+  const box = $("check");
+  const worst = items.some((i) => i.state === "fail") ? "fail" : items.some((i) => i.state === "warn") ? "warn" : "ok";
+  box.hidden = false;
+  box.innerHTML = `<h2>Kamera-Check <span class="light ${worst}" aria-hidden="true"></span></h2>
+    <ul class="checks">${items.map((i) => `<li class="${i.state}"><span class="light ${i.state}" aria-label="${{ ok: "in Ordnung", warn: "Hinweis", fail: "Problem" }[i.state]}"></span>
+      <b>${esc(CHECK_NAMES[i.id] || i.id)}</b> <span class="muted small">${esc(i.detail)}</span></li>`).join("")}</ul>`;
+}
+
+// SPEC §4.1: pause capture, e.g. to clean the dome; it stays paused until resumed.
+async function viewCapture() {
+  const st = await getJSON("api/status");
+  const show = (paused) => {
+    $("capState").textContent = paused
+      ? "Pausiert. Es werden keine Bilder aufgenommen, auch nach einem Neustart nicht, bis du fortsetzt."
+      : "Läuft. Zum Putzen der Kuppel kannst du die Aufnahme anhalten.";
+    const b = $("capToggle");
+    b.hidden = false;
+    b.textContent = paused ? "Aufnahme fortsetzen" : "Aufnahme anhalten";
+    b.onclick = async () => {
+      const r = await fetch(paused ? "api/capture/resume" : "api/capture/pause", { method: "POST" });
+      if (r.status === 401) { location.href = "local-login"; return; }
+      if (r.ok) { show((await r.json()).paused); viewCheck().catch(() => {}); }
+    };
+  };
+  show(!!st.paused);
+}
+
 async function viewSupport() {
   const box = $("support");
   const log = await getJSON("api/logs?lines=300");
@@ -1086,7 +1140,8 @@ async function viewSupport() {
   box.innerHTML = `<h2>Protokoll und Support</h2>
     <details><summary>Protokoll der Kamera (letzte ${log.lines.length} ${log.lines.length === 1 ? "Zeile" : "Zeilen"})</summary>
       <pre class="log" id="logBox"></pre>
-      <div class="actions"><button type="button" class="secondary small" id="logRefresh">Aktualisieren</button></div>
+      <div class="actions"><button type="button" class="secondary small" id="logRefresh">Aktualisieren</button>
+        <label class="check"><input type="checkbox" id="logFollow"> live mitlesen</label></div>
     </details>
     <p class="muted small">Das Support-Paket enthält Protokoll, Versionen, System- und Netzwerkdaten, Einstellungen und
       die Kalibrierung, aber keine Schlüssel, Passwörter oder Bilder. Hänge es an deine Frage an.</p>
@@ -1105,7 +1160,23 @@ async function viewSupport() {
     pre.scrollTop = pre.scrollHeight;
   };
   show(log.lines);
-  $("logRefresh").onclick = async () => show((await getJSON("api/logs?lines=300")).lines);
+  let lines = log.lines;
+  let seq = log.seq || 0;
+  $("logRefresh").onclick = async () => { const l = await getJSON("api/logs?lines=300"); lines = l.lines; seq = l.seq || 0; show(lines); };
+  // Follow: every 2 s only what is new, kept to the last 1000 lines.
+  let follow = null;
+  $("logFollow").onchange = (e) => {
+    if (follow) { clearInterval(follow); follow = null; }
+    if (!e.target.checked) return;
+    follow = setInterval(async () => {
+      const n = await getJSON("api/logs?after=" + seq).catch(() => null);
+      if (!n || !n.lines.length) return;
+      seq = n.seq;
+      lines = [...lines, ...n.lines].slice(-1000);
+      show(lines);
+    }, 2000);
+    timers.push(follow);  // stops when the page changes
+  };
   $("restoreFile").onchange = async (e) => {
     const file = e.target.files[0];
     if (!file) return;

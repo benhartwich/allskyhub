@@ -39,11 +39,15 @@ Routes:
                               a failed join opens the setup network (SPEC §7.1)
     GET  /api/tls             HTTPS on/off, port, whose certificate, fingerprint (SPEC §7.6)
     POST /api/nights/<n>/events/<id>/label   {label, reason} (SPEC §6.4 Labels)
+    POST /api/nights/<n>/delete   the whole night, not the current one → 200, 409, 404
+    POST /api/capture/pause, /api/capture/resume   (SPEC §4.1) → {paused}
     POST /api/tls             {cert, key} PEM → 202 and a restart, or 400 {detail, fields}
     POST /api/tls/remove      back to the self-signed certificate → 202 and a restart
     GET  /api/update          version, installed releases, the updater's state (roadmap L14)
     POST /api/update/<now|rollback>   ask the root updater → 202, or 404 without one
-    GET  /api/logs?lines=N    the agent's recent log lines (roadmap L15)
+    GET  /api/logs?lines=N    the agent's recent log lines (roadmap L15) and their `seq`;
+                              ?after=<seq> only the newer ones, to follow the log
+    GET  /api/check           the camera check: [{id, state ok|warn|fail, detail}] (SPEC §7)
     GET  /api/support.zip     support bundle: log, versions, facts, settings, calibration
     GET  /api/backup.json     settings and drawn sky-mask areas
     POST /api/restore         a backup → 202 (the capture restarts), or 400 {detail, fields}
@@ -99,6 +103,7 @@ from allskyhub_agent.web.auth import (
     LocalAuth,
 )
 from allskyhub_agent.web.calibration import LocalCalibration
+from allskyhub_agent.web.check import CheckFacts, run_checks
 from allskyhub_agent.web.support import Support
 from allskyhub_agent.web.tls import Certificates
 from allskyhub_protocol import SettingSpec
@@ -199,6 +204,7 @@ def _page(name: str = "index.html") -> bytes:
 
 _SYSTEM_ACTION = re.compile(r"^/api/system/(restart|reboot|shutdown)$")
 _NIGHT_API = re.compile(r"^/api/nights/(\d{8})/(frames|events|sky)$")
+_DELETE_NIGHT = re.compile(r"^/api/nights/(\d{8})/delete$")
 _LABEL = re.compile(r"^/api/nights/(\d{8})/events/([a-z]+-\d{8}T\d{6}Z(?:-\d+)?)/label$")
 _FILE = re.compile(r"^/files/(\d{8})/(?:(products|events)/)?([A-Za-z0-9_.-]+)$")
 _TYPES = {".jpg": "image/jpeg", ".mp4": "video/mp4"}
@@ -258,6 +264,7 @@ def make_handler(
     update_page: UpdatePage | None = None,
     support: Support | None = None,
     tls: TlsSetup | None = None,
+    check: CheckFacts | None = None,
 ) -> type[BaseHTTPRequestHandler]:
     page = _page()
     login_page = _page("login.html")
@@ -500,6 +507,21 @@ def make_handler(
                        (("Location", f"https://{host}:{port}{self.path}"),))  # fmt: skip
             return True
 
+        def _post_delete_night(self, night: str) -> None:
+            """SPEC §7: delete a whole night (not the current one), and tell the hub."""
+            if self._read_body() is None:
+                return
+            if archive is None:
+                self._text(HTTPStatus.NOT_FOUND, "not found")
+                return
+            why = archive.delete_night(night, datetime.now(UTC))
+            if why == "current":
+                self._json(HTTPStatus.CONFLICT, {"detail": "the current night"})
+            elif why is not None:
+                self._json(HTTPStatus.NOT_FOUND, {"detail": "no such night"})
+            else:
+                self._json(HTTPStatus.OK, {"deleted": night})
+
         def _post_label(self, night: str, event_id: str) -> None:
             """SPEC §6.4 Labels: {label, reason} for one detection, sent on to the hub."""
             raw = self._read_body()
@@ -668,6 +690,11 @@ def make_handler(
                 self._json(HTTPStatus.OK, [asdict(n) for n in setup.networks()])
             elif path in ("/api/logs", "/api/support.zip", "/api/backup.json"):
                 self._support_get(path)
+            elif path == "/api/check":
+                if check is None:
+                    self._text(HTTPStatus.NOT_FOUND, "not found")
+                    return
+                self._json(HTTPStatus.OK, run_checks(check, datetime.now(UTC)))
             elif path == "/api/tls":
                 if tls is None:
                     self._text(HTTPStatus.NOT_FOUND, "not found")
@@ -775,6 +802,13 @@ def make_handler(
                 self._restore()
             elif m := _LABEL.match(path):
                 self._post_label(m[1], m[2])
+            elif m := _DELETE_NIGHT.match(path):
+                self._post_delete_night(m[1])
+            elif path in ("/api/capture/pause", "/api/capture/resume"):
+                if self._read_body() is None:
+                    return
+                live.set_paused(path.endswith("pause"))
+                self._json(HTTPStatus.OK, {"paused": live.paused})
             elif path in ("/api/tls", "/api/tls/remove"):
                 self._post_tls(path)
             elif path in ("/api/update/now", "/api/update/rollback"):
@@ -899,8 +933,15 @@ def make_handler(
                 return
             stamp = datetime.now(UTC).strftime("%Y%m%d-%H%M%S")
             if path == "/api/logs":
+                after = self._query().get("after")
+                if after is not None and after.isdigit():
+                    # Following the log: only what came since `after` (the last `seq`).
+                    seq, lines = support.log.since(int(after))
+                    self._json(HTTPStatus.OK, {"lines": lines, "seq": seq})
+                    return
                 n = max(1, min(self._int("lines", 300), 2000))
-                self._json(HTTPStatus.OK, {"lines": support.log.lines(n)})
+                seq, _ = support.log.since(0)
+                self._json(HTTPStatus.OK, {"lines": support.log.lines(n), "seq": seq})
             elif path == "/api/support.zip":
                 save = (
                     (
@@ -1012,6 +1053,7 @@ class WebServer:
         support: Support | None = None,
         tls: TlsSetup | None = None,
         tls_context: ssl.SSLContext | None = None,
+        check: CheckFacts | None = None,
     ) -> None:
         net = ipaddress.ip_network(setup_net) if setup_net else _SETUP_NET
         handler = make_handler(
@@ -1031,6 +1073,7 @@ class WebServer:
             update_page,
             support,
             tls,
+            check,
         )
         self._tls_httpd: ThreadingHTTPServer | None = None
         if tls is not None and tls.enabled and tls_context is not None:

@@ -47,6 +47,7 @@ Routes:
     POST /api/update/<now|rollback>   ask the root updater → 202, or 404 without one
     GET  /api/logs?lines=N    the agent's recent log lines (roadmap L15) and their `seq`;
                               ?after=<seq> only the newer ones, to follow the log
+    GET  /api/overlay, POST /api/overlay   the overlay layout (SPEC §7 Overlay)
     GET  /api/check           the camera check: [{id, state ok|warn|fail, detail}] (SPEC §7)
     GET  /api/support.zip     support bundle: log, versions, facts, settings, calibration
     GET  /api/backup.json     settings and drawn sky-mask areas
@@ -104,6 +105,7 @@ from allskyhub_agent.web.auth import (
 )
 from allskyhub_agent.web.calibration import LocalCalibration
 from allskyhub_agent.web.check import CheckFacts, run_checks
+from allskyhub_agent.web.overlay import OverlayLayout
 from allskyhub_agent.web.support import Support
 from allskyhub_agent.web.tls import Certificates
 from allskyhub_protocol import SettingSpec
@@ -265,6 +267,8 @@ def make_handler(
     support: Support | None = None,
     tls: TlsSetup | None = None,
     check: CheckFacts | None = None,
+    overlay: OverlayLayout | None = None,
+    status_extra: Callable[[], dict[str, Any]] | None = None,
 ) -> type[BaseHTTPRequestHandler]:
     page = _page()
     login_page = _page("login.html")
@@ -746,7 +750,14 @@ def make_handler(
                 else:
                     self._send(HTTPStatus.OK, png, "image/png")
             elif path == "/api/status":
-                self._json(HTTPStatus.OK, live.status())
+                # Plus what the overlay draws besides the frame: sky values and the moon.
+                extra = status_extra() if status_extra is not None else {}
+                self._json(HTTPStatus.OK, live.status() | extra)
+            elif path == "/api/overlay":
+                if overlay is None:
+                    self._text(HTTPStatus.NOT_FOUND, "not found")
+                    return
+                self._json(HTTPStatus.OK, overlay.get())
             elif path == "/api/health":
                 self._json(HTTPStatus.OK, live.health())
             elif path == "/api/setup":
@@ -804,6 +815,19 @@ def make_handler(
                 self._post_label(m[1], m[2])
             elif m := _DELETE_NIGHT.match(path):
                 self._post_delete_night(m[1])
+            elif path == "/api/overlay":
+                raw = self._read_body()
+                if raw is None:
+                    return
+                try:
+                    body: object = json.loads(raw or b"{}")
+                except ValueError:
+                    body = None
+                saved = overlay.set(body) if overlay is not None else None
+                if saved is None:
+                    self._json(HTTPStatus.BAD_REQUEST, {"detail": "layout", "fields": ["overlay"]})
+                else:
+                    self._json(HTTPStatus.OK, saved)
             elif path in ("/api/capture/pause", "/api/capture/resume"):
                 if self._read_body() is None:
                     return
@@ -1054,6 +1078,8 @@ class WebServer:
         tls: TlsSetup | None = None,
         tls_context: ssl.SSLContext | None = None,
         check: CheckFacts | None = None,
+        overlay: OverlayLayout | None = None,
+        status_extra: Callable[[], dict[str, Any]] | None = None,
     ) -> None:
         net = ipaddress.ip_network(setup_net) if setup_net else _SETUP_NET
         handler = make_handler(
@@ -1074,6 +1100,8 @@ class WebServer:
             support,
             tls,
             check,
+            overlay,
+            status_extra,
         )
         self._tls_httpd: ThreadingHTTPServer | None = None
         if tls is not None and tls.enabled and tls_context is not None:

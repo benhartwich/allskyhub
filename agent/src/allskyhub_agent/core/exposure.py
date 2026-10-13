@@ -46,13 +46,13 @@ class ExposureConfig:
     max_step: float = 8.0
     # Focus mode (SPEC §7) needs quick feedback: exposure is capped, gain makes up the rest.
     focus_max_exposure_us: int = 2_000_000
-    # Moon mode (SPEC §4.3): the night target while a bright moon is up.
-    moon_target_mean: float = 0.12
+    # Moon mode (SPEC §4.3): the night target times this while a bright moon is up.
+    moon_factor: float = 0.6
 
     def limits(self, mode: Mode, focus: bool = False, moon: bool = False) -> ModeLimits:
         lim = self.day if mode is Mode.DAY else self.night
         if moon and mode is Mode.NIGHT and not focus:
-            lim = replace(lim, target_mean=self.moon_target_mean)
+            lim = replace(lim, target_mean=lim.target_mean * self.moon_factor)
         if focus and lim.max_exposure_us > self.focus_max_exposure_us:
             lim = replace(
                 lim,

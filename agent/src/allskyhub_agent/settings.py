@@ -19,6 +19,19 @@ DETECT_CHOICES = ("off", "low", "normal", "high")
 # Night products (roadmap L9): x264 CRF per quality.
 TIMELAPSE_CRF = {"small": 28, "normal": 23, "high": 19}
 DEFAULT_KEEP_DAYS = 14
+# Choices (SPEC §4.1, §7).
+DAY_CAPTURE_CHOICES = ("save", "live", "off")
+FLIP_CHOICES = ("none", "horizontal", "vertical")
+ROTATE_CHOICES = ("0", "90", "180", "270")
+LANGUAGE_CHOICES = ("de", "en")
+TEMPERATURE_CHOICES = ("c", "f")
+_CHOICES = {
+    "day_capture": DAY_CAPTURE_CHOICES,
+    "image_flip": FLIP_CHOICES,
+    "image_rotate": ROTATE_CHOICES,
+    "language": LANGUAGE_CHOICES,
+    "temperature_unit": TEMPERATURE_CHOICES,
+}
 _PRODUCT_SWITCHES = (
     "product_keogram",
     "product_startrails",
@@ -44,6 +57,8 @@ _INT_RANGES = {
     "bad_dark_pct": (0, 20),
     "bad_bright_pct": (50, 100),
     "mqtt_port": (1, 65535),
+    "day_target_pct": (5, 80),
+    "night_target_pct": (5, 80),
 }
 
 
@@ -98,6 +113,15 @@ class AgentSettings:
     wb_r: int | None = None
     wb_b: int | None = None
     jpeg_quality: int = 90
+    # Target brightness (SPEC §4.3), day capture (SPEC §4.1), flip and rotation.
+    day_target_pct: int = 35
+    night_target_pct: int = 20
+    day_capture: str = "save"
+    image_flip: str = "none"
+    image_rotate: str = "0"
+    # How the local UI shows texts and temperatures (SPEC §7).
+    language: str = "de"
+    temperature_unit: str = "c"
     # Moon mode (SPEC §4.3, roadmap L20) and bad frames (SPEC §4.9, roadmap L19).
     moon_mode: bool = True
     bad_frames: bool = True
@@ -202,6 +226,7 @@ class AgentSettings:
         later.update({k: d[k] for k in _PRODUCT_SWITCHES if isinstance(d.get(k), bool)})
         if d.get("timelapse_quality") in TIMELAPSE_CRF:
             later["timelapse_quality"] = d["timelapse_quality"]
+        later.update({k: d[k] for k, ok in _CHOICES.items() if d.get(k) in ok})
         if isinstance(d.get("nina_url"), str):
             later["nina_url"] = d["nina_url"]
         for k in _MQTT_STRINGS:
@@ -260,6 +285,7 @@ class AgentSettings:
                 extra[k] = values[k]
         if values.get("timelapse_quality") in TIMELAPSE_CRF:
             extra["timelapse_quality"] = values["timelapse_quality"]
+        extra.update({k: values[k] for k, ok in _CHOICES.items() if values.get(k) in ok})
         if isinstance(values.get("nina_url"), str) and valid_nina_url(values["nina_url"]):
             extra["nina_url"] = values["nina_url"].strip()
         for k in _MQTT_STRINGS:

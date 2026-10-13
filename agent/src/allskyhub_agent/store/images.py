@@ -138,6 +138,13 @@ class ImageStore:
             reverse=True,
         )
 
+    def remove(self, night: str, name: str) -> None:
+        """Delete one stored frame and its thumbnail (day capture `live`, SPEC §4.1)."""
+        for thumb in (False, True):
+            path = self.path_for(night, name, thumb)
+            if path is not None:
+                path.unlink(missing_ok=True)
+
     def path_for(self, night: str, name: str, thumbnail: bool = False) -> Path | None:
         """Stored image (or its thumbnail) by night id and name; None if it does not exist.
 

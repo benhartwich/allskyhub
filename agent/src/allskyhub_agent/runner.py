@@ -16,6 +16,7 @@ from allskyhub_agent.core.focus import sharpness
 from allskyhub_agent.core.metering import Mask, circle_mask, mean_brightness
 from allskyhub_agent.core.quality import FrameQuality
 from allskyhub_agent.core.sun import sun_elevation
+from allskyhub_agent.core.transform import turn
 from allskyhub_agent.live import LiveState
 from allskyhub_agent.process.hotpixels import HotPixels
 from allskyhub_agent.process.skymask import SkyMask
@@ -28,6 +29,7 @@ log = logging.getLogger(__name__)
 # Name reported for focus-mode frames, which are not stored (SPEC §7).
 FOCUS_FRAME_NAME = "focus.jpg"
 PAUSE_POLL_S = 2.0
+DAY_OFF_POLL_S = 60.0
 
 
 @dataclass(frozen=True)
@@ -61,6 +63,9 @@ class Runner:
         sky_mask: SkyMask | None = None,
         quality: FrameQuality | None = None,
         moon_mode: bool = False,
+        day_capture: str = "save",
+        flip: str = "none",
+        rotate: int = 0,
     ) -> None:
         self._cam = camera
         self._ae = auto_exposure
@@ -83,6 +88,11 @@ class Runner:
         self._quality = quality or FrameQuality(enabled=False)
         self._moon_mode = moon_mode
         self._moon = False
+        # SPEC §4.1: by day keep (`save`), only show (`live`) or take nothing (`off`).
+        self._day_capture = day_capture
+        self._ephemeral: tuple[str, str] | None = None  # the last day frame kept for `live`
+        self._flip = flip
+        self._rotate = rotate
 
     @property
     def mode(self) -> Mode | None:
@@ -110,11 +120,10 @@ class Runner:
         focus = self.focus_mode
         settings = self._ae.current(mode, focus)
         frame = self._cam.capture(CaptureRequest(settings.exposure_us, settings.gain))
+        # SPEC §4.1: turned before anything else sees the frame.
+        image = turn(frame.image, self._flip, self._rotate)
 
-        mean = mean_brightness(
-            frame.image, self._mask_for(frame.image.shape[0], frame.image.shape[1])
-        )
-        image = frame.image
+        mean = mean_brightness(image, self._mask_for(image.shape[0], image.shape[1]))
         if self._sky_mask is not None and not focus:
             self._sky_mask.observe(start, night_id(start, self._tz), elevation, image)
         if self._hot is not None:
@@ -122,11 +131,17 @@ class Runner:
             if not focus:
                 self._hot.observe(start, night_id(start, self._tz), elevation, image)
             image = self._hot.apply(image)
+        keep = not (mode is Mode.DAY and self._day_capture == "live")
         if focus:
             nid, name = night_id(start, self._tz), FOCUS_FRAME_NAME
         else:
             stored = self._store.save(image, start)
             nid, name = stored.night_id, stored.name
+            if self._ephemeral is not None:
+                self._store.remove(*self._ephemeral)  # `live`: only the newest stays
+                self._ephemeral = None
+            if not keep:
+                self._ephemeral = (nid, name)
         self._moon = (
             self._moon_mode
             and mode is Mode.NIGHT
@@ -147,7 +162,7 @@ class Runner:
             profile=self._profile,
             bad=None if focus else self._quality.judge(mean),
         )
-        if not focus:
+        if not focus and keep:
             self._store.append_index(info)
         if self._live is not None:
             self._live.publish(info, image, sharpness(image))
@@ -155,6 +170,12 @@ class Runner:
             for analyze in self._analyzers:
                 analyze(info, image)
         return info
+
+    def _mode_now(self) -> Mode:
+        """The mode for now, as `step` would pick it (SPEC §4.2)."""
+        elevation = sun_elevation(self._clock.now(), self._loc.lat, self._loc.lon)
+        self._mode = next_mode(self._mode, elevation, self._dn)
+        return self._mode
 
     def _mask_for(self, height: int, width: int) -> Mask | None:
         """Image-circle mask for the frame size, built once (SPEC §4.3: metering in the mask)."""
@@ -190,6 +211,9 @@ class Runner:
         while (frames is None or n < frames) and not self._stop.is_set():
             if self._live is not None and self._live.paused:
                 self._clock.sleep(PAUSE_POLL_S)  # SPEC §4.1: paused by the owner
+                continue
+            if self._day_capture == "off" and self._mode_now() is Mode.DAY:
+                self._clock.sleep(DAY_OFF_POLL_S)  # SPEC §4.1: nothing by day
                 continue
             try:
                 info = self.step()

@@ -272,6 +272,18 @@ def update_facts(
     }
 
 
+def forget_pixel_maps(calibration: Path) -> None:
+    """SPEC §4.1: after a change of flip or rotation the hot pixels, the sky mask (with the
+    drawn areas, which are fractions of the old picture) and the orientation are of the old
+    picture; they are learned again."""
+    for name in ("hotpixels.npz", "skymask.png", "skymask_edits.json", "orientation.json"):
+        try:
+            (calibration / name).unlink(missing_ok=True)
+        except OSError as exc:
+            log.warning("cannot remove %s: %s", name, exc)
+    log.info("flip or rotation changed: hot pixels, sky mask and orientation are learned again")
+
+
 def _exists(path: Path) -> bool:
     """Path.exists() raises on a directory this user may not read (other installations)."""
     try:
@@ -560,7 +572,11 @@ def main(argv: list[str] | None = None) -> int:
         if bad:
             return bad
         with settings_lock:
-            AgentSettings.load(settings_file).with_values(changes).save(settings_file)
+            before = AgentSettings.load(settings_file)
+            after = before.with_values(changes)
+            after.save(settings_file)
+        if (before.image_flip, before.image_rotate) != (after.image_flip, after.image_rotate):
+            forget_pixel_maps(Path(args.data) / "calibration")
         log.info("new settings from %s; restarting the capture", source)
         # Give the answer a moment to leave, then end run(): the service manager starts
         # the agent again, which reads the new settings.
@@ -1008,6 +1024,9 @@ def main(argv: list[str] | None = None) -> int:
             tuned.bad_frames, tuned.bad_dark_pct / 100.0, tuned.bad_bright_pct / 100.0
         ),
         moon_mode=tuned.moon_mode,
+        day_capture=tuned.day_capture,
+        flip=tuned.image_flip,
+        rotate=int(tuned.image_rotate),
     )
 
     def announce_products(night: str) -> None:

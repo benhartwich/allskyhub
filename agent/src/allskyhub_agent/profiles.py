@@ -55,7 +55,8 @@ def get_profile(profile_id: str) -> Profile:
 
 
 def with_night_limits(profile: Profile, s: AgentSettings) -> Profile:
-    """The profile with the night limits from the settings (roadmap L7), never beyond what
+    """The profile with the targets (SPEC §4.3) and the night limits from the settings
+    (roadmap L7), the limits never beyond what
     the profile allows (`night_cap_us`; an empty field keeps the profile's default); the
     auto exposure (SPEC §4.3) stays the only place that picks exposure and gain."""
     night = profile.exposure.night
@@ -66,5 +67,9 @@ def with_night_limits(profile: Profile, s: AgentSettings) -> Profile:
     max_gain = night.max_gain
     if s.night_max_gain is not None:
         max_gain = max(night.min_gain, min(max_gain, float(s.night_max_gain)))
-    night = replace(night, max_exposure_us=max_us, max_gain=max_gain)
-    return replace(profile, exposure=replace(profile.exposure, night=night))
+    night = replace(
+        night, max_exposure_us=max_us, max_gain=max_gain, target_mean=s.night_target_pct / 100.0
+    )
+    # SPEC §4.3: the owner's target brightness by day and at night.
+    day = replace(profile.exposure.day, target_mean=s.day_target_pct / 100.0)
+    return replace(profile, exposure=replace(profile.exposure, day=day, night=night))

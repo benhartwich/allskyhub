@@ -81,22 +81,23 @@ async def test_push_when_the_sky_turns_unsafe(
 
 
 def test_write_only_settings() -> None:
+    """SPEC §6.9 write_only; the key is made up (N.I.N.A. has no API key, SPEC §7.5)."""
     schema = [
         SettingSpec.model_validate({"key": "nina_url", "type": "string", "label": "N.I.N.A.",
                                     "group": "Sternwarte"}),
-        SettingSpec.model_validate({"key": "nina_api_key", "type": "string",
-                                    "label": "API-Key", "group": "Sternwarte",
+        SettingSpec.model_validate({"key": "example_token", "type": "string",
+                                    "label": "Zugangsschlüssel", "group": "Sternwarte",
                                     "nullable": True, "write_only": True}),
     ]  # fmt: skip
-    current: dict[str, Any] = {"nina_url": "http://192.168.1.30:1888", "nina_api_key_set": True}
+    current: dict[str, Any] = {"nina_url": "http://192.168.1.30:1888", "example_token_set": True}
     group = settings_form.groups(schema, current)[0]
     key = group.fields[1]
     assert key.is_set
     assert key.value == ""
     keep, error = settings_form.changes(schema, current, {"nina_url": current["nina_url"],
-                                                          "nina_api_key": ""})  # fmt: skip
+                                                          "example_token": ""})  # fmt: skip
     assert (keep, error) == ({}, None)
-    new, _ = settings_form.changes(schema, current, {"nina_api_key": "s3cret"})
-    assert new == {"nina_api_key": "s3cret"}
-    cleared, _ = settings_form.changes(schema, current, {"nina_api_key__clear": "1"})
-    assert cleared == {"nina_api_key": None}
+    new, _ = settings_form.changes(schema, current, {"example_token": "s3cret"})
+    assert new == {"example_token": "s3cret"}
+    cleared, _ = settings_form.changes(schema, current, {"example_token__clear": "1"})
+    assert cleared == {"example_token": None}

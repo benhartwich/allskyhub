@@ -503,6 +503,9 @@ class Watch:
         self._fetch = fetch
         self.tracks = Tracks()
         self._checked: dict[tuple[str, str], dt.datetime] = {}
+        # Meteors check_new has computed: a camera sends its backlog again after each
+        # reconnect, and a long event costs seconds of SGP4.
+        self._checked_new: dict[tuple[str, str], dt.datetime] = {}
         self._watched_until: dict[str, dt.datetime] = {}
         # Roadmap H6 (SPEC §7.9): set by the app; meteors are checked against both.
         self.satellites: SatelliteCatalogue | None = None
@@ -556,6 +559,8 @@ class Watch:
 
         for key in [k for k, t in self._checked.items() if t < now - KEEP]:
             del self._checked[key]
+        for key in [k for k, t in self._checked_new.items() if t < now - KEEP]:
+            del self._checked_new[key]
         changed: set[str] = set()
         async with self._maker() as db:
             rows = (
@@ -648,6 +653,10 @@ class Watch:
             if (event.data or {}).get("imported") or ends is None or place is None:
                 return False
             covered = self.tracks.covers(device_id, event.start - WINDOW, event.end + WINDOW)
+            key = (device_id, event_id)
+            if key in self._checked_new and not covered:
+                return False  # computed already; only new aircraft positions add to it
+            self._checked_new[key] = _now()
             found = await self._verdict(event, place, ends, with_aircraft=covered)
             if found is None or not await labels.set_auto(db, event, *found, _now()):
                 return False

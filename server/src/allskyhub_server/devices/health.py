@@ -50,6 +50,11 @@ def _when(value: object) -> dt.datetime | None:
         return None
 
 
+def paused(device: Device) -> bool:
+    """SPEC §4.1, §6.3 ``capture_paused``: the owner paused capture on the camera."""
+    return (device.last_status or {}).get("capture_paused") is True
+
+
 def check(device: Device, online: bool, now: dt.datetime) -> list[Problem]:
     problems: list[Problem] = []
     if not online:
@@ -65,7 +70,8 @@ def check(device: Device, online: bool, now: dt.datetime) -> list[Problem]:
               if isinstance(v, int | float)]  # fmt: skip
     stale = max(STALE_FRAMES, dt.timedelta(seconds=3 * max(delays, default=0)))
     captured = _when((device.last_frame or {}).get("captured_at"))
-    if captured is None or now - captured > stale:
+    # SPEC §4.1: the owner paused capture; missing pictures are expected then.
+    if not paused(device) and (captured is None or now - captured > stale):
         since = f" seit {_age(now - captured)}" if captured else ""
         problems.append(
             Problem("no_frames", "error", f"Verbunden, aber keine neuen Bilder{since}.")

@@ -50,6 +50,13 @@ def test_checks() -> None:
     problems = {p.key: p.level for p in health.check(bad, True, NOW)}
     assert problems == {"disk": "error", "sensor_hot": "warn", "cpu_hot": "warn",
                         "clock": "warn", "update": "warn"}  # fmt: skip
+    # SPEC §4.1: no pictures while the owner paused capture is not a problem.
+    stopped = _device(
+        last_status={"time_trusted": True, "capture_paused": True},
+        last_frame={"captured_at": (NOW - dt.timedelta(hours=2)).isoformat()},
+    )
+    assert health.check(stopped, True, NOW) == []
+    assert health.paused(stopped)
     # SPEC §6.3 alpaca_error: shown with the configured port; unknown values as they are.
     taken = _device(last_status={"alpaca_error": "port_in_use",
                                  "settings": {"alpaca_port": 11111}})  # fmt: skip

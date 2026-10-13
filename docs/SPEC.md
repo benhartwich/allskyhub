@@ -134,8 +134,8 @@ Frames are stored as JPEG under `<data>/images/<night-id>/` with a thumbnail. Th
 *night id* is the date of the evening the night started: frames before local noon
 belong to the previous day's id, so a whole night lands in one folder. Retention is
 by days (setting `keep_days`, §6.9, default 14, after the night products; an import of an
-existing installation raises it to that installation's retention and to the age of its
-oldest night) and by free disk space: every 10 minutes the oldest nights are removed until at least 10 % of the disk is free; the current night is never removed.
+existing installation raises it to that installation's retention (the longest, if it keeps
+images and products for different times) and to the age of its oldest night) and by free disk space: every 10 minutes the oldest nights are removed until at least 10 % of the disk is free; the current night is never removed.
 
 ### 4.6 Hot pixels
 
@@ -638,6 +638,10 @@ it announces each imported night once: its `products` and its `event`s (with
 through. Frames of imported nights stay on the camera (local UI, §7). The hub stores them
 like any other night (upsert per night and name or id) and never sends a push for an
 imported event.
+
+An import takes over one camera; if the other program's records hold several, the user
+picks one. A timelapse that is not H.264 MP4 (§5.2) is left out, not transcoded
+(Benjamin, 2026-10-13).
 
 ### 6.8 Public page
 

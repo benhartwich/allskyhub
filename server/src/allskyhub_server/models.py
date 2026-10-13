@@ -297,7 +297,12 @@ class EventRecord(Base):
     # The owner's verdict: "confirmed" or "false_positive" (e.g. "kein Meteor", an aircraft);
     # exported for tuning the detector.
     label: Mapped[str | None] = mapped_column(String(16))
+    # SPEC §6.4 Labels: why it is a false positive (aircraft, satellite, artifact, other);
+    # ``labelled_at`` is the label's `at` (also of a removal), the newer one wins.
+    label_reason: Mapped[str | None] = mapped_column(String(16))
     labelled_at: Mapped[dt.datetime | None] = mapped_column(_tz())
+    # Set on the hub and not yet acknowledged by the camera (`label_event`, SPEC §6.5).
+    label_pending: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
     # Roadmap H5: already posted to the owner's Discord channel.
     discord_posted: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
     # Retention counts from the first report (privacy policy).

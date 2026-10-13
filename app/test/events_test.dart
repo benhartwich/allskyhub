@@ -37,6 +37,7 @@ class FakeEventHub {
   int fullRequests = 0;
   final pages = <Map<String, String>>[];
   final labels = <String?>[];
+  final reasons = <String?>[];
 
   HubClient get client => HubClient(
     baseUrl: 'https://hub.example',
@@ -61,13 +62,15 @@ class FakeEventHub {
         );
       }
       if (path.endsWith('/label')) {
-        final label =
-            (jsonDecode(request.body) as Map<String, dynamic>)['label'];
+        final body = jsonDecode(request.body) as Map<String, dynamic>;
+        final label = body['label'];
         labels.add(label as String?);
+        reasons.add(body['reason'] as String?);
         return http.Response(
           jsonEncode({
             ...meteorJson('meteor-20261008T214512Z', '2026-10-08T21:45:12Z'),
             'label': label,
+            'label_reason': body['reason'],
           }),
           200,
         );
@@ -242,10 +245,16 @@ void main() {
       await tester.pumpAndSettle();
       await tester.tap(find.byKey(const Key('false-positive')));
       await tester.pumpAndSettle();
-      expect(find.text('Als „kein Meteor“ markiert.'), findsOneWidget);
+      await tester.tap(find.byKey(const Key('reason-aircraft')));
+      await tester.pumpAndSettle();
+      expect(
+        find.text('Als „kein Meteor“ markiert (Flugzeug).'),
+        findsOneWidget,
+      );
       await tester.tap(find.byKey(const Key('clear-label')));
       await tester.pumpAndSettle();
       expect(hub.labels, ['false_positive', null]);
+      expect(hub.reasons, ['aircraft', null]);
       expect(find.byKey(const Key('confirm')), findsOneWidget);
     },
   );

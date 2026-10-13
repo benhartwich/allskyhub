@@ -51,8 +51,8 @@ def _csv(header: list[str], rows: list[list[object]]) -> str:
 def meteors_csv(events: list[EventRecord], lat: float | None, lon: float | None) -> str:
     rows: list[list[object]] = []
     for e in sorted(events, key=lambda e: e.start):
-        if e.kind != "meteor":
-            continue
+        if e.kind != "meteor" or e.label == "false_positive":
+            continue  # SPEC §6.4 Labels: a false positive counts nowhere
         d: dict[str, Any] = e.data
         shower = d.get("shower")
         rows.append([

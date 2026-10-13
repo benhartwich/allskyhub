@@ -577,17 +577,24 @@ class _EventScreenState extends State<EventScreen> {
   bool _cancelled = false;
   String? _note;
   late String? _label = widget.event.label;
+  late String? _reason = widget.event.labelReason;
   bool _saving = false;
 
-  Future<void> _setLabel(String? label) async {
+  Future<void> _setLabel(String? label, {String? reason}) async {
     setState(() => _saving = true);
     try {
       final updated = await widget.client.labelEvent(
         widget.cameraId,
         widget.event,
         label,
+        reason: reason,
       );
-      if (mounted) setState(() => _label = updated.label);
+      if (mounted) {
+        setState(() {
+          _label = updated.label;
+          _reason = updated.labelReason;
+        });
+      }
     } on Exception {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -619,12 +626,26 @@ class _EventScreenState extends State<EventScreen> {
                     onPressed: _saving ? null : () => _setLabel('confirmed'),
                     child: const Text('Echt'),
                   ),
-                  OutlinedButton(
+                  PopupMenuButton<String>(
                     key: const Key('false-positive'),
-                    onPressed: _saving
-                        ? null
-                        : () => _setLabel('false_positive'),
-                    child: Text('Kein $title'),
+                    enabled: !_saving,
+                    tooltip: 'Kein $title, sondern …',
+                    onSelected: (reason) =>
+                        _setLabel('false_positive', reason: reason),
+                    itemBuilder: (_) => [
+                      for (final MapEntry(:key, :value) in labelReasons.entries)
+                        PopupMenuItem(
+                          key: Key('reason-$key'),
+                          value: key,
+                          child: Text(value),
+                        ),
+                    ],
+                    child: IgnorePointer(
+                      child: OutlinedButton(
+                        onPressed: _saving ? null : () {},
+                        child: Text('Kein $title …'),
+                      ),
+                    ),
                   ),
                 ],
               ),
@@ -635,7 +656,8 @@ class _EventScreenState extends State<EventScreen> {
               Expanded(
                 child: Text(
                   _label == 'false_positive'
-                      ? 'Als „kein $title“ markiert.'
+                      ? 'Als „kein $title“ markiert'
+                            '${labelReasons[_reason] == null ? '' : ' (${labelReasons[_reason]})'}.'
                       : 'Als echt bestätigt.',
                   style: const TextStyle(fontWeight: FontWeight.w600),
                 ),

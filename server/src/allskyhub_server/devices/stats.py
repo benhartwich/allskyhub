@@ -41,22 +41,28 @@ async def refresh(db: AsyncSession, now: dt.datetime) -> int:
     ).all()
     todo = [(d, n) for d, n in rows if n >= recent or (d, n) not in known]
     for device_id, night_id in todo:
-        s = await summarize(db, device_id, night_id)
-        values = {
-            "clear_hours": s.clear_hours,
-            "best_sqm": s.best_sqm,
-            "meteors": s.meteor_count,
-            "showers": s.showers,
-            "aurora": s.aurora,
-            "storms": s.storms,
-        }
-        await db.execute(
-            pg_insert(NightStat)
-            .values(device_id=device_id, night_id=night_id, **values)
-            .on_conflict_do_update(index_elements=["device_id", "night_id"], set_=values)
-        )
+        await refresh_night(db, device_id, night_id)
     await db.commit()
     return len(todo)
+
+
+async def refresh_night(db: AsyncSession, device_id: str, night_id: str) -> None:
+    """One night in numbers, again (also after a label changed, SPEC §6.4: a false
+    positive counts nowhere). The caller commits."""
+    s = await summarize(db, device_id, night_id)
+    values = {
+        "clear_hours": s.clear_hours,
+        "best_sqm": s.best_sqm,
+        "meteors": s.meteor_count,
+        "showers": s.showers,
+        "aurora": s.aurora,
+        "storms": s.storms,
+    }
+    await db.execute(
+        pg_insert(NightStat)
+        .values(device_id=device_id, night_id=night_id, **values)
+        .on_conflict_do_update(index_elements=["device_id", "night_id"], set_=values)
+    )
 
 
 @dataclass

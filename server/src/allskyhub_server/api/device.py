@@ -29,9 +29,11 @@ from allskyhub_protocol import (
     CloseCode,
     ErrorReply,
     Event,
+    EventLabel,
     FrameInfo,
     FrameVariant,
     Hello,
+    NightDeleted,
     ProductKind,
     Products,
     PublicState,
@@ -47,7 +49,14 @@ from allskyhub_protocol import (
 from allskyhub_server.auth import ratelimit
 from allskyhub_server.auth.accounts import DEFAULT_EVENT_KEEP_DAYS
 from allskyhub_server.auth.hub_keys import HubKeys
-from allskyhub_server.devices import local_access, meteor_pairs, pairing, public, settings_form
+from allskyhub_server.devices import (
+    labels,
+    local_access,
+    meteor_pairs,
+    pairing,
+    public,
+    settings_form,
+)
 from allskyhub_server.devices.connections import Connection, ConnectionRegistry
 from allskyhub_server.devices.discord import Discord
 from allskyhub_server.devices.events import image_rev
@@ -491,6 +500,8 @@ async def _handle(
         # SPEC §6.5 local_access: resend an unacknowledged verifier after every hello. In a
         # task: the reply arrives on this very connection.
         _background(local_access.deliver(maker, registry, conn.device_id))
+        # SPEC §6.4 Labels: labels set on the hub until the camera acknowledges them.
+        _background(labels.deliver(maker, registry, conn.device_id))
     elif isinstance(body, Status):
         before = await _safe(maker, conn.device_id)
         await _touch(maker, conn.device_id, last_status=body.model_dump(mode="json"))
@@ -507,6 +518,12 @@ async def _handle(
         await _on_products(body, conn, maker, registry)
     elif isinstance(body, Event):
         await _on_event(body, conn, maker, registry, notifier, store)
+    elif isinstance(body, EventLabel):
+        async with maker() as db:
+            await labels.from_device(db, conn.device_id, body)
+    elif isinstance(body, NightDeleted):
+        async with maker() as db:
+            await labels.delete_night(db, store, conn.device_id, body.night_id)
     elif isinstance(body, Ack | ErrorReply):
         registry.resolve(conn.device_id, body)
         if isinstance(body, ErrorReply):

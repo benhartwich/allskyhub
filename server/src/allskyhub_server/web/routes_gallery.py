@@ -16,6 +16,7 @@ from allskyhub_server.auth.sessions import SessionInfo
 from allskyhub_server.devices import (
     archive,
     events,
+    labels,
     meteor_pairs,
     public,
     queries,
@@ -284,6 +285,7 @@ async def event_page(
             "fireball": science.fireball_facts(event),
             "fireball_form": science.FIREBALL_FORM,
             "event_titles": EVENT_TITLES,
+            "label_reasons": labels.REASONS,
         },
         session=session,
     )
@@ -326,17 +328,24 @@ async def event_image(
 
 @router.post("/cameras/{device_id}/events/{night_id}/{event_id}/label")
 async def label_event(
+    request: Request,
     db: DbSession,
     session: CurrentSession,
     device_id: str,
     night_id: NightId,
     event_id: EventId,
     label: Annotated[str, Form()],
+    reason: Annotated[str, Form(max_length=16)] = "",
 ) -> Response:
-    """ "Kein Meteor" / "Echter Meteor" / reset; ``label`` "" clears it (owner, admin)."""
+    """ "Kein Meteor" (with a reason) / "Echt" / reset; ``label`` "" clears it (owner,
+    admin). The camera gets it too (SPEC §6.4 Labels)."""
     device = await _own(db, session, device_id, "admin")
-    await events.set_label(db, device.id, night_id, event_id, label or None)
+    # The reason buttons send "false_positive:<reason>".
+    label, _, picked = label.partition(":")
+    reason = picked or reason
+    await labels.set_on_hub(db, device.id, night_id, event_id, label or None, reason or None)
     await db.commit()
+    labels.deliver_later(request.app.state.sessionmaker, _registry(request), device.id)
     return RedirectResponse(f"/cameras/{device.id}/events/{night_id}/{event_id}", status_code=303)
 
 

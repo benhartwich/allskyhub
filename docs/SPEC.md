@@ -777,9 +777,10 @@ only 0 (other values `0x401`); `refresh` does nothing.
 Implementations are checked with ASCOM ConformU.
 
 **Relaying N.I.N.A.** With the settings `nina_url` (for example
-`http://192.168.1.30:1888`, empty = off) and `nina_api_key` (optional, `write_only`, §6.9), the agent reads the
+`http://192.168.1.30:1888`, empty = off) the agent reads the
 state of N.I.N.A.'s Advanced API plugin every 30 s on the local network and reports it as
-`status.observatory` (§6.3). It only reads; it never controls N.I.N.A. Target names and
+`status.observatory` (§6.3). It only reads; it never controls N.I.N.A. The Advanced API has no
+authentication, so there is no key setting (Benjamin, 2026-10-13). Target names and
 sequences can be private: the hub shows `observatory` to the owner and the camera's
 members, and on the public page only with the section `observatory` (§6.8, default
 false).

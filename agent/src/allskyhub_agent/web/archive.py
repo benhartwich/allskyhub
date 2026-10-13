@@ -7,25 +7,35 @@ sky log come from the data directory (SPEC §4.5, §5).
 from __future__ import annotations
 
 import re
-from datetime import datetime, timedelta
+from collections.abc import Callable
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 from allskyhub_agent.detect.events import EventStore
+from allskyhub_agent.detect.labels import Labels
 from allskyhub_agent.products.build import night_products, product_path
 from allskyhub_agent.products.day import MINI
 from allskyhub_agent.products.keolapse import keolapse
 from allskyhub_agent.store.images import ImageStore
-from allskyhub_protocol import FrameInfo
+from allskyhub_protocol import EventLabel, FrameInfo
 
 LOOP_WINDOW = timedelta(hours=1)
 MAX_FRAMES = 2000  # one night at 15 s pauses; the UI pages through more
 
 
 class LocalArchive:
-    def __init__(self, store: ImageStore, events: EventStore | None = None) -> None:
+    def __init__(
+        self,
+        store: ImageStore,
+        events: EventStore | None = None,
+        labels: Labels | None = None,
+        on_label: Callable[[EventLabel], None] | None = None,
+    ) -> None:
         self._store = store
         self._events = events
+        self._labels = labels
+        self._on_label = on_label
         self._root = store.images_dir.parent  # the data directory
 
     def nights(self) -> list[dict[str, Any]]:
@@ -35,6 +45,8 @@ class LocalArchive:
             good = [f for f in frames if f.bad is None] or frames
             products = night_products(self._store, night)
             events = self._events.night_events(night) if self._events is not None else []
+            # SPEC §6.4 Labels: false positives count nowhere.
+            fp: set[str] = self._labels.false_positives(night) if self._labels else set()
             if not frames and products is None and not events:
                 continue
             out.append(
@@ -48,7 +60,7 @@ class LocalArchive:
                     "products": [p.model_dump(mode="json") for p in products.products]
                     if products is not None
                     else [],
-                    "events": len(events),
+                    "events": sum(e.id not in fp for e in events),
                 }
             )
         return out
@@ -116,12 +128,40 @@ class LocalArchive:
             return []
         events = sorted(self._events.night_events(night), key=lambda e: e.start)
         frames = self._store.read_index(night)
+        labels = self._labels.night(night) if self._labels is not None else {}
         out: list[dict[str, Any]] = []
         for e in events:
             d = e.model_dump(mode="json")
             d["frame"] = _frame_of(frames, e.start)
+            lab = labels.get(e.id)
+            d["label"] = lab.label if lab is not None else None
+            d["reason"] = lab.reason if lab is not None else None
             out.append(d)
         return out
+
+    def set_label(self, night: str, event_id: str, body: object) -> EventLabel | None:
+        """The owner's label from the local UI (SPEC §6.4 Labels); None if the event is
+        unknown, ValueError if the body is not a label."""
+        if self._labels is None or self._events is None:
+            return None
+        if not any(e.id == event_id for e in self._events.night_events(night)):
+            return None
+        if not isinstance(body, dict):
+            raise ValueError("label")
+        raw = cast("dict[str, Any]", body)
+        label = EventLabel.model_validate(
+            {
+                "night_id": night,
+                "event_id": event_id,
+                "label": raw.get("label"),
+                "reason": raw.get("reason"),
+                "at": datetime.now(UTC),
+            }
+        )
+        self._labels.set(label)
+        if self._on_label is not None:
+            self._on_label(label)
+        return label
 
     def sky(self, night: str) -> list[dict[str, Any]]:
         return [m.model_dump(mode="json") for m in self._store.read_sky(night)]

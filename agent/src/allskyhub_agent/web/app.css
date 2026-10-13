@@ -122,3 +122,9 @@ button.chip:hover, button.chip:focus-visible { transform: none; filter: none; co
   border-radius: 6px; background: rgba(0, 0, 0, .6); color: #fff; font-variant-numeric: tabular-nums; pointer-events: none; }
 label.inline { display: inline-flex; align-items: center; gap: 6px; }
 label.inline input { width: auto; }
+/* SPEC §6.4 Labels */
+.label-chips { margin-top: 6px; }
+.label-chips button.chip { min-height: 28px; padding: 0 10px; font-size: 12px; }
+.label-chips button.chip[aria-pressed="true"] { border-color: var(--accent); background: rgba(127, 160, 255, .2); }
+.event.fp img { opacity: .5; }
+.badge.warn { color: var(--warn); border-color: var(--warn); }

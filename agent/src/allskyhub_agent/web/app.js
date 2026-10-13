@@ -488,36 +488,81 @@ function eventFacts(e) {
   return out.join(" · ");
 }
 
+// SPEC §6.4 Labels: the owner says what a detection really was; false positives are
+// hidden (never deleted) and the hub learns the same.
+const REASONS = { aircraft: "Flugzeug", satellite: "Satellit", artifact: "Artefakt", other: "Sonstiges" };
+function labelBadge(e) {
+  if (e.label === "confirmed") return '<span class="badge ok">bestätigt</span>';
+  if (e.label === "false_positive") return `<span class="badge warn">kein ${esc(KINDS[e.kind] || e.kind)}${e.reason ? ": " + esc(REASONS[e.reason] || e.reason) : ""}</span>`;
+  return "";
+}
+function labelButtons(e) {
+  const on = (l, r) => (e.label === l && (e.reason || null) === (r || null) ? ' aria-pressed="true"' : "");
+  return `<div class="chips label-chips" role="group" aria-label="Einordnen">
+    <button type="button" class="chip" data-l="confirmed"${on("confirmed")}>✓ ${esc(KINDS[e.kind] || e.kind)}</button>
+    ${Object.entries(REASONS).map(([r, t]) => `<button type="button" class="chip" data-l="false_positive" data-r="${r}"${on("false_positive", r)}>✕ ${t}</button>`).join("")}
+    ${e.label ? '<button type="button" class="chip" data-l="">zurücksetzen</button>' : ""}
+  </div>`;
+}
+
 async function viewEvents(night) {
   const picker = await nightPicker(night, "#ereignisse");
-  page.innerHTML = `<h1>Ereignisse</h1><div class="card stack">${picker.html}<ul class="events" id="events"><li class="muted">Lade …</li></ul></div>`;
+  page.innerHTML = `<h1>Ereignisse</h1><div class="card stack">${picker.html}
+    <ul class="events" id="events"><li class="muted">Lade …</li></ul>
+    <div class="actions"><button type="button" class="secondary small" id="showFp" hidden aria-pressed="false"></button></div></div>`;
   picker.bind();
   if (!picker.night) { $("events").innerHTML = `<li class="empty">Noch nichts erkannt.</li>`; return; }
   const events = await getJSON(`api/nights/${picker.night}/events`);
   if (!events.length) { $("events").innerHTML = `<li class="empty">In dieser Nacht nichts erkannt.</li>`; return; }
-  const pictures = events.filter((e) => e.has_image);
-  $("events").innerHTML = events.map((e) => `
-    <li class="event">
-      ${e.has_image ? `<img loading="lazy" alt="" data-i="${pictures.indexOf(e)}" src="files/${e.night_id}/events/${e.id}.jpg?thumb=1">` : "<span></span>"}
-      <div><b>${KINDS[e.kind] || esc(e.kind)}</b> <span class="muted">${fmtTime(e.start)}</span>
-        <p class="muted small">${eventFacts(e)}</p></div>
-    </li>`).join("");
-  // The detection's picture, and with one click the whole frame it was seen on.
-  const items = pictures.map((e) => {
-    const crop = `files/${e.night_id}/events/${e.id}.jpg`;
-    const full = e.frame ? fileUrl(e.night_id, e.frame, false) : null;
-    const caption = `${KINDS[e.kind] || e.kind} · ${fmtDateTime(e.start)}`;
-    return { src: crop, caption, actions: full ? [{ label: "Ganzes Bild", run: (it) => {
-      const whole = it.src !== full;
-      it.src = whole ? full : crop;
-      it.caption = whole ? `${caption} · ganzes Bild` : caption;
-      it.actions[0].label = whole ? "Ausschnitt" : "Ganzes Bild";
-      showLightbox();
-    } }] : null };
-  });
-  for (const img of $("events").querySelectorAll("img[data-i]")) {
-    img.onclick = () => lightbox(items, Number(img.dataset.i));
-  }
+  let showFp = false;
+  const render = () => {
+    const shown = events.filter((e) => showFp || e.label !== "false_positive");
+    const hidden = events.length - events.filter((e) => e.label !== "false_positive").length;
+    const fpBtn = $("showFp");
+    fpBtn.hidden = !hidden;
+    fpBtn.textContent = showFp ? "Fehlalarme ausblenden" : `${hidden} Fehlalarm${hidden === 1 ? "" : "e"} zeigen`;
+    if (!shown.length) { $("events").innerHTML = `<li class="empty">Nur Fehlalarme in dieser Nacht.</li>`; return; }
+    const pictures = shown.filter((e) => e.has_image);
+    $("events").innerHTML = shown.map((e) => `
+      <li class="event${e.label === "false_positive" ? " fp" : ""}" data-id="${esc(e.id)}">
+        ${e.has_image ? `<img loading="lazy" alt="" data-i="${pictures.indexOf(e)}" src="files/${e.night_id}/events/${e.id}.jpg?thumb=1">` : "<span></span>"}
+        <div><b>${KINDS[e.kind] || esc(e.kind)}</b> <span class="muted">${fmtTime(e.start)}</span> ${labelBadge(e)}
+          <p class="muted small">${eventFacts(e)}</p>
+          ${labelButtons(e)}</div>
+      </li>`).join("");
+    // The detection's picture, and with one click the whole frame it was seen on.
+    const items = pictures.map((e) => {
+      const crop = `files/${e.night_id}/events/${e.id}.jpg`;
+      const full = e.frame ? fileUrl(e.night_id, e.frame, false) : null;
+      const caption = `${KINDS[e.kind] || e.kind} · ${fmtDateTime(e.start)}`;
+      return { src: crop, caption, actions: full ? [{ label: "Ganzes Bild", run: (it) => {
+        const whole = it.src !== full;
+        it.src = whole ? full : crop;
+        it.caption = whole ? `${caption} · ganzes Bild` : caption;
+        it.actions[0].label = whole ? "Ausschnitt" : "Ganzes Bild";
+        showLightbox();
+      } }] : null };
+    });
+    for (const img of $("events").querySelectorAll("img[data-i]")) {
+      img.onclick = () => lightbox(items, Number(img.dataset.i));
+    }
+  };
+  $("events").onclick = async (ev) => {
+    const btn = ev.target.closest("button[data-l]");
+    if (!btn) return;
+    const li = btn.closest("li[data-id]");
+    const e = events.find((x) => x.id === li.dataset.id);
+    const body = { label: btn.dataset.l || null, reason: btn.dataset.r || null };
+    const r = await fetch(`api/nights/${e.night_id}/events/${encodeURIComponent(e.id)}/label`,
+      { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+    if (r.status === 401) { location.href = "local-login"; return; }
+    if (!r.ok) { alert("Nicht gespeichert."); return; }
+    e.label = body.label;
+    e.reason = body.reason;
+    render();
+  };
+  $("showFp").onclick = () => { showFp = !showFp; $("showFp").setAttribute("aria-pressed", String(showFp)); render(); };
+  render();
 }
 
 // --- Sky charts (L6) -------------------------------------------------------------------

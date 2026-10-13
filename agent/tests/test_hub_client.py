@@ -717,3 +717,60 @@ def test_imported_nights_are_announced_once(tmp_path: Path) -> None:
     sent = [b for b in bodies if isinstance(b, Event)]
     assert [(e.night_id, e.imported) for e in sent] == [(old, True)]
     assert backlog.next() is None
+
+
+def test_labels_both_ways(tmp_path: Path) -> None:
+    """SPEC §6.4 Labels: all labels again after hello; `label_event` from the hub."""
+    from allskyhub_protocol import EventLabel, NightDeleted
+
+    store, _, _ = _store_with_frame(tmp_path)
+    identity = DeviceIdentity.load_or_create(tmp_path / "device.key")
+    hub = FakeHub(register_unpaired=0, close_code=1000)
+    mine = EventLabel(night_id="20261006", event_id="meteor-20261006T213000Z",
+                      label="false_positive", reason="aircraft", at=TS)  # fmt: skip
+    theirs = {"night_id": "20261006", "event_id": "meteor-20261006T214000Z",
+              "label": "confirmed", "at": "2026-10-07T08:00:00Z"}  # fmt: skip
+    unknown = theirs | {"event_id": "meteor-20261006T220000Z"}
+    hub.commands = [
+        Command(name=CommandName.LABEL_EVENT, args=theirs),
+        Command(name=CommandName.LABEL_EVENT, args=unknown),
+        Command(name=CommandName.LABEL_EVENT, args={"label": "nonsense"}),
+    ]
+    stored: list[EventLabel] = []
+
+    def on_label(label: EventLabel) -> bool:
+        if label.event_id != theirs["event_id"]:
+            return False
+        stored.append(label)
+        return True
+
+    async def scenario() -> None:
+        async with serve(hub.ws_handler, "127.0.0.1", 0) as server:
+            port = server.sockets[0].getsockname()[1]
+            cfg = HubConfig(hub_url=f"http://127.0.0.1:{port}")
+            pairing = PairingState(identity.device_id, cfg.hub_url, "sim", "0.1.0")
+            async with httpx.AsyncClient(
+                transport=httpx.MockTransport(hub.handle), base_url=cfg.hub_url
+            ) as http:
+                session = HubSession(
+                    cfg, identity, pairing, store, LiveState(), "sim", "0.1.0",
+                    lambda: None, http, resend=lambda: [mine, NightDeleted(night_id="20261001")],
+                    on_label=on_label,
+                )  # fmt: skip
+                stop = asyncio.Event()
+                task = asyncio.create_task(session.run(stop))
+                await asyncio.wait_for(hub.done.wait(), 10)
+                stop.set()
+                await asyncio.wait_for(task, 10)
+
+    asyncio.run(scenario())
+    bodies = [e.body for e in hub.received]
+    assert mine in bodies
+    assert NightDeleted(night_id="20261001") in bodies
+    ok, missing, bad = hub.reply_order
+    assert isinstance(ok, Ack)
+    assert isinstance(missing, ErrorReply)
+    assert missing.code == "not_found"
+    assert isinstance(bad, ErrorReply)
+    assert bad.code == "invalid_args"
+    assert [s.label for s in stored] == ["confirmed"]

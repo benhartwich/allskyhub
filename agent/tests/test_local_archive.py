@@ -181,3 +181,40 @@ def test_events_name_their_frame(tmp_path: Path) -> None:
         )
     listed = LocalArchive(store, events).events(NIGHT)
     assert [e["frame"] for e in listed] == [infos[1].name, None]
+
+
+def test_labels(tmp_path: Path) -> None:
+    """SPEC §6.4 Labels: set in the UI, newer wins, false positives count nowhere."""
+    from allskyhub_agent.detect.labels import Labels
+    from allskyhub_protocol import Event, EventKind, EventLabel
+
+    store = ImageStore(tmp_path, TZ)
+    start = datetime(2026, 10, 12, 20, 0, tzinfo=UTC)
+    _fill(store, start, 2)
+    events = EventStore(store)
+    for eid in ("meteor-20261012T200000Z", "meteor-20261012T201000Z"):
+        at = datetime.strptime(eid[7:], "%Y%m%dT%H%M%SZ").replace(tzinfo=UTC)
+        events._append(  # pyright: ignore[reportPrivateUsage]
+            Event(id=eid, night_id=NIGHT, kind=EventKind.METEOR, start=at, end=at, confidence=0.9)
+        )
+    labels = Labels(store)
+    sent: list[EventLabel] = []
+    archive = LocalArchive(store, events, labels, on_label=sent.append)
+    assert archive.nights()[0]["events"] == 2
+    lab = archive.set_label(NIGHT, "meteor-20261012T200000Z",
+                            {"label": "false_positive", "reason": "satellite"})  # fmt: skip
+    assert lab is not None
+    assert sent == [lab]
+    assert archive.nights()[0]["events"] == 1
+    listed = {e["id"]: e for e in archive.events(NIGHT)}
+    assert listed["meteor-20261012T200000Z"]["reason"] == "satellite"
+    assert listed["meteor-20261012T201000Z"]["label"] is None
+    assert archive.set_label(NIGHT, "meteor-20261012T235900Z", {"label": "confirmed"}) is None
+    with pytest.raises(ValueError):  # noqa: PT011 - pydantic's ValidationError
+        archive.set_label(NIGHT, "meteor-20261012T201000Z", {"label": "confirmed", "reason": "x"})
+    # An older label from the hub does not win over the newer one set here.
+    old = lab.model_copy(update={"label": "confirmed", "reason": None,
+                                 "at": lab.at - timedelta(hours=1)})  # fmt: skip
+    assert not labels.set(old)
+    assert labels.false_positives(NIGHT) == {"meteor-20261012T200000Z"}
+    assert len(labels.all()) == 1

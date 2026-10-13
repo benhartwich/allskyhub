@@ -1,3 +1,5 @@
+import java.io.File
+
 plugins {
     id("com.android.application")
     // The Flutter Gradle Plugin must be applied after the Android and Kotlin Gradle plugins.
@@ -23,13 +25,34 @@ android {
         targetSdk = flutter.targetSdkVersion
         versionCode = flutter.versionCode
         versionName = flutter.versionName
+        manifestPlaceholders["appLabel"] = "allskyhub"
+    }
+
+    // Release key from the environment: Codemagic's android_signing (CM_*) for the stores,
+    // the hub server's test key for test builds (deploy/android/README.md). Without one,
+    // the debug key, so `flutter run --release` works.
+    val keystore = System.getenv("ALLSKYHUB_KEYSTORE") ?: System.getenv("CM_KEYSTORE_PATH")
+    signingConfigs {
+        if (keystore != null) {
+            create("release") {
+                storeFile = File(keystore)
+                storePassword = System.getenv("ALLSKYHUB_KEYSTORE_PASSWORD")
+                    ?: System.getenv("CM_KEYSTORE_PASSWORD")
+                keyAlias = System.getenv("ALLSKYHUB_KEY_ALIAS") ?: System.getenv("CM_KEY_ALIAS")
+                keyPassword = System.getenv("ALLSKYHUB_KEY_PASSWORD")
+                    ?: System.getenv("CM_KEY_PASSWORD")
+            }
+        }
     }
 
     buildTypes {
         release {
-            // TODO: Add your own signing config for the release build.
-            // Signing with the debug keys for now, so `flutter run --release` works.
-            signingConfig = signingConfigs.getByName("debug")
+            signingConfig = signingConfigs.findByName("release") ?: signingConfigs.getByName("debug")
+            // Test builds from the hub server sit next to the store app.
+            if (System.getenv("ALLSKYHUB_CHANNEL") == "test") {
+                applicationIdSuffix = ".test"
+                manifestPlaceholders["appLabel"] = "allskyhub Test"
+            }
         }
     }
 }

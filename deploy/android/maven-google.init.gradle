@@ -1,0 +1,19 @@
+// Google's Maven repository through maven-google-proxy.py (deploy/android/README.md):
+// from the hub's server dl.google.com does not answer HTTP/1.1, which Gradle speaks.
+def proxy = System.getenv("ALLSKYHUB_MAVEN_GOOGLE")
+if (proxy) {
+    def redirect = { RepositoryHandler repos ->
+        repos.withType(MavenArtifactRepository).configureEach { repo ->
+            def url = repo.url.toString()
+            if (url.startsWith("https://dl.google.com/dl/android/maven2") || url.contains("maven.google.com")) {
+                repo.url = proxy
+                repo.allowInsecureProtocol = true
+            }
+        }
+    }
+    beforeSettings { settings ->
+        redirect(settings.pluginManagement.repositories)
+        redirect(settings.dependencyResolutionManagement.repositories)
+        settings.gradle.beforeProject { project -> redirect(project.repositories) }
+    }
+}

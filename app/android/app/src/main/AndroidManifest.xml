@@ -7,7 +7,7 @@
     <!-- SPEC §7.1: the camera's coarse location (about 1 km) during setup. -->
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION"/>
     <application
-        android:label="allskyhub"
+        android:label="${appLabel}"
         android:networkSecurityConfig="@xml/network_security_config"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher">

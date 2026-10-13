@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../api/discovery.dart';
 import '../api/hub_client.dart';
 import '../api/setup_mode.dart';
+import '../api/test_update.dart';
 import '../platform/location.dart';
 import '../platform/wifi_binding.dart';
 import 'account_screen.dart';
@@ -29,6 +31,25 @@ class CamerasScreen extends StatefulWidget {
 
 class _CamerasScreenState extends State<CamerasScreen> {
   late Future<List<Camera>> _cameras = widget.client.cameras();
+  TestBuild? _update;
+
+  @override
+  void initState() {
+    super.initState();
+    if (testChannel) _checkUpdate();
+  }
+
+  /// A test build from the hub's server offers the newer one (deploy/android).
+  Future<void> _checkUpdate() async {
+    try {
+      final build = await widget.client.testBuild();
+      if (build != null && build.newerThan(appBuild) && mounted) {
+        setState(() => _update = build);
+      }
+    } on Object {
+      // Offline or an older hub: no hint.
+    }
+  }
 
   Future<void> _reload() async {
     final next = widget.client.cameras();
@@ -114,44 +135,53 @@ class _CamerasScreenState extends State<CamerasScreen> {
         icon: const Icon(Icons.add),
         label: const Text('Kamera koppeln'),
       ),
-      body: RefreshIndicator(
-        onRefresh: _reload,
-        child: FutureBuilder<List<Camera>>(
-          future: _cameras,
-          builder: (context, snapshot) {
-            if (snapshot.hasError) {
-              final error = snapshot.error;
-              if (error is HubException && error.unauthorized) {
-                WidgetsBinding.instance.addPostFrameCallback(
-                  (_) => widget.onSignOut(),
-                );
-              }
-              return _Message(
-                'Kameras konnten nicht geladen werden.',
-                onRetry: _reload,
+      body: Column(
+        children: [
+          if (_update case final update?) _UpdateBanner(update: update),
+          Expanded(child: _list()),
+        ],
+      ),
+    );
+  }
+
+  Widget _list() {
+    return RefreshIndicator(
+      onRefresh: _reload,
+      child: FutureBuilder<List<Camera>>(
+        future: _cameras,
+        builder: (context, snapshot) {
+          if (snapshot.hasError) {
+            final error = snapshot.error;
+            if (error is HubException && error.unauthorized) {
+              WidgetsBinding.instance.addPostFrameCallback(
+                (_) => widget.onSignOut(),
               );
             }
-            final cameras = snapshot.data;
-            if (cameras == null) {
-              return const Center(child: CircularProgressIndicator());
-            }
-            if (cameras.isEmpty) {
-              return const _Message(
-                'Noch keine Kamera gekoppelt. Schalte deine Kamera ein und tippe auf „Kamera koppeln“.',
-              );
-            }
-            return ListView.separated(
-              padding: const EdgeInsets.fromLTRB(16, 16, 16, 96),
-              itemCount: cameras.length,
-              separatorBuilder: (_, _) => const SizedBox(height: 12),
-              itemBuilder: (context, i) => _CameraCard(
-                client: widget.client,
-                camera: cameras[i],
-                onChanged: _reload,
-              ),
+            return _Message(
+              'Kameras konnten nicht geladen werden.',
+              onRetry: _reload,
             );
-          },
-        ),
+          }
+          final cameras = snapshot.data;
+          if (cameras == null) {
+            return const Center(child: CircularProgressIndicator());
+          }
+          if (cameras.isEmpty) {
+            return const _Message(
+              'Noch keine Kamera gekoppelt. Schalte deine Kamera ein und tippe auf „Kamera koppeln“.',
+            );
+          }
+          return ListView.separated(
+            padding: const EdgeInsets.fromLTRB(16, 16, 16, 96),
+            itemCount: cameras.length,
+            separatorBuilder: (_, _) => const SizedBox(height: 12),
+            itemBuilder: (context, i) => _CameraCard(
+              client: widget.client,
+              camera: cameras[i],
+              onChanged: _reload,
+            ),
+          );
+        },
       ),
     );
   }
@@ -272,3 +302,32 @@ class _Message extends StatelessWidget {
 }
 
 enum _PairWay { setupMode, lan, code }
+
+class _UpdateBanner extends StatelessWidget {
+  const _UpdateBanner({required this.update});
+
+  final TestBuild update;
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      key: const Key('test-update'),
+      margin: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+      child: ListTile(
+        leading: Icon(
+          Icons.system_update,
+          color: Theme.of(context).colorScheme.tertiary,
+        ),
+        title: Text('Neue Testversion: Build ${update.build}'),
+        subtitle: const Text(
+          'Lädt die App im Browser; danach „Installieren“ antippen.',
+        ),
+        trailing: FilledButton(
+          onPressed: () =>
+              launchUrl(update.apk, mode: LaunchMode.externalApplication),
+          child: const Text('Laden'),
+        ),
+      ),
+    );
+  }
+}

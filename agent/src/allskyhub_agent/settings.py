@@ -29,7 +29,10 @@ _PRODUCT_SWITCHES = (
     "alpaca_enabled",
     "bad_frames",
     "moon_mode",
+    "mqtt_tls",
 )
+# MQTT (SPEC §7.7, roadmap L23): free text, checked by `valid_mqtt`.
+_MQTT_STRINGS = ("mqtt_host", "mqtt_user", "mqtt_prefix")
 # Whole numbers the schema bounds (settings_schema.py); load() and with_values() keep them.
 _INT_RANGES = {
     "keep_days": (1, 3650),
@@ -39,6 +42,7 @@ _INT_RANGES = {
     "safe_hold_min": (0, 120),
     "bad_dark_pct": (0, 20),
     "bad_bright_pct": (50, 100),
+    "mqtt_port": (1, 65535),
 }
 
 
@@ -49,6 +53,22 @@ def valid_nina_url(url: str) -> bool:
         return True
     head, sep, rest = u.partition("://")
     return sep == "://" and head in ("http", "https") and bool(rest.split("/", 1)[0])
+
+
+def valid_mqtt(key: str, value: str) -> bool:
+    """SPEC §7.7: a host name or address without scheme, a topic prefix without MQTT
+    wildcards; the user is free text."""
+    v = value.strip()
+    if key == "mqtt_host":
+        return v == "" or ("://" not in v and " " not in v and "/" not in v and len(v) <= 253)
+    if key == "mqtt_prefix":
+        return (
+            0 < len(v) <= 40
+            and not any(c in v for c in "#+ \0")
+            and not v.startswith("/")
+            and not v.endswith("/")
+        )
+    return len(v) <= 100
 
 
 def valid_timezone(name: str) -> bool:
@@ -103,6 +123,13 @@ class AgentSettings:
     safe_cloud_max: int = 30  # %
     safe_hold_min: int = 10
     nina_url: str = ""  # N.I.N.A.'s Advanced API, e.g. http://192.168.1.30:1888; "" = off
+    # MQTT for home automation (SPEC §7.7, roadmap L23); "" = off.
+    mqtt_host: str = ""
+    mqtt_port: int = 1883
+    mqtt_tls: bool = False
+    mqtt_user: str = ""
+    mqtt_password: str | None = None  # write_only (SPEC §6.9)
+    mqtt_prefix: str = "allskyhub"
 
     @property
     def has_location(self) -> bool:
@@ -174,6 +201,12 @@ class AgentSettings:
             later["timelapse_quality"] = d["timelapse_quality"]
         if isinstance(d.get("nina_url"), str):
             later["nina_url"] = d["nina_url"]
+        for k in _MQTT_STRINGS:
+            v = d.get(k)
+            if isinstance(v, str) and valid_mqtt(k, v):
+                later[k] = v
+        if isinstance(d.get("mqtt_password"), str):
+            later["mqtt_password"] = d["mqtt_password"]
         location_ok = (
             isinstance(lat, int | float)
             and isinstance(lon, int | float)
@@ -226,12 +259,23 @@ class AgentSettings:
             extra["timelapse_quality"] = values["timelapse_quality"]
         if isinstance(values.get("nina_url"), str) and valid_nina_url(values["nina_url"]):
             extra["nina_url"] = values["nina_url"].strip()
+        for k in _MQTT_STRINGS:
+            v = values.get(k)
+            if isinstance(v, str) and valid_mqtt(k, v):
+                extra[k] = v.strip()
+        if "mqtt_password" in values:
+            pw = values["mqtt_password"]
+            if pw is None or (isinstance(pw, str) and pw):
+                extra["mqtt_password"] = pw  # None deletes, "" keeps (SPEC §6.9)
         return replace(s, **extra)
 
     def save(self, path: Path) -> None:
         path.parent.mkdir(parents=True, exist_ok=True)
         tmp = path.with_suffix(".tmp")
-        with tmp.open("w") as f:
+        # Only the agent may read it: it can hold the MQTT password (SPEC §7.7).
+        fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+        os.fchmod(fd, 0o600)
+        with os.fdopen(fd, "w") as f:
             json.dump(asdict(self), f)
             f.flush()
             os.fsync(f.fileno())

@@ -51,6 +51,7 @@ from allskyhub_agent.hub.public import PublicPage
 from allskyhub_agent.importer.allsky import AllskyImporter, AllskySettings
 from allskyhub_agent.importer.backlog import BACKLOG_NAME, Backlog
 from allskyhub_agent.live import LiveState
+from allskyhub_agent.mqtt import MqttConfig, MqttPublisher
 from allskyhub_agent.process.hotpixels import HotPixels
 from allskyhub_agent.process.skymask import SkyMask, parse_edits
 from allskyhub_agent.products.build import (
@@ -663,7 +664,7 @@ def main(argv: list[str] | None = None) -> int:
 
     def restore_backup(values: dict[str, Any], edits: dict[str, Any] | None) -> list[str]:
         """Roadmap L15: a backup's settings (only the keys this camera has) and drawn areas."""
-        known = set(settings_values())
+        known = settings_schema.keys(current_schema())
         bad = [] if edits is None or parse_edits(edits) is not None else ["skymask_edits"]
         if bad:
             return bad
@@ -832,9 +833,46 @@ def main(argv: list[str] | None = None) -> int:
         SafetyConfig(tuned.safe_cloud_max / 100.0, timedelta(minutes=tuned.safe_hold_min))
     )
 
+    # SPEC §7.7: MQTT for home automation (roadmap L23), only publishing.
+    mqtt: MqttPublisher | None = None
+    if tuned.mqtt_host:
+        mqtt_id = identity.device_id if identity is not None else socket.gethostname()
+        mqtt = MqttPublisher(
+            MqttConfig(tuned.mqtt_host, tuned.mqtt_port, tuned.mqtt_tls, tuned.mqtt_user,
+                       tuned.mqtt_password, tuned.mqtt_prefix),
+            mqtt_id,
+            f"allskyhub {mqtt_id[:8]}",
+            profile.id,
+            __version__,
+        )  # fmt: skip
+        mqtt.start()
+
+    def mqtt_state(f: FrameInfo) -> None:
+        if mqtt is None:
+            return
+        sky = sky_meter.latest
+        cover = sky.cloud_cover if sky is not None else None
+        mqtt.state(
+            {
+                "at": f.captured_at.isoformat(),
+                "mode": f.mode.value,
+                "exposure_us": f.exposure_us,
+                "gain": f.gain,
+                "mean": f.mean,
+                "sensor_temp_c": f.sensor_temp_c,
+                "cpu_temp_c": system.cpu_temp_c(),
+                "cloud_cover": None if cover is None else round(cover * 100, 1),
+                "sqm_mag": sky.sqm_mag if sky is not None else None,
+                "stars": sky.stars if sky is not None else None,
+                "safe": safety.is_safe(datetime.now(UTC)) if tuned.alpaca_enabled else None,
+            }
+        )
+
     def event_out(event: Event) -> None:
         if event.kind is EventKind.LIGHTNING:
             safety.lightning(event.start)
+        if mqtt is not None:
+            mqtt.event(event)
         if hub is not None:
             hub.notify_event(event)
 
@@ -944,6 +982,7 @@ def main(argv: list[str] | None = None) -> int:
 
     def show(f: FrameInfo) -> None:
         products.on_frame(f)
+        mqtt_state(f)
         if hub is not None:
             hub.notify_frame(f)
         local = f.captured_at.astimezone(tz).strftime("%Y-%m-%d %H:%M:%S")
@@ -965,6 +1004,8 @@ def main(argv: list[str] | None = None) -> int:
         camera.close()
         products.stop()
         mini.stop()
+        if mqtt is not None:
+            mqtt.stop()
         detect.stop()
         shutdown()
     return 0

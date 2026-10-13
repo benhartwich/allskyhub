@@ -171,6 +171,9 @@ class EventItem(BaseModel):
     # why: "aircraft", "satellite", "artifact" or "other" (SPEC §6.4 Labels).
     label: str | None = None
     label_reason: str | None = None
+    # SPEC §6.4, §7.8: set by a matcher, and what it found ("DLH4AB 3c6444").
+    label_auto: bool = False
+    label_detail: str | None = None
     # SPEC §6.4: revision of the picture; put it into image URLs (``v``) so caches renew.
     image_rev: int = 1
 
@@ -195,6 +198,8 @@ def _event(e: EventRecord) -> EventItem:
         data=e.data,
         label=e.label,
         label_reason=e.label_reason,
+        label_auto=e.label_auto,
+        label_detail=e.label_detail,
         image_rev=events.image_rev(e.data),
     )
 

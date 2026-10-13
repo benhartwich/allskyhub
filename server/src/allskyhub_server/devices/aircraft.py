@@ -29,7 +29,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from allskyhub_server.devices.connections import ConnectionRegistry
-from allskyhub_server.models import Device
+from allskyhub_server.models import Device, EventRecord
 
 log = logging.getLogger(__name__)
 
@@ -397,8 +397,9 @@ class Area:
 
 
 def areas(cameras: list[tuple[str, float, float]]) -> list[Area]:
-    """Cameras within ``RADIUS_KM`` of a group's first camera share its request, whose
-    radius covers ``RADIUS_KM`` around each of them."""
+    """Cameras within ``RADIUS_KM`` of a group's centre share its request, whose radius
+    covers ``RADIUS_KM`` around each of them. The centre is rounded to 0.1° (about
+    10 km), so adsb.lol never learns where exactly a camera stands."""
     groups: list[tuple[float, float, list[tuple[str, float]]]] = []
     for device_id, lat, lon in cameras:
         for g_lat, g_lon, members in groups:
@@ -407,7 +408,8 @@ def areas(cameras: list[tuple[str, float, float]]) -> list[Area]:
                 members.append((device_id, d))
                 break
         else:
-            groups.append((lat, lon, [(device_id, 0.0)]))
+            c_lat, c_lon = round(lat, 1), round(lon, 1)
+            groups.append((c_lat, c_lon, [(device_id, _km(c_lat, c_lon, lat, lon))]))
     return [
         Area(
             g_lat,
@@ -454,6 +456,29 @@ def wants_aircraft(
     return None
 
 
+CHECK_AFTER = dt.timedelta(seconds=60)
+WATCH_HOLD = dt.timedelta(minutes=2)
+GIVE_UP = dt.timedelta(minutes=3)
+
+
+def _track_ends(data: dict[str, Any]) -> tuple[tuple[float, float], tuple[float, float]] | None:
+    """SPEC §6.4: the meteor's track ends (altitude, azimuth); None without them."""
+    keys = ("start_altitude_deg", "start_azimuth_deg", "end_altitude_deg", "end_azimuth_deg")
+    values = [data.get(k) for k in keys]
+    if not all(isinstance(v, int | float) for v in values):
+        return None
+    a, b, c, d = (float(v) for v in values)  # pyright: ignore[reportArgumentType]
+    return (a, b), (c, d)
+
+
+def _place(status: dict[str, Any] | None) -> tuple[float, float] | None:
+    settings: dict[str, Any] = (status or {}).get("settings") or {}
+    lat, lon = settings.get("latitude"), settings.get("longitude")
+    if not isinstance(lat, int | float) or not isinstance(lon, int | float):
+        return None
+    return float(lat), float(lon)
+
+
 def _now() -> dt.datetime:
     return dt.datetime.now(dt.UTC)
 
@@ -474,8 +499,21 @@ class Watch:
         self._registry = registry
         self._fetch = fetch
         self.tracks = Tracks()
+        self._checked: dict[tuple[str, str], dt.datetime] = {}
+        self._watched_until: dict[str, dt.datetime] = {}
         global current  # the templates draw from the app's one Watch
         current = self
+
+    def watched(self, device_id: str) -> None:
+        """A public page shows the camera's live image (the owner's page marks the
+        registry's live view instead, which also fetches every frame)."""
+        self._watched_until[device_id] = _now() + WATCH_HOLD
+
+    def _is_watched(self, device_id: str, now: dt.datetime) -> bool:
+        if self._registry.is_live(device_id):
+            return True
+        until = self._watched_until.get(device_id)
+        return until is not None and until > now
 
     async def round(self, now: dt.datetime) -> None:
         if self._fetch is None:
@@ -489,17 +527,79 @@ class Watch:
             ).all()
         wanted: list[tuple[str, float, float]] = []
         for device_id, status in rows:
-            place = wants_aircraft(status, self._registry.is_live(device_id), now)
+            place = wants_aircraft(status, self._is_watched(device_id, now), now)
             if place is not None:
                 wanted.append((device_id, *place))
         if wanted:
             await fetch_areas(self.tracks, self._fetch, wanted, now)
+
+    def receive(self, device_id: str, at: dt.datetime, positions: Iterable[Any]) -> None:
+        """SPEC §6.3 ``aircraft`` from the camera's own receiver."""
+        for p in positions:
+            fix = Fix(
+                at - dt.timedelta(seconds=p.seen_s), p.lat, p.lon, p.alt_m, p.track_deg,
+                p.speed_kn, p.flight,
+            )  # fmt: skip
+            self.tracks.add("receiver", p.hex, fix)
+        self.tracks.covered(device_id, at)
+
+    async def check_meteors(self, now: dt.datetime) -> set[str]:
+        """SPEC §7.8: every unlabelled, not imported meteor whose window the kept positions
+        cover, once ``end + 60 s`` has passed; a match is an automatic false positive.
+        Returns the cameras whose labels changed."""
+        from allskyhub_server.devices import labels
+
+        for key in [k for k, t in self._checked.items() if t < now - KEEP]:
+            del self._checked[key]
+        changed: set[str] = set()
+        async with self._maker() as db:
+            rows = (
+                await db.execute(
+                    select(EventRecord, Device.last_status)
+                    .join(Device, Device.id == EventRecord.device_id)
+                    .where(
+                        EventRecord.kind == "meteor",
+                        EventRecord.labelled_at.is_(None),
+                        EventRecord.end <= now - CHECK_AFTER,
+                        EventRecord.end >= now - KEEP + WINDOW,
+                    )
+                )
+            ).all()
+            for event, status in rows:
+                key = (event.device_id, event.event_id)
+                if key in self._checked:
+                    continue
+                window = (event.start - WINDOW, event.end + WINDOW)
+                ends = _track_ends(event.data or {})
+                place = _place(status)
+                if (event.data or {}).get("imported") or ends is None or place is None:
+                    self._checked[key] = now
+                    continue
+                if not self.tracks.covers(event.device_id, *window):
+                    if now - event.end > GIVE_UP:  # no positions came for it
+                        self._checked[key] = now
+                    continue
+                self._checked[key] = now
+                plane = match(self.tracks, *place, event.start, event.end, ends)
+                if plane is not None and await labels.set_auto(
+                    db, event, "aircraft", plane.detail, now
+                ):
+                    log.info(
+                        "meteor is an aircraft",
+                        extra={"device_id": event.device_id, "event": event.event_id},
+                    )
+                    changed.add(event.device_id)
+            await db.commit()
+        for device_id in changed:
+            labels.deliver_later(self._maker, self._registry, device_id)
+        return changed
 
     async def run_forever(self) -> None:
         while True:
             started = _now()
             try:
                 await self.round(started)
+                await self.check_meteors(started)
             except Exception:  # never let one bad round end the loop
                 log.exception("aircraft round failed")
             await asyncio.sleep(max(0.0, (started + FETCH_EVERY - _now()).total_seconds()))

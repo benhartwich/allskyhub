@@ -306,6 +306,9 @@ class EventRecord(Base):
     labelled_at: Mapped[dt.datetime | None] = mapped_column(_tz())
     # Set on the hub and not yet acknowledged by the camera (`label_event`, SPEC §6.5).
     label_pending: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
+    # SPEC §6.4: set by a matcher (aircraft, §7.8), never over a label, and what it found.
+    label_auto: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
+    label_detail: Mapped[str | None] = mapped_column(String(100))
     # Roadmap H5: already posted to the owner's Discord channel.
     discord_posted: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
     # Retention counts from the first report (privacy policy).

@@ -70,22 +70,59 @@ async def set_on_hub(
     event.label = label
     event.label_reason = reason
     event.labelled_at = dt.datetime.now(dt.UTC)
+    event.label_auto = False
+    event.label_detail = None
     event.label_pending = True
     await stats.refresh_night(db, device_id, night_id)
     await db.flush()
     return event
 
 
+def stored(event: EventRecord) -> EventLabel | None:
+    """The event's label as the protocol has it, None if it never had one."""
+    if event.labelled_at is None:
+        return None
+    return EventLabel(
+        night_id=event.night_id,
+        event_id=event.event_id,
+        label=event.label,  # pyright: ignore[reportArgumentType]
+        reason=event.label_reason,  # pyright: ignore[reportArgumentType]
+        at=event.labelled_at,
+        auto=event.label_auto,
+        detail=event.label_detail if event.label_auto else None,
+    )
+
+
+async def set_auto(
+    db: AsyncSession, event: EventRecord, reason: str, detail: str, at: dt.datetime
+) -> bool:
+    """SPEC §6.4, §7.8: an automatic false positive, only where there was never a label
+    (an owner's removal stays). The camera gets it with ``deliver``. The caller commits."""
+    if event.labelled_at is not None:
+        return False
+    event.label = "false_positive"
+    event.label_reason = reason
+    event.labelled_at = at
+    event.label_auto = True
+    event.label_detail = detail[:100]
+    event.label_pending = True
+    await stats.refresh_night(db, event.device_id, event.night_id)
+    return True
+
+
 async def from_device(db: AsyncSession, device_id: str, body: EventLabel) -> bool:
-    """`event_label` from the camera: taken unless the hub has a newer one. Commits."""
+    """`event_label` from the camera: taken if it wins over the stored one
+    (``EventLabel.replaces``, the same rule on both sides). Commits."""
     event = await _event(db, device_id, body.night_id, body.event_id)
     if event is None:
         return False
-    if event.labelled_at is not None and event.labelled_at >= body.at:
-        return False  # ours is newer (and still on its way to the camera) or the same
+    if not body.replaces(stored(event)):
+        return False
     event.label = body.label
     event.label_reason = body.reason
     event.labelled_at = body.at
+    event.label_auto = body.auto
+    event.label_detail = body.detail
     event.label_pending = False
     await stats.refresh_night(db, device_id, body.night_id)
     await db.commit()
@@ -109,13 +146,11 @@ async def deliver(
         done = 0
         for event in pending:
             sent_at = event.labelled_at
-            args = EventLabel(
-                night_id=event.night_id,
-                event_id=event.event_id,
-                label=event.label,  # pyright: ignore[reportArgumentType]
-                reason=event.label_reason,  # pyright: ignore[reportArgumentType]
-                at=sent_at or dt.datetime.now(dt.UTC),
-            )
+            args = stored(event)
+            if args is None:  # pending without a label: never set that way
+                event.label_pending = False
+                await db.commit()
+                continue
             cmd = Command(
                 name=CommandName.LABEL_EVENT,
                 args=args.model_dump(mode="json"),

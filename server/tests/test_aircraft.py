@@ -9,7 +9,7 @@ import httpx
 from fastapi import FastAPI
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
-from allskyhub_server.devices import aircraft
+from allskyhub_server.devices import aircraft, public
 from allskyhub_server.devices.aircraft import Fix, Tracks
 from allskyhub_server.models import Device
 from tests.fake_device import FakeDevice
@@ -132,7 +132,8 @@ def test_cameras_nearby_share_a_request() -> None:
     found = aircraft.areas([("a", 48.14, 14.39), ("b", 48.3, 14.3), ("c", 52.5, 13.4)])
     assert [a.devices for a in found] == [("a", "b"), ("c",)]
     assert found[0].nm > aircraft.RADIUS_KM / 1.852
-    assert found[1].nm == round(aircraft.RADIUS_KM / 1.852 + 0.5)
+    assert (found[0].lat, found[0].lon) == (48.1, 14.4)  # never the exact place
+    assert found[1].nm <= round(aircraft.RADIUS_KM / 1.852) + 6
 
 
 def test_who_needs_aircraft() -> None:
@@ -187,3 +188,23 @@ async def test_camera_page_has_the_switch(app: FastAPI, client: httpx.AsyncClien
     assert 'data-overlay-toggle="air"' in page
     assert "DLH4AB · 10,0 km" in page
     assert "adsb.lol (ODbL)" in page
+
+    # The public page: with the section aircraft (default on), and marks it as watched.
+    async with maker() as db:
+        device = await db.get(Device, dev.device_id)
+        assert device
+        public.enable(device)
+        slug = device.public_slug
+        await db.commit()
+    shown = (await client.get(f"/sky/{slug}/now")).text
+    assert 'data-overlay-toggle="air"' in shown
+    assert "DLH4AB · 10,0 km" in shown
+    assert watch._is_watched(dev.device_id, dt.datetime.now(dt.UTC))  # pyright: ignore[reportPrivateUsage]
+    async with maker() as db:
+        device = await db.get(Device, dev.device_id)
+        assert device
+        profile = public.profile(device)
+        sections = profile.sections.model_copy(update={"aircraft": False})
+        device.public_profile = profile.model_copy(update={"sections": sections}).model_dump()
+        await db.commit()
+    assert 'data-overlay-toggle="air"' not in (await client.get(f"/sky/{slug}/now")).text

@@ -7,7 +7,10 @@
 <div id="event">{% include "_event_view.html" %}</div>
 <form method="post" action="/cameras/{{ device.id }}/events/{{ event.night_id }}/{{ event.event_id }}/label" class="card label-form">
   <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-  {% if event.label == "false_positive" %}
+  {% if event.label == "false_positive" and event.label_auto %}
+  <p><strong>Automatisch als „kein {{ event_titles[event.kind] or event.kind }}“ markiert: {{ label_reasons[event.label_reason] or "" }}{% if event.label_detail %} {{ event.label_detail }}{% endif %}.</strong> Die Spur passt zur Bahn dieses Flugzeugs; zählt nirgends mit.</p>
+  <button type="submit" name="label" value="" class="secondary">Doch kein {{ label_reasons[event.label_reason] or "Fehlalarm" }}: Markierung entfernen</button>
+  {% elif event.label == "false_positive" %}
   <p><strong>Als „kein {{ event_titles[event.kind] or event.kind }}“ markiert{% if event.label_reason %} ({{ label_reasons[event.label_reason] }}){% endif %}.</strong> Zählt nirgends mit.</p>
   <button type="submit" name="label" value="" class="secondary">Markierung entfernen</button>
   {% elif event.label == "confirmed" %}

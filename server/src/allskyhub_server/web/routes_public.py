@@ -290,8 +290,11 @@ async def ovation(request: Request, hemisphere: str) -> Response:
 
 
 @router.get("/karte")
-async def camera_map(request: Request, db: DbSession, region: str = "europa") -> Response:
-    """Roadmap C5: all public cameras that show their place."""
+async def camera_map(
+    request: Request, db: DbSession, region: str = "europa", layer: str = ""
+) -> Response:
+    """Roadmap C5: all public cameras that show their place; ``layer=sqm`` colours them
+    by how dark their sky is (roadmap H4)."""
     name, view_box, dot = camera_map_mod.REGIONS.get(region, camera_map_mod.REGIONS["europa"])
     return render(
         request,
@@ -303,5 +306,7 @@ async def camera_map(request: Request, db: DbSession, region: str = "europa") ->
             "region_name": name,
             "view_box": view_box,
             "dot": dot,
+            "layer": "sqm" if layer == "sqm" else "",
+            "sqm_classes": camera_map_mod.SQM_CLASSES,
         },
     )

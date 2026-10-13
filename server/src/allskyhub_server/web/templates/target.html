@@ -1,0 +1,42 @@
+{% extends "base.html" %}
+{% block title %}Ziel frei? · {{ device.name }}{% endblock %}
+{% block content %}
+<a class="back" href="/cameras/{{ device.id }}">← {{ device.name }}</a>
+<div class="page-head"><h1>Ziel frei?</h1></div>
+<p class="lead">Steht ein Objekt jetzt und in den nächsten Stunden hoch genug, im Dunkeln und ohne Wolken? Aus dem, was die Kamera sieht, und der Wolkenvorhersage.</p>
+<form method="get" class="card stack" action="/cameras/{{ device.id }}/ziel">
+  <label>Objekt
+    <select name="objekt" onchange="this.form.submit()">
+      <option value="">Bitte wählen …</option>
+      <optgroup label="Planeten">{% for o in objects if o.kind == 'planet' %}<option value="{{ o.key }}"{% if chosen and chosen.key == o.key %} selected{% endif %}>{{ o.label }}</option>{% endfor %}</optgroup>
+      <optgroup label="Messier">{% for o in objects if o.kind != 'planet' %}<option value="{{ o.key }}"{% if chosen and chosen.key == o.key %} selected{% endif %}>{{ o.label }}</option>{% endfor %}</optgroup>
+    </select>
+  </label>
+  <noscript><button type="submit" class="secondary">Anzeigen</button></noscript>
+</form>
+{% if unknown %}<p class="msg error">Dieses Objekt kenne ich nicht.</p>{% endif %}
+{% if chosen and not plan %}
+<div class="card empty"><h2>Standort fehlt</h2><p class="muted">Die Kamera kennt ihren Standort noch nicht. Trag ihn in den Einstellungen ein.</p></div>
+{% elif plan %}
+{% set n = plan.now %}
+<section class="card target-now verdict-{{ n.verdict }}">
+  <h2>{{ plan.summary() }}</h2>
+  <p>Jetzt: {{ n.alt | round | int }}° hoch im {{ n.direction }}{% if n.cloud_cover is not none %} · die Kamera sieht {{ '%.0f' | format(n.cloud_cover * 100) }} % Wolken ({{ n.source }}){% endif %} · <strong>{{ verdicts[n.verdict] }}</strong></p>
+  {% if n.cloud_cover is none %}<p class="muted small">Die Kamera hat gerade keinen frischen Wolkenwert; „jetzt“ beruht auf der Vorhersage.</p>{% endif %}
+</section>
+<section class="card">
+  <h2>Die nächsten Stunden</h2>
+  <div class="table-scroll">
+  <table class="stats target-hours">
+    <thead><tr><th>Uhrzeit</th><th>Bewertung</th><th>Höhe</th><th>Richtung</th><th>Wolken</th></tr></thead>
+    <tbody>
+    {% for h in plan.hours %}
+    <tr class="verdict-{{ h.verdict }}"><td>{{ plan.clock(h.at) }}</td><td class="verdict">{{ verdicts[h.verdict] }}{% if h.moon_near %} · Mond nah{% endif %}</td><td>{{ h.alt | round | int }}°</td><td>{{ h.direction }}</td><td>{{ (h.clouds ~ ' %') if h.clouds is not none else '–' }}</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  </div>
+  <p class="muted small">„Zu tief“: unter 20° Höhe. „Zu hell“: die Sonne steht höher als 12° unter dem Horizont. „Mond nah“: heller Mond weniger als 15° entfernt. Wolken: Vorhersage von Open-Meteo für den Standort der Kamera.</p>
+</section>
+{% endif %}
+{% endblock %}

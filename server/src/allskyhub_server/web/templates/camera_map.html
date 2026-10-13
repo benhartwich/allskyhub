@@ -4,16 +4,24 @@
 <div class="page-head">
   <h1>Kamerakarte</h1>
   <nav class="actions" aria-label="Region">
-    {% for key, (name, _, _) in regions.items() %}<a class="button small{{ '' if key == region else ' secondary' }}" href="?region={{ key }}">{{ name }}</a>{% endfor %}
+    {% for key, (name, _, _) in regions.items() %}<a class="button small{{ '' if key == region else ' secondary' }}" href="?region={{ key }}{{ '&layer=sqm' if layer }}">{{ name }}</a>{% endfor %}
   </nav>
 </div>
 <p class="lead">Allsky-Kameras mit öffentlicher Seite, deren Betreiber den Ort zeigen (auf etwa 10 km gerundet).</p>
+<nav class="actions" aria-label="Ansicht">
+  <a class="button small{{ ' secondary' if layer }}" href="?region={{ region }}">Kameras</a>
+  <a class="button small{{ '' if layer else ' secondary' }}" href="?region={{ region }}&layer=sqm">Himmelshelligkeit</a>
+</nav>
+{% if layer %}
+<p class="muted small">Gemessen von den Kameras selbst: der Median der dunkelsten Messung klarer Nächte der letzten 60 Tage, in mag/″² (höher = dunkler). Ungefähr, solange die Kameras nicht kalibriert sind. Grau: zu wenige Messungen oder Himmelsqualität nicht öffentlich.</p>
+<ul class="sqm-legend">{% for _, cls, label in sqm_classes %}<li><span class="swatch {{ cls }}"></span>{{ label }}</li>{% endfor %}</ul>
+{% endif %}
 <figure class="card camera-map">
   <svg viewBox="{{ view_box }}" role="img" aria-label="Karte {{ region_name }} mit {{ cameras | length }} Kameras">
     <image href="{{ asset('world-land.svg') }}" x="0" y="0" width="3600" height="1800"/>
     {% for c in cameras %}
-    <a href="/sky/{{ c.slug }}"><title>{{ c.title }}{% if c.place %} · {{ c.place }}{% endif %}</title>
-      <circle class="halo" cx="{{ c.x }}" cy="{{ c.y }}" r="{{ dot * 2.4 }}"/><circle class="dot" cx="{{ c.x }}" cy="{{ c.y }}" r="{{ dot }}"/>
+    <a href="/sky/{{ c.slug }}"><title>{{ c.title }}{% if c.place %} · {{ c.place }}{% endif %}{% if layer and c.sqm %} · {{ '%.2f' | format(c.sqm) | replace('.', ',') }} mag/″²{% endif %}</title>
+      <circle class="halo" cx="{{ c.x }}" cy="{{ c.y }}" r="{{ dot * 2.4 }}"/><circle class="dot{{ ' ' ~ c.sqm_class if layer }}" cx="{{ c.x }}" cy="{{ c.y }}" r="{{ dot }}"/>
     </a>
     {% endfor %}
   </svg>
@@ -25,7 +33,7 @@
   <li><a class="card cam" href="/sky/{{ c.slug }}">
     {% if c.has_image %}<img src="/sky/{{ c.slug }}/latest.jpg" alt="Himmel über {{ c.title }}" loading="lazy">{% else %}<div class="sky-ph" aria-hidden="true"></div>{% endif %}
     <div class="cam-meta"><strong>{{ c.title }}</strong></div>
-    <span class="muted">{{ c.place or ('%.1f°, %.1f°' | format(c.lat, c.lon)) }}</span>
+    <span class="muted">{{ c.place or ('%.1f°, %.1f°' | format(c.lat, c.lon)) }}{% if c.sqm %} · {{ '%.2f' | format(c.sqm) | replace('.', ',') }} mag/″²{% endif %}</span>
   </a></li>
   {% endfor %}
 </ul>

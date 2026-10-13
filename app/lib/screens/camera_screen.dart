@@ -9,6 +9,7 @@ import 'camera_status.dart';
 import 'manage_screens.dart';
 import 'measurements_screen.dart';
 import 'stats_screen.dart';
+import 'target_screen.dart';
 import 'zoomable.dart';
 
 /// Live view: polls the latest image with `live=true` every few seconds, so the hub asks
@@ -310,6 +311,14 @@ class _CameraScreenState extends State<CameraScreen> {
                   label: const Text('Statistik'),
                   onPressed: () => _open(
                     () => StatsScreen(client: widget.client, camera: _camera),
+                  ),
+                ),
+                OutlinedButton.icon(
+                  key: const Key('open-target'),
+                  icon: const Icon(Icons.travel_explore),
+                  label: const Text('Ziel frei?'),
+                  onPressed: () => _open(
+                    () => TargetScreen(client: widget.client, camera: _camera),
                   ),
                 ),
                 OutlinedButton.icon(

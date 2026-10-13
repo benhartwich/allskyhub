@@ -4,6 +4,7 @@ import 'dart:typed_data';
 import 'package:allskyhub_app/api/hub_client.dart';
 import 'package:allskyhub_app/screens/manage_screens.dart';
 import 'package:allskyhub_app/screens/stats_screen.dart';
+import 'package:allskyhub_app/screens/target_screen.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
@@ -136,6 +137,50 @@ class FakeManageHub {
             'aurora': 'Polarlicht',
             'nlc': 'NLC',
           },
+        });
+      }
+      if (path == '/api/v1/targets') {
+        return _json([
+          {'key': 'jupiter', 'label': 'Jupiter', 'kind': 'planet', 'mag': null},
+          {
+            'key': 'M31',
+            'label': 'M31 Andromedagalaxie',
+            'kind': 'gx',
+            'mag': 3.4,
+          },
+        ]);
+      }
+      if (path == '/api/v1/cameras/cam1/target') {
+        final key = request.url.queryParameters['key'];
+        if (key == 'jupiter') {
+          return _json({
+            'detail': 'Die Kamera kennt ihren Standort noch nicht.',
+          }, 409);
+        }
+        Map<String, dynamic> hour(int h, String v, String text) => {
+          'at': '2026-10-15T${h.toString().padLeft(2, '0')}:00:00Z',
+          'alt': 50.0,
+          'az': 90.0,
+          'direction': 'O',
+          'clouds': 10,
+          'moon_near': h == 21,
+          'verdict': v,
+          'verdict_text': text,
+        };
+        return _json({
+          'key': 'M31',
+          'label': 'M31 Andromedagalaxie',
+          'summary': 'M31 Andromedagalaxie ist jetzt frei.',
+          'tz': 'UTC',
+          'alt': 62.4,
+          'az': 80.0,
+          'direction': 'O',
+          'cloud_cover': 0.05,
+          'verdict': 'clear',
+          'verdict_text': 'frei',
+          'best_start': null,
+          'best_end': null,
+          'hours': [hour(21, 'clear', 'frei'), hour(22, 'cloudy', 'bewölkt')],
         });
       }
       return http.Response('', 404);
@@ -273,6 +318,31 @@ void main() {
     await tester.pumpAndSettle();
     expect(hub.discord, isEmpty);
     expect(find.byKey(const Key('discord-test')), findsNothing);
+  });
+
+  testWidgets('target: choose an object, see now and the hours', (
+    tester,
+  ) async {
+    final hub = FakeManageHub();
+    await _pump(tester, TargetScreen(client: hub.client, camera: camera));
+    await tester.tap(find.byKey(const Key('target-choice')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('M31 Andromedagalaxie').last);
+    await tester.pumpAndSettle();
+    expect(find.text('M31 Andromedagalaxie ist jetzt frei.'), findsOneWidget);
+    expect(find.textContaining('Jetzt: 62° hoch im O'), findsOneWidget);
+    expect(find.textContaining('5 % Wolken'), findsOneWidget);
+    expect(find.text('frei · Mond nah'), findsOneWidget);
+    expect(find.text('bewölkt'), findsOneWidget);
+
+    await tester.tap(find.byKey(const Key('target-choice')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Jupiter').last);
+    await tester.pumpAndSettle();
+    expect(
+      find.text('Die Kamera kennt ihren Standort noch nicht.'),
+      findsOneWidget,
+    );
   });
 
   test('camera role defaults to owner for older hubs', () {

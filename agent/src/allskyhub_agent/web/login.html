@@ -14,35 +14,70 @@
 <header class="appbar">
   <span class="brand"><img src="favicon.svg" width="28" height="28" alt="">allskyhub</span>
   <nav class="appbar-end">
-    <button type="button" class="nav-link" data-theme-toggle title="Rotlicht für die Nacht" aria-label="Rotlicht für die Nacht">
+    <button type="button" class="nav-link" data-theme-toggle title="Rotlicht für die Nacht" aria-label="Rotlicht für die Nacht"
+            data-i18n-title="red" data-i18n-label="red">
       <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 14.5A8 8 0 0 1 9.5 4a8 8 0 1 0 10.5 10.5z"/></svg></button>
   </nav>
 </header>
 <main class="auth">
-  <h1>Kamera anmelden</h1>
+  <h1 data-i18n="heading">Kamera anmelden</h1>
   <p class="msg error" id="error" role="alert" hidden></p>
   <section class="card stack">
-    <a class="button" href="local-login/start">Mit allskyhub anmelden</a>
-    <p class="muted small">Mit dem Konto, dem diese Kamera gehört.</p>
+    <a class="button" href="local-login/start" data-i18n="hub">Mit allskyhub anmelden</a>
+    <p class="muted small" data-i18n="hubHelp">Mit dem Konto, dem diese Kamera gehört.</p>
   </section>
   <section class="card stack">
     <form method="post" action="local-login/code" class="stack">
-      <label for="code">Offline-Code</label>
+      <label for="code" data-i18n="code">Offline-Code</label>
       <input id="code" name="code" autocomplete="off" autocapitalize="characters" spellcheck="false"
              placeholder="XXXX-XXXX-XXXX" required>
-      <button class="secondary" type="submit">Mit Code anmelden</button>
+      <button class="secondary" type="submit" data-i18n="codeLogin">Mit Code anmelden</button>
     </form>
-    <p class="muted small">Falls der Hub nicht erreichbar ist. Den Code erzeugst du in den
+    <p class="muted small" data-i18n="codeHelp">Falls der Hub nicht erreichbar ist. Den Code erzeugst du in den
       Kamera-Einstellungen auf allskyhub.</p>
   </section>
 </main>
 <script>
-const MESSAGES = {
-  wrong: "Der Code stimmt nicht.",
-  locked: "Zu viele Fehlversuche. Bitte 15 Minuten warten oder mit allskyhub anmelden.",
-  no_code: "Für diese Kamera ist kein Offline-Code eingerichtet.",
-  failed: "Die Anmeldung über allskyhub hat nicht geklappt. Bitte noch einmal versuchen.",
+// SPEC §7 Language and units: before the login the camera's settings cannot be read, so
+// this page follows the browser's language (German for "de…", English otherwise).
+const TEXTS = {
+  de: {
+    title: "Anmelden – allskyhub-Kamera",
+    red: "Rotlicht für die Nacht",
+    heading: "Kamera anmelden",
+    hub: "Mit allskyhub anmelden",
+    hubHelp: "Mit dem Konto, dem diese Kamera gehört.",
+    code: "Offline-Code",
+    codeLogin: "Mit Code anmelden",
+    codeHelp: "Falls der Hub nicht erreichbar ist. Den Code erzeugst du in den Kamera-Einstellungen auf allskyhub.",
+    wrong: "Der Code stimmt nicht.",
+    locked: "Zu viele Fehlversuche. Bitte 15 Minuten warten oder mit allskyhub anmelden.",
+    no_code: "Für diese Kamera ist kein Offline-Code eingerichtet.",
+    failed: "Die Anmeldung über allskyhub hat nicht geklappt. Bitte noch einmal versuchen.",
+  },
+  en: {
+    title: "Log in – allskyhub camera",
+    red: "Red light for the night",
+    heading: "Log in to the camera",
+    hub: "Log in with allskyhub",
+    hubHelp: "With the account this camera belongs to.",
+    code: "Offline code",
+    codeLogin: "Log in with code",
+    codeHelp: "In case the hub cannot be reached. You create the code in the camera settings on allskyhub.",
+    wrong: "The code is not correct.",
+    locked: "Too many failed attempts. Please wait 15 minutes or log in with allskyhub.",
+    no_code: "No offline code is set up for this camera.",
+    failed: "Logging in through allskyhub did not work. Please try again.",
+  },
 };
+const LANG = (navigator.language || "").toLowerCase().startsWith("de") ? "de" : "en";
+const L = TEXTS[LANG];
+document.documentElement.lang = LANG;
+document.title = L.title;
+for (const el of document.querySelectorAll("[data-i18n]")) el.textContent = L[el.dataset.i18n];
+for (const el of document.querySelectorAll("[data-i18n-title]")) el.title = L[el.dataset.i18nTitle];
+for (const el of document.querySelectorAll("[data-i18n-label]")) el.setAttribute("aria-label", L[el.dataset.i18nLabel]);
+const MESSAGES = { wrong: L.wrong, locked: L.locked, no_code: L.no_code, failed: L.failed };
 const e = new URLSearchParams(location.search).get("e");
 if (e && MESSAGES[e]) {
   const el = document.getElementById("error");

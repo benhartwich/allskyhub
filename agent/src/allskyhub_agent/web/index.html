@@ -14,49 +14,51 @@
 <body>
 <header class="appbar">
   <a class="brand" href="#live"><img src="favicon.svg" width="28" height="28" alt="">allskyhub</a>
-  <nav class="appbar-end" aria-label="Hauptmenü" id="nav">
+  <nav class="appbar-end" aria-label="Hauptmenü" data-i18n-label="nav.menu" id="nav">
     <a class="nav-link" href="#live" data-page="live">
-      <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="3.5"/></svg><span>Live</span></a>
+      <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="3.5"/></svg><span data-i18n="nav.live">Live</span></a>
     <a class="nav-link" href="#archiv" data-page="archiv">
-      <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 9h18M8 4v5"/></svg><span>Archiv</span></a>
+      <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 9h18M8 4v5"/></svg><span data-i18n="nav.archive">Archiv</span></a>
     <a class="nav-link" href="#ereignisse" data-page="ereignisse">
-      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20 20 4M14 4h6v6"/></svg><span>Ereignisse</span></a>
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20 20 4M14 4h6v6"/></svg><span data-i18n="nav.events">Ereignisse</span></a>
     <a class="nav-link" href="#himmel" data-page="himmel">
-      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 17l5-6 4 4 5-7 4 5"/></svg><span>Himmel</span></a>
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 17l5-6 4 4 5-7 4 5"/></svg><span data-i18n="nav.sky">Himmel</span></a>
     <a class="nav-link" href="#einstellungen" data-page="einstellungen">
-      <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M5 5l2 2M17 17l2 2M5 19l2-2M17 7l2-2"/></svg><span>Einstellungen</span></a>
+      <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M5 5l2 2M17 17l2 2M5 19l2-2M17 7l2-2"/></svg><span data-i18n="nav.settings">Einstellungen</span></a>
     <a class="nav-link" href="#system" data-page="system">
-      <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="4" width="16" height="12" rx="2"/><path d="M8 20h8M12 16v4"/></svg><span>System</span></a>
-    <button type="button" class="nav-link" data-theme-toggle title="Rotlicht für die Nacht" aria-label="Rotlicht für die Nacht">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="4" width="16" height="12" rx="2"/><path d="M8 20h8M12 16v4"/></svg><span data-i18n="nav.system">System</span></a>
+    <button type="button" class="nav-link" data-theme-toggle title="Rotlicht für die Nacht" aria-label="Rotlicht für die Nacht"
+            data-i18n-title="nav.red" data-i18n-label="nav.red">
       <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 14.5A8 8 0 0 1 9.5 4a8 8 0 1 0 10.5 10.5z"/></svg></button>
     <form method="post" action="local-login/logout" class="inline" id="logout" hidden>
-      <button class="nav-link" title="Abmelden" aria-label="Abmelden">
+      <button class="nav-link" title="Abmelden" aria-label="Abmelden" data-i18n-title="nav.logout" data-i18n-label="nav.logout">
         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 4h3a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2h-3M10 8l-4 4 4 4M6 12h10"/></svg></button>
     </form>
   </nav>
 </header>
 <main>
   <section class="card" id="pairPanel" hidden>
-    <p class="eyebrow">Kopplungscode</p>
+    <p class="eyebrow" data-i18n="pair.code">Kopplungscode</p>
     <p class="code big" id="pairCode">–</p>
-    <p class="muted">Gib den Code in der App oder auf allskyhub.org ein. Er erneuert sich alle paar
+    <p class="muted" data-i18n="pair.help">Gib den Code in der App oder auf allskyhub.org ein. Er erneuert sich alle paar
       Minuten.</p>
   </section>
   <div id="page"></div>
-  <footer class="app-foot">allskyhub-Kamera <span id="version"></span> ·
+  <footer class="app-foot"><span data-i18n="app.title">allskyhub-Kamera</span> <span id="version"></span> ·
     <a href="https://github.com/benhartwich/allskyhub">Open Source (GPL-3.0)</a></footer>
 </main>
-<dialog id="lightbox" aria-label="Bild">
+<dialog id="lightbox" aria-label="Bild" data-i18n-label="image">
   <div class="lb-stage" id="lbStage"><div class="lb-wrap" id="lbWrap"><img id="lightboxImg" alt="">
     <svg id="lbOverlay" class="overlay" aria-hidden="true"></svg></div></div>
   <p class="muted small" id="lbCaption"></p>
   <div class="actions">
-    <button type="button" class="secondary" id="lbPrev" aria-label="Vorheriges Bild">‹</button>
-    <a class="button secondary" id="lbDownload" download>Herunterladen</a>
-    <button type="button" class="secondary" id="lbZoom" aria-label="Vergrößern" title="Zoom (Doppelklick, Mausrad)">⤢</button>
+    <button type="button" class="secondary" id="lbPrev" aria-label="Vorheriges Bild" data-i18n-label="lb.prev">‹</button>
+    <a class="button secondary" id="lbDownload" download data-i18n="download">Herunterladen</a>
+    <button type="button" class="secondary" id="lbZoom" aria-label="Vergrößern" title="Zoom (Doppelklick, Mausrad)"
+      data-i18n-label="lb.zoom" data-i18n-title="lb.zoomTitle">⤢</button>
     <span id="lbExtra"></span>
-    <button type="button" class="secondary" id="lbNext" aria-label="Nächstes Bild">›</button>
-    <button type="button" id="lbClose">Schließen</button>
+    <button type="button" class="secondary" id="lbNext" aria-label="Nächstes Bild" data-i18n-label="lb.next">›</button>
+    <button type="button" id="lbClose" data-i18n="lb.close">Schließen</button>
   </div>
 </dialog>
 <script src="app.js"></script>

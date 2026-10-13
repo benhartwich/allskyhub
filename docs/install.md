@@ -199,6 +199,26 @@ Allsky's. The running agent then announces the imported nights to the hub, one p
 second; the hub shows their products and meteors (marked as imported, no push
 notifications).
 
+### 2.8 Take over the pictures of an existing indi-allsky
+
+The same works for [indi-allsky](https://github.com/aaronwmorris/indi-allsky): the agent
+reads its database (read-only, default `/var/lib/indi-allsky/indi-allsky.sqlite`) and
+takes over every JPEG image with its metadata (time, exposure, gain, sensor temperature,
+day or night), the keograms, star trails and H.264 timelapses (night and day), and its
+location if the agent has none. indi-allsky's line detections, its own SQM value, PNG/TIFF
+images and WebM timelapses do not come over. Hard links, dry run and resuming work as for
+Allsky:
+
+```bash
+sudo /opt/allskyhub-agent/current/.venv/bin/allskyhub-agent import-indi-allsky \
+  --data /var/lib/allskyhub-agent/data \
+  --settings /var/lib/allskyhub-agent/settings.json --dry-run
+```
+
+`--db` and `--images` point to another database or image folder (default: the
+`IMAGE_FOLDER` of its configuration, usually `/var/www/html/allsky/images`). If several
+cameras have images, `--camera <id>` picks one; the dry run lists them.
+
 ## 3. An account on allskyhub.org
 
 Accounts are by invitation for now. Ask the project for an invitation; you get a link to set

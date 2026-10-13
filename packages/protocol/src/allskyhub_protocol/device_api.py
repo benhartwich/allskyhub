@@ -234,6 +234,10 @@ class CloseCode:
 # SPEC §6.5 local_access: the lowest Argon2id parameters the device accepts.
 ARGON2_MIN_MEMORY_KIB = 19456
 ARGON2_MIN_TIME = 2
+# SPEC §6.5: more would cost the camera's memory or minutes per try.
+ARGON2_MAX_MEMORY_KIB = 65536
+ARGON2_MAX_TIME = 10
+ARGON2_MAX_PARALLELISM = 4
 _ARGON2 = re.compile(r"^\$argon2id\$v=19\$m=(\d+),t=(\d+),p=(\d+)\$[A-Za-z0-9+/]+\$[A-Za-z0-9+/]+$")
 
 
@@ -250,8 +254,11 @@ class LocalAccessArgs(_Model):
         match = _ARGON2.fullmatch(v)
         if match is None:
             raise ValueError("not an Argon2id PHC string")
-        if int(match[1]) < ARGON2_MIN_MEMORY_KIB or int(match[2]) < ARGON2_MIN_TIME:
+        m, t, p = int(match[1]), int(match[2]), int(match[3])
+        if m < ARGON2_MIN_MEMORY_KIB or t < ARGON2_MIN_TIME:
             raise ValueError("Argon2id parameters too weak")
+        if m > ARGON2_MAX_MEMORY_KIB or t > ARGON2_MAX_TIME or p > ARGON2_MAX_PARALLELISM:
+            raise ValueError("Argon2id parameters too costly for the camera")
         return v
 
 

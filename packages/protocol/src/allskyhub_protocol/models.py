@@ -344,6 +344,8 @@ class Status(_Body):
     alpaca_error: str | None = Field(default=None, max_length=40)
     # SPEC §4.1: the owner paused capture (cleaning the dome); no warnings meanwhile.
     capture_paused: bool = False
+    # SPEC §8: system updates wait for a reboot, done by day.
+    reboot_required: bool = False
     # SPEC §7.8: the owner's ADS-B receiver, null unless `adsb_url` is set.
     adsb: AdsbStatus | None = None
 

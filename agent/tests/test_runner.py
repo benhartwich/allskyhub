@@ -1,10 +1,13 @@
 """Capture loop end to end with the simulated camera (SPEC §4.1-§4.3)."""
 
-from datetime import UTC, datetime
+import threading
+import time
+from datetime import UTC, datetime, timedelta
 from itertools import pairwise
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
+import numpy as np
 import pytest
 
 from allskyhub_agent.adapters.sim import SimCamera, sky_radiance
@@ -109,3 +112,43 @@ def test_moon_mode_follows_the_moon(tmp_path: Path) -> None:
     runner, _ = make_runner(tmp_path, datetime(2026, 10, 10, 22, 0, tzinfo=UTC), moon_mode=True)
     runner.step()
     assert not runner.moon
+
+
+def test_turn() -> None:
+    """SPEC §4.1: flip first, then rotate clockwise."""
+    from allskyhub_agent.core.transform import turn
+
+    img = np.arange(6, dtype=np.uint8).reshape(2, 3)  # [[0 1 2] [3 4 5]]
+    assert turn(img) is img
+    assert turn(img, "horizontal").tolist() == [[2, 1, 0], [5, 4, 3]]
+    assert turn(img, "vertical").tolist() == [[3, 4, 5], [0, 1, 2]]
+    assert turn(img, rotate=90).tolist() == [[3, 0], [4, 1], [5, 2]]
+    assert turn(img, rotate=180).tolist() == [[5, 4, 3], [2, 1, 0]]
+    assert turn(img, rotate=270).tolist() == [[2, 5], [1, 4], [0, 3]]
+    rgb = np.zeros((4, 6, 3), dtype=np.uint8)
+    assert turn(rgb, rotate=90).shape == (6, 4, 3)
+
+
+def test_day_capture_live_and_off(tmp_path: Path) -> None:
+    """SPEC §4.1: `live` keeps only the newest day frame and indexes none; `off` takes none."""
+    noon = datetime(2026, 10, 6, 10, 0, tzinfo=UTC)
+    runner, clock = make_runner(tmp_path, noon)
+    runner._day_capture = "live"  # pyright: ignore[reportPrivateUsage]
+    infos = [runner.step() for _ in range(3)]
+    assert all(f.mode is Mode.DAY for f in infos)
+    store = ImageStore(tmp_path, ZoneInfo("Europe/Vienna"))
+    night = infos[0].night_id
+    assert store.read_index(night) == []
+    files = sorted(p.name for p in (tmp_path / "images" / night).glob("image-*.jpg"))
+    assert files == [infos[-1].name]
+    off, clock = make_runner(tmp_path / "off", noon)
+    off._day_capture = "off"  # pyright: ignore[reportPrivateUsage]
+    taken: list[FrameInfo] = []
+    # One hour of "off" by day takes nothing; the sun check runs every minute.
+    t = threading.Thread(target=off.run, kwargs={"on_frame": taken.append}, daemon=True)
+    t.start()
+    while clock.now() < noon + timedelta(hours=1):
+        time.sleep(0.001)
+    off.stop()
+    t.join(5)
+    assert taken == []

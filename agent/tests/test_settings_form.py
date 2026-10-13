@@ -42,6 +42,11 @@ def test_values_report_every_key_and_fit_device_settings() -> None:
         "night_max_exposure_s": None,
         "night_max_gain": None,
         "moon_mode": True,
+        "day_target_pct": 35,
+        "night_target_pct": 20,
+        "day_capture": "save",
+        "image_flip": "none",
+        "image_rotate": "0",
         "wb_r": 52,
         "wb_b": None,
         "jpeg_quality": 90,
@@ -73,6 +78,8 @@ def test_values_report_every_key_and_fit_device_settings() -> None:
         "mqtt_password_set": False,
         "mqtt_prefix": "allskyhub",
         "https": False,
+        "language": "de",
+        "temperature_unit": "c",
     }
 
 
@@ -188,3 +195,25 @@ def test_mqtt_password_is_write_only(tmp_path: Path) -> None:
     assert ss.check(schema, {"mqtt_prefix": "a/#"}) == ["mqtt_prefix"]
     assert ss.check(schema, {"mqtt_host": "mqtt://x"}) == ["mqtt_host"]
     assert ss.check(schema, {"mqtt_host": "192.168.1.5", "mqtt_prefix": "home/sky"}) == []
+
+
+def test_targets_and_pixel_maps(tmp_path: Path) -> None:
+    """SPEC §4.3 targets from the settings, moon 0.6 x night; SPEC §4.1 a new flip or
+    rotation forgets hot pixels, sky mask and orientation."""
+    from allskyhub_agent.cli import forget_pixel_maps
+    from allskyhub_agent.profiles import with_night_limits
+    from allskyhub_protocol import Mode
+
+    s = AgentSettings().with_values({"day_target_pct": 40, "night_target_pct": 25,
+                                     "image_rotate": "90", "day_capture": "live"})  # fmt: skip
+    assert (s.image_rotate, s.day_capture) == ("90", "live")
+    assert AgentSettings().with_values({"image_rotate": "45"}).image_rotate == "0"
+    exp = with_night_limits(get_profile("sim"), s).exposure
+    assert (exp.day.target_mean, exp.night.target_mean) == (0.40, 0.25)
+    assert abs(exp.limits(Mode.NIGHT, moon=True).target_mean - 0.15) < 1e-9
+    cal = tmp_path / "calibration"
+    cal.mkdir()
+    for name in ("hotpixels.npz", "skymask.png", "orientation.json", "keep.txt"):
+        (cal / name).write_text("x")
+    forget_pixel_maps(cal)
+    assert sorted(p.name for p in cal.iterdir()) == ["keep.txt"]

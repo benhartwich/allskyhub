@@ -63,6 +63,73 @@ _DETECTOR_TEXT = {
 }
 
 
+CAPTURE = {"de": "Aufnahme", "en": "Capture"}
+
+
+def _orientation_entries() -> list[dict[str, Any]]:
+    """Flip and rotation of every frame (SPEC §4.1)."""
+    group = {"de": "Bild", "en": "Image"}
+    note = {
+        "de": "Eine Änderung lernt Hotpixel, Himmelsmaske und Ausrichtung neu (eine klare Nacht).",
+        "en": "A change learns hot pixels, sky mask and orientation again (one clear night).",
+    }
+    return [
+        {
+            "key": "image_flip",
+            "type": "choice",
+            "label": {"de": "Spiegeln", "en": "Flip"},
+            "group": group,
+            "choices": [
+                {"value": "none", "label": {"de": "Nicht", "en": "No"}},
+                {"value": "horizontal", "label": {"de": "Links–rechts", "en": "Left–right"}},
+                {"value": "vertical", "label": {"de": "Oben–unten", "en": "Top–bottom"}},
+            ],
+            "help": note,
+        },
+        {
+            "key": "image_rotate",
+            "type": "choice",
+            "label": {"de": "Drehen", "en": "Rotate"},
+            "group": group,
+            "choices": [
+                {"value": v, "label": {"de": f"{v}°", "en": f"{v}°"}}
+                for v in ("0", "90", "180", "270")
+            ],
+            "help": {
+                "de": "Im Uhrzeigersinn, z. B. damit Norden oben ist.",
+                "en": "Clockwise, e.g. to have north at the top.",
+            },
+        },
+    ]
+
+
+def _display_entries() -> list[dict[str, Any]]:
+    """How the local UI shows texts and temperatures (SPEC §7)."""
+    group = {"de": "Anzeige", "en": "Display"}
+    return [
+        {
+            "key": "language",
+            "type": "choice",
+            "label": {"de": "Sprache", "en": "Language"},
+            "group": group,
+            "choices": [
+                {"value": "de", "label": "Deutsch"},
+                {"value": "en", "label": "English"},
+            ],
+        },
+        {
+            "key": "temperature_unit",
+            "type": "choice",
+            "label": {"de": "Temperatur", "en": "Temperature"},
+            "group": group,
+            "choices": [
+                {"value": "c", "label": "°C"},
+                {"value": "f", "label": "°F"},
+            ],
+        },
+    ]
+
+
 def _bad_frame_entries() -> list[dict[str, Any]]:
     """Bad frames (SPEC §4.9, roadmap L19)."""
     group = {"de": "Bild", "en": "Image"}
@@ -427,7 +494,58 @@ def build_schema(profile: Profile) -> list[SettingSpec]:
                 "night so the sky and the landscape do not burn out.",
             },
         },
+        {
+            "key": "day_target_pct",
+            "type": "int",
+            "label": {"de": "Helligkeit am Tag", "en": "Brightness by day"},
+            "group": CAPTURE,
+            "unit": "%",
+            "min": 5,
+            "max": 80,
+            "step": 1,
+            "help": {
+                "de": "Wie hell die Belichtungsautomatik das Bild macht. Standard 35 %.",
+                "en": "How bright the auto exposure makes the picture. Default 35 %.",
+            },
+        },
+        {
+            "key": "night_target_pct",
+            "type": "int",
+            "label": {"de": "Helligkeit in der Nacht", "en": "Brightness at night"},
+            "group": CAPTURE,
+            "unit": "%",
+            "min": 5,
+            "max": 80,
+            "step": 1,
+            "help": {
+                "de": "Standard 20 %. Heller zeigt mehr Sterne, aber auch mehr Rauschen und "
+                "Lichtverschmutzung.",
+                "en": "Default 20 %. Brighter shows more stars but also more noise and light "
+                "pollution.",
+            },
+        },
+        {
+            "key": "day_capture",
+            "type": "choice",
+            "label": {"de": "Bilder am Tag", "en": "Pictures by day"},
+            "group": CAPTURE,
+            "choices": [
+                {
+                    "value": "save",
+                    "label": {"de": "Aufnehmen und speichern", "en": "Take and keep"},
+                },
+                {"value": "live", "label": {"de": "Nur Livebild", "en": "Live picture only"}},
+                {"value": "off", "label": {"de": "Keine", "en": "None"}},
+            ],
+            "help": {
+                "de": "„Nur Livebild“ speichert tagsüber nichts (kein Tageszeitraffer), spart "
+                "aber Speicher und SD-Karte.",
+                "en": '"Live picture only" keeps nothing by day (no day timelapse) but saves '
+                "storage and the SD card.",
+            },
+        },
     ]
+    entries.extend(_orientation_entries())
     if profile.camera == "zwo":
         for key, de, en in (
             ("wb_r", "Weißabgleich Rot", "White balance red"),
@@ -467,6 +585,7 @@ def build_schema(profile: Profile) -> list[SettingSpec]:
     entries.extend(_product_entries())
     entries.extend(_observatory_entries())
     entries.extend(_mqtt_entries())
+    entries.extend(_display_entries())
     entries.append(
         {
             "key": "https",

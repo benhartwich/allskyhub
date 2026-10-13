@@ -152,6 +152,7 @@ async def _camera_context(
         ),
         "last_night": await _last_night(db, device),
         "health": await health.full_check(db, device, online, now, forecast),
+        "paused": health.paused(device),
         "online": online,
         "events": events.collapse(await events.events(db, device.id, limit=200, hide_false=True))[
             :6

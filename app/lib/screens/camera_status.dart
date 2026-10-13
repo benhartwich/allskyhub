@@ -37,6 +37,10 @@ List<StatusRow> statusRows({
   final rows = <StatusRow>[
     StatusRow('Zuletzt gesehen', formatAge(lastSeen, now: now)),
   ];
+  if (status['capture_paused'] == true) {
+    // SPEC §4.1: paused in the camera's local page.
+    rows.add(const StatusRow('Aufnahme', 'pausiert', warning: true));
+  }
   final mode = status['mode'];
   if (mode is String) {
     rows.add(StatusRow('Modus', mode == 'night' ? 'Nacht' : 'Tag'));

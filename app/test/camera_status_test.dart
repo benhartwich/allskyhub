@@ -134,6 +134,17 @@ void main() {
     expect(rows.single.value, 'nie');
   });
 
+  test('a paused capture is shown (SPEC §4.1)', () {
+    final rows = statusRows(
+      status: const {'capture_paused': true},
+      frame: const {},
+      lastSeen: null,
+      now: now,
+    );
+    final paused = rows.firstWhere((r) => r.label == 'Aufnahme');
+    expect((paused.value, paused.warning), ('pausiert', true));
+  });
+
   testWidgets('camera screen shows live state and status rows', (tester) async {
     tester.view.physicalSize = const Size(
       400,

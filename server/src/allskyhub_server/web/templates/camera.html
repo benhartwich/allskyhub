@@ -26,11 +26,12 @@
 </div>
 <div class="card health">
   <h2>Zustand</h2>
+  {% if paused and online %}<p class="health-line warn">Aufnahme pausiert: Die Kamera nimmt keine Bilder auf, bis du sie in ihrer lokalen Seite fortsetzt.</p>{% endif %}
   {% if health %}
   <ul class="health-list">
     {% for p in health %}<li class="health-line {{ p.level }}">{{ p.text }}</li>{% endfor %}
   </ul>
-  {% else %}
+  {% elif not paused %}
   <p class="health-line ok">Alles in Ordnung: verbunden, neue Bilder, genug Speicher, Temperaturen und Uhr unauffällig.</p>
   {% endif %}
 </div>

@@ -41,6 +41,8 @@ dependencies:
   geolocator: ^14.1.1
   flutter_timezone: ^5.1.1
   share_plus: ^13.3.1
+  # The Wi-Fi QR code on the camera's label (SPEC §7.1), BSD-3-Clause.
+  mobile_scanner: ^7.0.0
 
 dev_dependencies:
   flutter_test:

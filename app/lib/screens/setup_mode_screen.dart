@@ -2,15 +2,24 @@ import 'package:flutter/material.dart';
 
 import '../api/camera_setup.dart';
 import '../api/hub_client.dart';
+import '../api/setup_key.dart';
 import '../api/setup_mode.dart';
 import '../platform/location.dart';
 import 'onboarding_screen.dart';
+import 'qr_scan_screen.dart';
 
 /// A new camera without network: set it up through its own Wi-Fi (SPEC §7.1), then pair.
 class SetupModeScreen extends StatefulWidget {
-  const SetupModeScreen({super.key, required this.controller});
+  const SetupModeScreen({
+    super.key,
+    required this.controller,
+    this.scanner = QrScanScreen.new,
+  });
 
   final SetupModeController controller;
+
+  /// The QR scanner page; answers the code's text (replaced in tests).
+  final Widget Function() scanner;
 
   @override
   State<SetupModeScreen> createState() => _SetupModeScreenState();
@@ -18,6 +27,8 @@ class SetupModeScreen extends StatefulWidget {
 
 class _SetupModeScreenState extends State<SetupModeScreen> {
   final _password = TextEditingController();
+  final _setupKey = TextEditingController();
+  String? _keyProblem;
   final _country = TextEditingController();
   final _name = TextEditingController();
   final _address = TextEditingController();
@@ -52,6 +63,7 @@ class _SetupModeScreenState extends State<SetupModeScreen> {
   void dispose() {
     c.removeListener(_changed);
     _password.dispose();
+    _setupKey.dispose();
     _country.dispose();
     _name.dispose();
     _address.dispose();
@@ -123,24 +135,103 @@ class _SetupModeScreenState extends State<SetupModeScreen> {
     Text(text, textAlign: TextAlign.center),
   ];
 
+  Future<void> _scan() async {
+    final code = await Navigator.of(
+      context,
+    ).push<String>(MaterialPageRoute(builder: (_) => widget.scanner()));
+    if (code == null || !mounted) return;
+    final wifi = parseWifiQr(code);
+    if (wifi == null) {
+      setState(
+        () => _keyProblem =
+            'Das ist kein WLAN-Code einer allskyhub-Kamera. Der Aufkleber zeigt '
+            'einen QR-Code mit „allskyhub-…“.',
+      );
+      return;
+    }
+    setState(() => _keyProblem = null);
+    await c.join(wifi);
+  }
+
+  Future<void> _typed() async {
+    final key = normalizeSetupKey(_setupKey.text);
+    if (key == null) {
+      setState(
+        () => _keyProblem =
+            'Der Schlüssel hat 12 Zeichen, etwa ABCD-EFGH-JKMN (ohne 0, 1, I, L, O).',
+      );
+      return;
+    }
+    setState(() => _keyProblem = null);
+    await c.join(SetupWifi(key: key));
+  }
+
   List<Widget> _join() => [
-    const Text('1. Schalte die Kamera ein und warte etwa eine Minute.'),
-    const SizedBox(height: 8),
     const Text(
-      '2. Öffne die WLAN-Einstellungen deines Handys und verbinde dich mit dem '
-      'Netz „allskyhub-…“. Meldet das Handy, das Netz habe kein Internet, '
-      'bleib trotzdem verbunden.',
+      'Schalte die Kamera ein und warte etwa eine Minute. Dann öffnet sie ihr eigenes '
+      'WLAN „allskyhub-…“, geschützt mit dem Einrichtungs-Schlüssel vom Aufkleber.',
+    ),
+    const SizedBox(height: 16),
+    FilledButton.icon(
+      key: const Key('scan-qr'),
+      onPressed: _scan,
+      icon: const Icon(Icons.qr_code_scanner),
+      label: const Text('QR-Code auf der Kamera scannen'),
+    ),
+    const SizedBox(height: 16),
+    TextField(
+      key: const Key('setup-key'),
+      controller: _setupKey,
+      textCapitalization: TextCapitalization.characters,
+      autocorrect: false,
+      enableSuggestions: false,
+      decoration: InputDecoration(
+        labelText: 'Oder Einrichtungs-Schlüssel eintippen',
+        hintText: 'XXXX-XXXX-XXXX',
+        errorText: _keyProblem,
+        errorMaxLines: 3,
+      ),
+      onSubmitted: (_) => _typed(),
     ),
     const SizedBox(height: 8),
-    const Text('3. Komm hierher zurück und tippe auf „Weiter“.'),
+    OutlinedButton(
+      key: const Key('join-typed'),
+      onPressed: _typed,
+      child: const Text('Mit der Kamera verbinden'),
+    ),
     const SizedBox(height: 20),
-    FilledButton(onPressed: c.connect, child: const Text('Weiter')),
+    Text(
+      'Schon in den WLAN-Einstellungen mit „allskyhub-…“ verbunden (etwa über die '
+      'Kamera-App des Handys)? Meldet das Handy, das Netz habe kein Internet, bleib '
+      'trotzdem verbunden.',
+      style: Theme.of(context).textTheme.bodySmall,
+    ),
+    TextButton(
+      key: const Key('joined-manually'),
+      onPressed: c.connect,
+      child: const Text('Ich bin verbunden'),
+    ),
+    TextButton(
+      key: const Key('join-open'),
+      onPressed: () => c.join(const SetupWifi()),
+      child: const Text('Kamera ohne Schlüssel (ältere Software)'),
+    ),
   ];
 
   List<Widget> _choose() {
     final info = c.info!;
+    final outdated = c.outdatedCamera;
     return [
       Text('Verbunden mit ${info.setupSsid}. In welches WLAN soll die Kamera?'),
+      if (outdated) ...[
+        const SizedBox(height: 8),
+        Text(
+          'Diese Kamera hat noch ein offenes Einrichtungs-WLAN: Bitte nach der '
+          'Einrichtung ihre Software aktualisieren.',
+          key: const Key('outdated-camera'),
+          style: TextStyle(color: Theme.of(context).colorScheme.tertiary),
+        ),
+      ],
       const SizedBox(height: 12),
       RadioGroup<String>(
         groupValue: _network?.ssid,

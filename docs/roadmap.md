@@ -123,6 +123,22 @@ hub side. Push needs the Firebase project; until then the same messages show on 
 | H5 | Upload the night's timelapse to YouTube and post detections to Discord | hub | Benjamin, 2026-10-13 (indi-allsky/Allsky); the owner connects the accounts on the hub, never on the camera. Done: Discord (webhook per camera, web and app). Open: YouTube (needs a Google Cloud project with YouTube API access from Benjamin) |
 | H6 | Satellites among the meteors: name them from CelesTrak (SGP4, sunlit), ISS and Tiangong by name, automatic label | hub | Benjamin, 2026-10-13: on the hub, not on the camera; SPEC §7.9 |
 
+## Security (review 2026-10-13)
+
+Read-only reviews of hub and camera by the hub session; the camera points were checked
+again in the code. Benjamin decided the open questions on 2026-10-13.
+
+| # | Item | Owner | Notes |
+|---|---|---|---|
+| S1 | Local UI: refuse cross-site POSTs, no framing; Host allow-list against DNS rebinding with the setting `local_hostnames` | agent | Origin check, X-Frame-Options: #204; Host list: SPEC §7.4 |
+| S2 | Setup network with WPA2 and a per-camera setup key (QR label, file on the boot partition), `hub_url` https only | agent + hub (app) | SPEC §7.1; the app scans the Wi-Fi QR code |
+| S3 | MQTT password deleted when the broker changes; MQTT, N.I.N.A. and ADS-B addresses owner-only on the hub | agent + hub | SPEC §7.7; hub part in #202 |
+| S4 | Release pipeline before update keys exist: protected environment with a reviewer, tag must be on `main`, actions pinned by SHA; key revocation | agent | needs Benjamin to create the GitHub environment |
+| S5 | Root tools never write through links in the agent's folder | agent | #204 |
+| S6 | Offline code: tries counted before Argon2, one at a time, parameters capped | agent | #204; caps in SPEC §6.5 |
+| S7 | Image: nftables input filter, narrower polkit rule for NetworkManager, reboot by day for security updates | agent | SPEC §8 |
+| S8 | Wi-Fi credentials without control characters | agent | #204 |
+
 ## Needs Benjamin / hardware
 
 - First boot of the image on the spare Pi 4 (SD card ordered); test with `"camera": "sim"`.

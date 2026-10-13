@@ -17,7 +17,14 @@ from typing import Any, Protocol, cast
 from sqlalchemy import delete, select, update
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
-from allskyhub_server.devices import astro, health, night_summary, space_weather, tonight
+from allskyhub_server.devices import (
+    astro,
+    events,
+    health,
+    night_summary,
+    space_weather,
+    tonight,
+)
 from allskyhub_server.devices.connections import ConnectionRegistry
 from allskyhub_server.devices.discord import Discord
 from allskyhub_server.devices.event_text import EVENT_TITLES
@@ -132,7 +139,7 @@ class Notifier:
                 if row is None:
                     return
                 device, user, event = row
-                if not user.notify_events or event.label == "false_positive":
+                if not user.notify_events or events.dismissed(event):
                     return
                 # Old detections (an import, a camera that was offline for long) are news
                 # no more: no push for them.

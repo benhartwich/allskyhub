@@ -23,7 +23,7 @@ from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from allskyhub_protocol import FrameVariant
-from allskyhub_server.devices import astro, night_summary, tonight
+from allskyhub_server.devices import astro, events, night_summary, tonight
 from allskyhub_server.devices.event_text import EVENT_TITLES
 from allskyhub_server.devices.events import storm_key
 from allskyhub_server.devices.images import ImageStore
@@ -182,7 +182,7 @@ class Discord:
                 config = settings_of(device)
                 if config is None or config.broken or event.kind not in config.kinds:
                     return
-                if event.discord_posted or event.label == "false_positive":
+                if event.discord_posted or events.dismissed(event):
                     return
                 if event.has_image and not picture_arrived:
                     return  # wait for the picture

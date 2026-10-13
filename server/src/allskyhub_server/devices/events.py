@@ -9,13 +9,41 @@ from typing import Any
 
 from fastapi import HTTPException
 from fastapi.responses import FileResponse, JSONResponse, Response
-from sqlalchemy import select
+from sqlalchemy import ColumnElement, and_, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from allskyhub_protocol import FrameVariant
 from allskyhub_server.devices.connections import ConnectionRegistry
 from allskyhub_server.devices.images import ImageStore
 from allskyhub_server.models import EventRecord
+
+
+def trail(event: EventRecord) -> str:
+    """SPEC §6.4 Trail verdicts: the camera's verdict; missing means ``meteor``."""
+    value = (event.data or {}).get("trail")
+    return value if isinstance(value, str) and value else "meteor"
+
+
+def dismissed(event: EventRecord) -> bool:
+    """A false positive: labelled so, or a streak the camera judged not to be a meteor and
+    the owner did not confirm. Counts nowhere (SPEC §6.4), also before the camera's
+    automatic label has arrived."""
+    if event.label == "false_positive":
+        return True
+    return event.label != "confirmed" and trail(event) != "meteor"
+
+
+def counted() -> ColumnElement[bool]:
+    """``not dismissed(event)`` for queries."""
+    return and_(
+        or_(EventRecord.label.is_(None), EventRecord.label != "false_positive"),
+        or_(
+            EventRecord.label == "confirmed",
+            ~EventRecord.data.has_key("trail"),
+            EventRecord.data["trail"].astext == "meteor",
+        ),
+    )
+
 
 # Stored pictures never change.
 PRIVATE_CACHE = "private, max-age=86400"
@@ -107,10 +135,10 @@ async def events(
     hide_false: bool = False,
 ) -> list[EventRecord]:
     """Events newest first; one night, or across nights with paging by ``before``.
-    ``hide_false`` leaves out those the owner marked as false positives."""
+    ``hide_false`` leaves out false positives (``dismissed``)."""
     query = select(EventRecord).where(EventRecord.device_id == device_id)
     if hide_false:
-        query = query.where((EventRecord.label.is_(None)) | (EventRecord.label != "false_positive"))
+        query = query.where(counted())
     if night_id is not None:
         query = query.where(EventRecord.night_id == night_id)
     if before is not None:

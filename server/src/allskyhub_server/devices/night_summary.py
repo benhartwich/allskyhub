@@ -13,6 +13,7 @@ from dataclasses import dataclass, field
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from allskyhub_server.devices import events as events_mod
 from allskyhub_server.devices.event_text import EVENT_TITLES, meteor_summary, shower_name
 from allskyhub_server.devices.events import storm_key
 from allskyhub_server.models import EventRecord, SkySample
@@ -77,7 +78,7 @@ async def summarize(db: AsyncSession, device_id: str, night_id: str) -> NightSum
             select(EventRecord).where(
                 EventRecord.device_id == device_id,
                 EventRecord.night_id == night_id,
-                (EventRecord.label.is_(None)) | (EventRecord.label != "false_positive"),
+                events_mod.counted(),
             )
         )
     )

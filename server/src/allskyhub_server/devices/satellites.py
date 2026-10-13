@@ -12,7 +12,6 @@ from __future__ import annotations
 import asyncio
 import datetime as dt
 import math
-import time
 from dataclasses import dataclass
 from typing import Any, cast
 
@@ -20,6 +19,7 @@ import httpx
 import sgp4.api  # pyright: ignore[reportMissingTypeStubs]
 
 from allskyhub_server.devices import astro
+from allskyhub_server.devices.refresh import Refreshing
 from allskyhub_sky import astro as sky_astro
 
 # NORAD id → German name; the brightest objects people look for.
@@ -146,35 +146,35 @@ def passes(
 
 
 class TleCache:
-    """CelesTrak asks to fetch rarely; twice a day is plenty for a pass list."""
+    """CelesTrak asks to fetch rarely; twice a day is plenty for a pass list. A page never
+    waits for it (``refresh``)."""
 
     def __init__(self, client: httpx.AsyncClient | None = None) -> None:
         self._client = client
-        self._tles: dict[int, tuple[str, str]] = {}
-        self._at = 0.0
-        self._lock = asyncio.Lock()
+        self._tles: Refreshing[str, dict[int, tuple[str, str]]] = Refreshing(
+            self._fetch, TLE_MAX_AGE_S
+        )
 
     async def get(self) -> dict[int, tuple[str, str]]:
-        if self._at and time.monotonic() - self._at < TLE_MAX_AGE_S:
-            return self._tles
-        async with self._lock:
-            if self._at and time.monotonic() - self._at < TLE_MAX_AGE_S:
-                return self._tles
-            self._at = time.monotonic()
-            client = self._client or httpx.AsyncClient(timeout=TIMEOUT_S)
-            try:
-                for norad in SATELLITES:
-                    try:
-                        r = await client.get(TLE_URL.format(id=norad), timeout=TIMEOUT_S)
-                        r.raise_for_status()
-                    except httpx.HTTPError:
-                        continue
-                    lines = [x.strip() for x in r.text.splitlines() if x.strip()]
-                    l1 = next((x for x in lines if x.startswith("1 ")), None)
-                    l2 = next((x for x in lines if x.startswith("2 ")), None)
-                    if l1 and l2:
-                        self._tles[norad] = (l1, l2)
-            finally:
-                if self._client is None:
-                    await client.aclose()
-            return self._tles
+        return await self._tles.get("tles") or {}
+
+    async def _fetch(self, _: str) -> dict[int, tuple[str, str]] | None:
+        client = self._client or httpx.AsyncClient(timeout=TIMEOUT_S)
+        try:
+            answers = await asyncio.gather(
+                *(client.get(TLE_URL.format(id=n), timeout=TIMEOUT_S) for n in SATELLITES),
+                return_exceptions=True,
+            )
+        finally:
+            if self._client is None:
+                await client.aclose()
+        tles: dict[int, tuple[str, str]] = {}
+        for norad, r in zip(SATELLITES, answers, strict=True):
+            if not isinstance(r, httpx.Response) or r.status_code != 200:
+                continue
+            lines = [x.strip() for x in r.text.splitlines() if x.strip()]
+            l1 = next((x for x in lines if x.startswith("1 ")), None)
+            l2 = next((x for x in lines if x.startswith("2 ")), None)
+            if l1 and l2:
+                tles[norad] = (l1, l2)
+        return tles or None

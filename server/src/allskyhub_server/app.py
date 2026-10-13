@@ -40,6 +40,7 @@ from allskyhub_server.mail.send import SmtpMailer
 from allskyhub_server.push.fcm import Sender
 from allskyhub_server.push.notify import Notifier
 from allskyhub_server.settings import Settings, get_settings
+from allskyhub_server.stall import StallWatch
 from allskyhub_server.version import short as version
 from allskyhub_server.web import (
     routes_account,
@@ -227,6 +228,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             ),
             asyncio.create_task(app.state.notifier.discord.run_forever()),
             asyncio.create_task(app.state.aircraft.run_forever()),
+            asyncio.create_task(StallWatch().run_forever()),
         ]
         if sender is not None or app.state.mailer.enabled:
             tasks.append(

@@ -39,8 +39,8 @@ a.card.cam:hover { transform: translateY(-4px); border-color: rgba(122, 162, 247
 @media (min-width: 40rem) { .features { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 .features .card h2 { font-size: 21px; }
 .home-cameras { margin-bottom: 24px; }
-@media (min-width: 40rem) { .home-camera-grid { grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); } }
 .home-camera-grid { list-style: none; margin: 0; padding: 0; display: grid; gap: 16px; grid-template-columns: repeat(auto-fill, minmax(min(100%, 150px), 1fr)); }
+@media (min-width: 40rem) { .home-camera-grid { grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); } }
 .home-camera { display: flex; flex-direction: column; gap: 4px; height: 100%; color: inherit; text-decoration: none; }
 .home-camera img, .home-camera .sky-ph { width: 100%; height: auto; aspect-ratio: 1; object-fit: cover; border-radius: 50%; margin-bottom: 8px; }
 .home-camera .sky-ph { background: url("design/stars.svg") center / 300px, radial-gradient(circle, #16224a 0%, #05070f 72%); }

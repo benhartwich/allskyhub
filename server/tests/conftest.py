@@ -56,6 +56,7 @@ def settings(tmp_path_factory: pytest.TempPathFactory) -> Settings:
         session_cookie_secure=False,
         log_format="console",
         adsb=False,
+        satellites=False,
     )
 
 

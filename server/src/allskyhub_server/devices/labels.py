@@ -96,9 +96,17 @@ def stored(event: EventRecord) -> EventLabel | None:
 async def set_auto(
     db: AsyncSession, event: EventRecord, reason: str, detail: str, at: dt.datetime
 ) -> bool:
-    """SPEC §6.4, §7.8: an automatic false positive, only where there was never a label
-    (an owner's removal stays). The camera gets it with ``deliver``. The caller commits."""
-    if event.labelled_at is not None:
+    """SPEC §6.4, §7.8, §7.9: an automatic false positive where the owner never set a
+    label (their removal stays too); it replaces an older automatic one (the camera's trail
+    verdict), unless it says the same. The camera gets it with ``deliver``. The caller
+    commits."""
+    if event.labelled_at is not None and not event.label_auto:
+        return False
+    if (event.label, event.label_reason, event.label_detail) == (
+        "false_positive",
+        reason,
+        detail[:100],
+    ):
         return False
     event.label = "false_positive"
     event.label_reason = reason

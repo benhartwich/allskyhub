@@ -729,6 +729,9 @@ async def _on_event(
     if body.kind == "meteor":
         # Roadmap C4: the same meteor at another camera (also when the event was updated).
         _background(meteor_pairs.pair_event(maker, conn.device_id, body.id))
+        # Roadmap H6 (SPEC §7.9): a satellite, or an aircraft already covered (§7.8)?
+        if aircraft.current is not None:
+            _background(aircraft.current.check_new(conn.device_id, body.id))
     if not body.has_image:
         return
     if not stored.has_thumb:

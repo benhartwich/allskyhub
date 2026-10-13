@@ -62,6 +62,37 @@ def test_the_camera_sees_clouds() -> None:
     assert stale.now.verdict == "clear"
 
 
+def test_cloud_map_cells() -> None:
+    """SPEC §6.3: index = 8·band + sector; on a limit the higher sector or band."""
+    cells: list[float | None] = [i / 100 for i in range(24)]
+    assert target.map_cell(cells, 20, 0) == 0.0  # band 0, north
+    assert target.map_cell(cells, 20, 359) == 0.0
+    assert target.map_cell(cells, 20, 22.5) == 0.01  # on the limit: the next sector
+    assert target.map_cell(cells, 40, 90) == 0.10  # band 1, east
+    assert target.map_cell(cells, 89, 180) == 0.20  # band 2, south
+    assert target.map_cell(cells, 14.9, 0) is None  # below 15°
+    cells[4] = None
+    assert target.map_cell(cells, 30, 180) is None  # not judgeable
+    assert target.map_cell(cells[:23], 30, 0) is None
+    assert target.map_cell(None, 30, 0) is None
+
+
+def test_the_cell_in_the_objects_direction() -> None:
+    m31 = target.find("M31")
+    assert m31 is not None
+    clear = target.plan(m31, _status(cloud=0.05), _forecast(), EVENING)
+    assert clear is not None
+    status = _status(cloud=0.05)
+    cloud_map: list[float | None] = [0.0] * 24
+    band = 2 if clear.now.alt >= 65 else 1 if clear.now.alt >= 40 else 0
+    cloud_map[8 * band + round(clear.now.az / 45) % 8] = 0.9
+    status["sky"]["cloud_map"] = cloud_map
+    found = target.plan(m31, status, _forecast(), EVENING)
+    assert found is not None
+    assert (found.now.cloud_cover, found.now.source) == (0.9, "in Richtung des Objekts")
+    assert found.now.verdict == "cloudy"  # the whole sky would say clear
+
+
 def test_low_and_bright() -> None:
     m42 = target.find("M42")
     jupiter = target.find("jupiter")

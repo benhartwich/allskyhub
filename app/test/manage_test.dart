@@ -176,6 +176,7 @@ class FakeManageHub {
           'az': 80.0,
           'direction': 'O',
           'cloud_cover': 0.05,
+          'cloud_source': 'in Richtung des Objekts',
           'verdict': 'clear',
           'verdict_text': 'frei',
           'best_start': null,
@@ -331,7 +332,10 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('M31 Andromedagalaxie ist jetzt frei.'), findsOneWidget);
     expect(find.textContaining('Jetzt: 62° hoch im O'), findsOneWidget);
-    expect(find.textContaining('5 % Wolken'), findsOneWidget);
+    expect(
+      find.textContaining('5 % Wolken (in Richtung des Objekts)'),
+      findsOneWidget,
+    );
     expect(find.text('frei · Mond nah'), findsOneWidget);
     expect(find.text('bewölkt'), findsOneWidget);
 

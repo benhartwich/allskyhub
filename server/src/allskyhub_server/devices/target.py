@@ -1,9 +1,9 @@
 """„Ziel frei?“ (roadmap H4): is an object clear now and in the next hours at a camera?
 
 Where the object stands (``allskyhub_sky``), how cloudy the forecast is for each hour, how
-dark it is and where the moon is, and, for now, what the camera itself sees: its cloud
-cover for the whole sky (SPEC §6.3 ``status.sky``). Once the camera reports cover per
-sky area, the cell in the object's direction takes its place.
+dark it is and where the moon is, and what the camera itself sees now: the cloud cover in
+the object's direction from its cloud map (SPEC §6.3 ``status.sky.cloud_map``), else its
+cover for the whole sky.
 """
 
 from __future__ import annotations
@@ -11,7 +11,7 @@ from __future__ import annotations
 import datetime as dt
 import math
 from dataclasses import dataclass, field
-from typing import Any, Literal
+from typing import Any, Literal, cast
 
 from allskyhub_server.devices.tonight import Hour, zone_for
 from allskyhub_sky import alt_az, precess, sidereal_deg
@@ -123,6 +123,24 @@ def _position(key: str, at: dt.datetime, lat: float, lon: float) -> tuple[float,
     return alt, az, _sep((ra, dec), moon_radec(at))
 
 
+MAP_CELLS = 24
+MAP_BANDS = (15.0, 40.0, 65.0)  # lower limits of the altitude bands
+
+
+def map_cell(cloud_map: object, alt: float, az: float) -> float | None:
+    """SPEC §6.3 ``cloud_map``: the value of the cell around (alt, az), or None (no map,
+    below 15°, a cell the camera could not judge)."""
+    if not isinstance(cloud_map, list) or alt < MAP_BANDS[0]:
+        return None
+    cells = cast(list[object], cloud_map)
+    if len(cells) != MAP_CELLS:
+        return None
+    band = sum(alt >= low for low in MAP_BANDS) - 1
+    sector = math.floor((az % 360.0 + 22.5) / 45.0) % 8
+    value = cells[8 * band + sector]
+    return float(value) if isinstance(value, int | float) and 0 <= value <= 1 else None
+
+
 def _judge(alt: float, sun: float, clouds: float | None) -> Verdict:
     if alt < MIN_ALT:
         return "low"
@@ -150,13 +168,18 @@ def plan(
     alt, az, _ = _position(target.key, now, lat, lon)
     sky: dict[str, Any] = (status or {}).get("sky") or {}
     cover: float | None = None
+    source = "ganzer Himmel"
     try:
         measured = dt.datetime.fromisoformat(str(sky.get("at")))
     except ValueError:
         measured = None
-    value = sky.get("cloud_cover")
-    if measured is not None and now - measured <= NOW_FRESH and isinstance(value, int | float):
-        cover = float(value)
+    if measured is not None and now - measured <= NOW_FRESH:
+        cell = map_cell(sky.get("cloud_map"), alt, az)
+        value = sky.get("cloud_cover")
+        if cell is not None:
+            cover, source = cell, "in Richtung des Objekts"
+        elif isinstance(value, int | float):
+            cover = float(value)
     now_verdict = _judge(
         alt,
         sun_altitude(now, lat, lon),
@@ -164,7 +187,7 @@ def plan(
     )
     result = Plan(
         target,
-        TargetNow(alt, az, cover, "ganzer Himmel", now_verdict),
+        TargetNow(alt, az, cover, source, now_verdict),
         tz=str(settings.get("timezone") or "UTC"),
     )
     moon_lit = moon_illumination(now) >= MOON_BRIGHT

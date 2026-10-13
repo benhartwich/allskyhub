@@ -945,6 +945,7 @@ class TargetPlan {
       alt = (json['alt'] as num).toDouble(),
       direction = json['direction'] as String,
       cloudCover = (json['cloud_cover'] as num?)?.toDouble(),
+      cloudSource = json['cloud_source'] as String? ?? '',
       verdict = json['verdict'] as String,
       verdictText = json['verdict_text'] as String,
       hours = [
@@ -959,6 +960,9 @@ class TargetPlan {
 
   /// What the camera sees now (0..1), or null without a fresh value.
   final double? cloudCover;
+
+  /// "in Richtung des Objekts" (cloud map) or "ganzer Himmel"; empty from older hubs.
+  final String cloudSource;
   final String verdict;
   final String verdictText;
   final List<TargetHourItem> hours;

@@ -322,6 +322,8 @@ class PublicSections(_Model):
     aurora: bool = True
     # SPEC §6.8: what the telescope next to the camera does (roadmap C15), opt-in.
     observatory: bool = False
+    # SPEC §6.8, §7.8: aircraft over the live image (roadmap H3).
+    aircraft: bool = True
 
 
 class PublicProfile(_Model):

@@ -152,6 +152,7 @@ const T = {
     "ev.confidence": "Sicherheit {p} %",
     "ev.confirmed": "bestätigt",
     "ev.not": "kein {kind}",
+    "ev.auto": "automatisch",
     "ev.classify": "Einordnen",
     "ev.reset": "zurücksetzen",
     "ev.none": "Noch nichts erkannt.",
@@ -566,6 +567,7 @@ const T = {
     "ev.confidence": "Confidence {p} %",
     "ev.confirmed": "confirmed",
     "ev.not": "not {kind}",
+    "ev.auto": "automatic",
     "ev.classify": "Classify",
     "ev.reset": "reset",
     "ev.none": "Nothing detected yet.",
@@ -1415,7 +1417,10 @@ const REASONS = ["aircraft", "satellite", "artifact", "other"];
 const reasonName = (r) => tn("reason." + r) || r;
 function labelBadge(e) {
   if (e.label === "confirmed") return `<span class="badge ok">${t("ev.confirmed")}</span>`;
-  if (e.label === "false_positive") return `<span class="badge warn">${t("ev.not", { kind: esc(kindName(e.kind)) })}${e.reason ? ": " + esc(reasonName(e.reason)) : ""}</span>`;
+  // SPEC §7.8: a matcher's label (aircraft) says so; any click below replaces it.
+  const auto = e.label_auto ? t("ev.auto") + ": " : "";
+  const detail = e.label_auto && e.label_detail ? " " + esc(e.label_detail) : "";
+  if (e.label === "false_positive") return `<span class="badge warn">${auto}${t("ev.not", { kind: esc(kindName(e.kind)) })}${e.reason ? ": " + esc(reasonName(e.reason)) : ""}${detail}</span>`;
   return "";
 }
 function labelButtons(e) {
@@ -1481,6 +1486,8 @@ async function viewEvents(night) {
     if (!r.ok) { alert(t("notSaved")); return; }
     e.label = body.label;
     e.reason = body.reason;
+    e.label_auto = false;
+    e.label_detail = null;
     render();
   };
   $("showFp").onclick = () => { showFp = !showFp; $("showFp").setAttribute("aria-pressed", String(showFp)); render(); };

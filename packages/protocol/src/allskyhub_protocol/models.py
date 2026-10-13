@@ -287,6 +287,16 @@ class Observatory(BaseModel):
     safe: bool | None = None
 
 
+class AdsbStatus(BaseModel):
+    """The owner's ADS-B receiver (SPEC §6.3, §7.8)."""
+
+    model_config = ConfigDict(extra="ignore", frozen=True)
+
+    at: AwareDatetime | None = None  # when it was last read
+    aircraft: int = Field(default=0, ge=0)
+    error: str | None = Field(default=None, max_length=40)  # unreachable, bad_data
+
+
 class UpdateState(StrEnum):
     """The updater's last state (SPEC §8)."""
 
@@ -334,6 +344,8 @@ class Status(_Body):
     alpaca_error: str | None = Field(default=None, max_length=40)
     # SPEC §4.1: the owner paused capture (cleaning the dome); no warnings meanwhile.
     capture_paused: bool = False
+    # SPEC §7.8: the owner's ADS-B receiver, null unless `adsb_url` is set.
+    adsb: AdsbStatus | None = None
 
 
 class FrameInfo(_Body):
@@ -515,8 +527,9 @@ LabelReason = Literal["aircraft", "satellite", "artifact", "other"]
 
 
 class EventLabel(_Body):
-    """The owner's label of a detection, set on the camera (SPEC §6.4 Labels); the same
-    fields are the `args` of the `label_event` command (SPEC §6.5)."""
+    """A label of a detection, set on the camera (SPEC §6.4 Labels); the same fields are
+    the `args` of the `label_event` command (SPEC §6.5). `auto` labels come from a
+    matcher (aircraft, SPEC §7.8), never replace a label and give way to the owner's."""
 
     TYPE: ClassVar[str] = "event_label"
     night_id: str = Field(pattern=r"^\d{8}$")
@@ -524,12 +537,47 @@ class EventLabel(_Body):
     label: LabelName | None = None  # null removes the label
     reason: LabelReason | None = None  # only with false_positive
     at: AwareDatetime
+    auto: bool = False
+    detail: str | None = Field(default=None, max_length=100)  # only with auto
 
     @model_validator(mode="after")
     def _reason_only_for_false_positive(self) -> EventLabel:
         if self.reason is not None and self.label != "false_positive":
             raise ValueError("reason only with false_positive")
+        if self.detail is not None and not self.auto:
+            raise ValueError("detail only with auto")
         return self
+
+    def replaces(self, old: EventLabel | None) -> bool:
+        """Whether this label wins over the stored one (SPEC §6.4 Labels)."""
+        if old is None:
+            return True
+        if self.auto:
+            return False
+        return old.auto or self.at > old.at
+
+
+class AircraftPosition(BaseModel):
+    """One aircraft seen by the owner's receiver (SPEC §6.3 `aircraft`)."""
+
+    model_config = ConfigDict(extra="ignore", frozen=True)
+
+    hex: str = Field(pattern=r"^[0-9a-f]{6}$")
+    flight: str | None = Field(default=None, max_length=8)
+    lat: float = Field(ge=-90, le=90)
+    lon: float = Field(ge=-180, le=180)
+    alt_m: float | None = None
+    track_deg: float | None = Field(default=None, ge=0, lt=360)
+    speed_kn: float | None = Field(default=None, ge=0)
+    seen_s: float = Field(ge=0, le=60)
+
+
+class Aircraft(_Body):
+    """The aircraft the owner's ADS-B receiver sees (SPEC §6.3, §7.8)."""
+
+    TYPE: ClassVar[str] = "aircraft"
+    at: AwareDatetime
+    aircraft: list[AircraftPosition] = Field(default_factory=list[AircraftPosition], max_length=200)
 
 
 class NightDeleted(_Body):
@@ -550,13 +598,14 @@ Body = (
     | ErrorReply
     | EventLabel
     | NightDeleted
+    | Aircraft
 )
 
 _BODY_TYPES: dict[str, type[_Body]] = {
     m.TYPE: m
     for m in (
         Hello, Status, FrameInfo, Products, Event, Command, Ack, ErrorReply, EventLabel,
-        NightDeleted,
+        NightDeleted, Aircraft,
     )
 }  # fmt: skip
 

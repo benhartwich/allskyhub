@@ -218,3 +218,22 @@ def test_labels(tmp_path: Path) -> None:
     assert not labels.set(old)
     assert labels.false_positives(NIGHT) == {"meteor-20261012T200000Z"}
     assert len(labels.all()) == 1
+
+
+def test_auto_label_gives_way(tmp_path: Path) -> None:
+    """SPEC §6.4 Labels, §7.8: an aircraft match never replaces a label; the owner's wins."""
+    from allskyhub_agent.detect.labels import Labels
+    from allskyhub_protocol import EventLabel
+
+    store = ImageStore(tmp_path, TZ)
+    labels = Labels(store)
+    eid = "meteor-20261012T200000Z"
+    t = datetime(2026, 10, 12, 20, 5, tzinfo=UTC)
+    auto = EventLabel(night_id=NIGHT, event_id=eid, label="false_positive", reason="aircraft",
+                      auto=True, detail="DLH4AB 3c6444", at=t)  # fmt: skip
+    assert labels.set(auto)
+    assert not labels.set(auto.model_copy(update={"at": t + timedelta(minutes=1)}))
+    owner = EventLabel(night_id=NIGHT, event_id=eid, label="confirmed", at=t - timedelta(hours=1))
+    assert labels.set(owner)  # older, but the owner's
+    assert labels.night(NIGHT)[eid] == owner
+    assert not labels.set(auto.model_copy(update={"at": t + timedelta(hours=2)}))

@@ -1,9 +1,10 @@
 """The owner's labels of detections (SPEC §6.4 Labels).
 
 `confirmed` or `false_positive` (with a reason), set in the local UI or on the hub; the
-newer `at` wins. Kept per night in `<data>/images/<night>/events/labels.json` next to the
-events; a false positive is
-never deleted, only hidden and left out of counts.
+newer `at` wins. An automatic label (`auto`, aircraft matching, SPEC §7.8) never replaces
+one and any owner's label replaces it. Kept per night in
+`<data>/images/<night>/events/labels.json` next to the events; a false positive is never
+deleted, only hidden and left out of counts.
 """
 
 from __future__ import annotations
@@ -44,11 +45,10 @@ class Labels:
         return out
 
     def set(self, label: EventLabel) -> bool:
-        """Store it unless a newer one is there; True if stored."""
+        """Store it unless the stored one wins (SPEC §6.4 Labels); True if stored."""
         with self._lock:
             labels = self.night(label.night_id)
-            old = labels.get(label.event_id)
-            if old is not None and old.at >= label.at:
+            if not label.replaces(labels.get(label.event_id)):
                 return False
             labels[label.event_id] = label
             path = self._path(label.night_id)

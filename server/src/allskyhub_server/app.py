@@ -26,6 +26,7 @@ from allskyhub_server.auth.hub_keys import HubKeys
 from allskyhub_server.db import create_engine, create_sessionmaker
 from allskyhub_server.devices import domains
 from allskyhub_server.devices.connections import ConnectionRegistry
+from allskyhub_server.devices.discord import Discord, Poster
 from allskyhub_server.devices.domains import HostMap
 from allskyhub_server.devices.images import ImageStore
 from allskyhub_server.devices.renders import Renderer
@@ -202,6 +203,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         app.state.notifier.mailer = app.state.mailer
         app.state.notifier.base_url = settings.base_url
         app.state.notifier.forecast = app.state.forecast
+        app.state.notifier.discord = Discord(
+            app.state.sessionmaker, app.state.images, Poster(), settings.base_url
+        )
         app.state.renderer = Renderer(app.state.sessionmaker, app.state.images, settings)
         tasks = [
             cleanup,
@@ -209,6 +213,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             asyncio.create_task(
                 domains.run_forever(app.state.sessionmaker, settings.data_dir, app.state.hosts)
             ),
+            asyncio.create_task(app.state.notifier.discord.run_forever()),
         ]
         if sender is not None or app.state.mailer.enabled:
             tasks.append(

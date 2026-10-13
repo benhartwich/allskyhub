@@ -331,6 +331,15 @@ class _CameraScreenState extends State<CameraScreen> {
                     ),
                   ),
                   OutlinedButton.icon(
+                    key: const Key('open-discord'),
+                    icon: const Icon(Icons.forum_outlined),
+                    label: const Text('Discord'),
+                    onPressed: () => _open(
+                      () =>
+                          DiscordScreen(client: widget.client, camera: _camera),
+                    ),
+                  ),
+                  OutlinedButton.icon(
                     key: const Key('open-public'),
                     icon: const Icon(Icons.public),
                     label: const Text('Öffentliche Seite'),

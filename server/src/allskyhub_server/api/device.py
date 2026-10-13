@@ -49,6 +49,7 @@ from allskyhub_server.auth.accounts import DEFAULT_EVENT_KEEP_DAYS
 from allskyhub_server.auth.hub_keys import HubKeys
 from allskyhub_server.devices import local_access, meteor_pairs, pairing, public, settings_form
 from allskyhub_server.devices.connections import Connection, ConnectionRegistry
+from allskyhub_server.devices.discord import Discord
 from allskyhub_server.devices.events import image_rev
 from allskyhub_server.devices.images import JPEG_MAGIC, ImageStore
 from allskyhub_server.devices.space_weather import KpCache
@@ -273,6 +274,10 @@ async def upload_event(
         .values({"has_full": True} if variant is FrameVariant.FULL else {"has_thumb": True})
     )
     await db.commit()
+    discord: Discord | None = request.app.state.notifier.discord
+    if discord is not None and variant is FrameVariant.THUMB:
+        # Roadmap H5: detections with a picture go to Discord once it is here.
+        _background(discord.event(info.device_id, event_id, picture_arrived=True))
     return Response(status_code=204)
 
 
@@ -690,6 +695,8 @@ async def _on_event(
     if is_new:
         # Roadmap #6; in its own task so a slow push service never delays the device.
         _background(notifier.event(conn.device_id, body.id))
+        if notifier.discord is not None:
+            _background(notifier.discord.event(conn.device_id, body.id, picture_arrived=False))
     if body.kind == "meteor":
         # Roadmap C4: the same meteor at another camera (also when the event was updated).
         _background(meteor_pairs.pair_event(maker, conn.device_id, body.id))

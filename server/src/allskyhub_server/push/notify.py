@@ -19,6 +19,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from allskyhub_server.devices import astro, health, night_summary, space_weather, tonight
 from allskyhub_server.devices.connections import ConnectionRegistry
+from allskyhub_server.devices.discord import Discord
 from allskyhub_server.devices.event_text import EVENT_TITLES
 from allskyhub_server.devices.events import storm_key
 from allskyhub_server.devices.tonight import ForecastCache
@@ -67,6 +68,8 @@ class Notifier:
         # Set by the app: e-mail (roadmap #15, C14) and the hub's address for links in it.
         self.mailer: Mailer | None = None
         self.base_url = ""
+        # Set by the app: the owner's Discord channel (roadmap H5).
+        self.discord: Discord | None = None
 
     @property
     def enabled(self) -> bool:

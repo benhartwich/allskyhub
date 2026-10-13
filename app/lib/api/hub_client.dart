@@ -409,6 +409,35 @@ class HubClient {
       Member.fromJson(m as Map<String, dynamic>),
   ];
 
+  /// Roadmap H5: the camera's Discord channel (owner only).
+  Future<DiscordState> discord(String cameraId) async => DiscordState.fromJson(
+    await _send('GET', '/cameras/$cameraId/discord') as Map<String, dynamic>,
+  );
+
+  /// An empty [webhook] keeps the stored address; a 400 carries a German sentence.
+  Future<DiscordState> updateDiscord(
+    String cameraId, {
+    String webhook = '',
+    required List<String> kinds,
+    required bool summary,
+  }) async => DiscordState.fromJson(
+    await _send(
+          'PUT',
+          '/cameras/$cameraId/discord',
+          body: {'webhook': webhook, 'kinds': kinds, 'summary': summary},
+        )
+        as Map<String, dynamic>,
+  );
+
+  Future<DiscordState> removeDiscord(String cameraId) async =>
+      DiscordState.fromJson(
+        await _send('DELETE', '/cameras/$cameraId/discord')
+            as Map<String, dynamic>,
+      );
+
+  Future<void> testDiscord(String cameraId) =>
+      _send('POST', '/cameras/$cameraId/discord/test');
+
   /// Roadmap #9, SPEC §6.8: the public sky page and what it shows (owner only).
   Future<PublicState> publicState(String cameraId) async =>
       PublicState.fromJson(
@@ -834,4 +863,29 @@ class ExportItem {
   final String name;
   final String title;
   final String filename;
+}
+
+/// `GET /cameras/{id}/discord` (roadmap H5); [webhook] without its secret part.
+class DiscordState {
+  DiscordState.fromJson(Map<String, dynamic> json)
+    : configured = json['configured'] as bool,
+      webhook = json['webhook'] as String?,
+      kinds = [for (final k in json['kinds'] as List<dynamic>) k as String],
+      summary = json['summary'] as bool,
+      broken = json['broken'] as bool,
+      available = {
+        for (final e in (json['available'] as Map<String, dynamic>).entries)
+          e.key: e.value as String,
+      };
+
+  final bool configured;
+  final String? webhook;
+  final List<String> kinds;
+  final bool summary;
+
+  /// Discord no longer knows the webhook: the owner enters a new one.
+  final bool broken;
+
+  /// Every kind that can go to the channel, with its German label.
+  final Map<String, String> available;
 }

@@ -15,6 +15,7 @@ from allskyhub_server.auth import ratelimit
 from allskyhub_server.auth.sessions import SessionInfo
 from allskyhub_server.devices import (
     archive,
+    discord,
     domains,
     events,
     health,
@@ -165,6 +166,9 @@ async def _camera_context(
         "observatory": public.observatory(device),
         "charts": await archive.recent_charts(db, device.id, now - dt.timedelta(hours=24)),
         "members": await sharing.members(db, device.id) if role == "owner" else [],
+        "discord": discord.settings_of(device) if role == "owner" else None,
+        "discord_kinds": discord.KINDS,
+        "masked": discord.masked,
         **extra,
     }
 
@@ -399,3 +403,61 @@ async def public_domain_remove(
     domains.remove(device, settings.data_dir)
     await db.commit()
     return RedirectResponse(f"/cameras/{device.id}/public/edit#domain", status_code=303)
+
+
+@router.post("/cameras/{device_id}/discord")
+async def discord_save(
+    request: Request, db: DbSession, session: CurrentSession, device_id: str
+) -> Response:
+    """Roadmap H5: the webhook and what goes to the channel; an empty address keeps the
+    stored one."""
+    device = await _own_device(db, session, device_id)
+    form = await request.form()
+    old = discord.settings_of(device)
+    webhook = str(form.get("webhook") or "").strip() or (old.webhook if old else "")
+    try:
+        config = discord.DiscordSettings(
+            webhook=webhook,
+            kinds=[k for k in discord.KINDS if form.get(f"kind_{k}") == "on"],  # pyright: ignore[reportArgumentType]
+            summary=form.get("summary") == "on",
+        )
+    except ValidationError:
+        context = await _camera_context(request, db, device, error=discord.BAD_WEBHOOK)
+        return render(request, "camera.html", context, session=session, status_code=400)
+    device.discord = config.model_dump()
+    await db.commit()
+    return RedirectResponse(f"/cameras/{device.id}#discord", status_code=303)
+
+
+@router.post("/cameras/{device_id}/discord/test")
+async def discord_test(
+    request: Request, db: DbSession, session: CurrentSession, device_id: str
+) -> Response:
+    device = await _own_device(db, session, device_id)
+    try:
+        await ratelimit.hit(
+            request.app.state.engine, f"discord-test:{device.id}", ratelimit.DISCORD_TEST
+        )
+        poster: discord.Discord = request.app.state.notifier.discord
+        result = await poster.test(device)
+    except ratelimit.RateLimitedError:
+        result = "limited"
+    notice = error = None
+    if result == "limited":
+        error = "Bitte ein paar Minuten warten, bevor du noch eine Testnachricht schickst."
+    elif result == "ok":
+        notice = "Testnachricht gesendet. Schau in deinen Discord-Kanal."
+    elif result == "gone":
+        error = "Discord kennt diesen Webhook nicht (mehr). Bitte eine neue Adresse eintragen."
+    else:
+        error = "Discord war nicht erreichbar. Bitte später noch einmal versuchen."
+    context = await _camera_context(request, db, device, error=error, notice=notice)
+    return render(request, "camera.html", context, session=session)
+
+
+@router.post("/cameras/{device_id}/discord/remove")
+async def discord_remove(db: DbSession, session: CurrentSession, device_id: str) -> Response:
+    device = await _own_device(db, session, device_id)
+    device.discord = None
+    await db.commit()
+    return RedirectResponse(f"/cameras/{device.id}#discord", status_code=303)

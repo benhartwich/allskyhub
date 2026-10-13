@@ -13,6 +13,8 @@ final camera = Camera(id: 'cam1', name: 'Garten', profile: 'sim', online: true);
 
 /// Roadmap C10, #9 and C7 against a small fake of the app API (api/app_manage.py).
 class FakeManageHub {
+  var discord = <String, dynamic>{};
+  var discordTests = 0;
   final members = <Map<String, dynamic>>[];
   var enabled = false;
   var profile = <String, dynamic>{
@@ -101,6 +103,40 @@ class FakeManageHub {
       }
       if (path == '/api/v1/cameras/cam1/exports/sqm.csv') {
         return http.Response('night,sqm\n20261011,21.3\n', 200);
+      }
+      if (path.startsWith('/api/v1/cameras/cam1/discord')) {
+        if (path.endsWith('/test')) {
+          discordTests++;
+          return http.Response('', 204);
+        }
+        if (request.method == 'PUT') {
+          final body = jsonDecode(request.body) as Map<String, dynamic>;
+          if (body['webhook'] == 'https://example.org') {
+            return _json({
+              'detail': 'Das ist keine Discord-Webhook-Adresse.',
+            }, 400);
+          }
+          discord = {
+            'webhook': (body['webhook'] as String).isEmpty
+                ? discord['webhook']
+                : 'https://discord.com/api/webhooks/1/…',
+            'kinds': body['kinds'],
+            'summary': body['summary'],
+          };
+        }
+        if (request.method == 'DELETE') discord = {};
+        return _json({
+          'configured': discord.isNotEmpty,
+          'webhook': discord['webhook'],
+          'kinds': discord['kinds'] ?? ['meteor', 'aurora', 'nlc'],
+          'summary': discord['summary'] ?? true,
+          'broken': false,
+          'available': {
+            'meteor': 'Meteore',
+            'aurora': 'Polarlicht',
+            'nlc': 'NLC',
+          },
+        });
       }
       return http.Response('', 404);
     }),
@@ -205,6 +241,38 @@ void main() {
     await tester.tap(find.byKey(const Key('export-sqm')));
     await tester.pumpAndSettle();
     expect(shared, {'allskyhub-cam1-sqm.csv': 'night,sqm\n20261011,21.3\n'});
+  });
+
+  testWidgets('discord: wrong address, save, test, remove', (tester) async {
+    final hub = FakeManageHub();
+    await _pump(tester, DiscordScreen(client: hub.client, camera: camera));
+    expect(find.byKey(const Key('discord-test')), findsNothing);
+
+    await tester.enterText(
+      find.byKey(const Key('discord-webhook')),
+      'https://example.org',
+    );
+    await tester.tap(find.byKey(const Key('discord-save')));
+    await tester.pumpAndSettle();
+    expect(find.text('Das ist keine Discord-Webhook-Adresse.'), findsOneWidget);
+
+    await tester.enterText(
+      find.byKey(const Key('discord-webhook')),
+      'https://discord.com/api/webhooks/1/secret',
+    );
+    await tester.tap(find.byKey(const Key('discord-aurora')));
+    await tester.tap(find.byKey(const Key('discord-save')));
+    await tester.pumpAndSettle();
+    expect(hub.discord['kinds'], ['meteor', 'nlc']);
+    expect(find.textContaining('leer lassen = behalten'), findsOneWidget);
+
+    await tester.tap(find.byKey(const Key('discord-test')));
+    await tester.pumpAndSettle();
+    expect(hub.discordTests, 1);
+    await tester.tap(find.byKey(const Key('discord-remove')));
+    await tester.pumpAndSettle();
+    expect(hub.discord, isEmpty);
+    expect(find.byKey(const Key('discord-test')), findsNothing);
   });
 
   test('camera role defaults to owner for older hubs', () {

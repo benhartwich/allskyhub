@@ -4,6 +4,7 @@
   <link rel="stylesheet" href="{{ asset('uplot.min.css') }}">
   <script src="{{ asset('uplot.min.js') }}" defer></script>
   <script src="{{ asset('charts.js') }}" defer></script>
+  <script src="{{ asset('fold.js') }}" defer></script>
 {% endblock %}
 {% block content %}
 <a class="back" href="/">← Meine Kameras</a>
@@ -45,8 +46,8 @@
 </section>
 {% endif %}
 {% if role in ('owner', 'admin') %}{% include "_settings_form.html" %}{% endif %}
-<div class="card">
-  <h2>Gerät</h2>
+<details class="card fold" id="geraet" data-fold="geraet">
+  <summary><h2>Gerät</h2></summary>
   <dl class="facts">
     <dt>Profil</dt><dd>{{ device.profile }}</dd>
     <dt>Software</dt><dd>{{ device.agent_version }}{% if update %} · <span class="{{ 'warn' if update[1] }}">{{ update[0] }}</span>{% endif %}</dd>
@@ -54,10 +55,10 @@
     <dt>Ausrichtung</dt><dd>{{ orientation or "noch nicht kalibriert (braucht eine klare Nacht)" }}</dd>
     <dt>Geräte-ID</dt><dd><code>{{ device.id }}</code></dd>
   </dl>
-</div>
+</details>
 {% if role == 'owner' %}
-<div class="card" id="teilen">
-  <h2>Teilen</h2>
+<details class="card fold" id="teilen" data-fold="teilen">
+  <summary><h2>Teilen</h2></summary>
   <p class="muted">Gib die Kamera für andere allskyhub-Konten frei, etwa für Familie oder Verein. „Ansehen“ zeigt Bild, Galerie, Ereignisse und Statistik; „Verwalten“ erlaubt dazu Einstellungen und das Markieren von Ereignissen. Koppeln, Entfernen, öffentliche Seite und lokaler Zugang bleiben bei dir.</p>
   {% if members %}
   <ul class="list">
@@ -79,9 +80,9 @@
     </div>
     <button type="submit" class="secondary">Freigeben</button>
   </form>
-</div>
-<div class="card" id="discord">
-  <h2>Discord</h2>
+</details>
+<details class="card fold" id="discord" data-fold="discord">
+  <summary><h2>Discord</h2></summary>
   <p class="muted">Meteore, Polarlicht und die Nacht am Morgen in einem Discord-Kanal, mit Bild. In Discord: Servereinstellungen → Integrationen → Webhooks → Neuer Webhook → Webhook-URL kopieren. Links in den Nachrichten führen zur öffentlichen Seite, wenn sie an ist.</p>
   {% if discord and discord.broken %}<p class="warn">Discord kennt diesen Webhook nicht mehr. Bitte eine neue Adresse eintragen.</p>{% endif %}
   <form method="post" action="/cameras/{{ device.id }}/discord" class="stack">
@@ -108,9 +109,9 @@
     </form>
   </div>
   {% endif %}
-</div>
-<div class="card">
-  <h2>Lokale Seite der Kamera</h2>
+</details>
+<details class="card fold" id="lokal" data-fold="lokal">
+  <summary><h2>Lokale Seite der Kamera</h2></summary>
   <p class="muted">Im Heimnetz hat die Kamera eine eigene Seite. Dort meldest du dich mit „Mit allskyhub anmelden“ an. Für Zeiten ohne Internet gibt es einen Offline-Code.</p>
   {% if device.local_access_set_at %}
   <p>Offline-Code angelegt am {{ device.local_access_set_at | localtime }}{% if device.local_access_pending %} · <span class="warn">noch nicht bei der Kamera</span>{% else %} · bei der Kamera{% endif %}</p>
@@ -127,9 +128,9 @@
     </form>
     {% endif %}
   </div>
-</div>
-<div class="card">
-  <h2>Öffentliche Seite</h2>
+</details>
+<details class="card fold" id="oeffentlich" data-fold="oeffentlich">
+  <summary><h2>Öffentliche Seite{% if device.public_slug %} <span class="fold-note">· an</span>{% endif %}</h2></summary>
   {% if device.public_slug %}
   {% set url = request.base_url ~ "sky/" ~ device.public_slug %}
   <p>Jeder mit diesem Link sieht, was du für die Seite ausgewählt hast:</p>
@@ -149,7 +150,7 @@
     <button type="submit">Öffentliche Seite einschalten</button>
   </form>
   {% endif %}
-</div>
+</details>
 <form method="post" action="/cameras/{{ device.id }}/remove" class="card danger">
   <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
   <p class="muted">Entfernen trennt die Kamera von deinem Konto. Sie zeigt danach einen neuen Kopplungscode.</p>

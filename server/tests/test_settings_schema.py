@@ -74,7 +74,7 @@ async def test_form_from_schema(app: FastAPI, client: httpx.AsyncClient, live_ap
         )
         await db.commit()
     page = (await client.get(f"/cameras/{dev.device_id}")).text
-    for text in ("<legend>Belichtung</legend>", "Höchster Gain", "Erlaubt: 0 bis 600",
+    for text in ("<summary>Belichtung</summary>", "Höchster Gain", "Erlaubt: 0 bis 600",
                  "Mehr Gain rauscht stärker.", 'value="h">Horizontal', "Spiegeln",
                  'name="overlay" value="true" checked', 'value="Garten"'):  # fmt: skip
         assert text in page, text

@@ -80,6 +80,16 @@ CAPABILITIES = [
 ]
 
 
+def _retry_after(exc: Exception) -> float:
+    """Seconds a 429 or 503 asks to wait (Retry-After in seconds), else 0; at most 1 h."""
+    if not isinstance(exc, httpx.HTTPStatusError) or exc.response.status_code not in (429, 503):
+        return 0.0
+    try:
+        return min(3600.0, max(0.0, float(exc.response.headers.get("retry-after", "0"))))
+    except ValueError:
+        return 0.0
+
+
 @dataclass(frozen=True)
 class HubConfig:
     hub_url: str = "https://allskyhub.org"
@@ -88,6 +98,9 @@ class HubConfig:
     # Imported nights are announced one per interval (SPEC §6.7).
     backlog_interval_s: float = 1.0
     replaced_wait_s: float = 300.0
+    # A session counts as working once it stayed up this long; only then the backoff starts
+    # anew, and a 4401 right after connecting waits like any other failure (SPEC §6.1).
+    stable_s: float = 60.0
     http_timeout_s: float = 30.0
 
     @property
@@ -249,20 +262,25 @@ class HubSession:
                 if stop.is_set():
                     return
                 token = await self._token()
+                started = self._monotonic()
                 code = await self._session(token, stop)
+                if self._monotonic() - started >= self._cfg.stable_s:
+                    self._backoff.reset()
                 if code == CloseCode.REPLACED:
                     log.warning("another connection of this device took over; waiting")
                     delay = self._cfg.replaced_wait_s
                 elif code == CloseCode.UNPAIRED:
                     log.info("device was removed from its account; pairing again")
                     self._pairing.set_unpaired(None, None, self._monotonic())
-                elif code != CloseCode.REAUTH:
+                elif code != CloseCode.REAUTH or self._monotonic() - started < self._cfg.stable_s:
+                    # A token refused right away again and again must not run into the
+                    # hub's token limit: only an expired token is renewed at once.
                     delay = self._backoff.next()
             except _NotPaired:
                 self._pairing.set_unpaired(None, None, self._monotonic())
             except (httpx.HTTPError, OSError, WebSocketException, ValidationError) as exc:
                 log.info("hub not reachable: %s", exc)
-                delay = self._backoff.next()
+                delay = max(self._backoff.next(), _retry_after(exc))
             if delay > 0:
                 with contextlib.suppress(TimeoutError):
                     await asyncio.wait_for(stop.wait(), delay)
@@ -319,7 +337,6 @@ class HubSession:
             async with self._connect(self._cfg.ws_url, token) as ws:
                 self._frames = asyncio.Queue(maxsize=10)
                 self._pairing.set_connected(True)
-                self._backoff.reset()
                 await self._send(
                     ws,
                     Hello(

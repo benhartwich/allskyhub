@@ -1141,6 +1141,12 @@ report healthy within a timeout.
   10° up, local time 10:00 to 16:00, no product being built, no update installing, at
   most once a day (Benjamin, 2026-10-13); until then `status.reboot_required` is true and
   the local UI and the hub show "Neustart für Sicherheitsupdates ausstehend".
+- **Firewall:** the image's `nftables.conf` drops incoming connections except replies,
+  ICMP, DHCP for the camera itself, the local web UI (8080, 8443), mDNS, SSH (off unless the
+  owner turned it on) and, from the setup network `10.42.0.0/24`, DHCP and DNS (§7.1). It
+  replaces only its own tables, never NetworkManager's. The agent's polkit right covers only
+  what setup mode needs: activating connections, Wi-Fi scan and sharing, and adding
+  connections; not the hostname, DNS, radio switches, sleep or checkpoints.
 - Details and key handling: `docs/updates.md`.
 
 ### 8.1 Watchdog

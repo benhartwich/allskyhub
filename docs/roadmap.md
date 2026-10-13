@@ -136,7 +136,7 @@ again in the code. Benjamin decided the open questions on 2026-10-13.
 | S4 | Release pipeline before update keys exist: protected environment with a reviewer, tag must be on `main`, actions pinned by SHA; key revocation | agent | needs Benjamin to create the GitHub environment |
 | S5 | Root tools never write through links in the agent's folder | agent | #204 |
 | S6 | Offline code: tries counted before Argon2, one at a time, parameters capped | agent | #204; caps in SPEC §6.5 |
-| S7 | Image: nftables input filter, narrower polkit rule for NetworkManager, reboot by day for security updates | agent | SPEC §8 |
+| S7 | ✅ Image: nftables input filter, narrower polkit rule for NetworkManager, reboot by day for security updates | agent | SPEC §8; reboot: #215 |
 | S8 | Wi-Fi credentials without control characters | agent | #204 |
 
 ## Needs Benjamin / hardware

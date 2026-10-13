@@ -47,7 +47,7 @@ pairing and the hub all behave as with a real camera.
 | `allskyhub-setupfile` | hands the setup file to the agent and removes it from the boot partition |
 | `allskyhub-agent` | the camera agent (user `allskyhub`), web UI on port 8080 |
 | `allskyhub-wifi-country.path` | applies the Wi-Fi country the agent got from the app (root helper) |
-| `nftables` | in setup mode `http://10.42.0.1/` reaches port 8080 |
+| `nftables` | firewall (SPEC §8): only the local UI, mDNS, DHCP, SSH and setup mode come in; in setup mode `http://10.42.0.1/` reaches port 8080 |
 
 The agent's state is in `/var/lib/allskyhub-agent`: device key, settings, images.
 

@@ -66,6 +66,12 @@ def test_values_report_every_key_and_fit_device_settings() -> None:
         "safe_cloud_max": 30,
         "safe_hold_min": 10,
         "nina_url": "",
+        "mqtt_host": "",
+        "mqtt_port": 1883,
+        "mqtt_tls": False,
+        "mqtt_user": "",
+        "mqtt_password_set": False,
+        "mqtt_prefix": "allskyhub",
     }
 
 
@@ -156,3 +162,28 @@ def test_night_product_and_retention_settings(tmp_path: Path) -> None:
     s = AgentSettings.load(path)
     assert (s.keep_days, s.product_timelapse, s.timelapse_quality) == (60, False, "high")
     assert (s.product_keogram, s.timelapse_fps) == (True, 25)
+
+
+def test_mqtt_password_is_write_only(tmp_path: Path) -> None:
+    """SPEC §6.9/§7.7: the secret is never reported, only whether it is set; an empty
+    value keeps it, null deletes it; the settings file is readable by the agent only."""
+    from allskyhub_agent import settings_schema as ss
+    from allskyhub_agent.profiles import get_profile
+    from allskyhub_agent.settings import AgentSettings
+
+    schema = ss.build_schema(get_profile("sim"))
+    s = AgentSettings().with_values({"mqtt_host": "ha.local", "mqtt_password": "geheim"})
+    v = ss.values(s, schema)
+    assert "mqtt_password" not in v
+    assert v["mqtt_password_set"] is True
+    assert s.with_values({"mqtt_password": ""}).mqtt_password == "geheim"  # noqa: S105
+    assert s.with_values({"mqtt_password": None}).mqtt_password is None
+    assert "mqtt_password" in ss.keys(schema)
+    assert "mqtt_password_set" not in ss.keys(schema)
+    path = tmp_path / "settings.json"
+    s.save(path)
+    assert path.stat().st_mode & 0o777 == 0o600
+    assert AgentSettings.load(path).mqtt_password == "geheim"  # noqa: S105
+    assert ss.check(schema, {"mqtt_prefix": "a/#"}) == ["mqtt_prefix"]
+    assert ss.check(schema, {"mqtt_host": "mqtt://x"}) == ["mqtt_host"]
+    assert ss.check(schema, {"mqtt_host": "192.168.1.5", "mqtt_prefix": "home/sky"}) == []

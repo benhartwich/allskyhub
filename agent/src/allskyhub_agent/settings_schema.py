@@ -17,6 +17,7 @@ from allskyhub_agent.settings import (
     DETECT_CHOICES,
     DETECTORS,
     AgentSettings,
+    valid_mqtt,
     valid_nina_url,
 )
 from allskyhub_protocol import SetSettingsArgs, SettingSpec, invalid_settings
@@ -267,6 +268,69 @@ def _observatory_entries() -> list[dict[str, Any]]:
     ]
 
 
+def _mqtt_entries() -> list[dict[str, Any]]:
+    """MQTT for home automation (SPEC §7.7, roadmap L23)."""
+    group = {"de": "Hausautomation (MQTT)", "en": "Home automation (MQTT)"}
+    return [
+        {
+            "key": "mqtt_host",
+            "type": "string",
+            "label": {"de": "Broker", "en": "Broker"},
+            "group": group,
+            "max_length": 253,
+            "help": {
+                "de": "Name oder Adresse des MQTT-Brokers im Heimnetz, z. B. homeassistant.local. "
+                "Leer: aus. Home Assistant findet die Kamera von selbst.",
+                "en": "Name or address of the MQTT broker on the home network, e.g. "
+                "homeassistant.local. Empty: off. Home Assistant finds the camera by itself.",
+            },
+        },
+        {
+            "key": "mqtt_port",
+            "type": "int",
+            "label": {"de": "Port", "en": "Port"},
+            "group": group,
+            "min": 1,
+            "max": 65535,
+            "step": 1,
+            "help": {"de": "Meist 1883, mit TLS 8883.", "en": "Usually 1883, 8883 with TLS."},
+        },
+        {
+            "key": "mqtt_tls",
+            "type": "bool",
+            "label": {"de": "Verschlüsselt (TLS)", "en": "Encrypted (TLS)"},
+            "group": group,
+        },
+        {
+            "key": "mqtt_user",
+            "type": "string",
+            "label": {"de": "Benutzer", "en": "User"},
+            "group": group,
+            "max_length": 100,
+        },
+        {
+            "key": "mqtt_password",
+            "type": "string",
+            "label": {"de": "Passwort", "en": "Password"},
+            "group": group,
+            "max_length": 200,
+            "write_only": True,
+            "nullable": True,
+        },
+        {
+            "key": "mqtt_prefix",
+            "type": "string",
+            "label": {"de": "Themen-Präfix", "en": "Topic prefix"},
+            "group": group,
+            "max_length": 40,
+            "help": {
+                "de": "Die Kamera sendet unter <Präfix>/<Geräte-ID>/…",
+                "en": "The camera publishes under <prefix>/<device id>/…",
+            },
+        },
+    ]
+
+
 def build_schema(profile: Profile) -> list[SettingSpec]:
     night = profile.exposure.night
     max_exposure_s = night.max_exposure_us / 1e6  # the default for an empty field
@@ -402,6 +466,7 @@ def build_schema(profile: Profile) -> list[SettingSpec]:
     entries.extend(_detector_entries())
     entries.extend(_product_entries())
     entries.extend(_observatory_entries())
+    entries.extend(_mqtt_entries())
     return [SettingSpec.model_validate(e) for e in entries]
 
 
@@ -409,9 +474,19 @@ def values(s: AgentSettings, schema: list[SettingSpec]) -> dict[str, Any]:
     """`status.settings` (SPEC §6.3): every schema key, location as latitude/longitude."""
     out: dict[str, Any] = {"latitude": s.latitude, "longitude": s.longitude}
     for spec in schema:
-        if spec.key != "location":
+        if spec.key == "location":
+            continue
+        if spec.write_only:  # SPEC §6.9: never the secret, only whether it is set
+            out[f"{spec.key}_set"] = bool(getattr(s, spec.key))
+        else:
             out[spec.key] = getattr(s, spec.key)
     return out
+
+
+def keys(schema: list[SettingSpec]) -> set[str]:
+    """The settable keys (no `<key>_set` flags), location as latitude/longitude."""
+    out = {spec.key for spec in schema if spec.key != "location"}
+    return out | ({"latitude", "longitude"} if any(x.key == "location" for x in schema) else set())
 
 
 def check(schema: list[SettingSpec], changes: Mapping[str, Any]) -> list[str]:
@@ -421,6 +496,10 @@ def check(schema: list[SettingSpec], changes: Mapping[str, Any]) -> list[str]:
     nina: object = changes.get("nina_url")
     if isinstance(nina, str) and not valid_nina_url(nina):
         bad.add("nina_url")
+    for k in ("mqtt_host", "mqtt_prefix", "mqtt_user"):
+        v: object = changes.get(k)
+        if isinstance(v, str) and not valid_mqtt(k, v):
+            bad.add(k)
     if not bad:
         try:
             SetSettingsArgs.model_validate(dict(changes))

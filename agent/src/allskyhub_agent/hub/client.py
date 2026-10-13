@@ -35,6 +35,7 @@ from allskyhub_agent.runner import FOCUS_FRAME_NAME
 from allskyhub_agent.store.images import ImageStore
 from allskyhub_protocol import (
     Ack,
+    Aircraft,
     ChallengeRequest,
     ChallengeResponse,
     CloseCode,
@@ -186,7 +187,7 @@ class HubSession:
         # whether the event is known.
         self._resend = resend
         self._on_label = on_label
-        self._messages: list[EventLabel | NightDeleted] = []
+        self._messages: list[EventLabel | NightDeleted | Aircraft] = []
         self._backlog = backlog
         self._night_products = night_products
         self._night_events = night_events
@@ -234,7 +235,7 @@ class HubSession:
         if self._frames is not None:
             self._events.append(event)
 
-    def offer_message(self, body: EventLabel | NightDeleted) -> None:
+    def offer_message(self, body: EventLabel | NightDeleted | Aircraft) -> None:
         """A label or a deleted night; after a reconnect all are resent anyway."""
         if self._frames is not None:
             self._messages.append(body)
@@ -336,7 +337,7 @@ class HubSession:
                     # SPEC §6.4/§6.7: the current night's events again; the hub upserts.
                     self._events = await asyncio.to_thread(self._events_src.current_events)
                 if self._resend is not None:
-                    self._messages = await asyncio.to_thread(self._resend)
+                    self._messages = [*await asyncio.to_thread(self._resend)]
                 tasks: list[asyncio.Task[Any]] = [
                     asyncio.create_task(self._reader(ws, token)),
                     asyncio.create_task(self._writer(ws)),
@@ -381,7 +382,8 @@ class HubSession:
         | Ack
         | ErrorReply
         | EventLabel
-        | NightDeleted,
+        | NightDeleted
+        | Aircraft,
     ) -> None:
         await ws.send(Envelope.wrap(body, ts=_now()).model_dump_json())
 
@@ -634,7 +636,7 @@ class HubClient:
             with contextlib.suppress(RuntimeError):
                 loop.call_soon_threadsafe(session.offer_frame, info)
 
-    def notify_message(self, body: EventLabel | NightDeleted) -> None:
+    def notify_message(self, body: EventLabel | NightDeleted | Aircraft) -> None:
         """Never blocks; a label or a deleted night (SPEC §6.3)."""
         loop, session = self._loop, self._session
         if loop is not None and session is not None and not loop.is_closed():

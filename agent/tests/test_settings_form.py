@@ -74,6 +74,7 @@ def test_values_report_every_key_and_fit_device_settings() -> None:
         "safe_cloud_max": 30,
         "safe_hold_min": 10,
         "nina_url": "",
+        "adsb_url": "",
         "mqtt_host": "",
         "mqtt_port": 1883,
         "mqtt_tls": False,

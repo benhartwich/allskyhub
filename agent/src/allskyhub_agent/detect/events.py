@@ -172,6 +172,13 @@ class EventStore:
         with path.open("a", encoding="utf-8") as fh:
             fh.write(event.model_dump_json() + "\n")
 
+    def amend(self, event: Event, data: dict[str, float | int | str | bool | None]) -> Event:
+        """The event again with more `data` (the newer line counts, like an episode's)."""
+        with self._lock:
+            out = event.model_copy(update={"data": {**event.data, **data}})
+            self._append(out)
+        return out
+
     def save_meteor(self, hit: MeteorHit) -> Event:
         """Crop the frame around the streak, store picture, thumbnail and index line."""
         f, s = hit.frame, hit.streak

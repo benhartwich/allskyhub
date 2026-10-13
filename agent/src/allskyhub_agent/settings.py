@@ -62,8 +62,8 @@ _INT_RANGES = {
 }
 
 
-def valid_nina_url(url: str) -> bool:
-    """Empty (off) or an http(s) address with a host (SPEC §7.5)."""
+def valid_http_url(url: str) -> bool:
+    """Empty (off) or an http(s) address with a host (SPEC §7.5 N.I.N.A., §7.8 ADS-B)."""
     u = url.strip()
     if not u:
         return True
@@ -148,6 +148,8 @@ class AgentSettings:
     safe_cloud_max: int = 30  # %
     safe_hold_min: int = 10
     nina_url: str = ""  # N.I.N.A.'s Advanced API, e.g. http://192.168.1.30:1888; "" = off
+    # The owner's ADS-B receiver's aircraft.json (SPEC §7.8, roadmap H3); "" = off.
+    adsb_url: str = ""
     # MQTT for home automation (SPEC §7.7, roadmap L23); "" = off.
     mqtt_host: str = ""
     mqtt_port: int = 1883
@@ -227,8 +229,9 @@ class AgentSettings:
         if d.get("timelapse_quality") in TIMELAPSE_CRF:
             later["timelapse_quality"] = d["timelapse_quality"]
         later.update({k: d[k] for k, ok in _CHOICES.items() if d.get(k) in ok})
-        if isinstance(d.get("nina_url"), str):
-            later["nina_url"] = d["nina_url"]
+        for k in ("nina_url", "adsb_url"):
+            if isinstance(d.get(k), str):
+                later[k] = d[k]
         for k in _MQTT_STRINGS:
             v = d.get(k)
             if isinstance(v, str) and valid_mqtt(k, v):
@@ -286,8 +289,9 @@ class AgentSettings:
         if values.get("timelapse_quality") in TIMELAPSE_CRF:
             extra["timelapse_quality"] = values["timelapse_quality"]
         extra.update({k: values[k] for k, ok in _CHOICES.items() if values.get(k) in ok})
-        if isinstance(values.get("nina_url"), str) and valid_nina_url(values["nina_url"]):
-            extra["nina_url"] = values["nina_url"].strip()
+        for k in ("nina_url", "adsb_url"):
+            if isinstance(values.get(k), str) and valid_http_url(values[k]):
+                extra[k] = values[k].strip()
         for k in _MQTT_STRINGS:
             v = values.get(k)
             if isinstance(v, str) and valid_mqtt(k, v):

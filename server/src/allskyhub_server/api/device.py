@@ -393,19 +393,15 @@ async def device_ws(websocket: WebSocket) -> None:
         await websocket.send_text(text)
 
     async def close(code: int) -> None:
+        # Best effort: a connection whose device has gone without a close frame raises
+        # here, and that must never break the caller (the replacing connection).
         if websocket.application_state == WebSocketState.CONNECTED:
-            with contextlib.suppress(RuntimeError):
+            with contextlib.suppress(RuntimeError, WebSocketDisconnect):
                 await websocket.close(code)
 
     kp: KpCache = websocket.app.state.kp
     conn = Connection(info.device_id, send_text, close)
     old = await registry.attach(conn)
-    if old is not None:
-        await old.close(CloseCode.REPLACED)
-    await _touch(
-        maker, info.device_id, offline_notified_at=None, offline_mailed_at=None
-    )  # a new outage may notify
-    log.info("device connected", extra={"device_id": info.device_id})
 
     async def expire() -> None:
         await asyncio.sleep(max(0.0, (info.expires_at - _now()).total_seconds()))
@@ -413,7 +409,14 @@ async def device_ws(websocket: WebSocket) -> None:
 
     watchdog = asyncio.create_task(expire())
     bucket = _Bucket()
-    try:
+    try:  # from attach on: whatever happens, detach in finally
+        if old is not None:
+            with contextlib.suppress(Exception):  # its device may be gone already
+                await old.close(CloseCode.REPLACED)
+        await _touch(
+            maker, info.device_id, offline_notified_at=None, offline_mailed_at=None
+        )  # a new outage may notify
+        log.info("device connected", extra={"device_id": info.device_id})
         while True:
             raw = await websocket.receive_text()
             if len(raw) > MAX_MESSAGE_CHARS:

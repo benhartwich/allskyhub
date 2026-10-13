@@ -6,7 +6,7 @@ import asyncio
 
 import httpx
 import pytest
-from fastapi import FastAPI
+from fastapi import FastAPI, WebSocketDisconnect
 
 from allskyhub_protocol import (
     CloseCode,
@@ -17,6 +17,7 @@ from allskyhub_protocol import (
     Status,
     UploadFrameArgs,
 )
+from allskyhub_server.devices.connections import Connection, ConnectionRegistry
 from tests.fake_device import FakeDevice
 from tests.helpers import home_csrf
 from tests.ws_helpers import (
@@ -28,6 +29,7 @@ from tests.ws_helpers import (
     online,
     paired_token,
     send,
+    until,
 )
 
 
@@ -98,6 +100,38 @@ async def test_new_connection_replaces_old(client: httpx.AsyncClient, live_app: 
         await send(first, Hello(device_id=dev.device_id, profile=dev.profile, agent_version="1"))
         async with device_ws(live_app, token):
             assert await closed_with(first) == CloseCode.REPLACED
+
+
+async def test_a_dead_old_connection_does_not_break_the_new_one(
+    app: FastAPI, client: httpx.AsyncClient, live_app: str
+) -> None:
+    """2026-10-13: closing a connection whose device was gone raised, which ended the new
+    connection before it was detached, so it became the next dead one: every reconnect
+    failed until the token limit (429) stopped the camera."""
+    dev = FakeDevice()
+    token = await paired_token(client, dev)
+    registry: ConnectionRegistry = app.state.connections
+
+    async def gone(code: int) -> None:
+        raise WebSocketDisconnect(code=1006)
+
+    async def unused(text: str) -> None:
+        pass
+
+    await registry.attach(Connection(dev.device_id, unused, gone))
+    async with device_ws(live_app, token) as ws:
+        await send(ws, Hello(device_id=dev.device_id, profile=dev.profile, agent_version="1"))
+        await online(app, dev.device_id)
+        await send(ws, frame_info())
+        cmd = await next_command(ws)  # the connection works
+        assert cmd.name is CommandName.UPLOAD_FRAME
+        connected = registry.get(dev.device_id)
+    assert connected is not None
+
+    async def detached() -> bool:
+        return registry.get(dev.device_id) is None
+
+    await until(detached)  # and detached when it ends
 
 
 async def test_remove_closes_with_unpaired(

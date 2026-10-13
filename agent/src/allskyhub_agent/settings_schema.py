@@ -62,6 +62,53 @@ _DETECTOR_TEXT = {
 }
 
 
+def _bad_frame_entries() -> list[dict[str, Any]]:
+    """Bad frames (SPEC §4.9, roadmap L19)."""
+    group = {"de": "Bild", "en": "Image"}
+    return [
+        {
+            "key": "bad_frames",
+            "type": "bool",
+            "label": {"de": "Schlechte Bilder aussortieren", "en": "Sort out bad frames"},
+            "group": group,
+            "help": {
+                "de": "Zu dunkle oder zu helle Bilder bleiben gespeichert, fehlen aber in "
+                "Zeitraffer, Keogramm, Startrails und den Bildlisten.",
+                "en": "Frames that are too dark or too bright stay stored but are left out of "
+                "the timelapse, keogram, star trails and the image lists.",
+            },
+        },
+        {
+            "key": "bad_dark_pct",
+            "type": "int",
+            "label": {"de": "Zu dunkel unter", "en": "Too dark below"},
+            "group": group,
+            "unit": "%",
+            "min": 0,
+            "max": 20,
+            "step": 1,
+            "help": {
+                "de": "Mittlere Helligkeit im Himmel; 0 schaltet diese Grenze ab.",
+                "en": "Mean brightness of the sky; 0 switches this limit off.",
+            },
+        },
+        {
+            "key": "bad_bright_pct",
+            "type": "int",
+            "label": {"de": "Zu hell über", "en": "Too bright above"},
+            "group": group,
+            "unit": "%",
+            "min": 50,
+            "max": 100,
+            "step": 1,
+            "help": {
+                "de": "Mittlere Helligkeit im Himmel; 100 schaltet diese Grenze ab.",
+                "en": "Mean brightness of the sky; 100 switches this limit off.",
+            },
+        },
+    ]
+
+
 def _detector_entries() -> list[dict[str, Any]]:
     return [
         {
@@ -287,6 +334,18 @@ def build_schema(profile: Profile) -> list[SettingSpec]:
                 "en": f"Empty: {night.max_gain:g}. Less is less noisy but darker.",
             },
         },
+        {
+            "key": "moon_mode",
+            "type": "bool",
+            "label": {"de": "Mond-Modus", "en": "Moon mode"},
+            "group": {"de": "Aufnahme", "en": "Capture"},
+            "help": {
+                "de": "Steht ein mindestens halb beleuchteter Mond am Himmel, belichtet die "
+                "Kamera nachts dunkler, damit Himmel und Landschaft nicht ausbrennen.",
+                "en": "While an at least half-lit moon is up, the camera exposes darker at "
+                "night so the sky and the landscape do not burn out.",
+            },
+        },
     ]
     if profile.camera == "zwo":
         for key, de, en in (
@@ -322,6 +381,7 @@ def build_schema(profile: Profile) -> list[SettingSpec]:
             },
         }
     )
+    entries.extend(_bad_frame_entries())
     entries.extend(_detector_entries())
     entries.extend(_product_entries())
     entries.extend(_observatory_entries())

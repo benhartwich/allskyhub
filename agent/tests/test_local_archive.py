@@ -25,7 +25,7 @@ TZ = ZoneInfo("Europe/Vienna")
 NIGHT = "20261012"
 
 
-def _fill(store: ImageStore, start: datetime, n: int) -> list[FrameInfo]:
+def _fill(store: ImageStore, start: datetime, n: int, bad: tuple[int, ...] = ()) -> list[FrameInfo]:
     infos: list[FrameInfo] = []
     for i in range(n):
         at = start + timedelta(minutes=10 * i)
@@ -33,7 +33,7 @@ def _fill(store: ImageStore, start: datetime, n: int) -> list[FrameInfo]:
         info = FrameInfo(
             captured_at=at, night_id=saved.night_id, name=saved.name, mode=Mode.NIGHT,
             exposure_us=30_000_000, gain=200.0, mean=0.2, sun_elevation=-30.0,
-            profile="sim",
+            profile="sim", bad="bright" if i in bad else None,
         )  # fmt: skip
         store.append_index(info)
         store.append_sky(
@@ -127,3 +127,21 @@ def test_loop_is_the_last_hour(tmp_path: Path) -> None:
     infos = _fill(store, start, 12)  # 20:00 .. 21:50
     loop = LocalArchive(store).loop(start + timedelta(minutes=115))
     assert [f["name"] for f in loop] == [i.name for i in infos[6:]]
+
+
+def test_bad_frames_hidden_unless_asked(tmp_path: Path) -> None:
+    """SPEC §4.9: bad frames are left out of the grid, the loop and the cover."""
+    store = ImageStore(tmp_path, TZ)
+    start = datetime(2026, 10, 12, 20, 0, tzinfo=UTC)
+    infos = _fill(store, start, 5, bad=(1, 2))
+    archive = LocalArchive(store)
+    night = archive.nights()[0]
+    assert (night["frames"], night["bad"]) == (5, 2)
+    assert night["cover"] == infos[3].name  # the middle one of the good frames
+    good = archive.frames(NIGHT)
+    assert (good["total"], [f["name"] for f in good["frames"]]) == (
+        3, [infos[i].name for i in (0, 3, 4)]
+    )  # fmt: skip
+    assert archive.frames(NIGHT, bad=True)["total"] == 5
+    loop = archive.loop(start + timedelta(minutes=45))
+    assert [f["name"] for f in loop] == [infos[i].name for i in (0, 3, 4)]

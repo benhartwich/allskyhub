@@ -279,7 +279,8 @@ async function viewNight(night) {
   page.innerHTML = `<p><a class="back" href="#archiv">‹ Alle Nächte</a></p><h1>Nacht vom ${fmtNight(night)}</h1>
     <div class="products" id="products"></div>
     <section class="card stack"><h2>Bilder</h2><div class="thumbs" id="thumbs"></div>
-      <div class="actions"><button type="button" class="secondary" id="more" hidden>Mehr laden</button></div></section>`;
+      <div class="actions"><button type="button" class="secondary" id="more" hidden>Mehr laden</button>
+        <button type="button" class="secondary" id="bad" hidden aria-pressed="false"></button></div></section>`;
   const nights = await getJSON("api/nights");
   const n = nights.find((x) => x.night_id === night);
   const names = { keogram: "Keogramm", startrails: "Sternspuren", timelapse: "Zeitraffer" };
@@ -291,10 +292,14 @@ async function viewNight(night) {
     return `<section class="card stack product"><h2>${names[p.kind] || esc(p.kind)}</h2>${media}
       <a class="button secondary small" href="${src}" download>Herunterladen</a></section>`;
   }).join("");
+  // SPEC §4.9: bad frames are hidden unless asked for.
+  const badCount = n ? n.bad || 0 : 0;
+  let showBad = false;
+  const badLabel = { dark: "zu dunkel", bright: "zu hell" };
   let offset = 0;
-  const all = [];
+  let all = [];
   const load = async () => {
-    const data = await getJSON(`api/nights/${night}/frames?offset=${offset}&limit=200`);
+    const data = await getJSON(`api/nights/${night}/frames?offset=${offset}&limit=200${showBad ? "&bad=1" : ""}`);
     const start = all.length;
     all.push(...data.frames);
     offset += data.frames.length;
@@ -302,14 +307,29 @@ async function viewNight(night) {
     data.frames.forEach((f, i) => {
       const b = document.createElement("button");
       b.type = "button";
+      if (f.bad) b.className = "bad";
       b.innerHTML = `<img loading="lazy" alt="${fmtTime(f.captured_at)}" src="${fileUrl(night, f.name, true)}">`;
       b.onclick = () => lightbox(all.map((x) => ({ src: fileUrl(night, x.name, false),
-        caption: `${fmtDateTime(x.captured_at)} · ${fmtExposure(x.exposure_us)} · Gain ${x.gain}` })), start + i);
+        caption: `${fmtDateTime(x.captured_at)} · ${fmtExposure(x.exposure_us)} · Gain ${x.gain}`
+          + (x.bad ? ` · verworfen (${badLabel[x.bad] || esc(x.bad)})` : "") })), start + i);
       box.appendChild(b);
     });
     $("more").hidden = offset >= data.total;
   };
   $("more").onclick = load;
+  const bad = $("bad");
+  const label = () => { bad.textContent = showBad ? "Verworfene ausblenden" : `${badCount} verworfene zeigen`; };
+  bad.hidden = !badCount;
+  label();
+  bad.onclick = async () => {
+    showBad = !showBad;
+    bad.setAttribute("aria-pressed", String(showBad));
+    label();
+    offset = 0;
+    all = [];
+    $("thumbs").innerHTML = "";
+    await load();
+  };
   await load();
 }
 
@@ -391,7 +411,7 @@ async function viewSky(night) {
   if (!picker.night) { $("charts").innerHTML = `<p class="empty">Noch keine Messwerte.</p>`; return; }
   const [sky, frames] = await Promise.all([
     getJSON(`api/nights/${picker.night}/sky`),
-    getJSON(`api/nights/${picker.night}/frames?limit=2000`),
+    getJSON(`api/nights/${picker.night}/frames?limit=2000&bad=1`),
   ]);
   const pts = (rows, key, scale = 1, at = "at") => rows.filter((r) => r[key] != null)
     .map((r) => ({ t: Date.parse(r[at]), v: r[key] * scale }));

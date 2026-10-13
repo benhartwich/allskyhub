@@ -343,6 +343,8 @@ class FrameInfo(_Body):
     sun_elevation: float = Field(ge=-90, le=90)
     sensor_temp_c: float | None = None
     profile: str
+    # SPEC §4.9: a bad frame (too dark or too bright), left out of products and grids.
+    bad: Literal["dark", "bright"] | None = None
 
 
 class EventKind(StrEnum):

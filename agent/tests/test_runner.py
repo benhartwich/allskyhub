@@ -10,6 +10,7 @@ import pytest
 from allskyhub_agent.adapters.sim import SimCamera, sky_radiance
 from allskyhub_agent.core.clock import SimClock
 from allskyhub_agent.core.exposure import AutoExposure
+from allskyhub_agent.core.quality import FrameQuality
 from allskyhub_agent.core.sun import sun_elevation
 from allskyhub_agent.profiles import get_profile
 from allskyhub_agent.runner import Location, LoopConfig, Runner
@@ -19,7 +20,12 @@ from allskyhub_protocol import FrameInfo, Mode
 LOC = Location(48.14, 14.39)
 
 
-def make_runner(tmp_path: Path, start: datetime) -> tuple[Runner, SimClock]:
+def make_runner(
+    tmp_path: Path,
+    start: datetime,
+    quality: FrameQuality | None = None,
+    moon_mode: bool = False,
+) -> tuple[Runner, SimClock]:
     clock = SimClock(start)
     profile = get_profile("sim")
 
@@ -35,6 +41,8 @@ def make_runner(tmp_path: Path, start: datetime) -> tuple[Runner, SimClock]:
         profile=profile.id,
         loop=LoopConfig(day_delay_s=60.0, night_delay_s=30.0),
         mask_radius_frac=profile.image_circle_frac,
+        quality=quality,
+        moon_mode=moon_mode,
     )
     return runner, clock
 
@@ -70,3 +78,34 @@ def test_run_reports_each_frame(tmp_path: Path) -> None:
     assert runner.run(5, on_frame=seen.append) == 5
     assert [f.mode for f in seen] == [Mode.DAY] * 5
     assert seen[-1].mean == pytest.approx(0.35, abs=0.05)
+
+
+def test_bad_frames_are_marked_not_dropped(tmp_path: Path) -> None:
+    """SPEC §4.9: a frame outside the limits is stored and marked."""
+    q = FrameQuality(dark_max=0.02, bright_min=0.9)
+    q_all_dark = FrameQuality(dark_max=0.99)
+    assert (q.judge(0.01), q.judge(0.2), q.judge(0.95)) == ("dark", None, "bright")
+    assert FrameQuality(enabled=False).judge(0.0) is None
+    assert FrameQuality(dark_max=0.0, bright_min=1.0).judge(0.0) is None  # 0 % / 100 %: off
+
+    # Every frame is "too dark":
+    runner, _ = make_runner(tmp_path, datetime(2026, 10, 6, 20, 0, tzinfo=UTC), q_all_dark)
+    f = runner.step()
+    assert f.bad == "dark"
+    stored = ImageStore(tmp_path, ZoneInfo("Europe/Vienna")).read_index(f.night_id)
+    assert [(s.name, s.bad) for s in stored] == [(f.name, "dark")]
+    assert (tmp_path / "images" / f.night_id / f.name).is_file()
+
+
+def test_moon_mode_follows_the_moon(tmp_path: Path) -> None:
+    """SPEC §4.3: full moon on 2026-10-26, up at midnight; new moon on 2026-10-10."""
+    runner, clock = make_runner(tmp_path, datetime(2026, 10, 25, 22, 0, tzinfo=UTC), moon_mode=True)
+    frames: list[FrameInfo] = []
+    for _ in range(40):
+        frames.append(runner.step())
+        clock.sleep(runner.delay())
+    assert runner.moon
+    assert frames[-1].mean == pytest.approx(0.12, abs=0.05)
+    runner, _ = make_runner(tmp_path, datetime(2026, 10, 10, 22, 0, tzinfo=UTC), moon_mode=True)
+    runner.step()
+    assert not runner.moon

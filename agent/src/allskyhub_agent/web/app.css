@@ -36,6 +36,7 @@
 .thumbs { display: grid; gap: 6px; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); }
 .thumbs button { padding: 0; border: 0; background: none; cursor: zoom-in; }
 .thumbs img { border-radius: 8px; aspect-ratio: 16 / 9; object-fit: cover; }
+.thumbs button.bad img { opacity: .55; outline: 2px dashed var(--warn); outline-offset: -2px; }
 
 .events { list-style: none; padding: 0; margin: 0; display: grid; gap: 12px; }
 .event { display: grid; grid-template-columns: 120px 1fr; gap: 12px; align-items: center; }

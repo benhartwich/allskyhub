@@ -92,9 +92,9 @@ The controller aims for a target mean brightness (`target_mean`, 0..1, default d
 - On a mode change the controller starts from that mode's last known good values.
 
 **Moon mode** (roadmap L20, setting `moon_mode`, default on). At night, while the moon is
-above the horizon and at least half lit, the night target is `moon_target_mean` (default
-0.12 instead of 0.20) and the gain stays at the profile's lowest night gain unless the
-exposure is at its maximum, so the moonlit sky and the landscape do not burn out. The moon
+above the horizon and at least half lit, the night target is 0.12 instead of 0.20
+(`moon_target_mean` of the exposure configuration), so the moonlit sky and the landscape do
+not burn out; as always, gain only rises once the exposure is at its maximum. The moon
 position and phase come from `allskyhub_sky.astro` (low precision, Meeus). Switching in or
 out of moon mode only moves the target; the damping above makes the change gradual.
 

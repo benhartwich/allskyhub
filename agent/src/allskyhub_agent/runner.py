@@ -14,12 +14,14 @@ from allskyhub_agent.core.daynight import DayNightConfig, next_mode
 from allskyhub_agent.core.exposure import AutoExposure, Exposure
 from allskyhub_agent.core.focus import sharpness
 from allskyhub_agent.core.metering import Mask, circle_mask, mean_brightness
+from allskyhub_agent.core.quality import FrameQuality
 from allskyhub_agent.core.sun import sun_elevation
 from allskyhub_agent.live import LiveState
 from allskyhub_agent.process.hotpixels import HotPixels
 from allskyhub_agent.process.skymask import SkyMask
 from allskyhub_agent.store.images import ImageStore, night_id
 from allskyhub_protocol import FrameInfo, Mode
+from allskyhub_sky.astro import bright_moon_up
 
 log = logging.getLogger(__name__)
 
@@ -56,6 +58,8 @@ class Runner:
         local_tz: tzinfo = UTC,
         hot_pixels: HotPixels | None = None,
         sky_mask: SkyMask | None = None,
+        quality: FrameQuality | None = None,
+        moon_mode: bool = False,
     ) -> None:
         self._cam = camera
         self._ae = auto_exposure
@@ -75,10 +79,18 @@ class Runner:
         self._tz = local_tz
         self._hot = hot_pixels
         self._sky_mask = sky_mask
+        self._quality = quality or FrameQuality(enabled=False)
+        self._moon_mode = moon_mode
+        self._moon = False
 
     @property
     def mode(self) -> Mode | None:
         return self._mode
+
+    @property
+    def moon(self) -> bool:
+        """Whether the last frame was exposed in moon mode (SPEC §4.3)."""
+        return self._moon
 
     @property
     def focus_mode(self) -> bool:
@@ -114,7 +126,12 @@ class Runner:
         else:
             stored = self._store.save(image, start)
             nid, name = stored.night_id, stored.name
-        self._ae.update(mode, Exposure(frame.exposure_us, frame.gain), mean, focus)
+        self._moon = (
+            self._moon_mode
+            and mode is Mode.NIGHT
+            and bright_moon_up(start, self._loc.lat, self._loc.lon)
+        )
+        self._ae.update(mode, Exposure(frame.exposure_us, frame.gain), mean, focus, self._moon)
 
         info = FrameInfo(
             captured_at=start,
@@ -127,6 +144,7 @@ class Runner:
             sun_elevation=round(elevation, 2),
             sensor_temp_c=frame.sensor_temp_c,
             profile=self._profile,
+            bad=None if focus else self._quality.judge(mean),
         )
         if not focus:
             self._store.append_index(info)

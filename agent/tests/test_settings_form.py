@@ -41,9 +41,13 @@ def test_values_report_every_key_and_fit_device_settings() -> None:
     assert DeviceSettings.model_validate(v).model_extra == {
         "night_max_exposure_s": None,
         "night_max_gain": None,
+        "moon_mode": True,
         "wb_r": 52,
         "wb_b": None,
         "jpeg_quality": 90,
+        "bad_frames": True,
+        "bad_dark_pct": 2,
+        "bad_bright_pct": 90,
         "detect_meteor": "normal",
         "detect_aurora": "normal",
         "detect_lightning": "normal",

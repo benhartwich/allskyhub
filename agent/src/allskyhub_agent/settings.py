@@ -19,7 +19,14 @@ DETECT_CHOICES = ("off", "low", "normal", "high")
 # Night products (roadmap L9): x264 CRF per quality.
 TIMELAPSE_CRF = {"small": 28, "normal": 23, "high": 19}
 DEFAULT_KEEP_DAYS = 14
-_PRODUCT_SWITCHES = ("product_keogram", "product_startrails", "product_timelapse", "alpaca_enabled")
+_PRODUCT_SWITCHES = (
+    "product_keogram",
+    "product_startrails",
+    "product_timelapse",
+    "alpaca_enabled",
+    "bad_frames",
+    "moon_mode",
+)
 # Whole numbers the schema bounds (settings_schema.py); load() and with_values() keep them.
 _INT_RANGES = {
     "keep_days": (1, 3650),
@@ -27,6 +34,8 @@ _INT_RANGES = {
     "alpaca_port": (1024, 65535),
     "safe_cloud_max": (5, 95),
     "safe_hold_min": (0, 120),
+    "bad_dark_pct": (0, 20),
+    "bad_bright_pct": (50, 100),
 }
 
 
@@ -65,6 +74,11 @@ class AgentSettings:
     wb_r: int | None = None
     wb_b: int | None = None
     jpeg_quality: int = 90
+    # Moon mode (SPEC §4.3, roadmap L20) and bad frames (SPEC §4.9, roadmap L19).
+    moon_mode: bool = True
+    bad_frames: bool = True
+    bad_dark_pct: int = 2
+    bad_bright_pct: int = 90
     detect_meteor: str = "normal"
     detect_aurora: str = "normal"
     detect_lightning: str = "normal"

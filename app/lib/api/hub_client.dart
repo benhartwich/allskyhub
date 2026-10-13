@@ -9,6 +9,14 @@ import 'package:http/http.dart' as http;
 /// Default hub (SPEC §2); self-hosters enter their own URL at login.
 const defaultHubUrl = 'https://allskyhub.org';
 
+/// SPEC §6.4 Labels: why a detection is a false positive.
+const labelReasons = {
+  'aircraft': 'Flugzeug',
+  'satellite': 'Satellit',
+  'artifact': 'Bildfehler',
+  'other': 'Sonstiges',
+};
+
 class HubException implements Exception {
   HubException(this.statusCode, this.message);
 
@@ -228,6 +236,7 @@ class SkyEvent {
     required this.hasFull,
     this.data = const {},
     this.label,
+    this.labelReason,
     this.imageRev = 1,
   });
 
@@ -243,6 +252,7 @@ class SkyEvent {
     hasFull: json['has_full'] as bool,
     data: (json['data'] as Map<String, dynamic>?) ?? const {},
     label: json['label'] as String?,
+    labelReason: json['label_reason'] as String?,
     imageRev: (json['image_rev'] as int?) ?? 1,
   );
 
@@ -261,6 +271,9 @@ class SkyEvent {
 
   /// The owner's verdict: "confirmed", "false_positive" or null.
   final String? label;
+
+  /// Why it is a false positive (SPEC §6.4 Labels): aircraft, satellite, artifact, other.
+  final String? labelReason;
 
   /// SPEC §6.4: revision of a replaceable picture (a growing aurora); part of image URLs.
   final int imageRev;
@@ -617,15 +630,17 @@ class HubClient {
       });
 
   /// The owner's verdict: "confirmed", "false_positive" ("kein Meteor") or null to clear.
+  /// [reason] only with `false_positive` (see [labelReasons]).
   Future<SkyEvent> labelEvent(
     String cameraId,
     SkyEvent event,
-    String? label,
-  ) async => SkyEvent.fromJson(
+    String? label, {
+    String? reason,
+  }) async => SkyEvent.fromJson(
     await _send(
           'PUT',
           '/cameras/$cameraId/events/${event.nightId}/${event.id}/label',
-          body: {'label': label},
+          body: {'label': label, 'reason': ?reason},
         )
         as Map<String, dynamic>,
   );

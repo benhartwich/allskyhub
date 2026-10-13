@@ -21,7 +21,6 @@ from allskyhub_server.models import EventRecord
 PRIVATE_CACHE = "private, max-age=86400"
 
 
-LABELS = ("confirmed", "false_positive")
 STORM_PATTERN = r"^storm-\d{8}T\d{6}Z$"
 
 
@@ -150,27 +149,6 @@ async def event_file(
     raise HTTPException(404, "Not available")
 
 
-async def set_label(
-    db: AsyncSession, device_id: str, night_id: str, event_id: str, label: str | None
-) -> EventRecord:
-    """The owner's verdict on an event (or None to clear it). The caller commits."""
-    if label is not None and label not in LABELS:
-        raise HTTPException(400, "Unknown label")
-    event = await db.scalar(
-        select(EventRecord).where(
-            EventRecord.device_id == device_id,
-            EventRecord.night_id == night_id,
-            EventRecord.event_id == event_id,
-        )
-    )
-    if event is None:
-        raise HTTPException(404, "Not found")
-    event.label = label
-    event.labelled_at = dt.datetime.now(dt.UTC) if label else None
-    await db.flush()
-    return event
-
-
 def export_row(event: EventRecord) -> dict[str, object]:
     """One event for tuning the detector: what the camera said and what the owner said."""
     return {
@@ -182,5 +160,6 @@ def export_row(event: EventRecord) -> dict[str, object]:
         "confidence": event.confidence,
         "data": event.data,
         "label": event.label,
+        "reason": event.label_reason,
         "labelled_at": event.labelled_at.isoformat() if event.labelled_at else None,
     }

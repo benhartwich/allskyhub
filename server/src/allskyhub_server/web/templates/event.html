@@ -8,7 +8,7 @@
 <form method="post" action="/cameras/{{ device.id }}/events/{{ event.night_id }}/{{ event.event_id }}/label" class="card label-form">
   <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
   {% if event.label == "false_positive" %}
-  <p><strong>Als „kein {{ event_titles[event.kind] or event.kind }}“ markiert.</strong></p>
+  <p><strong>Als „kein {{ event_titles[event.kind] or event.kind }}“ markiert{% if event.label_reason %} ({{ label_reasons[event.label_reason] }}){% endif %}.</strong> Zählt nirgends mit.</p>
   <button type="submit" name="label" value="" class="secondary">Markierung entfernen</button>
   {% elif event.label == "confirmed" %}
   <p><strong>Als echt bestätigt.</strong></p>
@@ -17,7 +17,10 @@
   <p class="muted">Stimmt die Erkennung? Deine Antwort hilft, die Erkennung zu verbessern.</p>
   <div class="actions">
     <button type="submit" name="label" value="confirmed">Echt</button>
-    <button type="submit" name="label" value="false_positive" class="secondary">Kein {{ event_titles[event.kind] or event.kind }} (z. B. Flugzeug)</button>
+  </div>
+  <div class="actions label-reasons">
+    <span class="muted">Kein {{ event_titles[event.kind] or event.kind }}, sondern:</span>
+    {% for key, title in label_reasons.items() %}<button type="submit" name="label" value="false_positive:{{ key }}" class="secondary small">{{ title }}</button>{% endfor %}
   </div>
   {% endif %}
 </form>

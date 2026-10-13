@@ -26,7 +26,15 @@ from allskyhub_protocol import (
 from allskyhub_server.auth import accounts, app_tokens, ratelimit
 from allskyhub_server.auth.passwords import verify_secret_async
 from allskyhub_server.auth.tokens import hash_token
-from allskyhub_server.devices import archive, events, pairing, public, queries, settings_form
+from allskyhub_server.devices import (
+    archive,
+    events,
+    labels,
+    pairing,
+    public,
+    queries,
+    settings_form,
+)
 from allskyhub_server.devices import settings as settings_mod
 from allskyhub_server.devices.connections import ConnectionRegistry
 from allskyhub_server.devices.images import ImageStore
@@ -159,14 +167,18 @@ class EventItem(BaseModel):
     has_thumb: bool
     has_full: bool
     data: dict[str, Any]
-    # The owner's verdict: "confirmed", "false_positive" or None.
+    # The owner's verdict: "confirmed", "false_positive" or None, and for a false positive
+    # why: "aircraft", "satellite", "artifact" or "other" (SPEC §6.4 Labels).
     label: str | None = None
+    label_reason: str | None = None
     # SPEC §6.4: revision of the picture; put it into image URLs (``v``) so caches renew.
     image_rev: int = 1
 
 
 class LabelRequest(_In):
     label: Literal["confirmed", "false_positive"] | None
+    # SPEC §6.4 Labels: only with false_positive.
+    reason: Literal["aircraft", "satellite", "artifact", "other"] | None = None
 
 
 def _event(e: EventRecord) -> EventItem:
@@ -182,6 +194,7 @@ def _event(e: EventRecord) -> EventItem:
         has_full=e.has_full,
         data=e.data,
         label=e.label,
+        label_reason=e.label_reason,
         image_rev=events.image_rev(e.data),
     )
 
@@ -532,6 +545,7 @@ async def export_events(
 
 @router.put("/cameras/{device_id}/events/{night_id}/{event_id}/label")
 async def label_event(
+    request: Request,
     body: LabelRequest,
     db: DbSession,
     user: AppUser,
@@ -541,8 +555,9 @@ async def label_event(
 ) -> EventItem:
     """The owner's verdict, e.g. "false_positive" for "kein Meteor"; null clears it."""
     device = await _own(db, user, device_id, "admin")
-    event = await events.set_label(db, device.id, night_id, event_id, body.label)
+    event = await labels.set_on_hub(db, device.id, night_id, event_id, body.label, body.reason)
     await db.commit()
+    labels.deliver_later(request.app.state.sessionmaker, _registry(request), device.id)
     return _event(event)
 
 

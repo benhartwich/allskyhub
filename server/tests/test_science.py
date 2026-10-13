@@ -45,7 +45,7 @@ def test_meteor_list_and_hourly_counts() -> None:
     assert rows[0]["altitude_deg"] == "60.25"
     assert rows[0]["shower"] == "Perseids"
     assert rows[0]["camera_latitude"] == "48.136"
-    assert rows[3]["owner_label"] == "false_positive"
+    assert len(rows) == 3  # SPEC §6.4 Labels: a false positive counts nowhere, not here either
     hourly = _rows(science.hourly_counts_csv(meteors))
     assert hourly == [
         {"hour_utc": "2026-08-12T22:00:00+00:00", "meteors": "2", "Perseids": "1",

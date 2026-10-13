@@ -110,6 +110,10 @@ class ImageStore:
             except OSError:
                 break
 
+    def delete_night(self, device_id: str, night_id: str) -> None:
+        """Frames, products and event pictures of one night (SPEC §6.3 night_deleted)."""
+        shutil.rmtree(self.root / device_id / night_id, ignore_errors=True)
+
     def delete_device(self, device_id: str) -> None:
         """Everything of a device: latest images and the whole archive."""
         shutil.rmtree(self.root / device_id, ignore_errors=True)

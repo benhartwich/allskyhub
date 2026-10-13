@@ -12,10 +12,16 @@
 </head>
 <body>
 <main>
-  <p>Anmeldung läuft …</p>
+  <p id="msg">Anmeldung läuft …</p>
   <form id="f" method="post" action="callback"><input type="hidden" name="assertion" id="a"></form>
 </main>
 <script>
+// SPEC §7 Language and units: no settings before the login, so the browser's language.
+if (!(navigator.language || "").toLowerCase().startsWith("de")) {
+  document.documentElement.lang = "en";
+  document.title = "Log in – allskyhub";
+  document.getElementById("msg").textContent = "Logging in …";
+}
 // SPEC §7.4 step 3: the assertion comes in the fragment, which no server or log sees.
 // It is sent on as a same-origin POST, which carries the SameSite=Lax nonce cookie.
 const a = new URLSearchParams(location.hash.slice(1)).get("assertion") || "";

@@ -33,6 +33,7 @@ class Camera {
     this.status = const {},
     this.frame = const {},
     this.role = 'owner',
+    this.settingsSchema = const [],
   });
 
   factory Camera.fromJson(Map<String, dynamic> json) => Camera(
@@ -45,6 +46,7 @@ class Camera {
     status: (json['status'] as Map<String, dynamic>?) ?? const {},
     frame: (json['frame'] as Map<String, dynamic>?) ?? const {},
     role: json['role'] as String? ?? 'owner',
+    settingsSchema: (json['settings_schema'] as List<dynamic>?) ?? const [],
   );
 
   final String id;
@@ -63,6 +65,10 @@ class Camera {
   /// Roadmap C10: `owner`, or `admin`/`viewer` for a camera shared with this account
   /// (older hubs send nothing: their cameras are all owned).
   final String role;
+
+  /// SPEC §6.9: the form for the settings screen (`settings_schema.dart`); empty from
+  /// hubs that do not send it.
+  final List<dynamic> settingsSchema;
 
   bool get isOwner => role == 'owner';
   bool get canChange => role != 'viewer';
@@ -328,7 +334,7 @@ class HubClient {
   /// answer. Throws a [HubException] with a German message (400 rejected, 409 offline, 504).
   Future<void> updateCameraSettings(
     String cameraId,
-    Map<String, Object> changes,
+    Map<String, Object?> changes,
   ) => _send('PUT', '/cameras/$cameraId/settings', body: changes);
 
   /// Retention of detections and the notifications (roadmap #6, #15, C1–C3).

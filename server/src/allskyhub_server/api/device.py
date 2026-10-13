@@ -531,6 +531,10 @@ async def _on_frame(
       ``latest_image_interval_s``;
     * thumbnail (gallery): at most every ``thumb_interval_s`` and with every full image.
 
+    A bad frame (SPEC §4.9, too dark or too bright) is fetched only for the live view and
+    never as a thumbnail, so it stays out of the gallery, the loop and everything made from
+    thumbnails (renders, month keograms), and out of the latest image between live views.
+
     Every requested frame gets a ``Frame`` row with its metadata; uploads fill it in."""
     now = _now()
     async with maker() as db:
@@ -545,9 +549,10 @@ async def _on_frame(
         thumb_due = device.latest_thumb_at is None or now - device.latest_thumb_at >= (
             dt.timedelta(seconds=settings.thumb_interval_s)
         )
-        want_full = full_due or registry.is_live(conn.device_id)
-        want_thumb = thumb_due or want_full
-        if want_thumb:
+        bad = frame.bad is not None
+        want_full = (full_due and not bad) or registry.is_live(conn.device_id)
+        want_thumb = (thumb_due or want_full) and not bad
+        if want_thumb or want_full:
             await db.execute(
                 pg_insert(Frame)
                 .values(

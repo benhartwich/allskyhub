@@ -20,6 +20,7 @@ import httpx
 import sgp4.api  # pyright: ignore[reportMissingTypeStubs]
 
 from allskyhub_server.devices import astro
+from allskyhub_sky import astro as sky_astro
 
 # NORAD id → German name; the brightest objects people look for.
 SATELLITES = {25544: "Raumstation ISS", 48274: "Raumstation Tiangong", 20580: "Hubble"}
@@ -74,7 +75,7 @@ def _gmst_rad(t: dt.datetime) -> float:
 
 def _sun_unit(t: dt.datetime) -> tuple[float, float, float]:
     d = (t - dt.datetime(2000, 1, 1, 12, tzinfo=dt.UTC)).total_seconds() / 86400
-    lon = math.radians(astro._sun_ecliptic(d))  # pyright: ignore[reportPrivateUsage]
+    lon = math.radians(sky_astro._sun_ecliptic(d))  # pyright: ignore[reportPrivateUsage]
     eps = math.radians(23.439)
     return (math.cos(lon), math.cos(eps) * math.sin(lon), math.sin(eps) * math.sin(lon))
 

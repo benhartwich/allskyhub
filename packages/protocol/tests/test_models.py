@@ -378,3 +378,22 @@ def test_orientation_lens_is_optional() -> None:
     parsed = Orientation.model_validate({**base, "lens": lens})
     assert parsed.lens == Lens(cx=960.0, cy=540.0, a1=600.0, a3=-20.0, tilt_east_deg=0.4,
                                tilt_north_deg=-0.2, width=1920, height=1080)  # fmt: skip
+
+
+def test_event_label_and_night_deleted() -> None:
+    """SPEC §6.3, §6.4 Labels, §6.5 label_event."""
+    from allskyhub_protocol import EventLabel, NightDeleted
+
+    at = "2026-10-13T20:00:00Z"
+    base = {"night_id": "20261012", "event_id": "meteor-20261012T214512Z", "at": at}
+    fp = EventLabel.model_validate(base | {"label": "false_positive", "reason": "aircraft"})
+    env = Envelope.wrap(fp, ts=fp.at)
+    assert parse_envelope(env.model_dump_json()).body == fp
+    assert EventLabel.model_validate(base).label is None  # null removes the label
+    with pytest.raises(ValidationError):
+        EventLabel.model_validate(base | {"label": "confirmed", "reason": "aircraft"})
+    with pytest.raises(ValidationError):
+        EventLabel.model_validate(base | {"label": "maybe"})
+    gone = NightDeleted(night_id="20261001")
+    assert parse_envelope(Envelope.wrap(gone, ts=fp.at).model_dump_json()).body == gone
+    assert CommandName("label_event") is CommandName.LABEL_EVENT

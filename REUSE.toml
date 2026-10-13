@@ -53,7 +53,7 @@ SPDX-FileCopyrightText = "2022 Leon Sorokin"
 SPDX-License-Identifier = "MIT"
 
 [[annotations]]
-path = "packages/design/src/allskyhub_design/static/fonts/space-grotesk.woff2"
+path = ["packages/design/src/allskyhub_design/static/fonts/space-grotesk.woff2", "app/assets/fonts/SpaceGrotesk.ttf"]
 SPDX-FileCopyrightText = "2020 The Space Grotesk Project Authors"
 SPDX-License-Identifier = "OFL-1.1"
 

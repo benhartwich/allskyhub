@@ -2,6 +2,8 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 
+import '../design.dart';
+
 import '../api/hub_client.dart';
 import '../platform/location.dart';
 import 'camera_settings_screen.dart';
@@ -213,9 +215,7 @@ class _CameraScreenState extends State<CameraScreen> {
                   avatar: Icon(
                     Icons.circle,
                     size: 12,
-                    color: _camera.online
-                        ? Colors.greenAccent
-                        : theme.disabledColor,
+                    color: _camera.online ? Sky.aurora : theme.disabledColor,
                   ),
                   label: Text(_camera.online ? 'Live' : 'Offline'),
                 ),
@@ -243,23 +243,23 @@ class _CameraScreenState extends State<CameraScreen> {
                     Padding(
                       padding: const EdgeInsets.symmetric(vertical: 3),
                       child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
+                          Text(row.label, style: theme.textTheme.bodyMedium),
+                          const SizedBox(width: 16),
                           Expanded(
                             child: Text(
-                              row.label,
-                              style: theme.textTheme.bodyMedium,
+                              row.value,
+                              textAlign: TextAlign.end,
+                              style: row.warning
+                                  ? TextStyle(
+                                      color: theme.colorScheme.error,
+                                      fontWeight: FontWeight.w600,
+                                    )
+                                  : theme.textTheme.bodyMedium?.copyWith(
+                                      fontWeight: FontWeight.w600,
+                                    ),
                             ),
-                          ),
-                          Text(
-                            row.value,
-                            style: row.warning
-                                ? TextStyle(
-                                    color: theme.colorScheme.error,
-                                    fontWeight: FontWeight.w600,
-                                  )
-                                : theme.textTheme.bodyMedium?.copyWith(
-                                    fontWeight: FontWeight.w600,
-                                  ),
                           ),
                         ],
                       ),
@@ -280,10 +280,17 @@ class _CameraScreenState extends State<CameraScreen> {
             if (overview.lastNight case final line?)
               Card(
                 margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                child: ListTile(
+                child: Padding(
                   key: const Key('last-night'),
-                  title: const Text('Letzte Nacht'),
-                  subtitle: Text(line),
+                  padding: const EdgeInsets.all(16),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text('Letzte Nacht', style: theme.textTheme.titleMedium),
+                      const SizedBox(height: 6),
+                      Text(line),
+                    ],
+                  ),
                 ),
               ),
           ],
@@ -405,7 +412,7 @@ class _HealthCard extends StatelessWidget {
                       size: 18,
                       color: item.level == 'error'
                           ? theme.colorScheme.error
-                          : Colors.amber,
+                          : Sky.warn,
                     ),
                     const SizedBox(width: 8),
                     Expanded(child: Text(item.text)),
@@ -447,39 +454,40 @@ class _TonightCard extends StatelessWidget {
             if (tonight.hours.isNotEmpty) ...[
               const SizedBox(height: 10),
               SizedBox(
-                height: 54,
+                height: 36,
                 child: Row(
                   crossAxisAlignment: CrossAxisAlignment.end,
                   children: [
                     for (final h in tonight.hours)
                       Expanded(
-                        child: Padding(
-                          padding: const EdgeInsets.symmetric(horizontal: 1.5),
-                          child: Column(
-                            mainAxisAlignment: MainAxisAlignment.end,
-                            children: [
-                              Container(
-                                height: h.clouds == null
-                                    ? 4
-                                    : 6 + 30 * (100 - h.clouds!) / 100,
-                                decoration: BoxDecoration(
-                                  color: h.good
-                                      ? Colors.tealAccent.shade400
-                                      : theme.disabledColor,
-                                  borderRadius: BorderRadius.circular(3),
-                                ),
-                              ),
-                              const SizedBox(height: 3),
-                              Text(
-                                h.at.toLocal().hour.toString().padLeft(2, '0'),
-                                style: theme.textTheme.labelSmall,
-                              ),
-                            ],
+                        child: Container(
+                          margin: const EdgeInsets.symmetric(horizontal: 1.5),
+                          height: h.clouds == null
+                              ? 4
+                              : 6 + 30 * (100 - h.clouds!) / 100,
+                          decoration: BoxDecoration(
+                            color: h.good ? Sky.aurora : theme.disabledColor,
+                            borderRadius: BorderRadius.circular(3),
                           ),
                         ),
                       ),
                   ],
                 ),
+              ),
+              const SizedBox(height: 3),
+              Row(
+                children: [
+                  for (final h in tonight.hours)
+                    Expanded(
+                      child: Text(
+                        h.at.toLocal().hour.toString().padLeft(2, '0'),
+                        textAlign: TextAlign.center,
+                        maxLines: 1,
+                        overflow: TextOverflow.clip,
+                        style: theme.textTheme.labelSmall,
+                      ),
+                    ),
+                ],
               ),
             ],
             const SizedBox(height: 8),

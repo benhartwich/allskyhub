@@ -43,6 +43,8 @@ dependencies:
   share_plus: ^13.3.1
   # The Wi-Fi QR code on the camera's label (SPEC §7.1), BSD-3-Clause.
   mobile_scanner: ^7.0.0
+  # Opens the Android test build's APK in the browser (deploy/android), BSD-3-Clause.
+  url_launcher: ^6.3.3
 
 dev_dependencies:
   flutter_test:

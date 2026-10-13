@@ -1,0 +1,11 @@
+[Unit]
+Description=allskyhub: Android test build of the app when app/ changed (deploy/android)
+After=network-online.target docker.service
+Requires=docker.service
+
+[Service]
+Type=oneshot
+Nice=15
+IOSchedulingClass=idle
+TimeoutStartSec=3h
+ExecStart=/opt/allskyhub-server/deploy/android/allskyhub-android-build.sh

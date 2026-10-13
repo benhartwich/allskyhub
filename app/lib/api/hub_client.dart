@@ -6,6 +6,10 @@ import 'dart:typed_data';
 
 import 'package:http/http.dart' as http;
 
+import 'test_update.dart';
+
+export 'test_update.dart' show TestBuild;
+
 /// Default hub (SPEC §2); self-hosters enter their own URL at login.
 const defaultHubUrl = 'https://allskyhub.org';
 
@@ -487,6 +491,18 @@ class HubClient {
         )
         as Map<String, dynamic>,
   );
+
+  /// The newest Android test build on the hub, or null (none, or an older hub).
+  Future<TestBuild?> testBuild() async {
+    final response = await _http.get(
+      Uri.parse(baseUrl).replace(path: '/app/android/test.json'),
+    );
+    if (response.statusCode != 200) return null;
+    return TestBuild.fromJson(
+      jsonDecode(utf8.decode(response.bodyBytes)) as Map<String, dynamic>,
+      baseUrl,
+    );
+  }
 
   /// Roadmap C11: the CSV files for science the hub offers.
   Future<List<ExportItem>> exports(String cameraId) async => [

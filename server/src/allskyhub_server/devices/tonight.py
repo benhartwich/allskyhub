@@ -10,7 +10,6 @@ from __future__ import annotations
 import asyncio
 import dataclasses
 import datetime as dt
-import time
 from dataclasses import dataclass, field
 from typing import Any, cast
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
@@ -18,6 +17,7 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 import httpx
 
 from allskyhub_server.devices import astro, satellites
+from allskyhub_server.devices.refresh import Refreshing
 
 FORECAST_URL = "https://api.open-meteo.com/v1/forecast"
 MAX_AGE_S = 3600
@@ -68,44 +68,37 @@ def parse_forecast(payload: Any) -> list[Hour]:
 
 
 class ForecastCache:
+    """Per 0.1° cell, at most once an hour; a page never waits for Open-Meteo (``refresh``)."""
+
     def __init__(self, client: httpx.AsyncClient | None = None) -> None:
         self._client = client
-        self._data: dict[tuple[float, float], tuple[float, list[Hour]]] = {}
-        self._lock = asyncio.Lock()
+        self._cells: Refreshing[tuple[float, float], list[Hour]] = Refreshing(
+            self._fetch, MAX_AGE_S
+        )
 
     async def get(self, lat: float, lon: float) -> list[Hour]:
-        key = (round(lat, 1), round(lon, 1))
-        cached = self._data.get(key)
-        if cached and time.monotonic() - cached[0] < MAX_AGE_S:
-            return cached[1]
-        async with self._lock:
-            cached = self._data.get(key)
-            if cached and time.monotonic() - cached[0] < MAX_AGE_S:
-                return cached[1]
-            hours = cached[1] if cached else []
-            params: dict[str, str | float] = {
-                "latitude": key[0],
-                "longitude": key[1],
-                "hourly": "cloud_cover,cloud_cover_low,cloud_cover_mid,cloud_cover_high,"
-                "precipitation_probability",
-                "timezone": "UTC",
-                "timeformat": "unixtime",
-                "forecast_days": 3,
-            }
-            try:
-                client = self._client or httpx.AsyncClient(timeout=TIMEOUT_S)
-                try:
-                    r = await client.get(FORECAST_URL, params=params, timeout=TIMEOUT_S)
-                    r.raise_for_status()
-                    hours = parse_forecast(r.json())
-                finally:
-                    if self._client is None:
-                        await client.aclose()
-            except (httpx.HTTPError, ValueError):
-                pass
-            # Also after a failure: try again in an hour, keep what we had.
-            self._data[key] = (time.monotonic(), hours)
-            return hours
+        return await self._cells.get((round(lat, 1), round(lon, 1))) or []
+
+    async def _fetch(self, key: tuple[float, float]) -> list[Hour] | None:
+        params: dict[str, str | float] = {
+            "latitude": key[0],
+            "longitude": key[1],
+            "hourly": "cloud_cover,cloud_cover_low,cloud_cover_mid,cloud_cover_high,"
+            "precipitation_probability",
+            "timezone": "UTC",
+            "timeformat": "unixtime",
+            "forecast_days": 3,
+        }
+        client = self._client or httpx.AsyncClient(timeout=TIMEOUT_S)
+        try:
+            r = await client.get(FORECAST_URL, params=params, timeout=TIMEOUT_S)
+            r.raise_for_status()
+            return parse_forecast(r.json())
+        except (httpx.HTTPError, ValueError):
+            return None
+        finally:
+            if self._client is None:
+                await client.aclose()
 
 
 @dataclass(frozen=True)

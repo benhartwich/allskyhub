@@ -5,13 +5,13 @@ shows nothing when NOAA is unreachable."""
 
 from __future__ import annotations
 
-import asyncio
 import datetime as dt
-import time
 from dataclasses import dataclass
 from typing import Any, cast
 
 import httpx
+
+from allskyhub_server.devices.refresh import Refreshing
 
 KP_URL = "https://services.swpc.noaa.gov/products/noaa-planetary-k-index-forecast.json"
 MAX_AGE_S = 3600
@@ -69,31 +69,26 @@ def needed_kp(latitude: float) -> float:
 
 
 class KpCache:
+    """At most once an hour; a page never waits for NOAA (``refresh``)."""
+
     def __init__(self, client: httpx.AsyncClient | None = None) -> None:
         self._client = client
-        self._value: KpForecast | None = None
-        self._at = 0.0
-        self._lock = asyncio.Lock()
+        self._kp: Refreshing[str, KpForecast] = Refreshing(self._fetch, MAX_AGE_S)
 
     async def get(self) -> KpForecast | None:
-        if time.monotonic() - self._at < MAX_AGE_S and self._at:
-            return self._value
-        async with self._lock:
-            if time.monotonic() - self._at < MAX_AGE_S and self._at:
-                return self._value
-            self._at = time.monotonic()  # also after a failure: try again in an hour
-            try:
-                client = self._client or httpx.AsyncClient(timeout=TIMEOUT_S)
-                try:
-                    r = await client.get(KP_URL, timeout=TIMEOUT_S)
-                    r.raise_for_status()
-                    self._value = parse(r.json(), dt.datetime.now(dt.UTC).date())
-                finally:
-                    if self._client is None:
-                        await client.aclose()
-            except (httpx.HTTPError, ValueError):
-                pass
-            return self._value
+        return await self._kp.get("kp")
+
+    async def _fetch(self, _: str) -> KpForecast | None:
+        client = self._client or httpx.AsyncClient(timeout=TIMEOUT_S)
+        try:
+            r = await client.get(KP_URL, timeout=TIMEOUT_S)
+            r.raise_for_status()
+            return parse(r.json(), dt.datetime.now(dt.UTC).date())
+        except (httpx.HTTPError, ValueError):
+            return None
+        finally:
+            if self._client is None:
+                await client.aclose()
 
 
 # Roadmap C13: NOAA's OVATION aurora forecast map (public domain), kept for 10 minutes.
@@ -107,32 +102,22 @@ class OvationCache:
 
     def __init__(self, client: httpx.AsyncClient | None = None) -> None:
         self._client = client
-        self._data: dict[str, tuple[float, bytes | None]] = {}
-        self._lock = asyncio.Lock()
+        self._maps: Refreshing[str, bytes] = Refreshing(self._fetch, OVATION_MAX_AGE_S)
 
     async def get(self, hemisphere: str) -> bytes | None:
         if hemisphere not in ("north", "south"):
             return None
-        cached = self._data.get(hemisphere)
-        if cached and time.monotonic() - cached[0] < OVATION_MAX_AGE_S:
-            return cached[1]
-        async with self._lock:
-            cached = self._data.get(hemisphere)
-            if cached and time.monotonic() - cached[0] < OVATION_MAX_AGE_S:
-                return cached[1]
-            image = cached[1] if cached else None
-            try:
-                client = self._client or httpx.AsyncClient(timeout=TIMEOUT_S)
-                try:
-                    r = await client.get(OVATION_URL.format(hemisphere=hemisphere))
-                    r.raise_for_status()
-                    body = r.content
-                    if body.startswith(b"\xff\xd8") and len(body) <= OVATION_MAX_BYTES:
-                        image = body
-                finally:
-                    if self._client is None:
-                        await client.aclose()
-            except httpx.HTTPError:
-                pass
-            self._data[hemisphere] = (time.monotonic(), image)
-            return image
+        return await self._maps.get(hemisphere)
+
+    async def _fetch(self, hemisphere: str) -> bytes | None:
+        client = self._client or httpx.AsyncClient(timeout=TIMEOUT_S)
+        try:
+            r = await client.get(OVATION_URL.format(hemisphere=hemisphere))
+            r.raise_for_status()
+        except httpx.HTTPError:
+            return None
+        finally:
+            if self._client is None:
+                await client.aclose()
+        body = r.content
+        return body if body.startswith(b"\xff\xd8") and len(body) <= OVATION_MAX_BYTES else None

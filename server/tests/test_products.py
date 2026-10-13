@@ -227,3 +227,54 @@ async def test_public_page_gets_last_nights_timelapse(
     night_page = (await new_client.get(f"/sky/{slug}/nights/{recent}")).text
     assert f"/sky/{slug}/nights/{recent}/timelapse.mp4" in night_page
     assert (await new_client.get(f"/sky/{slug}/nights/{NIGHT}/timelapse.mp4")).status_code == 404
+
+
+async def test_day_products(
+    app: FastAPI, client: httpx.AsyncClient, live_app: str, settings: Settings
+) -> None:
+    """SPEC §5.2 day products: the day keogram comes in full at once, the day timelapse
+    only on request and expires like the night's."""
+    dev = FakeDevice()
+    token = await paired_token(client, dev)
+    r = await client.post(
+        "/api/v1/auth/login",
+        json={"email": await owner_email(app, dev.device_id), "password": PASSWORD},
+    )
+    auth = {"Authorization": f"Bearer {r.json()['access_token']}"}
+    api = f"/api/v1/cameras/{dev.device_id}"
+    day = Products(
+        night_id=NIGHT,
+        products=[
+            *products().products,
+            ProductFile(kind=ProductKind.DAY_TIMELAPSE, name="day-timelapse.mp4",
+                        content_type="video/mp4", size=len(MP4), thumbnail=True, duration_s=30),
+            ProductFile(kind=ProductKind.DAY_KEOGRAM, name="day-keogram.jpg",
+                        content_type="image/jpeg", size=len(JPEG), thumbnail=True),
+        ],
+    )  # fmt: skip
+    async with device_ws(live_app, token) as ws:
+        await send(ws, day)
+        got = await requested(ws, 8)
+        assert ("day-keogram.jpg", FrameVariant.FULL) in got
+        assert ("day-timelapse.mp4", FrameVariant.THUMB) in got
+        assert ("day-timelapse.mp4", FrameVariant.FULL) not in got
+        video = f"{api}/products/{NIGHT}/day-timelapse.mp4"
+        assert (await client.get(video, headers=auth)).status_code == 202
+        assert await requested(ws, 1) == {("day-timelapse.mp4", FrameVariant.FULL)}
+        full = FrameVariant.FULL
+        assert await put(live_app, token, "day-timelapse.mp4", full, MP4, "video/mp4") == 204
+        assert await put(live_app, token, "day-keogram.jpg", full, JPEG, "image/jpeg") == 204
+
+    page = (await client.get(f"/cameras/{dev.device_id}/nights/{NIGHT}")).text
+    titles = ["Keogramm", "Sternspuren", "Zeitraffer", "Keogramm am Tag", "Zeitraffer am Tag"]
+    positions = [page.index(f"{t} ·") if t != "Zeitraffer" else page.index("Zeitraffer · ")
+                 for t in titles]  # fmt: skip
+    assert positions == sorted(positions)  # the night's products first
+
+    store: ImageStore = app.state.images
+    later = dt.datetime.now(dt.UTC) + dt.timedelta(days=8)
+    async with app.state.sessionmaker() as db:
+        await maintenance.purge(db, store, settings, now=later)
+    path = store.product_path
+    assert not path(dev.device_id, NIGHT, "day-timelapse.mp4", FrameVariant.FULL).exists()
+    assert path(dev.device_id, NIGHT, "day-keogram.jpg", FrameVariant.FULL).exists()

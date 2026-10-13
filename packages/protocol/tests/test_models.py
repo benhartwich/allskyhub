@@ -160,6 +160,8 @@ def test_upload_product_args() -> None:
     assert a.variant is FrameVariant.FULL
     with pytest.raises(ValidationError):
         UploadProductArgs.model_validate({"night_id": "20261006", "name": "../etc/passwd"})
+    day = UploadProductArgs.model_validate({"night_id": "20261006", "name": "day-keogram.jpg"})
+    assert day.name == "day-keogram.jpg"  # SPEC §5.2 day products
 
 
 def test_event_ids_and_upload_event_args() -> None:

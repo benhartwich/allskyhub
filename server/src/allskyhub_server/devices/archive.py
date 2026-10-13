@@ -4,6 +4,7 @@ app API and the web UI."""
 from __future__ import annotations
 
 import datetime as dt
+import re
 from dataclasses import dataclass, field
 
 from fastapi import HTTPException
@@ -11,7 +12,7 @@ from fastapi.responses import FileResponse, JSONResponse, Response
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from allskyhub_protocol import FrameVariant
+from allskyhub_protocol import PRODUCT_NAMES, FrameVariant
 from allskyhub_server.devices import sky_chart
 from allskyhub_server.devices.connections import ConnectionRegistry
 from allskyhub_server.devices.images import ImageStore
@@ -19,7 +20,8 @@ from allskyhub_server.models import EventRecord, Frame, Product, SkySample, Stat
 
 NIGHT_ID = r"^\d{8}$"
 FRAME_NAME = r"^[A-Za-z0-9._-]{1,128}$"
-PRODUCT_NAME = r"^(keogram\.jpg|startrails\.jpg|timelapse\.mp4)$"
+# Every product file name of SPEC §5.2, night and day.
+PRODUCT_NAME = "^(" + "|".join(re.escape(name) for name, _ in PRODUCT_NAMES.values()) + ")$"
 # Archived files never change once stored.
 PRIVATE_CACHE = "private, max-age=86400"
 
@@ -83,13 +85,16 @@ async def night_frames(db: AsyncSession, device_id: str, night_id: str) -> list[
     return list(rows)
 
 
+# The night's own products first, then the day's after it (SPEC §5.2).
+PRODUCT_ORDER = ("keogram", "startrails", "timelapse", "day_keogram", "day_timelapse")
+
+
 async def night_products(db: AsyncSession, device_id: str, night_id: str) -> list[Product]:
     rows = await db.scalars(
-        select(Product)
-        .where(Product.device_id == device_id, Product.night_id == night_id)
-        .order_by(Product.kind)
+        select(Product).where(Product.device_id == device_id, Product.night_id == night_id)
     )
-    return list(rows)
+    rank = {kind: i for i, kind in enumerate(PRODUCT_ORDER)}
+    return sorted(rows, key=lambda p: (rank.get(p.kind, len(rank)), p.kind))
 
 
 def frame_file(

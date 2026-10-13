@@ -24,6 +24,8 @@ from pydantic import (
     model_validator,
 )
 
+from allskyhub_protocol.models import PRODUCT_NAMES
+
 # SPEC §6.2: lowercase RFC 4648 base32 of 16 bytes, without padding.
 DEVICE_ID_PATTERN = r"^[a-z2-7]{26}$"
 # SPEC §6.2: no 0/O, 1/I/L; shown as "ABC-DEF" (the hyphen is optional on input).
@@ -154,8 +156,16 @@ class UploadProductArgs(_Model):
     """`args` of the `upload_product` command (SPEC §6.5)."""
 
     night_id: str = Field(pattern=r"^\d{8}$")
-    name: Literal["keogram.jpg", "startrails.jpg", "timelapse.mp4"]
+    # One of PRODUCT_NAMES (SPEC §5.2), night and day products alike.
+    name: str = Field(max_length=40)
     variant: FrameVariant = FrameVariant.FULL
+
+    @field_validator("name")
+    @classmethod
+    def _known_product(cls, value: str) -> str:
+        if value not in {name for name, _ in PRODUCT_NAMES.values()}:
+            raise ValueError("not a product name (SPEC §5.2)")
+        return value
 
 
 class UploadEventArgs(_Model):

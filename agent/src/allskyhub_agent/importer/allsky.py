@@ -155,6 +155,8 @@ class ImportReport:
     images_skipped: int = 0
     products: int = 0
     meteors: int = 0
+    lightning: int = 0
+    episodes: int = 0  # aurora and NLC
     sky: int = 0
     linked: int = 0
     copied: int = 0
@@ -407,6 +409,164 @@ class AllskyImporter:
                 else:  # only nights with something new go to the hub again
                     report.nights.add(night_id(start, self._tz))
 
+    def _web(self) -> Path:
+        """The local website, where Benjamin's lightning, aurora and NLC modules write."""
+        return self._home / "html" / "allsky"
+
+    def _local(self, stamp: str, fmt: str) -> datetime | None:
+        try:
+            return datetime.strptime(stamp, fmt).replace(tzinfo=self._src_tz).astimezone(UTC)
+        except ValueError:
+            return None
+
+    def _import_lightning(self, nights: set[str], report: ImportReport, dry: bool) -> None:
+        """Benjamin's lightning module: lightning/lightning.json, one row per bolt with its
+        whole frame; storms as the agent groups them (gaps over 30 min, SPEC §6.4)."""
+        folder = self._web() / "lightning"
+        try:
+            raw: object = json.loads((folder / "lightning.json").read_text())
+        except (OSError, ValueError):
+            return
+        rows = (
+            [cast(dict[str, Any], r) for r in cast(list[Any], raw) if isinstance(r, dict)]
+            if isinstance(raw, list)
+            else []
+        )
+        bolts: list[tuple[datetime, dict[str, Any]]] = []
+        for r in rows:
+            at = self._local(str(r.get("time", "")), "%Y%m%d%H%M%S")
+            if at is not None:
+                bolts.append((at, r))
+        bolts.sort(key=lambda b: b[0])
+        storm_start = bolts[0][0] if bolts else datetime.now(UTC)
+        recent: list[datetime] = []
+        last: datetime | None = None
+        for at, r in bolts:
+            if last is None or at - last > STORM_GAP:
+                storm_start = at
+            last = at
+            recent = [t for t in recent if at - t <= STORM_GAP] + [at]
+            nid = night_id(at, self._tz)
+            if nid not in nights:
+                continue
+            report.lightning += 1
+            if dry:
+                report.nights.add(nid)
+                continue
+            picture = folder / str(r.get("file") or "")
+            area = r.get("area")
+            pixels = _pixels(picture)
+            frac = (
+                round(min(1.0, float(area) / pixels), 4)
+                if isinstance(area, int | float) and pixels
+                else None
+            )
+            peak = r.get("peak")
+            exp = r.get("exposure_ms")
+            end = at + timedelta(milliseconds=float(exp)) if isinstance(exp, int | float) else at
+            event = self._events.import_event(
+                EventKind.LIGHTNING,
+                nid,
+                at,
+                end,
+                round(min(1.0, 0.5 + 25.0 * (frac or 0.0)), 2),
+                {
+                    "area_frac": frac,
+                    "peak": round(float(peak) / 255.0, 3)
+                    if isinstance(peak, int | float)
+                    else None,
+                    "storm_flashes": len(recent),
+                    "storm": "storm-" + storm_start.strftime("%Y%m%dT%H%M%SZ"),
+                    "azimuth_deg": None,
+                    "altitude_deg": None,
+                },
+                picture if picture.is_file() else None,
+            )
+            if event is None:
+                report.lightning -= 1
+            else:
+                report.nights.add(nid)
+
+    def _import_episodes(
+        self, kind: EventKind, nights: set[str], report: ImportReport, dry: bool
+    ) -> None:
+        """Benjamin's aurora and NLC modules: a picture per candidate frame (`<kind>/`, and
+        for aurora also `images/<day>/aurora/`) and a rolling `<kind>.json` with the index
+        of the last days. Candidates less than 30 min apart are one episode (SPEC §6.4)."""
+        name = "aurora" if kind is EventKind.AURORA else "nlc"
+        rows: dict[str, dict[str, Any]] = {}
+        try:
+            raw: object = json.loads((self._web() / f"{name}.json").read_text())
+        except (OSError, ValueError):
+            raw = []
+        for item in cast(list[Any], raw) if isinstance(raw, list) else []:
+            if isinstance(item, dict):
+                r = cast(dict[str, Any], item)
+                if r.get("thumb"):
+                    rows[str(r["thumb"])] = r
+        pictures: list[tuple[datetime, Path]] = []
+        dirs = [self._web() / name] + ([self._images / d / "aurora" for d in sorted(nights)]
+                                        if kind is EventKind.AURORA else [])  # fmt: skip
+        seen: set[str] = set()
+        for d in dirs:
+            for f in sorted(d.glob(f"{name}-*.jpg")) if d.is_dir() else []:
+                if f.name in seen:
+                    continue
+                at = self._local(f.stem.split("-", 1)[1][:15], "%Y%m%d_%H%M%S")
+                if at is not None:
+                    seen.add(f.name)
+                    pictures.append((at, f))
+        pictures.sort()
+        episodes: list[list[tuple[datetime, Path]]] = []
+        for at, f in pictures:
+            if episodes and at - episodes[-1][-1][0] <= STORM_GAP:
+                episodes[-1].append((at, f))
+            else:
+                episodes.append([(at, f)])
+        for ep in episodes:
+            start, end = ep[0][0], ep[-1][0]
+            nid = night_id(start, self._tz)
+            if nid not in nights:
+                continue
+            report.episodes += 1
+            if dry:
+                report.nights.add(nid)
+                continue
+            known = [(rows[f.name], f) for _, f in ep if f.name in rows]
+            best_row, best_pic = (
+                max(known, key=lambda k: float(k[0].get("index") or 0))
+                if known
+                else ({}, ep[len(ep) // 2][1])
+            )
+            index = best_row.get("index")
+            colour = best_row.get("green" if kind is EventKind.AURORA else "blue")
+            event = self._events.import_event(
+                kind,
+                nid,
+                start,
+                end,
+                round(min(1.0, 0.5 + float(index) / 10.0), 2)
+                if isinstance(index, int | float)
+                else 0.6,
+                {
+                    "peak_index": float(index) if isinstance(index, int | float) else None,
+                    ("green" if kind is EventKind.AURORA else "blue"): float(colour)
+                    if isinstance(colour, int | float)
+                    else None,
+                    "frames": len(ep),
+                    "direction_deg": None,
+                    "ongoing": False,
+                    "image_rev": 1,
+                    "azimuth_deg": _COMPASS.get(str(best_row.get("dir", ""))),
+                    "altitude_deg": None,
+                },
+                best_pic,
+            )
+            if event is None:
+                report.episodes -= 1
+            else:
+                report.nights.add(nid)
+
     def _import_sky(self, folders: list[str], report: ImportReport, dry: bool) -> None:
         """The sky quality module's history as the sky log (SPEC §5.1) for the charts, with
         the agent's own rules: cloud cover only at night, sky brightness only at
@@ -460,7 +620,24 @@ class AllskyImporter:
             self._import_meteors(date, rows, report, dry)
             report.folders += 1
         self._import_sky(folders, report, dry)
+        nights = set(folders)
+        self._import_lightning(nights, report, dry)
+        self._import_episodes(EventKind.AURORA, nights, report, dry)
+        self._import_episodes(EventKind.NLC, nights, report, dry)
         return report
+
+
+STORM_GAP = timedelta(minutes=30)
+_COMPASS = {"N": 0.0, "NE": 45.0, "E": 90.0, "SE": 135.0, "S": 180.0, "SW": 225.0, "W": 270.0,
+            "NW": 315.0}  # fmt: skip
+
+
+def _pixels(picture: Path) -> int | None:
+    try:
+        with PILImage.open(picture) as im:
+            return im.width * im.height
+    except OSError:
+        return None
 
 
 def _axis_direction(angle_deg: float) -> float:

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import os
 import urllib.error
 import urllib.request
 from collections.abc import Mapping
@@ -221,10 +222,9 @@ def test_targets_and_pixel_maps(tmp_path: Path) -> None:
     assert sorted(p.name for p in cal.iterdir()) == ["keep.txt"]
 
 
+@pytest.mark.skipif(os.geteuid() == 0, reason="a file of root's needs no handing back")
 def test_save_keeps_the_owner(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """A root tool rewriting settings.json (mode 0600) must leave it to the agent's user."""
-    import os
-
     path = tmp_path / "settings.json"
     AgentSettings().save(path)
     calls: list[tuple[int, int]] = []

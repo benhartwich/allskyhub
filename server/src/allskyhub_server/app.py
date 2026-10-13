@@ -30,6 +30,7 @@ from allskyhub_server.devices.connections import ConnectionRegistry
 from allskyhub_server.devices.discord import Discord, Poster
 from allskyhub_server.devices.domains import HostMap
 from allskyhub_server.devices.images import ImageStore
+from allskyhub_server.devices.map_tiles import MapTiles
 from allskyhub_server.devices.renders import Renderer
 from allskyhub_server.devices.satellites import TleCache
 from allskyhub_server.devices.space_weather import KpCache, OvationCache
@@ -252,6 +253,10 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.state.hosts = HostMap()
     app.state.mailer = SmtpMailer(settings)
     app.state.ovation = OvationCache()
+    app.state.map_tiles = MapTiles(
+        settings.data_dir / "tiles",
+        httpx.AsyncClient(headers={"User-Agent": f"allskyhub ({settings.base_url})"}),
+    )
     app.state.hub_keys = HubKeys(settings.key_dir)
     app.state.forecast = ForecastCache()
     app.state.tles = TleCache()

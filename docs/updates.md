@@ -46,8 +46,13 @@ openssl pkey -in allskyhub-2026-main.key -pubout \
   -out image/files/etc/allskyhub-agent/update-keys/allskyhub-2026-main.pem
 openssl pkey -in allskyhub-2026-backup.key -pubout \
   -out image/files/etc/allskyhub-agent/update-keys/allskyhub-2026-backup.pem
-gh secret set ALLSKYHUB_UPDATE_KEY < allskyhub-2026-main.key
+gh secret set ALLSKYHUB_UPDATE_KEY --env release < allskyhub-2026-main.key
 ```
+
+The secret belongs to the GitHub environment `release` only, never to the repository:
+create the environment first (Settings → Environments → `release`) with yourself as
+required reviewer and the deployment tags limited to `agent-v*`. Then every signing run
+waits for your approval, and the workflow refuses a tag whose commit is not on `main`.
 
 Commit the two `.pem` files; keep both `.key` files offline (e.g. a password manager).
 

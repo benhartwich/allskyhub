@@ -29,16 +29,16 @@ jobs:
     runs-on: ubuntu-24.04-arm
     timeout-minutes: 90
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262  # v4
       - name: build tools
         run: sudo apt-get update && sudo apt-get install -y --no-install-recommends parted e2fsprogs xz-utils
-      - uses: astral-sh/setup-uv@v6
+      - uses: astral-sh/setup-uv@d0cc045d04ccac9d8b7881df0226f9e82c39688e  # v6
       - name: image
         run: |
           VERSION="$(date -u +%Y.%m.%d)-${GITHUB_SHA::7}"
           sudo env UV_BIN="$(command -v uv)" ALLSKYHUB_IMAGE_VERSION="$VERSION" image/build.sh
           sudo chown -R "$(id -u):$(id -g)" build
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02  # v4
         with:
           name: allskyhub-image
           path: |
@@ -46,7 +46,7 @@ jobs:
             build/allskyhub-*.img.xz.sha256
           retention-days: 14
           compression-level: 0
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02  # v4
         with:
           name: allskyhub-agent-bundle
           path: build/allskyhub-agent-*-arm64.tar.xz
@@ -59,14 +59,26 @@ jobs:
     if: startsWith(github.ref, 'refs/tags/agent-v')
     needs: build
     runs-on: ubuntu-24.04
+    # The signing key is a secret of this environment only; it requires Benjamin's approval
+    # for every run (security review 2026-10-13, roadmap S4).
+    environment: release
     permissions:
       contents: write
     env:
       GH_TOKEN: ${{ github.token }}
       UPDATE_KEY: ${{ secrets.ALLSKYHUB_UPDATE_KEY }}
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/download-artifact@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262  # v4
+        with:
+          fetch-depth: 0
+      - name: tag is on main
+        run: |
+          # Anyone who may push a tag must not be able to sign a commit that never went
+          # through review on main.
+          git fetch --no-tags origin main
+          git merge-base --is-ancestor "$GITHUB_SHA" origin/main \
+            || { echo "::error::$GITHUB_REF_NAME is not on main"; exit 1; }
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093  # v4
         with:
           name: allskyhub-agent-bundle
           path: dist

@@ -125,15 +125,32 @@ def _detector_entries() -> list[dict[str, Any]]:
 
 
 def _product_entries() -> list[dict[str, Any]]:
-    group = {"de": "Nachtprodukte", "en": "Night products"}
+    group = {"de": "Produkte", "en": "Products"}
     switches = [
         {"key": key, "type": "bool", "label": {"de": de, "en": en}, "group": group}
         for key, de, en in (
             ("product_keogram", "Keogramm", "Keogram"),
             ("product_startrails", "Sternspuren", "Star trails"),
             ("product_timelapse", "Zeitraffer", "Timelapse"),
+            ("product_day_timelapse", "Zeitraffer vom Tag", "Day timelapse"),
+            ("product_day_keogram", "Keogramm vom Tag", "Day keogram"),
         )
     ]
+    switches.append(
+        {
+            "key": "product_mini_timelapse",
+            "type": "bool",
+            "label": {
+                "de": "Mini-Zeitraffer der letzten Stunde",
+                "en": "Mini timelapse of the last hour",
+            },
+            "group": group,
+            "help": {
+                "de": "Alle 10 Minuten neu für die Live-Seite; kostet auf dem Pi Rechenzeit.",
+                "en": "Rebuilt every 10 minutes for the live page; costs CPU time on the Pi.",
+            },
+        }
+    )
     return [
         *switches,
         {

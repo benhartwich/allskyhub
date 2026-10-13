@@ -19,6 +19,8 @@ Routes:
     GET  /api/nights/<n>/events   detections of the night (SPEC §6.4, roadmap L5)
     GET  /api/nights/<n>/sky      sky log of the night (SPEC §5.1, roadmap L6)
     GET  /api/loop            frames of the last hour (roadmap L3)
+    GET  /api/mini.mp4        the last hour as a small video, if switched on (SPEC §5.2)
+    GET  /api/keolapse.jpg?from=&to=   keograms of a range of nights (SPEC §5.4)
     GET  /files/<n>/<image>[?thumb=1], /files/<n>/products/<name>[?thumb=1],
          /files/<n>/events/<id>.jpg[?thumb=1]   stored files, with Range for the video
     GET  /api/settings        {schema, values} for the settings form (SPEC §6.9)
@@ -329,7 +331,9 @@ def make_handler(
 
         def _archive_get(self, path: str) -> bool:
             """Archive routes (roadmap L3–L6); False if `path` is none of them."""
-            if not path.startswith(("/api/nights", "/api/loop", "/files/")):
+            if not path.startswith(
+                ("/api/nights", "/api/loop", "/files/", "/api/keolapse.jpg", "/api/mini.mp4")
+            ):
                 return False
             if archive is None:
                 self._text(HTTPStatus.NOT_FOUND, "not found")
@@ -338,6 +342,15 @@ def make_handler(
                 self._json(HTTPStatus.OK, archive.nights())
             elif path == "/api/loop":
                 self._json(HTTPStatus.OK, archive.loop(datetime.now(UTC)))
+            elif path == "/api/mini.mp4":
+                self._send_file(archive.mini())
+            elif path == "/api/keolapse.jpg":
+                q = self._query()
+                img = archive.keolapse(q.get("from", ""), q.get("to", ""))
+                if img is None:
+                    self._text(HTTPStatus.NOT_FOUND, "no nights")
+                else:
+                    self._send(HTTPStatus.OK, img, "image/jpeg")
             elif m := _NIGHT_API.match(path):
                 night, what = m[1], m[2]
                 if what == "frames":

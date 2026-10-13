@@ -58,6 +58,7 @@ from allskyhub_agent.products.build import (
     build_night,
     night_products,
 )
+from allskyhub_agent.products.day import MINI, DayConfig, MiniTimelapse
 from allskyhub_agent.products.worker import ProductWorker
 from allskyhub_agent.profiles import Profile, get_profile, with_night_limits
 from allskyhub_agent.runner import Location, LoopConfig, Runner
@@ -913,8 +914,19 @@ def main(argv: list[str] | None = None) -> int:
         ),
         on_done=products_done,
         keep_days=night_cfg.keep_days,
+        day=DayConfig(night_cfg.product_day_timelapse, night_cfg.product_day_keogram)
+        if night_cfg.product_day_timelapse or night_cfg.product_day_keogram
+        else None,
+        local_tz=tz,
     )
     products.start()
+    # SPEC §5.2: the last hour as a small video for the live page, never archived.
+    mini_path = Path(args.data) / "live" / MINI
+    mini = MiniTimelapse(store, mini_path, ProductConfig(timelapse_crf=28))
+    if night_cfg.product_mini_timelapse:
+        mini.start()
+    else:
+        mini_path.unlink(missing_ok=True)
 
     def show(f: FrameInfo) -> None:
         products.on_frame(f)
@@ -938,6 +950,7 @@ def main(argv: list[str] | None = None) -> int:
     finally:
         camera.close()
         products.stop()
+        mini.stop()
         detect.stop()
         shutdown()
     return 0

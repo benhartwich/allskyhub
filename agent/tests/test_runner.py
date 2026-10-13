@@ -1,7 +1,5 @@
 """Capture loop end to end with the simulated camera (SPEC §4.1-§4.3)."""
 
-import threading
-import time
 from datetime import UTC, datetime, timedelta
 from itertools import pairwise
 from pathlib import Path
@@ -143,12 +141,18 @@ def test_day_capture_live_and_off(tmp_path: Path) -> None:
     assert files == [infos[-1].name]
     off, clock = make_runner(tmp_path / "off", noon)
     off._day_capture = "off"  # pyright: ignore[reportPrivateUsage]
+    # One hour of "off" by day takes nothing; the sun is checked every minute.
+    sleeps: list[float] = []
+    real_sleep = clock.sleep
+
+    def sleep(s: float) -> None:
+        sleeps.append(s)
+        real_sleep(s)
+        if clock.now() >= noon + timedelta(hours=1):
+            off.stop()
+
+    clock.sleep = sleep  # type: ignore[method-assign]
     taken: list[FrameInfo] = []
-    # One hour of "off" by day takes nothing; the sun check runs every minute.
-    t = threading.Thread(target=off.run, kwargs={"on_frame": taken.append}, daemon=True)
-    t.start()
-    while clock.now() < noon + timedelta(hours=1):
-        time.sleep(0.001)
-    off.stop()
-    t.join(5)
+    off.run(on_frame=taken.append)
     assert taken == []
+    assert set(sleeps) == {60.0}

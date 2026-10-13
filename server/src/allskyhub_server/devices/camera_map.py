@@ -1,4 +1,5 @@
-"""Map of public cameras (roadmap C5), and how dark their sky is (roadmap H4).
+"""Map of public cameras (roadmap C5), how dark their sky is (roadmap H4), and the public
+cameras on the start page.
 
 Only cameras with a public page whose owner shows coordinates, at the same rounding as on
 the page (0.1°). The map is the hub's own Natural Earth outline (static/world-land.svg,
@@ -112,3 +113,38 @@ async def cameras(db: AsyncSession, now: dt.datetime | None = None) -> list[MapC
             )
         )
     return sorted(out, key=lambda c: c.title.lower())
+
+
+HOME_MAX = 12
+
+
+@dataclass(frozen=True)
+class HomeCamera:
+    slug: str
+    title: str
+    place: str
+    image_at: dt.datetime | None
+
+
+async def home_cameras(db: AsyncSession) -> list[HomeCamera]:
+    """Public cameras whose owner lists them on the start page, the freshest image first."""
+    rows = await db.scalars(
+        select(Device)
+        .where(
+            Device.public_slug.is_not(None),
+            Device.owner_id.is_not(None),
+            Device.public_on_home.is_(True),
+        )
+        .order_by(Device.latest_image_at.desc().nulls_last(), Device.id)
+        .limit(HOME_MAX)
+    )
+    return [
+        HomeCamera(
+            slug=device.public_slug,
+            title=public.title(device),
+            place=public.profile(device).location_label,
+            image_at=device.latest_image_at,
+        )
+        for device in rows
+        if device.public_slug is not None
+    ]

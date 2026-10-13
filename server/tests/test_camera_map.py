@@ -1,5 +1,5 @@
 # pyright: reportPrivateUsage=false
-"""Map of public cameras (roadmap C5)."""
+"""Map of public cameras (roadmap C5), and public cameras on the start page."""
 
 from __future__ import annotations
 
@@ -10,6 +10,7 @@ from fastapi import FastAPI
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from allskyhub_server.models import NightStat
+from tests.helpers import home_csrf
 from tests.test_public_page import (
     _add_archive,
     _public,
@@ -71,3 +72,34 @@ async def test_sky_brightness_layer(
     page = (await new_client.get("/karte?layer=sqm")).text
     assert 'class="dot sqm-none"' in page
     assert "21,50" not in page
+
+
+async def test_start_page_lists_only_cameras_whose_owner_wants_it(
+    app: FastAPI, client: httpx.AsyncClient, new_client: httpx.AsyncClient
+) -> None:
+    device_id, slug = await _public(app, client, new_client)
+    await _add_archive(app, device_id)
+    landing = (await new_client.get("/")).text
+    assert 'href="/karte"' in landing.split("<main>")[0]  # in the header for visitors
+    assert "Öffentliche Kameras" not in landing
+    assert f"/sky/{slug}" not in landing
+
+    await _save(client, device_id, title="Lanzenberg", location_label="Hofkirchen",
+                on_home="on")  # fmt: skip
+    edit = (await client.get(f"/cameras/{device_id}/public/edit")).text
+    assert 'name="on_home" checked' in edit
+    landing = (await new_client.get("/")).text
+    assert "Öffentliche Kameras" in landing
+    assert f'href="/sky/{slug}"' in landing
+    assert "Lanzenberg" in landing
+    assert "Hofkirchen" in landing
+    assert "Noch keine Kamera" in (await new_client.get("/karte")).text  # no coordinates
+
+    await _save(client, device_id, title="Lanzenberg")  # unticked: off again
+    assert f"/sky/{slug}" not in (await new_client.get("/")).text
+    await _save(client, device_id, on_home="on")
+    await client.post(  # the page switched off: gone from the start page too
+        f"/cameras/{device_id}/public",
+        data={"csrf_token": await home_csrf(client), "enabled": "false"},
+    )
+    assert "Öffentliche Kameras" not in (await new_client.get("/")).text

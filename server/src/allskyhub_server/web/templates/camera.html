@@ -26,6 +26,7 @@
 </div>
 <div class="card health">
   <h2>Zustand</h2>
+  {% if reboot_required and online %}<p class="health-line">Sicherheitsupdates warten auf einen Neustart; die Kamera startet dafür tagsüber von selbst neu.</p>{% endif %}
   {% if paused and online %}<p class="health-line warn">Aufnahme pausiert: Die Kamera nimmt keine Bilder auf, bis du sie in ihrer lokalen Seite fortsetzt.</p>{% endif %}
   {% if health %}
   <ul class="health-list">

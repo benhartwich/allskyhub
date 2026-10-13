@@ -145,6 +145,17 @@ void main() {
     expect((paused.value, paused.warning), ('pausiert', true));
   });
 
+  test('a reboot for updates is shown (SPEC §8)', () {
+    final rows = statusRows(
+      status: const {'reboot_required': true},
+      frame: const {},
+      lastSeen: null,
+      now: now,
+    );
+    final reboot = rows.firstWhere((r) => r.label == 'Neustart');
+    expect((reboot.value, reboot.warning), ('tagsüber für Updates', false));
+  });
+
   testWidgets('camera screen shows live state and status rows', (tester) async {
     tester.view.physicalSize = const Size(
       400,

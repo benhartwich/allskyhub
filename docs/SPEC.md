@@ -447,7 +447,7 @@ base64url-encoded without padding.
 
 | kind | keys |
 |---|---|
-| `meteor` | `length_px` (int, track length), `peak` (0..1, peak brightness of the track), `frames` (int, frames it appears in), `direction_deg` (0..360 in the image, 0 = up, clockwise, or null), `shower` (name of a shower, e.g. `Perseids`, or null), `shower_match` (how `shower` was found, below), `aircraft` (optional: the call sign, else the ICAO address, of an aircraft the camera's own receiver matched, §7.8, else null) |
+| `meteor` | `length_px` (int, track length), `peak` (0..1, peak brightness of the track), `frames` (int, frames it appears in), `direction_deg` (0..360 in the image, 0 = up, clockwise, or null), `shower` (name of a shower, e.g. `Perseids`, or null), `shower_match` (how `shower` was found, below), `aircraft` (optional: the call sign, else the ICAO address, of an aircraft the camera's own receiver matched, §7.8, else null), `trail` (optional, the camera's verdict from the trail itself, §6.4 Trail verdicts; missing means `meteor`) |
 | `lightning` | `area_frac` (0..1, part of the sky that lit up), `peak` (0..1, mean brightening of the lit area), `storm_flashes` (int, flashes in the last 30 min including this one), `storm` (string, `storm-` + UTC start of the storm like an event id; the same for all flashes of a storm, a gap of more than 30 min starts a new one) |
 | `aurora` | one event per episode (below): `peak_index` (0..100, % of the searched band that is aurora-green in the best frame; the band is the low sky (2–36°) within 70° of the pole's azimuth once the camera has an orientation (§4.8), else the whole low ring of the image circle), `green` (mean green over red of those pixels, 8 bit), `frames` (int, candidate frames so far), `direction_deg` (0..360 in the image, 0 = up, clockwise, of the green's centroid; not a compass bearing), `ongoing` (bool), `image_rev` |
 | `nlc` | one episode (below), only with an orientation (§4.8), sun −16° to −9°, in the low sky (12–45°) toward the sun: `peak_index` (0..100, % of that band that is NLC-blue and structured, best frame), `blue` (mean blue over red of those pixels, 8 bit), `frames`, `direction_deg`, `ongoing`, `image_rev` |
@@ -509,9 +509,36 @@ detectors.
 A label can also be set automatically (roadmap H3, §7.8): then it carries `auto: true` and
 `detail`, a short text such as the call sign and ICAO address (`"DLH4AB 3c6444"`); both are
 optional, default `false` and null, and only an automatic label has them. An automatic label
-never replaces an existing label, and any label set by the owner replaces an automatic
-one whatever its `at`. The UIs show an automatic label as such ("automatisch: Flugzeug
-DLH4AB") with one click to undo it; undoing sets `label` null by the owner, which stays.
+never replaces a label set by the owner, any label set by the owner replaces an automatic
+one whatever its `at`, and between two automatic labels the newer `at` wins (a named
+satellite or aircraft from a catalogue replaces the camera's own trail verdict). The UIs
+show an automatic label as such ("automatisch: Flugzeug DLH4AB") with one click to undo
+it; undoing sets `label` null by the owner, which stays.
+
+**Trail verdicts** (roadmap L25, Benjamin, 2026-10-13; a port of the checks of his Allsky
+module Meteor Detection). The camera keeps every streak its meteor detector finds as a
+`meteor` event with picture, also those it judges not to be a meteor, and says why in
+`data.trail`:
+
+| `trail` | meaning | automatic label |
+|---|---|---|
+| `meteor` | nothing speaks against a meteor | none |
+| `moving` | the streak continues in the frame before or after, moved along its own direction (a satellite or an aircraft) | `false_positive`/`other`, detail `bewegtes Objekt` |
+| `circle` | it lies on one great circle (within 1.2°) with a streak of the frame before or after (needs an orientation, §4.8) | as `moving` |
+| `dashed` | its brightness along the track is broken into ten or more dashes (blinking aircraft lights, a tumbling satellite) | `false_positive`/`aircraft`, detail `blinkt` |
+| `fragmented` | five or more pieces in line beyond its ends | `false_positive`/`other`, detail `Bruchstücke` |
+| `star` | short, on a catalogue star down to magnitude 5 (scintillation; needs an orientation) | `false_positive`/`artifact`, detail `Stern` |
+| `star_trail` | short and parallel to the stars' motion there (needs an orientation) | `false_positive`/`artifact`, detail `Sternspur` |
+| `glare` | a radial spike next to a saturated light (moon, lamp) | `false_positive`/`artifact`, detail `Blendung` |
+| `edge_glow` | ends at the edge of the sky mask, short and broad | `false_positive`/`artifact`, detail `Randleuchten` |
+| `repeat` | the third streak or more at the same place within 25 min (hot spot, bloom) | `false_positive`/`artifact`, detail `wiederkehrend` |
+
+The checks run in this order and the first that applies is the verdict; thresholds are those
+of the Allsky module scaled to the frame size. A streak that is part of a flickering or
+cloudy frame (§4.9) is still dropped without an event. The camera sets the automatic label
+when it saves the event and sends it as `event_label` (§6.3). At most 300 non-`meteor`
+events are kept per night; beyond that they are only counted in the log. Nothing is deleted:
+the owner sees them with "Aussortierte zeigen" and can label any of them a meteor.
 
 ### 6.5 Hub → device
 
@@ -1006,7 +1033,7 @@ aircraft is named.
 - The agent, with its own receiver, checks every meteor when it saves it: a match fills
   `data.aircraft` and sets an automatic label `false_positive`/`aircraft` (§6.4 Labels),
   which goes to the hub as `event_label`. The event is still saved and sent.
-- The hub checks every meteor that has no label yet against the merged positions once
+- The hub checks every meteor that has no label set by the owner against the merged positions once
   `end + 60 s` has passed, but only when its kept positions cover the whole window
   `start − 30 s .. end + 30 s`; otherwise (backlog after an outage, a camera offline, an
   imported event, §6.4) the event stays unchecked. A match sets an automatic label the
@@ -1022,6 +1049,23 @@ past the newest one (aircraft without them, or older, are not drawn): a marker, 
 call sign and the altitude, with a short trail of its last minute. A switch "Flugzeuge"
 next to "Sternbilder" shows them, remembered per browser. On the public page only with
 the section `aircraft` (§6.8).
+
+### 7.9 Satellites
+
+Roadmap H6 (Benjamin, 2026-10-13): the hub names satellites among the meteor events, as it
+names aircraft (§7.8); the camera needs no orbital data and no new dependency.
+
+The hub loads the orbital elements (GP data) of CelesTrak's groups `active` and `visual`
+once a day. For every meteor event that has both track ends (§6.4; they need an orientation
+and a trusted clock), no label set by the owner and is not imported, it propagates every
+satellite (SGP4) over `start .. end` in steps of at most 1 s, and keeps those above 5° and
+in sunlight (the earth's shadow as a cylinder) for part of that time. A satellite is the
+streak when both track ends lie within 1° of its apparent path and the streak is not longer
+than that path plus 2°. If an aircraft (§7.8) and a satellite both match, the nearer one
+counts. A match sets the automatic label `false_positive`/`satellite` with `detail` the
+satellite's name and NORAD number (`"STARLINK-1234 44238"`; the ISS and Tiangong as
+`"ISS"` and `"Tiangong"`), which goes to the camera with `label_event`. Events are checked
+when they arrive, also after an outage, since orbits can be computed for any time.
 
 ## 8. Updates
 

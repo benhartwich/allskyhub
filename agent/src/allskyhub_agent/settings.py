@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import tempfile
 from collections.abc import Mapping
 from dataclasses import asdict, dataclass, replace
@@ -70,6 +71,21 @@ def valid_http_url(url: str) -> bool:
         return True
     head, sep, rest = u.partition("://")
     return sep == "://" and head in ("http", "https") and bool(rest.split("/", 1)[0])
+
+
+_LABEL = r"[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?"
+_HOSTNAME = re.compile(rf"^(?=.{{1,253}}$){_LABEL}(?:\.{_LABEL})*$")
+
+
+def host_names(value: str) -> list[str]:
+    """The names of `local_hostnames` (SPEC §7.4): separated by commas or spaces."""
+    return [n.lower().rstrip(".") for n in re.split(r"[\s,]+", value.strip()) if n]
+
+
+def valid_hostnames(value: str) -> bool:
+    """Empty, or at most 10 host names (SPEC §7.4 Addresses)."""
+    names = host_names(value)
+    return len(value) <= 500 and len(names) <= 10 and all(_HOSTNAME.match(n) for n in names)
 
 
 def valid_mqtt(key: str, value: str) -> bool:
@@ -160,6 +176,8 @@ class AgentSettings:
     mqtt_prefix: str = "allskyhub"
     # HTTPS for the local UI (SPEC §7.6, roadmap L24).
     https: bool = False
+    # SPEC §7.4 Addresses: own host names the local UI also answers under.
+    local_hostnames: str = ""
 
     @property
     def has_location(self) -> bool:
@@ -233,6 +251,9 @@ class AgentSettings:
         for k in ("nina_url", "adsb_url"):
             if isinstance(d.get(k), str):
                 later[k] = d[k]
+        names = d.get("local_hostnames")
+        if isinstance(names, str) and valid_hostnames(names):
+            later["local_hostnames"] = names
         for k in _MQTT_STRINGS:
             v = d.get(k)
             if isinstance(v, str) and valid_mqtt(k, v):
@@ -301,6 +322,16 @@ class AgentSettings:
             pw = values["mqtt_password"]
             if pw is None or (isinstance(pw, str) and pw):
                 extra["mqtt_password"] = pw  # None deletes, "" keeps (SPEC §6.9)
+        moved = (
+            extra.get("mqtt_host", s.mqtt_host) != s.mqtt_host
+            or extra.get("mqtt_port", s.mqtt_port) != s.mqtt_port
+        )
+        if moved and "mqtt_password" not in extra:
+            # SPEC §7.7: the password never goes to another broker than it was set for.
+            extra["mqtt_password"] = None
+        v = values.get("local_hostnames")
+        if isinstance(v, str) and valid_hostnames(v):
+            extra["local_hostnames"] = " ".join(host_names(v))
         return replace(s, **extra)
 
     def save(self, path: Path) -> None:

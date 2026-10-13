@@ -577,9 +577,9 @@ async def _on_frame(
         )
 
 
-# Keogram and startrails are a few MB: fetched in full right away. The timelapse (up to
-# hundreds of MB) only when someone opens it (app API, ``request_product``).
-FETCH_AT_ONCE = frozenset({ProductKind.KEOGRAM, ProductKind.STARTRAILS})
+# Keograms and startrails are a few MB: fetched in full right away. Timelapses (up to
+# hundreds of MB) only when someone opens them (app API, ``request_product``).
+FETCH_AT_ONCE = frozenset({ProductKind.KEOGRAM, ProductKind.STARTRAILS, ProductKind.DAY_KEOGRAM})
 FETCH_AT_ONCE_MAX = 50 * 1024 * 1024
 
 

@@ -122,14 +122,14 @@ async def _purge_frames(
 async def _purge_products(
     db: AsyncSession, store: ImageStore, settings: Settings, now: dt.datetime
 ) -> None:
-    """Night products: the timelapse (large) after ``keep_full_days`` from its arrival,
+    """Night products: videos (the timelapses, large) after ``keep_full_days`` from arrival,
     everything of a night after ``keep_thumb_days`` from the announcement."""
     full_cutoff = now - dt.timedelta(days=settings.keep_full_days)
     thumb_cutoff = now - dt.timedelta(days=settings.keep_thumb_days)
     old_videos = (
         await db.execute(
             select(Product.device_id, Product.night_id, Product.name).where(
-                Product.kind == "timelapse",
+                Product.content_type == "video/mp4",
                 Product.has_full.is_(True),
                 Product.full_at < full_cutoff,
             )
@@ -140,7 +140,9 @@ async def _purge_products(
     await db.execute(
         update(Product)
         .where(
-            Product.kind == "timelapse", Product.has_full.is_(True), Product.full_at < full_cutoff
+            Product.content_type == "video/mp4",
+            Product.has_full.is_(True),
+            Product.full_at < full_cutoff,
         )
         .values(has_full=False, full_at=None)
     )

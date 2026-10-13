@@ -11,6 +11,8 @@ const productTitles = {
   'keogram': 'Keogramm',
   'startrails': 'Sternspuren',
   'timelapse': 'Zeitraffer',
+  'day_timelapse': 'Zeitraffer am Tag',
+  'day_keogram': 'Keogramm am Tag',
 };
 
 String formatSize(int bytes) {

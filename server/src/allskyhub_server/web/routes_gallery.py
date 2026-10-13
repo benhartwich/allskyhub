@@ -42,7 +42,13 @@ router = APIRouter(dependencies=[Depends(csrf_protect)])
 NightId = Annotated[str, Path(pattern=archive.NIGHT_ID)]
 ProductName = Annotated[str, Path(pattern=archive.PRODUCT_NAME)]
 EventId = Annotated[str, Path(pattern=EVENT_ID_PATTERN)]
-PRODUCT_TITLES = {"keogram": "Keogramm", "startrails": "Sternspuren", "timelapse": "Zeitraffer"}
+PRODUCT_TITLES = {
+    "keogram": "Keogramm",
+    "startrails": "Sternspuren",
+    "timelapse": "Zeitraffer",
+    "day_timelapse": "Zeitraffer am Tag",
+    "day_keogram": "Keogramm am Tag",
+}
 
 
 async def _access(

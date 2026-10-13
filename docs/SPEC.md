@@ -767,6 +767,13 @@ The camera opens its own Wi-Fi network for setup:
   image can write the file before the first boot (any 12 characters from the alphabet),
   read the made one from the SD card, or skip the setup network with a setup file (§7.3).
   `GET /api/setup` never shows it.
+- **QR code:** the ZXing Wi-Fi format, fields in any order, `H:` optional; the camera
+  writes exactly `WIFI:T:WPA;S:allskyhub-XXXX;P:<12 characters>;;`. The app accepts `\`
+  escapes (`\\`, `\;`, `\,`, `\:`, `\"`) when it reads one, although the camera's SSID
+  and key never need them, and only `T:WPA` with an SSID starting `allskyhub-`. A camera
+  with an agent from before this rule opens its setup network without a key; the app
+  joins such an open `allskyhub-XXXX` network without asking for a key and shows that
+  this camera should be updated.
 
 Endpoints, only reachable from the setup network:
 

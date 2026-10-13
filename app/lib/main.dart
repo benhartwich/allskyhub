@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import 'design.dart';
 import 'api/hub_client.dart';
 import 'api/session_store.dart';
 import 'screens/cameras_screen.dart';
@@ -67,9 +68,7 @@ class _AllskyAppState extends State<AllskyApp> {
     return MaterialApp(
       title: 'allskyhub',
       debugShowCheckedModeBanner: false,
-      theme: _theme(Brightness.light),
-      darkTheme: _theme(Brightness.dark),
-      themeMode: ThemeMode.dark,
+      theme: skyTheme(),
       home: _loading
           ? const Scaffold(body: Center(child: CircularProgressIndicator()))
           : client == null
@@ -78,12 +77,3 @@ class _AllskyAppState extends State<AllskyApp> {
     );
   }
 }
-
-ThemeData _theme(Brightness brightness) => ThemeData(
-  colorScheme: ColorScheme.fromSeed(
-    seedColor: const Color(0xFF7AA2F7),
-    brightness: brightness,
-    surface: brightness == Brightness.dark ? const Color(0xFF0B1020) : null,
-  ),
-  useMaterial3: true,
-);

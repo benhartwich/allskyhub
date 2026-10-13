@@ -1,0 +1,22 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#0a1230"/><stop offset=".6" stop-color="#04060f"/><stop offset="1" stop-color="#02030a"/>
+    </linearGradient>
+    <radialGradient id="a1" cx=".15" cy="-.05" r=".8"><stop offset="0" stop-color="#4fe3b0" stop-opacity=".35"/><stop offset=".6" stop-color="#4fe3b0" stop-opacity="0"/></radialGradient>
+    <radialGradient id="a2" cx=".9" cy="0" r=".75"><stop offset="0" stop-color="#b48cff" stop-opacity=".38"/><stop offset=".6" stop-color="#b48cff" stop-opacity="0"/></radialGradient>
+    <linearGradient id="sheen" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#8fe3ff"/><stop offset=".45" stop-color="#7aa2f7"/><stop offset="1" stop-color="#b48cff"/>
+    </linearGradient>
+    <filter id="glow" x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur stdDeviation="14"/></filter>
+    <clipPath id="dome"><circle cx="512" cy="512" r="300"/></clipPath>
+    <linearGradient id="trail" x1="392" y1="330" x2="560" y2="455" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#4fe3b0" stop-opacity="0"/><stop offset="1" stop-color="#4fe3b0"/>
+    </linearGradient>
+  </defs>
+  <g id="background">
+    <rect width="1024" height="1024" fill="url(#bg)"/>
+    <rect width="1024" height="1024" fill="url(#a1)"/>
+    <rect width="1024" height="1024" fill="url(#a2)"/>
+  </g>
+</svg>

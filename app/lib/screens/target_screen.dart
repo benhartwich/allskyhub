@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import '../design.dart';
+
 import '../api/hub_client.dart';
 
 String _clock(DateTime t) {
@@ -65,8 +67,8 @@ class _TargetScreenState extends State<TargetScreen> {
   }
 
   Color? _color(BuildContext context, String verdict) => switch (verdict) {
-    'clear' => Colors.greenAccent.shade400,
-    'partly' => Colors.orangeAccent,
+    'clear' => Sky.aurora,
+    'partly' => Sky.warn,
     'low' || 'bright' => Theme.of(context).disabledColor,
     _ => null,
   };

@@ -1,0 +1,39 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#0a1230"/><stop offset=".6" stop-color="#04060f"/><stop offset="1" stop-color="#02030a"/>
+    </linearGradient>
+    <radialGradient id="a1" cx=".15" cy="-.05" r=".8"><stop offset="0" stop-color="#4fe3b0" stop-opacity=".35"/><stop offset=".6" stop-color="#4fe3b0" stop-opacity="0"/></radialGradient>
+    <radialGradient id="a2" cx=".9" cy="0" r=".75"><stop offset="0" stop-color="#b48cff" stop-opacity=".38"/><stop offset=".6" stop-color="#b48cff" stop-opacity="0"/></radialGradient>
+    <linearGradient id="sheen" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#8fe3ff"/><stop offset=".45" stop-color="#7aa2f7"/><stop offset="1" stop-color="#b48cff"/>
+    </linearGradient>
+    <filter id="glow" x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur stdDeviation="14"/></filter>
+    <clipPath id="dome"><circle cx="512" cy="512" r="300"/></clipPath>
+    <linearGradient id="trail" x1="392" y1="330" x2="560" y2="455" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#4fe3b0" stop-opacity="0"/><stop offset="1" stop-color="#4fe3b0"/>
+    </linearGradient>
+  </defs>
+  <g id="background">
+    <rect width="1024" height="1024" fill="url(#bg)"/>
+    <rect width="1024" height="1024" fill="url(#a1)"/>
+    <rect width="1024" height="1024" fill="url(#a2)"/>
+  </g>
+  <g id="foreground">
+    <circle cx="512" cy="512" r="300" fill="none" stroke="url(#sheen)" stroke-width="40" filter="url(#glow)" opacity=".7"/>
+    <circle cx="512" cy="512" r="300" fill="#0b1020" fill-opacity=".6"/>
+    <g clip-path="url(#dome)">
+      <g fill="#eef1fb">
+        <circle cx="402" cy="392" r="9"/><circle cx="600" cy="352" r="7"/><circle cx="650" cy="470" r="11"/>
+        <circle cx="352" cy="512" r="6"/><circle cx="470" cy="300" r="6"/><circle cx="700" cy="560" r="6"/>
+        <circle cx="430" cy="560" r="5"/><circle cx="560" cy="520" r="5"/><circle cx="330" cy="420" r="4"/>
+        <path d="M545 250 l9 34 l34 9 l-34 9 l-9 34 l-9 -34 l-34 -9 l34 -9 z"/>
+      </g>
+      <path d="M392 330 L560 455" stroke="url(#trail)" stroke-width="12" stroke-linecap="round"/>
+      <circle cx="560" cy="455" r="10" fill="#eafff7"/>
+      <path d="M190 690 C300 640 400 655 480 680 C570 708 650 650 840 662 L840 840 L190 840 Z" fill="#050816"/>
+      <path d="M190 690 C300 640 400 655 480 680 C570 708 650 650 840 662" fill="none" stroke="url(#sheen)" stroke-width="8" opacity=".8"/>
+    </g>
+    <circle cx="512" cy="512" r="300" fill="none" stroke="url(#sheen)" stroke-width="30"/>
+  </g>
+</svg>

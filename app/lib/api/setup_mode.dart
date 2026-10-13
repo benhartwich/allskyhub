@@ -6,6 +6,7 @@ import 'package:flutter/foundation.dart';
 
 import '../platform/location.dart';
 import '../platform/wifi_binding.dart';
+import 'setup_key.dart';
 import 'camera_setup.dart';
 import 'discovery.dart';
 import 'hub_client.dart';
@@ -51,6 +52,9 @@ class SetupModeController extends ChangeNotifier {
   Uri? cameraUri;
   String? error;
 
+  /// The camera's setup network was open: an agent from before the setup key (SPEC §7.1).
+  bool outdatedCamera = false;
+
   /// Where the camera stands (SPEC §7.1): from the phone or typed in.
   CameraLocation? location;
   LocationProblem? locationProblem;
@@ -81,10 +85,43 @@ class SetupModeController extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// After the user joined `allskyhub-XXXX`.
-  Future<void> connect() async {
+  /// Joins the camera's setup network from the app (QR code, typed key, or open for an
+  /// older camera), then goes on as [connect].
+  Future<void> join(SetupWifi wifi) async {
     _set(SetupPhase.connecting);
-    await binding.bindToWifi();
+    final result = await binding.joinSetup(wifi);
+    switch (result) {
+      case JoinResult.joined:
+        outdatedCamera = wifi.open;
+        await connect(alreadyBound: true);
+      case JoinResult.unsupported:
+        _set(
+          SetupPhase.joinCameraNetwork,
+          error:
+              'Dieses Handy kann sich nicht aus der App verbinden. Verbinde dich in den '
+              'WLAN-Einstellungen mit „${wifi.ssid ?? 'allskyhub-…'}“'
+              '${wifi.key == null ? '' : ' (Schlüssel ${_shown(wifi.key!)})'} und tippe dann '
+              'auf „Ich bin verbunden“.',
+        );
+      case JoinResult.failed:
+        _set(
+          SetupPhase.joinCameraNetwork,
+          error: wifi.open
+              ? 'Kein offenes Netz „allskyhub-…“ gefunden. Ist die Kamera eingeschaltet?'
+              : 'Verbindung fehlgeschlagen. Stimmt der Schlüssel, und ist die Kamera in '
+                    'der Nähe und eingeschaltet?',
+        );
+    }
+  }
+
+  static String _shown(String key) => key.length == 12
+      ? '${key.substring(0, 4)}-${key.substring(4, 8)}-${key.substring(8)}'
+      : key;
+
+  /// After the user (or [join]) joined `allskyhub-XXXX`.
+  Future<void> connect({bool alreadyBound = false}) async {
+    _set(SetupPhase.connecting);
+    if (!alreadyBound) await binding.bindToWifi();
     try {
       final current = await setup.fetch();
       if (!current.setupMode) {
@@ -132,6 +169,14 @@ class SetupModeController extends ChangeNotifier {
     String? password,
     required String country,
   }) async {
+    // SPEC §7.1: the camera's hub token must never travel over plain ws.
+    if (!hub.baseUrl.startsWith('https://')) {
+      _set(
+        SetupPhase.chooseNetwork,
+        error: 'Die Hub-Adresse muss mit https:// beginnen (${hub.baseUrl}).',
+      );
+      return;
+    }
     _set(SetupPhase.sending);
     try {
       await setup.sendNetwork(

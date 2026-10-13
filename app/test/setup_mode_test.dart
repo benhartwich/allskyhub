@@ -5,6 +5,7 @@ import 'dart:typed_data';
 import 'package:allskyhub_app/api/camera_setup.dart';
 import 'package:allskyhub_app/api/discovery.dart';
 import 'package:allskyhub_app/api/hub_client.dart';
+import 'package:allskyhub_app/api/setup_key.dart';
 import 'package:allskyhub_app/api/setup_mode.dart';
 import 'package:allskyhub_app/platform/location.dart';
 import 'package:allskyhub_app/platform/wifi_binding.dart';
@@ -20,6 +21,15 @@ const hubUrl = 'https://hub.example';
 
 class FakeBinding implements WifiBinding {
   final calls = <String>[];
+  final joined = <SetupWifi>[];
+  JoinResult joinResult = JoinResult.joined;
+
+  @override
+  Future<JoinResult> joinSetup(SetupWifi wifi) async {
+    joined.add(wifi);
+    calls.add('join');
+    return joinResult;
+  }
 
   @override
   Future<bool> bindToWifi() async {
@@ -223,7 +233,7 @@ void main() {
     await tester.pumpWidget(
       MaterialApp(home: SetupModeScreen(controller: f.controller)),
     );
-    await tester.tap(find.text('Weiter'));
+    await tester.tap(find.byKey(const Key('joined-manually')));
     await tester.pumpAndSettle();
     expect(find.textContaining('Verbunden mit allskyhub-ABCD'), findsOneWidget);
 
@@ -293,5 +303,115 @@ void main() {
       'paired': true,
     });
     expect(old.locationSet, isTrue); // older agents: no false alarm
+  });
+
+  group('setup key (SPEC §7.1)', () {
+    test('the Wi-Fi QR code on the label', () {
+      final wifi = parseWifiQr('WIFI:T:WPA;S:allskyhub-ABCD;P:ABCDEFGHJKMN;;');
+      expect(wifi?.ssid, 'allskyhub-ABCD');
+      expect(wifi?.key, 'ABCDEFGHJKMN');
+      // Any order, H: optional, escapes.
+      final other = parseWifiQr(
+        r'WIFI:P:AB\;CD\\EFGHJ;H:false;S:allskyhub-WXYZ;T:WPA;;',
+      );
+      expect(other?.ssid, 'allskyhub-WXYZ');
+      expect(other?.key, r'AB;CD\EFGHJ');
+      expect(parseWifiQr('WIFI:T:WPA;S:HomeNet;P:secret123;;'), isNull);
+      expect(parseWifiQr('WIFI:T:nopass;S:allskyhub-ABCD;;'), isNull);
+      expect(
+        parseWifiQr('WIFI:T:WEP;S:allskyhub-ABCD;P:ABCDEFGHJKMN;;'),
+        isNull,
+      );
+      expect(parseWifiQr('https://allskyhub.org'), isNull);
+    });
+
+    test('a typed key', () {
+      expect(normalizeSetupKey('abcd-efgh-jkmn'), 'ABCDEFGHJKMN');
+      expect(normalizeSetupKey(' ABCD EFGH JKMN '), 'ABCDEFGHJKMN');
+      expect(normalizeSetupKey('ABCD-EFGH-JKM'), isNull);
+      expect(normalizeSetupKey('ABCD-EFGH-JKM0'), isNull); // no 0, 1, I, L, O
+    });
+
+    test('joined from the app: no second bind, then the networks', () async {
+      final f = Fixture();
+      await f.controller.join(const SetupWifi(key: 'ABCDEFGHJKMN'));
+      expect(f.controller.phase, SetupPhase.chooseNetwork);
+      expect(f.binding.calls, ['join']);
+      expect(f.binding.joined.single.ssid, isNull); // any allskyhub-… network
+      expect(f.controller.outdatedCamera, isFalse);
+    });
+
+    test('an older camera with an open network is flagged', () async {
+      final f = Fixture();
+      await f.controller.join(const SetupWifi());
+      expect(f.controller.phase, SetupPhase.chooseNetwork);
+      expect(f.controller.outdatedCamera, isTrue);
+    });
+
+    test('failed or impossible joins explain what to do', () async {
+      final f = Fixture()..binding.joinResult = JoinResult.failed;
+      await f.controller.join(const SetupWifi(key: 'ABCDEFGHJKMN'));
+      expect(f.controller.phase, SetupPhase.joinCameraNetwork);
+      expect(f.controller.error, contains('Stimmt der Schlüssel'));
+      f.binding.joinResult = JoinResult.unsupported;
+      await f.controller.join(
+        const SetupWifi(ssid: 'allskyhub-ABCD', key: 'ABCDEFGHJKMN'),
+      );
+      expect(
+        f.controller.error,
+        contains('„allskyhub-ABCD“ (Schlüssel ABCD-EFGH-JKMN)'),
+      );
+    });
+
+    test('the hub must be https', () async {
+      final f = Fixture();
+      final insecure = SetupModeController(
+        hub: HubClient(baseUrl: 'http://hub.example', token: 'tok'),
+        binding: f.binding,
+        discovery: f.discovery,
+        locationSource: f.location,
+        setup: f.controller.setup,
+      );
+      await insecure.connect();
+      await insecure.send(ssid: 'Home', password: 'secret123', country: 'AT');
+      expect(insecure.phase, SetupPhase.chooseNetwork);
+      expect(insecure.error, contains('https://'));
+      expect(f.sent, isNull);
+    });
+
+    testWidgets('scan the label, or type the key', (tester) async {
+      final f = Fixture();
+      await tester.pumpWidget(
+        MaterialApp(
+          home: SetupModeScreen(
+            controller: f.controller,
+            scanner: () => Builder(
+              builder: (context) => TextButton(
+                key: const Key('fake-scan'),
+                onPressed: () => Navigator.of(
+                  context,
+                ).pop('WIFI:T:WPA;S:allskyhub-ABCD;P:ABCDEFGHJKMN;;'),
+                child: const Text('scan'),
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.enterText(
+        find.byKey(const Key('setup-key')),
+        'abcd-efgh-jkm',
+      );
+      await tester.tap(find.byKey(const Key('join-typed')));
+      await tester.pumpAndSettle();
+      expect(find.textContaining('12 Zeichen'), findsOneWidget);
+      expect(f.binding.joined, isEmpty);
+
+      await tester.tap(find.byKey(const Key('scan-qr')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('fake-scan')));
+      await tester.pumpAndSettle();
+      expect(f.binding.joined.single.ssid, 'allskyhub-ABCD');
+      expect(f.controller.phase, SetupPhase.chooseNetwork);
+    });
   });
 }

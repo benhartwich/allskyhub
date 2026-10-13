@@ -33,6 +33,7 @@ class RecentLog(logging.Handler):
         super().__init__(logging.INFO)
         self._lines: deque[str] = deque(maxlen=size)
         self._lock_lines = threading.Lock()
+        self._seq = 0  # number of lines ever logged, for following the log
         self.setFormatter(
             logging.Formatter(
                 "%(asctime)s %(levelname)s %(name)s: %(message)s", "%Y-%m-%d %H:%M:%S"
@@ -46,10 +47,17 @@ class RecentLog(logging.Handler):
             return
         with self._lock_lines:
             self._lines.append(line)
+            self._seq += 1
 
     def lines(self, n: int = LOG_LINES) -> list[str]:
         with self._lock_lines:
             return list(self._lines)[-n:]
+
+    def since(self, seq: int) -> tuple[int, list[str]]:
+        """The lines after `seq` (at most what is kept) and the new `seq`, to follow live."""
+        with self._lock_lines:
+            new = max(0, min(self._seq - seq, len(self._lines)))
+            return self._seq, list(self._lines)[len(self._lines) - new :] if new else []
 
 
 @dataclass(frozen=True)

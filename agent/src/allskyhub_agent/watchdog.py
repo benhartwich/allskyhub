@@ -56,12 +56,14 @@ class Heartbeat:
         self,
         frames: Callable[[], int],
         max_age_s: float = 600.0,
+        paused: Callable[[], bool] = lambda: False,
         grace_s: float = 1200.0,
         interval_s: float = 30.0,
         notify: Callable[[str], bool] = sd_notify,
         monotonic: Callable[[], float] = time.monotonic,
     ) -> None:
         self._frames = frames
+        self._paused = paused
         self._max_age = max_age_s
         self._interval = interval_s
         self._notify = notify
@@ -76,7 +78,8 @@ class Heartbeat:
         """One check; True if it pinged."""
         now = self._monotonic()
         count = self._frames()
-        if count != self._count:
+        if count != self._count or self._paused():
+            # A pause (SPEC §4.1) is no stall: it counts as a fresh frame.
             self._count, self._last_new = count, now
         fresh = (
             now - self._last_new < self._max_age
@@ -155,14 +158,22 @@ def _since(now: datetime, raw: str | None, gap: timedelta) -> bool:
 
 
 def decide(
-    st: WatchState, now: datetime, frames: int | None, net_ok: bool, busy: bool
+    st: WatchState,
+    now: datetime,
+    frames: int | None,
+    net_ok: bool,
+    busy: bool,
+    paused: bool = False,
 ) -> str | None:
     """The next step: "restart", "usb_reset", "reboot" or None; updates `st`.
 
     `frames` is the agent's frame count (None: the agent does not answer), `net_ok`
-    whether the gateway or DNS answers, `busy` whether the updater is switching versions.
+    whether the gateway or DNS answers, `busy` whether the updater is switching versions,
+    `paused` whether the owner paused capture (SPEC §4.1): no stall then.
     """
     iso = now.isoformat()
+    if paused:
+        st.frames_changed = iso
     if frames is not None and frames != st.frames:
         st.frames, st.frames_changed = frames, iso
     if st.frames_changed is None:

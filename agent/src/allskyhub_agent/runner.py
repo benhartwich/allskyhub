@@ -27,6 +27,7 @@ log = logging.getLogger(__name__)
 
 # Name reported for focus-mode frames, which are not stored (SPEC §7).
 FOCUS_FRAME_NAME = "focus.jpg"
+PAUSE_POLL_S = 2.0
 
 
 @dataclass(frozen=True)
@@ -187,6 +188,9 @@ class Runner:
         n = 0
         failures = 0
         while (frames is None or n < frames) and not self._stop.is_set():
+            if self._live is not None and self._live.paused:
+                self._clock.sleep(PAUSE_POLL_S)  # SPEC §4.1: paused by the owner
+                continue
             try:
                 info = self.step()
             except (CameraError, OSError) as exc:

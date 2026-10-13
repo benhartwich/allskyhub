@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import base64
 import hashlib
 import io
 import json
@@ -16,7 +17,7 @@ from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 
 from allskyhub_agent.update.installer import Paths, Updater, read_request
-from allskyhub_agent.update.manifest import verify_signature
+from allskyhub_agent.update.manifest import fingerprint, verify_signature
 from allskyhub_protocol.updates import is_newer
 
 URL = "https://updates.test/channel-stable/manifest.json"
@@ -315,3 +316,93 @@ def test_read_request(tmp_path: Path) -> None:
     assert not req.exists()  # read once
     req.write_text("rm -rf /\n")
     assert read_request(req) is None
+
+
+# --- key revocation (SPEC §8 Key revocation) --------------------------------------------
+
+
+def _b64(private: Ed25519PrivateKey) -> str:
+    der = private.public_key().public_bytes(
+        serialization.Encoding.DER, serialization.PublicFormat.SubjectPublicKeyInfo
+    )
+    return base64.b64encode(der).decode()
+
+
+def publish_keys(
+    ch: Channel,
+    emergency: Ed25519PrivateKey,
+    serial: int,
+    revoked: list[Ed25519PrivateKey],
+    added: list[Ed25519PrivateKey],
+) -> None:
+    body = json.dumps({
+        "serial": serial, "issued_at": "2026-10-13T18:00:00Z",
+        "revoked": [fingerprint(k.public_key()) for k in revoked],
+        "added": [_b64(k) for k in added],
+    }).encode()  # fmt: skip
+    url = URL.rsplit("/", 1)[0] + "/keys.json"
+    ch.files[url] = body
+    ch.files[url + ".sig"] = emergency.sign(body)
+
+
+@pytest.fixture
+def emergency(key: tuple[Ed25519PrivateKey, Path]) -> Ed25519PrivateKey:
+    private = Ed25519PrivateKey.generate()
+    folder = key[1] / "emergency"
+    folder.mkdir()
+    (folder / "backup.pem").write_bytes(private.public_key().public_bytes(
+        serialization.Encoding.PEM, serialization.PublicFormat.SubjectPublicKeyInfo))  # fmt: skip
+    return private
+
+
+def test_emergency_key_signs_no_release(
+    tmp_path: Path, key: tuple[Ed25519PrivateKey, Path], emergency: Ed25519PrivateKey
+) -> None:
+    cam = Camera(tmp_path)
+    cam.install("0.1.0")
+    ch = Channel()
+    ch.publish(emergency, "0.2.0")
+    make(cam, ch, key[1]).run_once()
+    assert cam.current() == "0.1.0"
+    assert state(cam)["code"] == "bad_signature"
+
+
+def test_revoked_key_is_replaced_by_the_added_one(
+    tmp_path: Path, key: tuple[Ed25519PrivateKey, Path], emergency: Ed25519PrivateKey
+) -> None:
+    main, keys = key
+    new_main = Ed25519PrivateKey.generate()
+    cam = Camera(tmp_path)
+    cam.install("0.1.0")
+    ch = Channel()
+    publish_keys(ch, emergency, 1, revoked=[main], added=[new_main])
+    ch.publish(main, "0.2.0")  # signed with the leaked key: refused
+    make(cam, ch, keys).run_once()
+    assert cam.current() == "0.1.0"
+    assert state(cam)["code"] == "bad_signature"
+    ch.publish(new_main, "0.2.0")
+    make(cam, ch, keys).run_once()
+    assert cam.current() == "0.2.0"
+
+
+def test_key_list_cannot_be_rolled_back_or_faked(
+    tmp_path: Path, key: tuple[Ed25519PrivateKey, Path], emergency: Ed25519PrivateKey
+) -> None:
+    main, keys = key
+    cam = Camera(tmp_path)
+    cam.install("0.1.0")
+    ch = Channel()
+    publish_keys(ch, emergency, 2, revoked=[main], added=[])
+    make(cam, ch, keys).run_once()
+    # The leaked key cannot sign a list, an older list does not count, and a list taken
+    # off the channel stays revoked on the camera.
+    publish_keys(ch, main, 3, revoked=[], added=[])
+    ch.publish(main, "0.2.0")
+    make(cam, ch, keys).run_once()
+    publish_keys(ch, emergency, 1, revoked=[], added=[])
+    make(cam, ch, keys).run_once()
+    del ch.files[URL.rsplit("/", 1)[0] + "/keys.json"]
+    make(cam, ch, keys).run_once()
+    assert cam.current() == "0.1.0"
+    assert not verify_signature(b"x", main.sign(b"x"), keys, tmp_path)
+    assert verify_signature(b"x", main.sign(b"x"), keys)  # without the kept list

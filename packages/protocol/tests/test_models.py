@@ -441,3 +441,17 @@ def test_aircraft_message() -> None:
             "body": {"at": "2026-10-13T21:00:00Z",
                      "aircraft": [{"hex": "3C6444", "lat": 0, "lon": 0, "seen_s": 0}]},
         })  # fmt: skip
+
+
+def test_key_list() -> None:
+    """SPEC §8 Key revocation."""
+    from allskyhub_protocol.updates import KeyList
+
+    ok = KeyList.model_validate({
+        "serial": 1, "issued_at": "2026-10-13T18:00:00Z", "revoked": ["ab" * 32],
+        "added": ["MCowBQYDK2VwAyEABmUx6fwER9WNLm4toRtyvjdO4Iilv1KEKA4WRW/G61U="],
+    })  # fmt: skip
+    assert ok.serial == 1
+    for bad in ({"revoked": ["AB" * 32]}, {"added": ["MFkwEwYHKoZIzj0CAQYI"]}, {"serial": 0}):
+        with pytest.raises(ValidationError):
+            KeyList.model_validate({"serial": 1, "issued_at": "2026-10-13T18:00:00Z"} | bad)

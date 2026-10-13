@@ -1119,8 +1119,18 @@ report healthy within a timeout.
 
 - **Channel:** a JSON manifest `{channel, version, released_at, bundle: {url, sha256,
   size}}` (`allskyhub_protocol.updates`) at a fixed URL, with a detached Ed25519
-  signature over its bytes at the same URL + `.sig`. The camera trusts the public keys
-  in `/etc/allskyhub-agent/update-keys/`, which only an image brings.
+  signature over its bytes at the same URL + `.sig`. The camera trusts the release keys
+  in `/etc/allskyhub-agent/update-keys/`, which only an image brings, as changed by the key
+  list.
+- **Key revocation:** `keys.json` next to the manifest (+ `.sig`), signed by an emergency
+  key from `update-keys/emergency/` (these sign nothing else): `{serial, issued_at,
+  revoked, added}` (`allskyhub_protocol.updates.KeyList`), `revoked` the SHA-256 of each
+  revoked release key's DER, `added` new release keys (base64 DER). Each list is complete
+  and replaces the one before; the updater fetches it before the manifest and keeps the
+  newest in its state folder, taking only a higher `serial`, so an older list, a missing
+  one or one signed otherwise changes nothing. Release keys are the image's plus the added,
+  minus the revoked. A leaked main key is revoked and replaced without a new image
+  (Benjamin, 2026-10-13); a leaked emergency key needs a new image.
 - **Bundle:** `<version>/` with the agent's venv, unpacked into
   `/opt/allskyhub-agent/releases/`; `current` points to the running one and is
   switched with one rename.

@@ -37,6 +37,9 @@ Routes:
     GET  /api/network/wifi    visible Wi-Fi networks, only where the agent manages the network
     POST /api/network/wifi    {ssid, password?, country} → 202 {will_join}; as in setup mode,
                               a failed join opens the setup network (SPEC §7.1)
+    GET  /api/tls             HTTPS on/off, port, whose certificate, fingerprint (SPEC §7.6)
+    POST /api/tls             {cert, key} PEM → 202 and a restart, or 400 {detail, fields}
+    POST /api/tls/remove      back to the self-signed certificate → 202 and a restart
     GET  /api/update          version, installed releases, the updater's state (roadmap L14)
     POST /api/update/<now|rollback>   ask the root updater → 202, or 404 without one
     GET  /api/logs?lines=N    the agent's recent log lines (roadmap L15)
@@ -63,6 +66,7 @@ from __future__ import annotations
 import ipaddress
 import json
 import re
+import ssl
 import threading
 import time
 from collections.abc import Callable, Mapping
@@ -95,6 +99,7 @@ from allskyhub_agent.web.auth import (
 )
 from allskyhub_agent.web.calibration import LocalCalibration
 from allskyhub_agent.web.support import Support
+from allskyhub_agent.web.tls import Certificates
 from allskyhub_protocol import SettingSpec
 
 _MAX_BODY = 4096
@@ -218,6 +223,22 @@ _OPEN = {
 }
 
 
+@dataclass(frozen=True)
+class TlsSetup:
+    """HTTPS for the local UI (SPEC §7.6): the certificates, whether HTTPS is on, its
+    port, and what to do after a certificate change (restart the agent)."""
+
+    certs: Certificates
+    enabled: bool
+    port: int = 8443
+    on_change: Callable[[], None] = lambda: None
+
+
+# Plain HTTP stays usable for these with HTTPS on (SPEC §7.6): the app's onboarding, the
+# updater's and the watchdog's health check.
+_PLAIN_OK = ("/api/setup", "/api/health")
+
+
 def make_handler(
     live: LiveState,
     pairing: PairingState | None = None,
@@ -234,6 +255,7 @@ def make_handler(
     network_info: Callable[[], dict[str, Any]] | None = None,
     update_page: UpdatePage | None = None,
     support: Support | None = None,
+    tls: TlsSetup | None = None,
 ) -> type[BaseHTTPRequestHandler]:
     page = _page()
     login_page = _page("login.html")
@@ -241,6 +263,9 @@ def make_handler(
     assets = {path: (_page(name), ctype) for path, (name, ctype) in _ASSETS.items()}
 
     class Handler(BaseHTTPRequestHandler):
+        # Set on the plain-HTTP server's handler while HTTPS is on (SPEC §7.6).
+        redirect_port: int | None = None
+
         server_version = "allskyhub-agent"
 
         def log_message(self, format: str, *args: object) -> None:
@@ -410,7 +435,10 @@ def make_handler(
             return self.client_address[0] in _LOOPBACK
 
         def _https(self) -> bool:
-            """A reverse proxy on this machine says whether the browser used HTTPS."""
+            """Served over HTTPS (SPEC §7.6), or a reverse proxy on this machine says the
+            browser used HTTPS."""
+            if isinstance(self.connection, ssl.SSLSocket):
+                return True
             proto = self.headers.get("X-Forwarded-Proto", "") if self._from_loopback() else ""
             return proto.split(",")[0].strip().lower() == "https"
 
@@ -448,6 +476,55 @@ def make_handler(
 
         def _redirect(self, location: str, headers: tuple[tuple[str, str], ...] = ()) -> None:
             self._send(HTTPStatus.SEE_OTHER, b"", "text/plain", (("Location", location), *headers))
+
+        def _to_https(self, path: str) -> bool:
+            """With HTTPS on, send a browser on plain HTTP over (SPEC §7.6); True if sent."""
+            port = self.redirect_port
+            if port is None or path in _PLAIN_OK:
+                return False
+            if self._from_loopback() and self.headers.get("X-Forwarded-Proto"):
+                return False  # a reverse proxy on this machine (it does its own TLS)
+            try:
+                if ipaddress.ip_address(self.client_address[0]) in setup_net:
+                    return False  # setup mode (SPEC §7.1) stays plain
+            except ValueError:
+                pass
+            host = self.headers.get("Host", "") or SETUP_ADDRESS
+            host = host.rsplit(":", 1)[0] if not host.endswith("]") else host
+            if not re.fullmatch(r"[A-Za-z0-9.\-]+|\[[0-9A-Fa-f:.]+\]", host):
+                host = SETUP_ADDRESS
+            self._send(HTTPStatus.PERMANENT_REDIRECT, b"", "text/plain",
+                       (("Location", f"https://{host}:{port}{self.path}"),))  # fmt: skip
+            return True
+
+        def _post_tls(self, path: str) -> None:
+            """SPEC §7.6: install the owner's certificate and key (PEM), or drop them."""
+            raw = self._read_body()
+            if raw is None:
+                return
+            if tls is None:
+                self._text(HTTPStatus.NOT_FOUND, "not found")
+                return
+            if path == "/api/tls/remove":
+                tls.certs.remove_own()
+            else:
+                try:
+                    body: object = json.loads(raw or b"{}")
+                except ValueError:
+                    body = None
+                cert = body.get("cert") if isinstance(body, dict) else None  # pyright: ignore[reportUnknownMemberType, reportUnknownVariableType]
+                key = body.get("key") if isinstance(body, dict) else None  # pyright: ignore[reportUnknownMemberType, reportUnknownVariableType]
+                if not isinstance(cert, str) or not isinstance(key, str):
+                    self._json(
+                        HTTPStatus.BAD_REQUEST, {"detail": "cert and key", "fields": ["tls"]}
+                    )
+                    return
+                why = tls.certs.install_own(cert.encode(), key.encode(), datetime.now(UTC))
+                if why is not None:
+                    self._json(HTTPStatus.BAD_REQUEST, {"detail": why, "fields": ["tls"]})
+                    return
+            self._json(HTTPStatus.ACCEPTED, {"restart": True})
+            tls.on_change()
 
         def _login_needed(self, path: str) -> bool:
             if auth is None or not auth.paired or path in _OPEN or path.startswith(_DESIGN):
@@ -521,6 +598,8 @@ def make_handler(
 
         def do_GET(self) -> None:
             path = self.path.split("?", 1)[0]
+            if self._to_https(path):
+                return
             if self._login_needed(path):
                 self._refuse(path)
                 return
@@ -567,6 +646,12 @@ def make_handler(
                 self._json(HTTPStatus.OK, [asdict(n) for n in setup.networks()])
             elif path in ("/api/logs", "/api/support.zip", "/api/backup.json"):
                 self._support_get(path)
+            elif path == "/api/tls":
+                if tls is None:
+                    self._text(HTTPStatus.NOT_FOUND, "not found")
+                    return
+                info = tls.certs.info(datetime.now(UTC))
+                self._json(HTTPStatus.OK, {"enabled": tls.enabled, "port": tls.port, **info})
             elif path == "/api/update":
                 if update_page is None:
                     self._text(HTTPStatus.NOT_FOUND, "not found")
@@ -645,6 +730,8 @@ def make_handler(
 
         def do_POST(self) -> None:
             path = self.path.split("?", 1)[0]
+            if self._to_https(path):
+                return
             if self._login_needed(path):
                 self._refuse(path)
                 return
@@ -664,6 +751,8 @@ def make_handler(
                 self._post_wifi()
             elif path == "/api/restore":
                 self._restore()
+            elif path in ("/api/tls", "/api/tls/remove"):
+                self._post_tls(path)
             elif path in ("/api/update/now", "/api/update/rollback"):
                 if self._read_body() is None:
                     return
@@ -897,6 +986,8 @@ class WebServer:
         network_info: Callable[[], dict[str, Any]] | None = None,
         update_page: UpdatePage | None = None,
         support: Support | None = None,
+        tls: TlsSetup | None = None,
+        tls_context: ssl.SSLContext | None = None,
     ) -> None:
         net = ipaddress.ip_network(setup_net) if setup_net else _SETUP_NET
         handler = make_handler(
@@ -915,7 +1006,19 @@ class WebServer:
             network_info,
             update_page,
             support,
+            tls,
         )
+        self._tls_httpd: ThreadingHTTPServer | None = None
+        if tls is not None and tls.enabled and tls_context is not None:
+            # SPEC §7.6: the same pages over HTTPS; plain HTTP redirects there.
+            secure = type("SecureHandler", (handler,), {})
+            self._tls_httpd = ThreadingHTTPServer((host, tls.port), secure)
+            self._tls_httpd.daemon_threads = True
+            self._tls_httpd.socket = tls_context.wrap_socket(
+                self._tls_httpd.socket, server_side=True
+            )
+            bound = int(self._tls_httpd.server_address[1])
+            handler = type("PlainHandler", (handler,), {"redirect_port": bound})
         self._httpd = ThreadingHTTPServer((host, port), handler)
         self._httpd.daemon_threads = True
         self._thread = threading.Thread(target=self._httpd.serve_forever, daemon=True)
@@ -924,9 +1027,18 @@ class WebServer:
     def port(self) -> int:
         return int(self._httpd.server_address[1])
 
+    @property
+    def tls_port(self) -> int | None:
+        return int(self._tls_httpd.server_address[1]) if self._tls_httpd is not None else None
+
     def start(self) -> None:
         self._thread.start()
+        if self._tls_httpd is not None:
+            threading.Thread(target=self._tls_httpd.serve_forever, daemon=True).start()
 
     def stop(self) -> None:
         self._httpd.shutdown()
         self._httpd.server_close()
+        if self._tls_httpd is not None:
+            self._tls_httpd.shutdown()
+            self._tls_httpd.server_close()

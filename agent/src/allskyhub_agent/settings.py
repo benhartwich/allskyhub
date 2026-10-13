@@ -30,6 +30,7 @@ _PRODUCT_SWITCHES = (
     "bad_frames",
     "moon_mode",
     "mqtt_tls",
+    "https",
 )
 # MQTT (SPEC §7.7, roadmap L23): free text, checked by `valid_mqtt`.
 _MQTT_STRINGS = ("mqtt_host", "mqtt_user", "mqtt_prefix")
@@ -130,6 +131,8 @@ class AgentSettings:
     mqtt_user: str = ""
     mqtt_password: str | None = None  # write_only (SPEC §6.9)
     mqtt_prefix: str = "allskyhub"
+    # HTTPS for the local UI (SPEC §7.6, roadmap L24).
+    https: bool = False
 
     @property
     def has_location(self) -> bool:

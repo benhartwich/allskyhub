@@ -467,6 +467,20 @@ def build_schema(profile: Profile) -> list[SettingSpec]:
     entries.extend(_product_entries())
     entries.extend(_observatory_entries())
     entries.extend(_mqtt_entries())
+    entries.append(
+        {
+            "key": "https",
+            "type": "bool",
+            "label": {"de": "HTTPS für die lokale Seite", "en": "HTTPS for the local page"},
+            "group": {"de": "Sicherheit", "en": "Security"},
+            "help": {
+                "de": "Verschlüsselt auf Port 8443, mit einem Zertifikat der Kamera (der Browser "
+                "warnt einmal) oder einem eigenen. Die Einrichtung per App bleibt bei HTTP.",
+                "en": "Encrypted on port 8443, with the camera's own certificate (the browser "
+                "warns once) or your own. Setting up with the app stays on HTTP.",
+            },
+        }
+    )
     return [SettingSpec.model_validate(e) for e in entries]
 
 

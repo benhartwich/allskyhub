@@ -145,3 +145,39 @@ def test_bad_frames_hidden_unless_asked(tmp_path: Path) -> None:
     assert archive.frames(NIGHT, bad=True)["total"] == 5
     loop = archive.loop(start + timedelta(minutes=45))
     assert [f["name"] for f in loop] == [infos[i].name for i in (0, 3, 4)]
+
+
+def test_jump_to_a_time(tmp_path: Path) -> None:
+    """The night view jumps to "HH:MM" camera time; before noon is the next morning."""
+    store = ImageStore(tmp_path, TZ)
+    # 20:00 UTC = 22:00 Vienna, every 10 min for 8 hours: 22:00 .. 05:10 local.
+    infos = _fill(store, datetime(2026, 10, 12, 20, 0, tzinfo=UTC), 44)
+    archive = LocalArchive(store)
+    page = archive.frames(NIGHT, limit=3, at="23:05")
+    assert page["offset"] == 7  # 23:10 is the first from 23:05 on
+    assert page["frames"][0]["name"] == infos[7].name
+    assert archive.frames(NIGHT, at="03:00")["offset"] == 30  # next morning
+    assert archive.frames(NIGHT, at="11:59")["offset"] == 43  # after the last: the last
+    assert archive.frames(NIGHT, at="12:00")["offset"] == 0  # noon starts the night
+    assert archive.frames(NIGHT, at="25:00")["offset"] == 0  # nonsense: from the start
+    assert archive.frames(NIGHT, offset=5)["offset"] == 5
+
+
+def test_events_name_their_frame(tmp_path: Path) -> None:
+    """The events list names the frame a detection was seen on, for "whole frame"."""
+    from allskyhub_protocol import Event, EventKind
+
+    store = ImageStore(tmp_path, TZ)
+    start = datetime(2026, 10, 12, 20, 0, tzinfo=UTC)
+    infos = _fill(store, start, 3)
+    events = EventStore(store)
+    at = infos[1].captured_at
+    later = at + timedelta(minutes=35)
+    for eid, when in (("meteor-20261012T201000Z", at), ("meteor-20261012T204500Z", later)):
+        events._append(  # pyright: ignore[reportPrivateUsage]
+            Event(
+                id=eid, night_id=NIGHT, kind=EventKind.METEOR, start=when, end=when, confidence=0.9
+            )
+        )
+    listed = LocalArchive(store, events).events(NIGHT)
+    assert [e["frame"] for e in listed] == [infos[1].name, None]

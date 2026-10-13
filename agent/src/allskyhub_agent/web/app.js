@@ -11,9 +11,13 @@ const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => (
   { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 const KINDS = { meteor: "Meteor", lightning: "Blitz", aurora: "Polarlicht", nlc: "Leuchtende Nachtwolken",
   satellite: "Satellit", clouds: "Wolken", sky_quality: "Himmelsqualität" };
-const fmtTime = (iso) => new Date(iso).toLocaleTimeString("de-AT", { hour: "2-digit", minute: "2-digit" });
+// Times in the camera's time zone, not the browser's (set from /api/setup at start).
+let CAMERA_TZ;
+const tzOpt = () => (CAMERA_TZ ? { timeZone: CAMERA_TZ } : {});
+const fmtTime = (iso) => new Date(iso).toLocaleTimeString("de-AT", { hour: "2-digit", minute: "2-digit", ...tzOpt() });
 const fmtDateTime = (iso) => new Date(iso).toLocaleString("de-AT",
-  { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" });
+  { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit", ...tzOpt() });
+const camHour = (iso) => Number(new Date(iso).toLocaleString("en-GB", { hour: "2-digit", hourCycle: "h23", ...tzOpt() }));
 const fmtNight = (id) => `${id.slice(6, 8)}.${id.slice(4, 6)}.${id.slice(0, 4)}`;
 const fmtExposure = (us) => (us >= 1e6 ? (us / 1e6).toFixed(1) + " s" : (us / 1000).toFixed(2) + " ms");
 const fileUrl = (night, name, thumb) => `files/${night}/${encodeURIComponent(name)}${thumb ? "?thumb=1" : ""}`;
@@ -38,17 +42,66 @@ function lightbox(items, index) {
   showLightbox();
   $("lightbox").showModal();
 }
+// Zoom: double click, wheel or the button; drag to move while zoomed.
+let lbScale = 1;
+let lbX = 0;
+let lbY = 0;
+function lbApply() {
+  $("lightboxImg").style.transform = `translate(${lbX}px, ${lbY}px) scale(${lbScale})`;
+  $("lbStage").classList.toggle("zoomed", lbScale > 1);
+}
+function lbZoom(scale) {
+  lbScale = Math.min(8, Math.max(1, scale));
+  if (lbScale === 1) { lbX = 0; lbY = 0; }
+  lbApply();
+}
+$("lbZoom").onclick = () => lbZoom(lbScale >= 4 ? 1 : lbScale * 2);
+$("lbStage").addEventListener("dblclick", () => lbZoom(lbScale > 1 ? 1 : 3));
+$("lbStage").addEventListener("wheel", (e) => { e.preventDefault(); lbZoom(lbScale * (e.deltaY < 0 ? 1.25 : 0.8)); }, { passive: false });
+{
+  let drag = null;
+  $("lbStage").addEventListener("pointerdown", (e) => {
+    if (lbScale === 1) return;
+    drag = { x: e.clientX - lbX, y: e.clientY - lbY };
+    $("lbStage").setPointerCapture(e.pointerId);
+  });
+  $("lbStage").addEventListener("pointermove", (e) => {
+    if (!drag) return;
+    lbX = e.clientX - drag.x;
+    lbY = e.clientY - drag.y;
+    lbApply();
+  });
+  $("lbStage").addEventListener("pointerup", () => { drag = null; });
+}
 function showLightbox() {
   const it = lbItems[lbIndex];
+  lbZoom(1);
   $("lightboxImg").src = it.src;
   $("lbDownload").href = it.src;
   $("lbCaption").textContent = it.caption || "";
   $("lbPrev").disabled = lbIndex === 0;
   $("lbNext").disabled = lbIndex === lbItems.length - 1;
+  // Optional buttons of the item, e.g. "full frame" or "not a meteor" on an event.
+  const extra = $("lbExtra");
+  extra.innerHTML = "";
+  extra.hidden = !it.actions;
+  for (const a of it.actions || []) {
+    const b = document.createElement("button");
+    b.type = "button";
+    b.className = "secondary";
+    b.textContent = a.label;
+    b.onclick = () => a.run(it);
+    extra.appendChild(b);
+  }
 }
 $("lbPrev").onclick = () => { if (lbIndex > 0) { lbIndex--; showLightbox(); } };
 $("lbNext").onclick = () => { if (lbIndex < lbItems.length - 1) { lbIndex++; showLightbox(); } };
 $("lbClose").onclick = () => $("lightbox").close();
+// A click on the dark backdrop (outside the dialog's box) closes it too.
+$("lightbox").addEventListener("click", (e) => {
+  const r = $("lightbox").getBoundingClientRect();
+  if (e.clientX < r.left || e.clientX > r.right || e.clientY < r.top || e.clientY > r.bottom) $("lightbox").close();
+});
 document.addEventListener("keydown", (e) => {
   if (!$("lightbox").open) return;
   if (e.key === "ArrowLeft") $("lbPrev").click();
@@ -312,8 +365,15 @@ function keolapseCard(nights) {
 async function viewNight(night) {
   page.innerHTML = `<p><a class="back" href="#archiv">‹ Alle Nächte</a></p><h1>Nacht vom ${fmtNight(night)}</h1>
     <div class="products" id="products"></div>
-    <section class="card stack"><h2>Bilder</h2><div class="thumbs" id="thumbs"></div>
-      <div class="actions"><button type="button" class="secondary" id="more" hidden>Mehr laden</button>
+    <section class="card stack"><h2>Bilder</h2>
+      <div class="row jump" id="jump" hidden>
+        <div class="chips" id="hours" role="group" aria-label="Zur Stunde springen"></div>
+        <label class="inline">Uhrzeit <input type="time" id="jumpTime"></label>
+        <button type="button" class="secondary small" id="jumpGo">Springen</button>
+      </div>
+      <div class="actions"><button type="button" class="secondary" id="less" hidden>Frühere laden</button></div>
+      <div class="thumbs" id="thumbs"></div>
+      <div class="actions"><button type="button" class="secondary" id="more" hidden>Spätere laden</button>
         <button type="button" class="secondary" id="bad" hidden aria-pressed="false"></button></div></section>`;
   const nights = await getJSON("api/nights");
   const n = nights.find((x) => x.night_id === night);
@@ -331,27 +391,68 @@ async function viewNight(night) {
   const badCount = n ? n.bad || 0 : 0;
   let showBad = false;
   const badLabel = { dark: "zu dunkel", bright: "zu hell" };
-  let offset = 0;
-  let all = [];
-  const load = async () => {
-    const data = await getJSON(`api/nights/${night}/frames?offset=${offset}&limit=200${showBad ? "&bad=1" : ""}`);
-    const start = all.length;
-    all.push(...data.frames);
-    offset += data.frames.length;
+  const PAGE = 200;
+  let lo = 0;      // index of the first loaded frame
+  let total = 0;
+  let all = [];    // the loaded frames, lo .. lo + all.length
+  const url = (offset, extra = "") => `api/nights/${night}/frames?offset=${offset}&limit=${PAGE}${showBad ? "&bad=1" : ""}${extra}`;
+  const render = (focus) => {
     const box = $("thumbs");
-    data.frames.forEach((f, i) => {
+    box.innerHTML = "";
+    all.forEach((f, i) => {
       const b = document.createElement("button");
       b.type = "button";
       if (f.bad) b.className = "bad";
-      b.innerHTML = `<img loading="lazy" alt="${fmtTime(f.captured_at)}" src="${fileUrl(night, f.name, true)}">`;
+      b.innerHTML = `<img loading="lazy" alt="" src="${fileUrl(night, f.name, true)}"><span class="t">${fmtTime(f.captured_at)}</span>`;
+      b.setAttribute("aria-label", "Bild von " + fmtTime(f.captured_at));
       b.onclick = () => lightbox(all.map((x) => ({ src: fileUrl(night, x.name, false),
         caption: `${fmtDateTime(x.captured_at)} · ${fmtExposure(x.exposure_us)} · Gain ${x.gain}`
-          + (x.bad ? ` · verworfen (${badLabel[x.bad] || esc(x.bad)})` : "") })), start + i);
+          + (x.bad ? ` · verworfen (${badLabel[x.bad] || esc(x.bad)})` : "") })), i);
       box.appendChild(b);
     });
-    $("more").hidden = offset >= data.total;
+    $("less").hidden = lo <= 0;
+    $("more").hidden = lo + all.length >= total;
+    if (focus != null && box.children[focus]) box.children[focus].scrollIntoView({ block: "center" });
   };
-  $("more").onclick = load;
+  const loadAt = async (offset, extra = "") => {
+    const data = await getJSON(url(offset, extra));
+    total = data.total;
+    lo = data.offset ?? offset;
+    all = data.frames;
+    render(extra ? 0 : null);
+  };
+  $("more").onclick = async () => {
+    const data = await getJSON(url(lo + all.length));
+    total = data.total;
+    all.push(...data.frames);
+    render();
+  };
+  $("less").onclick = async () => {
+    const from = Math.max(0, lo - PAGE);
+    const data = await getJSON(url(from));
+    const keep = all.length;
+    all = [...data.frames.slice(0, lo - from), ...all];
+    lo = from;
+    render(all.length - keep);
+  };
+  // Jump to a time: hour buttons for the hours the night has, and a free time field.
+  if (n && n.first && n.last) {
+    // Every camera-time hour from the first frame's to the last frame's.
+    const hours = [];
+    const end = Date.parse(n.last);
+    for (let t = Date.parse(n.first) - 3600e3; t <= end + 3600e3; t += 900e3) {
+      const h = camHour(new Date(Math.min(Math.max(t, Date.parse(n.first)), end)).toISOString());
+      if (!hours.includes(h)) hours.push(h);
+    }
+    $("hours").innerHTML = hours.map((h) => `<button type="button" class="chip" data-h="${h}">${String(h).padStart(2, "0")}</button>`).join("");
+    $("hours").onclick = (e) => {
+      const h = e.target.closest("[data-h]")?.dataset.h;
+      if (h != null) loadAt(0, `&at=${h}:00`);
+    };
+    $("jump").hidden = false;
+  }
+  $("jumpGo").onclick = () => { if ($("jumpTime").value) loadAt(0, `&at=${$("jumpTime").value}`); };
+  $("jumpTime").onkeydown = (e) => { if (e.key === "Enter") $("jumpGo").click(); };
   const bad = $("bad");
   const label = () => { bad.textContent = showBad ? "Verworfene ausblenden" : `${badCount} verworfene zeigen`; };
   bad.hidden = !badCount;
@@ -360,12 +461,9 @@ async function viewNight(night) {
     showBad = !showBad;
     bad.setAttribute("aria-pressed", String(showBad));
     label();
-    offset = 0;
-    all = [];
-    $("thumbs").innerHTML = "";
-    await load();
+    await loadAt(0);
   };
-  await load();
+  await loadAt(0);
 }
 
 // --- night picker shared by events and sky ----------------------------------------------
@@ -404,8 +502,19 @@ async function viewEvents(night) {
       <div><b>${KINDS[e.kind] || esc(e.kind)}</b> <span class="muted">${fmtTime(e.start)}</span>
         <p class="muted small">${eventFacts(e)}</p></div>
     </li>`).join("");
-  const items = pictures.map((e) => ({ src: `files/${e.night_id}/events/${e.id}.jpg`,
-    caption: `${KINDS[e.kind] || e.kind} · ${fmtDateTime(e.start)}` }));
+  // The detection's picture, and with one click the whole frame it was seen on.
+  const items = pictures.map((e) => {
+    const crop = `files/${e.night_id}/events/${e.id}.jpg`;
+    const full = e.frame ? fileUrl(e.night_id, e.frame, false) : null;
+    const caption = `${KINDS[e.kind] || e.kind} · ${fmtDateTime(e.start)}`;
+    return { src: crop, caption, actions: full ? [{ label: "Ganzes Bild", run: (it) => {
+      const whole = it.src !== full;
+      it.src = whole ? full : crop;
+      it.caption = whole ? `${caption} · ganzes Bild` : caption;
+      it.actions[0].label = whole ? "Ausschnitt" : "Ganzes Bild";
+      showLightbox();
+    } }] : null };
+  });
   for (const img of $("events").querySelectorAll("img[data-i]")) {
     img.onclick = () => lightbox(items, Number(img.dataset.i));
   }
@@ -1129,7 +1238,9 @@ function route() {
   window.scrollTo(0, 0);
 }
 window.addEventListener("hashchange", route);
-route();
+getJSON("api/setup").then((st) => {
+  try { if (st.timezone) { new Date().toLocaleString("de-AT", { timeZone: st.timezone }); CAMERA_TZ = st.timezone; } } catch { /* unknown zone: browser time */ }
+}).catch(() => {}).finally(route);
 
 // Pairing code while unpaired, logout button once paired (SPEC §7, §7.4).
 (async function pollSetup() {

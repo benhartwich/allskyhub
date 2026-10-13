@@ -397,3 +397,44 @@ def test_event_label_and_night_deleted() -> None:
     gone = NightDeleted(night_id="20261001")
     assert parse_envelope(Envelope.wrap(gone, ts=fp.at).model_dump_json()).body == gone
     assert CommandName("label_event") is CommandName.LABEL_EVENT
+
+
+def test_auto_labels_give_way_to_the_owner() -> None:
+    from allskyhub_protocol import EventLabel
+
+    t = datetime(2026, 10, 13, 21, 0, tzinfo=UTC)
+    base = {"night_id": "20261013", "event_id": "meteor-20261013T210000Z"}
+    owner = EventLabel.model_validate(base | {"label": "confirmed", "at": t})
+    auto = EventLabel.model_validate(
+        base | {"label": "false_positive", "reason": "aircraft", "auto": True,
+                "detail": "DLH4AB 3c6444", "at": t + timedelta(hours=1)}
+    )  # fmt: skip
+    assert auto.replaces(None)
+    assert not auto.replaces(owner)  # never over an existing label, however new
+    assert not auto.replaces(auto)
+    assert owner.replaces(auto)  # the owner always wins, however old
+    later = owner.model_copy(update={"at": t + timedelta(minutes=1)})
+    assert later.replaces(owner)
+    assert not owner.replaces(later)
+    with pytest.raises(ValidationError):
+        EventLabel.model_validate(base | {"label": "confirmed", "detail": "x", "at": t})
+
+
+def test_aircraft_message() -> None:
+    from allskyhub_protocol import Envelope
+
+    env = Envelope.model_validate({
+        "v": 1, "type": "aircraft", "id": "a1", "ts": "2026-10-13T21:00:00Z",
+        "body": {"at": "2026-10-13T21:00:00Z", "aircraft": [
+            {"hex": "3c6444", "flight": "DLH4AB", "lat": 48.1, "lon": 11.5,
+             "alt_m": 10668, "track_deg": 271.5, "speed_kn": 450, "seen_s": 0.4},
+            {"hex": "4b1805", "lat": 48.3, "lon": 11.2, "seen_s": 12},
+        ]},
+    })  # fmt: skip
+    assert env.body.TYPE == "aircraft"
+    with pytest.raises(ValidationError):
+        Envelope.model_validate({
+            "v": 1, "type": "aircraft", "id": "a2", "ts": "2026-10-13T21:00:00Z",
+            "body": {"at": "2026-10-13T21:00:00Z",
+                     "aircraft": [{"hex": "3C6444", "lat": 0, "lon": 0, "seen_s": 0}]},
+        })  # fmt: skip

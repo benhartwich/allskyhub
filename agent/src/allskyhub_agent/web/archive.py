@@ -142,6 +142,8 @@ class LocalArchive:
             lab = labels.get(e.id)
             d["label"] = lab.label if lab is not None else None
             d["reason"] = lab.reason if lab is not None else None
+            d["label_auto"] = lab.auto if lab is not None else False
+            d["label_detail"] = lab.detail if lab is not None else None
             out.append(d)
         return out
 

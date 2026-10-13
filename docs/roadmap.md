@@ -74,6 +74,7 @@ them most:
 | L22 | Cloud cover by day: estimate cloud cover from daytime frames (sky colour) so the charts and the hub have it around the clock | agent | Benjamin, 2026-10-13; today cloud cover comes from star counts and is night-only; SPEC §6.3. Blue/red fails without an IR cut filter: the method is tested on real day frames first (Benjamin, 2026-10-13) |
 | L23 | ✅ MQTT: publish status, sky values and detections to a local broker (Home Assistant discovery) | agent | Benjamin, 2026-10-13 (indi-allsky, Allsky module); off by default, settings for broker, user, password (`write_only`), topic prefix; SPEC §7.7. Done: own MQTT 3.1.1 publisher, no new dependency; the first `write_only` setting (`mqtt_password`) |
 | L24 | ✅ HTTPS for the local portal: a self-signed certificate made on first boot, optionally the user's own | agent | Benjamin, 2026-10-13 (indi-allsky); off by default (Benjamin, 2026-10-13); SPEC §7.6. Done: setting `https`, port 8443, own certificate upload on the system page |
+| L25 | Trail verdicts: keep every streak, say from the trail why it is not a meteor (moving, great circle, blinking, fragments, star, star trail, glare, edge glow, repeat) and label it automatically | agent | Benjamin, 2026-10-13: like his Allsky modules Meteor Detection and Sky Traffic; mark, never delete; all checks label (no shadow mode); SPEC §6.4 Trail verdicts |
 
 Not ported on purpose: the free-form module manager and file editor (fixed detectors
 instead), the website upload/remote server (the hub and its public page do that).
@@ -90,7 +91,7 @@ hub side. Push needs the Firebase project; until then the same messages show on 
 | C3 | ~~Morning summary per camera: meteors, clear hours, best sky brightness, the night's best picture; push, later e-mail (#15)~~ done | hub | |
 | C4 | ~~Meteor triangulation: the same meteor seen by two oriented cameras gives its path, height and radiant~~ done | hub | needs `azimuth_deg`/`altitude_deg` of both ends from the agent (SPEC change) |
 | C5 | ~~Map of all public cameras~~ done | hub | coordinates rounded as on the public page, only where the owner shows them |
-| C6 | ~~Satellite passes (ISS, bright satellites) as a forecast and to drop satellite trails from meteor detections~~ done | hub | TLE from CelesTrak, SGP4 |
+| C6 | ~~Satellite passes (ISS, bright satellites) as a forecast~~ done; naming satellite trails among the meteors is H6 | hub | TLE from CelesTrak, SGP4; the pass forecast only covers ISS, Tiangong and Hubble |
 | C7 | ~~Statistics per month and year: clear nights, sky brightness, meteors per shower~~ done | hub | from `sky_sample` and `event` |
 | C8 | ~~Timelapse over a chosen period and monthly keograms from the archive~~ done | hub | thumbnails only, ffmpeg on the hub |
 | C9 | ~~Embeddable widget and image feed for own websites, RSS/Atom for detections~~ done | hub | per public page |
@@ -120,6 +121,7 @@ hub side. Push needs the Firebase project; until then the same messages show on 
 | H3 | Aircraft from ADS-B: label planes in the live image and drop their trails from meteor detections | hub + agent | Benjamin, 2026-10-13 (indi-allsky ADS-B): adsb.lol on the hub plus, optionally, the owner's own receiver on the camera (`adsb_url`); a match is an automatic label false_positive/aircraft, never a deletion; SPEC §7.8 |
 | H4 | "Ziel frei?": is a chosen object (or a sky area) clear now and in the next hours, from the camera's cloud map and the forecast; light-pollution map next to it | hub | Benjamin, 2026-10-13; from the roadmap brainstorm 2026-09-26. Done: planets and Messier, height, darkness, moon and forecast per hour, the camera's overall cloud cover now (web and app); light-pollution view on the camera map from the cameras' own SQM (Benjamin, 2026-10-13). Also done: the cell of the camera's cloud map (SPEC §6.3 `cloud_map`) in the object's direction |
 | H5 | Upload the night's timelapse to YouTube and post detections to Discord | hub | Benjamin, 2026-10-13 (indi-allsky/Allsky); the owner connects the accounts on the hub, never on the camera. Done: Discord (webhook per camera, web and app). Open: YouTube (needs a Google Cloud project with YouTube API access from Benjamin) |
+| H6 | Satellites among the meteors: name them from CelesTrak (SGP4, sunlit), ISS and Tiangong by name, automatic label | hub | Benjamin, 2026-10-13: on the hub, not on the camera; SPEC §7.9 |
 
 ## Needs Benjamin / hardware
 

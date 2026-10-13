@@ -525,19 +525,28 @@ module Meteor Detection). The camera keeps every streak its meteor detector find
 | `meteor` | nothing speaks against a meteor | none |
 | `moving` | the streak continues in the frame before or after, moved along its own direction (a satellite or an aircraft) | `false_positive`/`other`, detail `bewegtes Objekt` |
 | `circle` | it lies on one great circle (within 1.2°) with a streak of the frame before or after (needs an orientation, §4.8) | as `moving` |
+| `repeat` | three or more streaks at the same place (within 55 px) in the 25 min before (hot spot, bloom) | `false_positive`/`artifact`, detail `wiederkehrend` |
+| `star_trail` | short and parallel to the stars' motion there (needs an orientation) | `false_positive`/`artifact`, detail `Sternspur` |
+| `star` | short, on a catalogue star down to magnitude 5 (scintillation; needs an orientation) | `false_positive`/`artifact`, detail `Stern` |
+| `glare` | a radial spike next to a saturated light (moon, lamp) | `false_positive`/`artifact`, detail `Blendung` |
 | `dashed` | its brightness along the track is broken into ten or more dashes (blinking aircraft lights, a tumbling satellite) | `false_positive`/`aircraft`, detail `blinkt` |
 | `fragmented` | five or more pieces in line beyond its ends | `false_positive`/`other`, detail `Bruchstücke` |
-| `star` | short, on a catalogue star down to magnitude 5 (scintillation; needs an orientation) | `false_positive`/`artifact`, detail `Stern` |
-| `star_trail` | short and parallel to the stars' motion there (needs an orientation) | `false_positive`/`artifact`, detail `Sternspur` |
-| `glare` | a radial spike next to a saturated light (moon, lamp) | `false_positive`/`artifact`, detail `Blendung` |
-| `edge_glow` | ends at the edge of the sky mask, short and broad | `false_positive`/`artifact`, detail `Randleuchten` |
-| `repeat` | the third streak or more at the same place within 25 min (hot spot, bloom) | `false_positive`/`artifact`, detail `wiederkehrend` |
+| `edge_glow` | both ends within 50 px of the sky mask's edge, at least 80 px long and broad (elongation under 10) | `false_positive`/`artifact`, detail `Randleuchten` |
 
-The checks run in this order and the first that applies is the verdict; thresholds are those
-of the Allsky module scaled to the frame size. A streak that is part of a flickering or
-cloudy frame (§4.9) is still dropped without an event. The camera sets the automatic label
-when it saves the event and sends it as `event_label` (§6.3). At most 300 non-`meteor`
-events are kept per night; beyond that they are only counted in the log. Nothing is deleted:
+The checks run in this order, as in the Allsky module, and the first that applies is the
+verdict; the thresholds are the module's (in pixels of the stored frame; the glare check
+scales with the frame size), `star` and `star_trail` only for streaks up to 130 px. A streak
+without its disappearance at the same place in the next frame (flicker), one whose light
+is there in the frames before and after too (a drifting star) and every streak of a
+cloudy or twinkling frame are dropped without an event, as before. The camera sets the
+automatic label when it saves the event and sends it as `event_label` (§6.3).
+
+The pieces of one moving object (`moving` or `circle`) in frames at most 5 minutes apart,
+each continuing the previous piece or at the same place (a drifting contrail), are one
+event (Benjamin, 2026-10-13): it is sent again with the same id as it grows, `end` and
+`data.frames` grow, `end_*` is the end of the newest piece farther from `start_*`, and the
+picture stays the first piece's. At most 300 non-`meteor`
+events are kept per night (a growing one counts once); beyond that they are only counted in the log. Nothing is deleted:
 the owner sees them with "Aussortierte zeigen" and can label any of them a meteor.
 
 ### 6.5 Hub → device

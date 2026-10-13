@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import math
 from collections import deque
+from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import date, datetime
 from pathlib import Path
@@ -24,8 +25,9 @@ import cv2
 import numpy as np
 import numpy.typing as npt
 
-from allskyhub_agent.calib.solve import alt_az, sidereal_deg
+from allskyhub_agent.calib.solve import Solution, alt_az, sidereal_deg
 from allskyhub_agent.core.metering import circle_mask
+from allskyhub_agent.detect import trail
 from allskyhub_protocol import FrameInfo, Mode
 
 Gray = npt.NDArray[np.uint8]
@@ -88,12 +90,12 @@ def radiant(name: str, day: date) -> tuple[float, float]:
     return (ra + dra * days) % 360.0, dec + ddec * days
 
 
-def _vec(az: float, alt: float) -> npt.NDArray[np.float64]:
+def sky_unit(az: float, alt: float) -> npt.NDArray[np.float64]:
     a, e = math.radians(az), math.radians(alt)
     return np.array([math.cos(e) * math.sin(a), math.cos(e) * math.cos(a), math.sin(e)])
 
 
-def _angle(a: npt.NDArray[np.float64], b: npt.NDArray[np.float64]) -> float:
+def angle_between(a: npt.NDArray[np.float64], b: npt.NDArray[np.float64]) -> float:
     return math.degrees(math.atan2(float(np.linalg.norm(np.cross(a, b))), float(a @ b)))
 
 
@@ -103,7 +105,7 @@ def radiant_distance(
     """How far (degrees) a radiant at (az, alt) is from the meteor's path between the ends
     (az, alt) extended along its great circle; None if the radiant lies on the trail
     itself: a meteor moves away from its radiant and never crosses it."""
-    p1, p2, r = _vec(*end1), _vec(*end2), _vec(*rad)
+    p1, p2, r = sky_unit(*end1), sky_unit(*end2), sky_unit(*rad)
     n = np.cross(p1, p2)
     norm = float(np.linalg.norm(n))
     if norm < 1e-6:
@@ -115,7 +117,7 @@ def radiant_distance(
     if qn < 1e-9:
         return off  # the radiant is the circle's pole: 90 degrees off anyway
     q = q / qn
-    if _angle(p1, q) + _angle(q, p2) - _angle(p1, p2) < 1e-3:
+    if angle_between(p1, q) + angle_between(q, p2) - angle_between(p1, p2) < 1e-3:
         return None
     return off
 
@@ -168,6 +170,18 @@ class MeteorConfig:
     # A meteor is in one frame only; a slowly drifting bright star near the horizon is in
     # all of them and makes short "streaks" at the same place frame after frame.
     min_new_light: float = 0.5
+    # Trail verdicts (SPEC §6.4), the module's defaults. Short streaks only for the star
+    # checks: a long, bright fireball may well pass a star.
+    short_max_px: float = 130.0
+    star_trail_tol_deg: float = 12.0
+    star_radius_px: float = 16.0
+    glare_radii: float = 10.0
+    glare_tol_deg: float = 6.0
+    frag_min_len_px: float = 120.0
+    frag_min: int = 5
+    edge_min_len_px: float = 80.0
+    edge_max_elongation: float = 10.0
+    edge_margin_px: float = 50.0
 
 
 @dataclass(frozen=True)
@@ -354,11 +368,13 @@ def _count_runs(on: npt.NDArray[np.bool_], min_gap: int, min_run: int) -> int:
 
 @dataclass(frozen=True)
 class MeteorHit:
-    """A confirmed meteor: the frame it is in and its streak."""
+    """A streak decided one frame later: the frame it is in, the streak and the verdict
+    from its trail (SPEC §6.4 Trail verdicts), `meteor` when nothing speaks against one."""
 
     frame: FrameInfo
     image_path: Path
     streak: Streak
+    trail: str = "meteor"
 
 
 @dataclass
@@ -370,6 +386,8 @@ class _Pending:
     gray: Gray  # the frame the streaks are in
     before: Gray  # and the one before it
     moving: set[int]  # streaks that continue one of the frame before
+    diff: Gray  # the difference the streaks are in
+    prior: list[tuple[Streak, FrameInfo]]  # the streaks of the frame before, for the circle
 
 
 class MeteorDetector:
@@ -386,14 +404,26 @@ class MeteorDetector:
         cfg: MeteorConfig | None = None,
         mask: Mask | None = None,
         mask_radius_frac: float | None = None,
+        orientation: Callable[[], Solution | None] | None = None,
+        location: Callable[[], tuple[float, float] | None] | None = None,
     ) -> None:
         self._cfg = cfg or MeteorConfig()
+        # SPEC §4.8: the sky checks (great circle, star trail, star) need the lens.
+        self._orientation = orientation or (lambda: None)
+        self._location = location or (lambda: None)
+        self._stars = trail.StarField()
+        self._edge: npt.NDArray[np.float32] | None = None
+        self._edge_of: Mask | None = None
         self._mask = mask
         # Without a mask: the image circle of the hardware profile, built for the first frame.
         self._mask_frac = mask_radius_frac
         self._prev_gray: Gray | None = None
         self._pending: _Pending | None = None
         self._hotspots: deque[tuple[float, float, float]] = deque(maxlen=2000)
+
+    @property
+    def config(self) -> MeteorConfig:
+        return self._cfg
 
     def set_mask(self, mask: Mask) -> None:
         """Use the learned sky mask (SPEC §4.7) instead of the image circle."""
@@ -404,7 +434,7 @@ class MeteorDetector:
         self._prev_gray = None
         self._pending = None
 
-    def _streaks(self, gray: Gray, prev: Gray) -> list[Streak] | None:
+    def _streaks(self, gray: Gray, prev: Gray) -> tuple[list[Streak], Gray] | None:
         """Candidates in the difference of two frames; None for a cloudy or twinkling frame."""
         cfg = self._cfg
         diff = cv2.absdiff(gray, prev)
@@ -422,13 +452,79 @@ class MeteorDetector:
         sky = float(self._mask.mean()) if self._mask is not None else 1.0
         if float((diff > cfg.diff_threshold).mean()) / max(sky, 1e-6) > cfg.cloud_fraction:
             return None
-        streaks = find_streaks(np.asarray(diff, dtype=np.uint8), cfg)
+        diff = np.asarray(diff, dtype=np.uint8)
+        streaks = find_streaks(diff, cfg)
         if len(streaks) > cfg.scint_max:
             ordered = sorted(streaks, key=lambda st: st.length, reverse=True)
             if ordered[0].length >= cfg.scint_dominance * ordered[1].length:
-                return [ordered[0]]
+                return [ordered[0]], diff
             return None
-        return streaks
+        return streaks, diff
+
+    def _edge_distance(self) -> npt.NDArray[np.float32] | None:
+        if self._mask is None:
+            return None
+        if self._edge is None or self._edge_of is not self._mask:
+            self._edge, self._edge_of = trail.edge_distance(self._mask), self._mask
+        return self._edge
+
+    def _verdict(
+        self, cand: Streak, dashes: int, pending: _Pending, frame: FrameInfo, after: list[Streak]
+    ) -> str:
+        """Why the streak is not a meteor, in the module's order, or `meteor`."""
+        cfg = self._cfg
+        sol, loc = self._orientation(), self._location()
+        shape = pending.gray.shape
+        if sol is not None:
+            pf = pending.frame
+            others = [(o, frame) for o in after if not similar(o, cand, cfg)] + pending.prior
+            for o, of in others:
+                times = (pf.captured_at, pf.exposure_us / 1e6, of.captured_at, of.exposure_us / 1e6)
+                if trail.same_circle(cand, o, sol, shape, times):
+                    return "circle"
+        recent = [
+            h for h in self._hotspots if frame.captured_at.timestamp() - h[2] <= cfg.repeat_window_s
+        ]
+        if (
+            sum(
+                1
+                for hx, hy, _ in recent
+                if math.hypot(hx - cand.cx, hy - cand.cy) <= cfg.repeat_radius_px
+            )
+            >= cfg.repeat_k
+        ):
+            return "repeat"
+        short = cand.length <= cfg.short_max_px
+        if sol is not None and loc is not None and short:
+            ta = trail.star_trail_angle(sol, shape, cand.cx, cand.cy, loc[0])
+            if ta is not None and _angle_diff(cand.angle_deg, ta) <= cfg.star_trail_tol_deg:
+                return "star_trail"
+            mid = pending.frame.captured_at
+            if self._stars.near(
+                sol, shape, mid, loc[0], loc[1], cand.cx, cand.cy, cfg.star_radius_px
+            ):
+                return "star"
+        if trail.glare_spike(
+            cand, trail.glare_sources(pending.gray), cfg.glare_radii, cfg.glare_tol_deg
+        ):
+            return "glare"
+        if cand.length >= cfg.dash_min_len_px and dashes >= cfg.dash_runs:
+            return "dashed"
+        if (
+            cand.length >= cfg.frag_min_len_px
+            and trail.collinear_fragments(pending.diff, cand, cfg.diff_threshold) >= cfg.frag_min
+        ):
+            return "fragmented"
+        edge = self._edge_distance()
+        if (
+            edge is not None
+            and edge.shape == shape
+            and cand.length >= cfg.edge_min_len_px
+            and cand.elongation < cfg.edge_max_elongation
+            and trail.edge_hug(cand, edge) < cfg.edge_margin_px
+        ):
+            return "edge_glow"
+        return "meteor"
 
     def feed(self, frame: FrameInfo, gray: Gray, image_path: Path) -> list[MeteorHit]:
         cfg = self._cfg
@@ -443,44 +539,40 @@ class MeteorDetector:
         if prev is None or prev.shape != gray.shape:
             self._pending = None
             return []
-        streaks = self._streaks(gray, prev)
-        if streaks is None:  # cloudy or twinkling: nothing from here is trusted
+        found = self._streaks(gray, prev)
+        if found is None:  # cloudy or twinkling: nothing from here is trusted
             self._pending = None
             return []
+        streaks, diff = found
 
-        now = frame.captured_at.timestamp()
         hits: list[MeteorHit] = []
         pending = self._pending
         if pending is not None:
-            recent = [h for h in self._hotspots if now - h[2] <= cfg.repeat_window_s]
             for i, (cand, dashes) in enumerate(zip(pending.streaks, pending.dashes, strict=True)):
                 if i in pending.moving or any(progressing(cur, cand, cfg) for cur in streaks):
-                    continue  # it goes on: satellite or aircraft
+                    # It goes on: satellite or aircraft (SPEC §6.4 `moving`).
+                    hits.append(MeteorHit(pending.frame, pending.image_path, cand, "moving"))
+                    continue
                 if not any(similar(cur, cand, cfg) for cur in streaks):
-                    continue  # no disappearance at the same place: flicker
-                repeats = sum(
-                    1
-                    for hx, hy, _ in recent
-                    if math.hypot(hx - cand.cx, hy - cand.cy) <= cfg.repeat_radius_px
-                )
-                if repeats >= cfg.repeat_k:
-                    continue  # a spot that keeps changing
-                if cand.length >= cfg.dash_min_len_px and dashes >= cfg.dash_runs:
-                    continue  # dashed trail
+                    continue  # no disappearance at the same place: flicker, no event
                 light = new_light_fraction(
                     cand, pending.before, pending.gray, gray, cfg.diff_threshold
                 )
                 if light < cfg.min_new_light:
-                    continue  # also there before or after: a drifting star, not a meteor
-                hits.append(MeteorHit(pending.frame, pending.image_path, cand))
+                    continue  # also there before or after: a drifting star, no event
+                verdict = self._verdict(cand, dashes, pending, frame, streaks)
+                hits.append(MeteorHit(pending.frame, pending.image_path, cand, verdict))
             for cand in pending.streaks:
                 self._hotspots.append((cand.cx, cand.cy, pending.frame.captured_at.timestamp()))
 
         dashes = [dash_runs(gray, st) if st.length >= cfg.dash_min_len_px else 0 for st in streaks]
         before = pending.streaks if pending is not None else []
         moving = {i for i, st in enumerate(streaks) if any(progressing(b, st, cfg) for b in before)}
+        prior = [(b, pending.frame) for b in before] if pending is not None else []
         self._pending = (
-            _Pending(frame, image_path, streaks, dashes, gray, prev, moving) if streaks else None
+            _Pending(frame, image_path, streaks, dashes, gray, prev, moving, diff, prior)
+            if streaks
+            else None
         )
         return hits
 

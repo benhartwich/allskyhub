@@ -91,10 +91,18 @@ The controller aims for a target mean brightness (`target_mean`, 0..1, default d
 - A measured mean of 0 is treated as `1/65536` so the controller can always recover.
 - On a mode change the controller starts from that mode's last known good values.
 
+**Moon mode** (roadmap L20, setting `moon_mode`, default on). At night, while the moon is
+above the horizon and at least half lit, the night target is `moon_target_mean` (default
+0.12 instead of 0.20) and the gain stays at the profile's lowest night gain unless the
+exposure is at its maximum, so the moonlit sky and the landscape do not burn out. The moon
+position and phase come from `allskyhub_sky.astro` (low precision, Meeus). Switching in or
+out of moon mode only moves the target; the damping above makes the change gradual.
+
 ### 4.4 Frame metadata
 
 Every frame carries: capture time (UTC), mode, exposure (µs), gain, measured mean,
-sun elevation, sensor temperature if available, and the profile id.
+sun elevation, sensor temperature if available, the profile id, and `bad` (§4.9; null
+for a good frame, missing from older agents).
 
 Timestamps come from the system clock, synchronized by NTP. A Pi has no real-time clock,
 so after a boot without network the clock can be wrong: the agent reports
@@ -167,6 +175,19 @@ The fitted lens maps a direction (alt, az) to a pixel (x, y) of the solved frame
 `cx`, `cy`, `a1`, `a3` are pixels of a `width` × `height` frame; for another size of the
 same frame (thumbnails, the latest image) they scale with the width.
 
+### 4.9 Bad frames
+
+Roadmap L19. A frame whose measured mean (§4.3) is below `bad_dark_pct` (default 2 %) or
+above `bad_bright_pct` (default 90 %) is a bad frame, typically while the exposure is
+still catching up at dusk or dawn, or when a light is switched on next to the camera. It
+is stored as usual and marked in its metadata: `bad` is `dark` or `bright`. It is never
+deleted for this: detections run on it as on every other frame (a lightning flash makes
+a frame bright), and retention (§4.5) removes it with its night. Bad frames are left out
+of the night products (§5.2), the loop on the live page and the image grids of the local
+UI and the hub; the local archive shows them on request. `bad_frames` (default on)
+switches the marking off. Blur and dew are not judged per frame here: dew and dirt are
+recognised over many frames on the hub (roadmap C12).
+
 ## 5. Products (M4)
 
 ### 5.1 Frame index
@@ -200,10 +221,30 @@ cannot be built (too few frames, no `ffmpeg`) is skipped and logged; the others 
 still built. Building again replaces the old files (written to a temp name, then
 renamed). Products of a night are kept as long as its folder (§4.5).
 
+**Day products** (roadmap L21). At dusk, when the mode switches from day to night, the
+agent builds `day-timelapse.mp4` (`product_day_timelapse`, default on) and
+`day-keogram.jpg` (`product_day_keogram`, default off) the same way from the day frames of
+that local date: the morning's frames are in the previous night id's folder (before
+noon, §4.5), the afternoon's in the current one; the files go into the current one. Day
+products stay local for now: the `products` message (§6.3) lists only the three night
+products until the hub accepts more kinds.
+
+**Mini timelapse** (`product_mini_timelapse`, default off): every 10 minutes the agent
+renders the last hour's good frames (at most 640 px wide, 25 fps) to `<data>/live/mini.mp4`
+for the live page; it is replaced each time and never archived.
+
 ### 5.3 Detections
 
 Meteor, lightning, aurora, noctilucent clouds, sky quality and cloud cover are emitted
 as protocol events (§6.4).
+
+### 5.4 Keolapse
+
+The local archive (roadmap L21) shows the keograms of a range of nights side by side, each
+night's `keogram.jpg` scaled to the same height (540 px) and a width of 48 px, oldest on
+the left, at most 92 nights. It is built on request (`GET /api/keolapse.jpg?from=&to=`,
+night ids) from existing keograms and cached in `<data>/cache/` until a night in the
+range changes; nights without a keogram leave a grey gap.
 
 ## 6. Device protocol v1 (draft)
 
@@ -293,7 +334,10 @@ base64url-encoded without padding.
   stars}` measured on the newest frame. `at` is that frame's `captured_at` and
   `night_id` its night (§4.5); status repeats the last `sky` until a new frame is
   measured, so the hub keeps one sample per `at`. `cloud_cover` (0..1) comes from the
-  stars visible in the upper sky at night (sun ≤ −12°), else null. `sqm_mag` (mag/arcsec², approximate until calibrated) is the
+  stars visible in the upper sky at night (sun ≤ −12°), from the sky's colour by day (sun
+  ≥ 3°, roadmap L22: the share of unsaturated sky pixels inside the sky mask whose
+  blue-to-red ratio is below 1.15, i.e. white or grey instead of blue; pixels within 15°
+  of the sun are left out), else null (twilight). `sqm_mag` (mag/arcsec², approximate until calibrated) is the
   sky background normalised by exposure and gain, only at astronomical night (sun ≤
   −18°), else null. `stars` is the number of stars detected at night, else null.
   `orientation` (null until solved, §4.8): `{north_deg, mirrored, solved_at, stars,
@@ -323,7 +367,7 @@ base64url-encoded without padding.
   `installing`, `installed`, `rolled_back`, `failed`; `version` the release it is about,
   `at` when that state was reached, `code` why it failed or rolled back (e.g.
   `unhealthy`, `checksum`, `bad_signature`, `no_space`).
-- `frame`: frame metadata (§4.4); the image itself goes over HTTPS when the hub asks
+- `frame`: frame metadata (§4.4), with `bad` (§4.9) null, `dark` or `bright`; the image itself goes over HTTPS when the hub asks
   for it (§6.5, `upload_frame`).
 - `event`: a detection (§6.4).
 - `products`: the night products (§5.2) of one night, `{night_id, products: [{kind,
@@ -777,12 +821,48 @@ only 0 (other values `0x401`); `refresh` does nothing.
 Implementations are checked with ASCOM ConformU.
 
 **Relaying N.I.N.A.** With the settings `nina_url` (for example
-`http://192.168.1.30:1888`, empty = off) and `nina_api_key` (optional, `write_only`, §6.9), the agent reads the
+`http://192.168.1.30:1888`, empty = off) the agent reads the
 state of N.I.N.A.'s Advanced API plugin every 30 s on the local network and reports it as
-`status.observatory` (§6.3). It only reads; it never controls N.I.N.A. Target names and
+`status.observatory` (§6.3). It only reads; it never controls N.I.N.A. The Advanced API has no
+authentication, so there is no key setting (Benjamin, 2026-10-13). Target names and
 sequences can be private: the hub shows `observatory` to the owner and the camera's
 members, and on the public page only with the section `observatory` (§6.8, default
 false).
+
+### 7.6 HTTPS
+
+Roadmap L24, setting `https` (default off). When on, the local UI is also served over
+HTTPS on port 8443 with a certificate the agent makes on first use (ECDSA P-256,
+self-signed, valid 10 years, subject alternative names: the host name, `<host>.local` and
+the current IP addresses; renewed when an address changes), kept in `<data>/tls/` (key
+mode 0600). The owner can upload an own certificate and key (PEM) in the local UI
+instead; a certificate that does not match its key or has expired is refused. Plain HTTP
+on 8080 then answers every page with a redirect to HTTPS, except `/api/setup` and
+`/api/health`, which the app's onboarding (§7), the updater (§8) and the watchdog (§8.1)
+use. Browsers warn about a self-signed certificate once; the session cookie is `Secure`
+over HTTPS (§7.4).
+
+### 7.7 MQTT
+
+Roadmap L23, for home automation (Home Assistant and others). Settings: `mqtt_host`
+(empty = off), `mqtt_port` (default 1883), `mqtt_tls` (default off), `mqtt_user`,
+`mqtt_password` (`write_only`, §6.9) and `mqtt_prefix` (default `allskyhub`). The agent
+connects to the broker on the local network and publishes, with `<base>` =
+`<prefix>/<device id>`:
+
+- `<base>/availability`: `online`, retained; the broker's last will sets `offline`.
+- `<base>/state`, retained, at most once a minute and after every mode change: JSON
+  `{at, mode, exposure_us, gain, mean, sensor_temp_c, cpu_temp_c, cloud_cover, sqm_mag,
+  stars, safe}` with the meanings of §6.3 (`cloud_cover` in percent, `safe` the
+  safety monitor's verdict of §7.5 or null while it is off).
+- `<base>/event`, not retained: every detection (§6.4) as `{kind, at, night_id, ...}`
+  without images.
+- Home Assistant discovery: one retained config per value under
+  `homeassistant/sensor/<device id>/<key>/config` (and `binary_sensor` for `safe`),
+  with the device's name and id, so the camera appears as one device.
+
+The agent only publishes; it subscribes to nothing and cannot be controlled over MQTT.
+A broker that cannot be reached is retried with backoff and never slows capture.
 
 ## 8. Updates
 

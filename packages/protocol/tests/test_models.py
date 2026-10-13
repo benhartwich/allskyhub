@@ -332,10 +332,10 @@ def test_write_only_setting() -> None:
 
     key = SettingSpec.model_validate(
         {
-            "key": "nina_api_key",
+            "key": "mqtt_password",
             "type": "string",
-            "label": "Key",
-            "group": "N.I.N.A.",
+            "label": "Passwort",
+            "group": "MQTT",
             "write_only": True,
             "nullable": True,
         }

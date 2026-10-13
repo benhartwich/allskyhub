@@ -12,25 +12,28 @@ from __future__ import annotations
 import json
 import logging
 import math
-import os
 import re
-import shutil
 import sqlite3
-import subprocess
 from collections import defaultdict
 from collections.abc import Callable
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta, tzinfo
 from pathlib import Path
 from typing import Any, cast
-from zoneinfo import ZoneInfo
 
 from PIL import Image as PILImage
 
 from allskyhub_agent.core.sun import sun_elevation
 from allskyhub_agent.detect.events import EventStore
+from allskyhub_agent.importer.common import (
+    FilePlacer,
+    ImportReport,
+    system_timezone,
+    thumbnail,
+    video_duration,
+)
 from allskyhub_agent.products.build import KEOGRAM, MANIFEST, STARTRAILS, TIMELAPSE
-from allskyhub_agent.store.images import THUMB_WIDTH, ImageStore, night_id
+from allskyhub_agent.store.images import ImageStore, night_id
 from allskyhub_protocol import EventKind, FrameInfo, Mode, SkyMetrics
 
 log = logging.getLogger(__name__)
@@ -92,14 +95,6 @@ class AllskySettings:
         )
 
 
-def system_timezone() -> tzinfo:
-    """Allsky names its files in the system's local time."""
-    try:
-        return ZoneInfo(Path("/etc/timezone").read_text().strip())
-    except (OSError, ValueError, KeyError):
-        return UTC
-
-
 def _image_rows(allsky_home: Path) -> dict[str, dict[str, Any]]:
     """Frame metadata Allsky kept in its database, by image name (newer installations)."""
     db = allsky_home / "config" / "myFiles" / "allsky.db"
@@ -148,34 +143,7 @@ def _sky_rows(allsky_home: Path) -> list[tuple[int, float | None, float | None, 
     return [(int(t), num(q), num(c), num(n)) for t, q, c, n in rows if isinstance(t, int | float)]
 
 
-@dataclass
-class ImportReport:
-    folders: int = 0
-    images: int = 0
-    images_skipped: int = 0
-    products: int = 0
-    meteors: int = 0
-    lightning: int = 0
-    episodes: int = 0  # aurora and NLC
-    sky: int = 0
-    linked: int = 0
-    copied: int = 0
-    bytes: int = 0
-    nights: set[str] = field(default_factory=set[str])
-
-
-def _thumbnail(src: Path, dest: Path) -> None:
-    dest.parent.mkdir(parents=True, exist_ok=True)
-    with PILImage.open(src) as im:
-        im.draft("RGB", (THUMB_WIDTH, THUMB_WIDTH))  # JPEG: decode at a smaller scale, fast
-        rgb = im.convert("RGB")
-    h = max(1, round(rgb.height * THUMB_WIDTH / rgb.width))
-    tmp = dest.with_name(dest.stem + ".tmp.jpg")
-    rgb.resize((THUMB_WIDTH, h)).save(tmp, format="JPEG", quality=80)
-    tmp.replace(dest)
-
-
-class AllskyImporter:
+class AllskyImporter(FilePlacer):
     def __init__(
         self,
         allsky_home: Path,
@@ -188,6 +156,7 @@ class AllskyImporter:
         owner: tuple[int, int] | None = None,
         progress: Callable[[str], None] = print,
     ) -> None:
+        super().__init__(copy, owner)
         self._home = allsky_home
         self._images = allsky_home / "images"
         self._store = store
@@ -195,8 +164,6 @@ class AllskyImporter:
         self._tz = local_tz
         self._src_tz = source_tz or system_timezone()
         self._profile = profile
-        self._copy = copy
-        self._owner = owner
         self._progress = progress
         self.settings = AllskySettings.load(allsky_home)
 
@@ -207,40 +174,6 @@ class AllskyImporter:
             p.name for p in self._images.iterdir() if p.is_dir() and _FOLDER.match(p.name)
         )
         return [n for n in names if only is None or n in only]
-
-    # --- files -------------------------------------------------------------------------
-    def _chown(self, path: Path) -> None:
-        """Run as root (hard links need it): what this import creates belongs to the agent."""
-        if self._owner is not None and os.geteuid() == 0:
-            os.chown(path, *self._owner, follow_symlinks=False)
-
-    def _mkdir(self, path: Path) -> None:
-        missing = [p for p in [path, *path.parents] if not p.exists()]
-        path.mkdir(parents=True, exist_ok=True)
-        for p in missing:
-            self._chown(p)
-
-    def _place(self, src: Path, dest: Path, report: ImportReport, dry: bool) -> bool:
-        """Hard link (or copy) `src` to `dest`; False if `dest` already exists."""
-        if dest.exists():
-            return False
-        report.bytes += src.stat().st_size
-        if dry:
-            return True
-        self._mkdir(dest.parent)
-        if not self._copy:
-            try:
-                os.link(src, dest)
-                report.linked += 1
-                return True
-            except OSError:
-                pass  # another disk, or not allowed: copy instead
-        tmp = dest.with_name(dest.name + ".tmp")
-        shutil.copy2(src, tmp)
-        tmp.replace(dest)
-        self._chown(dest)
-        report.copied += 1
-        return True
 
     # --- one Allsky folder ---------------------------------------------------------------
     def _frame(self, name: str, at: datetime, row: dict[str, Any] | None) -> FrameInfo:
@@ -292,7 +225,7 @@ class AllskyImporter:
                 thumb = self._store.night_dir(nid) / "thumbnails" / src.name
                 if not thumb.exists():
                     try:
-                        _thumbnail(src, thumb)
+                        thumbnail(src, thumb)
                         self._chown(thumb)
                     except OSError:
                         log.warning("%s: unreadable, no thumbnail", src)
@@ -328,12 +261,12 @@ class AllskyImporter:
                 if name == TIMELAPSE:
                     poster = next((src_dir / "videothumbnail").glob("*.jpg"), None)
                     if poster is not None:
-                        _thumbnail(poster, thumb)
-                    duration = _video_duration(src)
+                        thumbnail(poster, thumb)
+                    duration = video_duration(src)
                     if duration is not None:
                         durations[name] = duration
                 else:
-                    _thumbnail(src, thumb)
+                    thumbnail(src, thumb)
                 if thumb.exists():
                     self._chown(thumb)
             except OSError:
@@ -644,15 +577,3 @@ def _axis_direction(angle_deg: float) -> float:
     """Allsky's streak angle (from the image x axis) as 0 = up, clockwise, 0..180."""
     dx, dy = math.cos(math.radians(angle_deg)), math.sin(math.radians(angle_deg))
     return round(math.degrees(math.atan2(dx, -dy)) % 180.0, 1)
-
-
-def _video_duration(path: Path) -> float | None:
-    ffprobe = shutil.which("ffprobe")
-    if ffprobe is None:
-        return None
-    cmd = [ffprobe, "-v", "error", "-show_entries", "format=duration", "-of", "csv=p=0", str(path)]
-    try:
-        out = subprocess.run(cmd, capture_output=True, text=True, timeout=30, check=False)  # noqa: S603
-        return round(float(out.stdout.strip()), 1)
-    except (OSError, ValueError, subprocess.SubprocessError):
-        return None

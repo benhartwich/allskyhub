@@ -55,6 +55,10 @@ from allskyhub_agent.hub.pairing import PairingState
 from allskyhub_agent.hub.public import PublicPage
 from allskyhub_agent.importer.allsky import AllskyImporter, AllskySettings
 from allskyhub_agent.importer.backlog import BACKLOG_NAME, Backlog
+from allskyhub_agent.importer.common import ImportReport
+from allskyhub_agent.importer.indi_allsky import DEFAULT_DB as INDI_DB
+from allskyhub_agent.importer.indi_allsky import IndiAllskyImporter, IndiAllskySettings
+from allskyhub_agent.importer.indi_allsky import cameras as indi_cameras
 from allskyhub_agent.live import LiveState
 from allskyhub_agent.mqtt import MqttConfig, MqttPublisher
 from allskyhub_agent.process.hotpixels import HotPixels
@@ -155,6 +159,18 @@ def _parser() -> argparse.ArgumentParser:
     imp.add_argument("--nights", default=None, help="only these Allsky folders, YYYYMMDD,...")
     imp.add_argument("--dry-run", action="store_true", help="only show what would come over")
     imp.add_argument("--copy", action="store_true", help="copy instead of hard links")
+    ind = sub.add_parser(
+        "import-indi-allsky", help="take over the pictures of an existing indi-allsky (L18)"
+    )
+    ind.add_argument("--db", type=Path, default=INDI_DB, help=f"its database (default {INDI_DB})")
+    ind.add_argument("--images", type=Path, default=None,
+                     help="its image folder (default: from its configuration)")  # fmt: skip
+    ind.add_argument("--camera", type=int, default=None, help="its camera id, if it has several")
+    ind.add_argument("--data", type=Path, required=True, help="the agent's data directory")
+    ind.add_argument("--settings", type=Path, default=None, help="the agent's settings file")
+    ind.add_argument("--nights", default=None, help="only these nights, YYYYMMDD,...")
+    ind.add_argument("--dry-run", action="store_true", help="only show what would come over")
+    ind.add_argument("--copy", action="store_true", help="copy instead of hard links")
     upd = sub.add_parser("update", help="install a newer signed agent release (root, SPEC §8)")
     upd.add_argument("--manifest-url", default=os.environ.get("ALLSKYHUB_UPDATE_MANIFEST_URL",
                                                               DEFAULT_MANIFEST_URL))  # fmt: skip
@@ -227,35 +243,103 @@ def run_import(args: argparse.Namespace) -> int:
         print("no Allsky night folders found")
         return 1
     r = importer.run(only, dry=args.dry_run)
-    verb = "would take over" if args.dry_run else "took over"
+    _report_import(r, args.dry_run)
+    if args.dry_run:
+        return 0
+    _finish_import(args, current, store, r, (allsky.latitude, allsky.longitude),
+                   allsky.camera, allsky.days_to_keep, owner)  # fmt: skip
+    return 0
+
+
+def run_import_indi(args: argparse.Namespace) -> int:
+    """Roadmap L18: indi-allsky's nights and products into the agent's storage."""
+    logging.basicConfig(level=logging.WARNING, format="%(levelname)s %(name)s: %(message)s")
+    current = AgentSettings.load(args.settings) if args.settings else AgentSettings()
+    tz = ZoneInfo(args.tz or current.timezone)
+    data: Path = args.data
+    st = data.stat()
+    owner = (st.st_uid, st.st_gid)
+    store = ImageStore(data, tz)
+    db: Path = args.db
+    if not db.is_file():
+        print(f"no indi-allsky database at {db}")
+        return 1
+    found = indi_cameras(db)
+    for cam in found:
+        print(f"camera {cam.id}: {cam.name or '?'}, {cam.images} images")
+    cam_id: int | None = args.camera
+    if cam_id is None and len([c for c in found if c.images]) > 1:
+        print("several cameras have images: choose one with --camera")
+        return 1
+    if cam_id is not None and cam_id not in {c.id for c in found}:
+        print(f"no camera {cam_id} in {db}")
+        return 1
+    indi = IndiAllskySettings.load(db, cam_id if cam_id is not None else
+                                   (found[0].id if found else None))  # fmt: skip
+    camera = current.camera if current.camera != "auto" else None
+    profile = args.profile or camera or indi.camera or "zwo-asi678mc"
+    importer = IndiAllskyImporter(db, store, tz, profile, camera_id=cam_id,
+                                  image_folder=args.images, copy=args.copy,
+                                  owner=owner)  # fmt: skip
+    print(
+        f"indi-allsky in {db}: {indi.location or 'no place'}, {indi.camera_name}, "
+        f"{indi.latitude}, {indi.longitude}, images in {args.images or indi.image_folder}"
+    )
+    only = set(args.nights.split(",")) if args.nights else None
+    if not importer.nights(only):
+        print("no indi-allsky nights found")
+        return 1
+    r = importer.run(only, dry=args.dry_run)
+    _report_import(r, args.dry_run)
+    if args.dry_run:
+        return 0
+    _finish_import(args, current, store, r, (indi.latitude, indi.longitude), indi.camera,
+                   indi.days_to_keep, owner)  # fmt: skip
+    return 0
+
+
+def _report_import(r: ImportReport, dry_run: bool) -> None:
+    verb = "would take over" if dry_run else "took over"
     print(
         f"{verb}: {r.images} images ({r.images_skipped} already there), {r.products} products, "
         f"{r.meteors} meteors, {r.lightning} lightning, {r.episodes} aurora/NLC, "
         f"{r.sky} sky samples, {len(r.nights)} nights, {r.bytes / 1e9:.1f} GB"
-        + ("" if args.dry_run else f"; {r.linked} hard links, {r.copied} copies")
+        + ("" if dry_run else f"; {r.linked} hard links, {r.copied} copies")
     )
-    if args.dry_run:
-        return 0
-    if args.settings and not current.has_location and allsky.latitude is not None:
-        current = current.with_updates(
-            latitude=allsky.latitude, longitude=allsky.longitude, camera=allsky.camera
-        )
+    for reason, n in sorted(r.unsupported.items()):
+        print(f"left out: {n} x {reason}")
+
+
+def _finish_import(
+    args: argparse.Namespace,
+    current: AgentSettings,
+    store: ImageStore,
+    r: ImportReport,
+    location: tuple[float | None, float | None],
+    camera: str | None,
+    days_to_keep: int | None,
+    owner: tuple[int, int],
+) -> None:
+    """The location if the agent has none, retention, and the nights for the hub."""
+    lat, lon = location
+    tz = store.local_tz
+    if args.settings and not current.has_location and lat is not None and lon is not None:
+        current = current.with_updates(latitude=lat, longitude=lon, camera=camera)
         current.save(args.settings)
-        print(f"location {allsky.latitude}, {allsky.longitude} saved in {args.settings}")
+        print(f"location {lat}, {lon} saved in {args.settings}")
     # Retention (SPEC §4.5) must not delete what was just taken over: at least as long as
-    # Allsky kept its nights, and long enough for the oldest imported one.
+    # the other program kept its nights, and long enough for the oldest imported one.
     nights = store.nights()
     if args.settings and nights:
         oldest = datetime.strptime(nights[-1], "%Y%m%d").replace(tzinfo=tz)
         age = (datetime.now(tz) - oldest).days + 1
-        keep = min(3650, max(current.keep_days, allsky.days_to_keep or 0, age))
+        keep = min(3650, max(current.keep_days, days_to_keep or 0, age))
         if keep > current.keep_days:
             current.with_values({"keep_days": keep}).save(args.settings)
             print(f"keeping nights for {keep} days now (was {current.keep_days}); "
                   "restart the agent to apply it")  # fmt: skip
     # SPEC §6.7: the running agent announces these nights to the hub, one per second.
-    Backlog(data / BACKLOG_NAME).add(sorted(r.nights), owner)
-    return 0
+    Backlog(args.data / BACKLOG_NAME).add(sorted(r.nights), owner)
 
 
 INSTALL_DIR = Path("/opt/allskyhub-agent")
@@ -507,6 +591,8 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.cmd == "import-allsky":
         return run_import(args)
+    if args.cmd == "import-indi-allsky":
+        return run_import_indi(args)
     tz = ZoneInfo(args.tz or "UTC")
     if args.cmd == "update":
         return run_update(args)

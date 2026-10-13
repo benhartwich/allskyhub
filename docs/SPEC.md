@@ -256,7 +256,9 @@ WebSocket message is an envelope `{v: 1, type, id, ts, body}`.
 
 **Compatible changes.** Within v1 either side may add optional fields to any message,
 request or answer. Receivers ignore fields they do not know, so a hub can be newer than
-its cameras and the other way round. Only where a person's input is checked (the public
+its cameras and the other way round. Likewise a receiver skips a list entry whose kind
+it does not know (e.g. a new product kind in `products`, §6.3) instead of rejecting the
+whole message. Only where a person's input is checked (the public
 profile, §6.8) is an unknown key an error. A new message type or command is announced in
 `capabilities` (§6.3) or simply not used against an older peer. Cameras in the field may
 run an older agent for a long time, so a hub must never require a new field from them.
@@ -377,7 +379,8 @@ base64url-encoded without padding.
   `content_type` `image/jpeg` or `video/mp4`. Sent when a night's products have been
   built, and once after every (re)connect for the newest night that has products. Only
   existing products are listed; the files themselves go over HTTPS when the hub asks for
-  them (§6.5, `upload_product`).
+  them (§6.5, `upload_product`). At most 20 entries; kinds the hub does not know are
+  skipped (§6.1).
 
 ### 6.4 Events
 

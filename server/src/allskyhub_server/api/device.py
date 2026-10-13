@@ -9,6 +9,7 @@ import logging
 import os
 import pathlib
 import tempfile
+import time
 from collections.abc import Coroutine
 from typing import Annotated, Any
 
@@ -81,7 +82,7 @@ log = logging.getLogger(__name__)
 router = APIRouter(prefix="/device/v1")
 
 NIGHT_ID = r"^\d{8}$"
-FRAME_NAME = r"^[A-Za-z0-9._-]{1,128}$"
+FRAME_NAME = r"^[A-Za-z0-9_-][A-Za-z0-9._-]{0,127}$"  # never "." or ".."
 
 
 def _now() -> dt.datetime:
@@ -411,9 +412,14 @@ async def device_ws(websocket: WebSocket) -> None:
         await close(CloseCode.REAUTH)
 
     watchdog = asyncio.create_task(expire())
+    bucket = _Bucket()
     try:
         while True:
             raw = await websocket.receive_text()
+            if len(raw) > MAX_MESSAGE_CHARS:
+                log.warning("message too large", extra={"device_id": info.device_id})
+                continue
+            await bucket.take()  # a flooding device is slowed down, nothing is lost
             await _handle(raw, conn, maker, settings, registry, notifier, store, kp)
     except WebSocketDisconnect:
         pass
@@ -421,6 +427,32 @@ async def device_ws(websocket: WebSocket) -> None:
         watchdog.cancel()
         await registry.detach(conn)
         log.info("device disconnected", extra={"device_id": info.device_id})
+
+
+# No protocol message comes near this; a status with its schema is a few kB.
+MAX_MESSAGE_CHARS = 256_000
+# Messages a device may send in a burst (a night of backlog: products and hundreds of
+# events) and per second after that.
+BURST = 1000
+PER_SECOND = 50.0
+
+
+class _Bucket:
+    """Token bucket per connection: one compromised device cannot flood the database."""
+
+    def __init__(self) -> None:
+        self._tokens = float(BURST)
+        self._at = time.monotonic()
+
+    async def take(self) -> None:
+        now = time.monotonic()
+        self._tokens = min(BURST, self._tokens + (now - self._at) * PER_SECOND)
+        self._at = now
+        if self._tokens < 1:
+            await asyncio.sleep((1 - self._tokens) / PER_SECOND)
+            self._tokens = 1.0
+            self._at = time.monotonic()
+        self._tokens -= 1
 
 
 # A chart point every five minutes is plenty; status comes about every minute.
@@ -662,6 +694,19 @@ async def _on_products(
         await registry.request_product(conn.device_id, body.night_id, name, variant)
 
 
+DATA_KEYS = 64
+DATA_TEXT = 200
+
+
+def _bounded(data: dict[str, Any]) -> dict[str, Any]:
+    """SPEC §6.4 data from a device, within sane bounds: the protocol allows any number of
+    keys and any string length, the database should not."""
+    out: dict[str, Any] = {}
+    for key, value in list(data.items())[:DATA_KEYS]:
+        out[key[:DATA_TEXT]] = value[:DATA_TEXT] if isinstance(value, str) else value
+    return out
+
+
 async def _on_event(
     body: Event,
     conn: Connection,
@@ -681,7 +726,7 @@ async def _on_event(
         "confidence": body.confidence,
         "has_image": body.has_image,
         # SPEC §6.4 imported: kept with the data, where push and Discord look for it.
-        "data": dict(body.data) | ({"imported": True} if body.imported else {}),
+        "data": _bounded(dict(body.data)) | ({"imported": True} if body.imported else {}),
     }
     async with maker() as db:
         if not await _still_paired(db, conn.device_id):

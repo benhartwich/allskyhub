@@ -121,7 +121,8 @@ async def cameras(db: AsyncSession, now: dt.datetime | None = None) -> list[MapC
                 place=public.profile(device).location_label,
                 lat=coords[0],
                 lon=coords[1],
-                has_image=device.latest_image_at is not None,
+                has_image=device.latest_image_at is not None
+                and public.profile(device).sections.live,
                 sqm=sqm.get(device.id),
                 shows_sky=device.id in shows_sky,
             )
@@ -157,7 +158,7 @@ async def home_cameras(db: AsyncSession) -> list[HomeCamera]:
             slug=device.public_slug,
             title=public.title(device),
             place=public.profile(device).location_label,
-            image_at=device.latest_image_at,
+            image_at=device.latest_image_at if public.profile(device).sections.live else None,
         )
         for device in rows
         if device.public_slug is not None

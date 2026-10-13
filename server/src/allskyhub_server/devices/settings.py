@@ -47,11 +47,21 @@ def describe_fields(message: str, labels: dict[str, str] | None = None) -> str:
     return ", ".join(dict.fromkeys(found)) or "unbekannt"
 
 
+# Settings that make the camera talk to other machines in the owner's network (or send
+# credentials there): only the owner changes them, never a shared admin (roadmap C10).
+OWNER_ONLY = frozenset({
+    "nina_url", "adsb_url", "mqtt_host", "mqtt_port", "mqtt_tls", "mqtt_user",
+    "mqtt_password", "mqtt_prefix",
+})  # fmt: skip
+
+
 async def apply(
     registry: ConnectionRegistry,
     device_id: str,
     args: SetSettingsArgs | dict[str, Any],
     labels: dict[str, str] | None = None,
+    *,
+    owner: bool = True,
 ) -> Outcome:
     """Send only the given keys (a null resets a nullable setting, SPEC §6.5); the device
     changes all or nothing."""
@@ -62,6 +72,9 @@ async def apply(
     )
     if not payload:
         return Outcome(False, "Keine Änderung angegeben.", 400)
+    if not owner and (kept := sorted(OWNER_ONLY & payload.keys())):
+        names = ", ".join(dict.fromkeys((labels or {}).get(k, k) for k in kept))
+        return Outcome(False, f"Nur der Besitzer kann das ändern: {names}.", 403)
     cmd = Command(name=CommandName.SET_SETTINGS, args=payload)
     try:
         reply = await registry.command(device_id, cmd, REPLY_TIMEOUT_S)

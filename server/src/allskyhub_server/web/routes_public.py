@@ -133,7 +133,9 @@ async def sky_page(
     lat = public.latitude(device)
     forecast: ForecastCache = request.app.state.forecast
     night = (
-        await tonight.for_device(forecast, device.last_status, now, request.app.state.tles)
+        await tonight.for_device(
+            forecast, public.coarse_status(device), now, request.app.state.tles
+        )
         if sections.sky
         else None
     )
@@ -167,6 +169,8 @@ async def sky_now(request: Request, db: DbSession, slug: str) -> Response:
     """The latest image and its facts; polled by the page."""
     device = await _device(db, slug)
     profile = public.profile(device)
+    if not profile.sections.live:
+        raise HTTPException(404)
     if profile.sections.aircraft and aircraft.current is not None:
         aircraft.current.watched(device.id)  # SPEC §7.8: someone watches the live image
     return render(request, "_public_now.html", {"device": device, "slug": slug, "profile": profile})
@@ -175,6 +179,8 @@ async def sky_now(request: Request, db: DbSession, slug: str) -> Response:
 @router.get("/sky/{slug}/latest.jpg")
 async def sky_latest(request: Request, db: DbSession, slug: str) -> Response:
     device = await _device(db, slug)
+    if not public.profile(device).sections.live:
+        raise HTTPException(404)  # the owner switched the live image off
     store: ImageStore = request.app.state.images
     return _jpeg(store.path(device.id, FrameVariant.FULL), PUBLIC_CACHE)
 
@@ -214,6 +220,8 @@ async def sky_product(
     request: Request, db: DbSession, slug: str, night_id: str, name: str, full: bool = False
 ) -> Response:
     device = await _device(db, slug)
+    if not public.profile(device).sections.archive:
+        raise HTTPException(404)
     if name not in public.PUBLIC_PRODUCTS or not night_id.isdigit() or len(night_id) != 8:
         raise HTTPException(404)
     store: ImageStore = request.app.state.images
@@ -275,6 +283,8 @@ EMBED_CSP = (
 async def sky_widget(request: Request, db: DbSession, slug: str) -> Response:
     """A small page with the latest image for an <iframe> on another website."""
     device = await _device(db, slug)
+    if not public.profile(device).sections.live:
+        raise HTTPException(404)
     response = render(request, "public_widget.html", {**_base(device, slug)})
     response.headers["Content-Security-Policy"] = EMBED_CSP
     response.headers["X-Frame-Options"] = "ALLOWALL"  # ignored by browsers; CSP decides

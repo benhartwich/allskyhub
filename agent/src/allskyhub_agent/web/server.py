@@ -342,7 +342,10 @@ def make_handler(
                 night, what = m[1], m[2]
                 if what == "frames":
                     data: object = archive.frames(
-                        night, self._int("offset", 0), self._int("limit", 2000)
+                        night,
+                        self._int("offset", 0),
+                        self._int("limit", 2000),
+                        bad=self._query().get("bad") == "1",
                     )
                 elif what == "events":
                     data = archive.events(night)

@@ -46,9 +46,13 @@ class ExposureConfig:
     max_step: float = 8.0
     # Focus mode (SPEC §7) needs quick feedback: exposure is capped, gain makes up the rest.
     focus_max_exposure_us: int = 2_000_000
+    # Moon mode (SPEC §4.3): the night target while a bright moon is up.
+    moon_target_mean: float = 0.12
 
-    def limits(self, mode: Mode, focus: bool = False) -> ModeLimits:
+    def limits(self, mode: Mode, focus: bool = False, moon: bool = False) -> ModeLimits:
         lim = self.day if mode is Mode.DAY else self.night
+        if moon and mode is Mode.NIGHT and not focus:
+            lim = replace(lim, target_mean=self.moon_target_mean)
         if focus and lim.max_exposure_us > self.focus_max_exposure_us:
             lim = replace(
                 lim,
@@ -93,10 +97,18 @@ class AutoExposure:
         return Exposure(lim.max_exposure_us, self._gain_from_factor(factor, lim))
 
     def update(
-        self, mode: Mode, used: Exposure, measured_mean: float, focus: bool = False
+        self,
+        mode: Mode,
+        used: Exposure,
+        measured_mean: float,
+        focus: bool = False,
+        moon: bool = False,
     ) -> Exposure:
-        """Feed back the result of a frame taken with `used`; returns the next settings."""
-        lim = self._cfg.limits(mode, focus)
+        """Feed back the result of a frame taken with `used`; returns the next settings.
+
+        `moon`: a bright moon is up and moon mode is on (SPEC §4.3), a lower night target.
+        """
+        lim = self._cfg.limits(mode, focus, moon)
         ratio = lim.target_mean / max(measured_mean, _MIN_MEAN)
         ratio = _clamp(ratio**self._cfg.damping, 1 / self._cfg.max_step, self._cfg.max_step)
 

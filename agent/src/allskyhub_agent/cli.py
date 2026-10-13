@@ -37,6 +37,7 @@ from allskyhub_agent.alpaca.server import Alpaca, AlpacaServer, PortInUse
 from allskyhub_agent.calib.orientation import Orienter
 from allskyhub_agent.core.clock import Clock, SimClock, SystemClock
 from allskyhub_agent.core.exposure import AutoExposure
+from allskyhub_agent.core.quality import FrameQuality
 from allskyhub_agent.core.sun import sun_elevation
 from allskyhub_agent.detect import tuning
 from allskyhub_agent.detect.events import DetectionWorker, EventStore
@@ -886,6 +887,10 @@ def main(argv: list[str] | None = None) -> int:
         analyzers=[detect.on_frame],
         hot_pixels=HotPixels(Path(args.data) / "calibration" / "hotpixels.npz"),
         sky_mask=sky_mask,
+        quality=FrameQuality(
+            tuned.bad_frames, tuned.bad_dark_pct / 100.0, tuned.bad_bright_pct / 100.0
+        ),
+        moon_mode=tuned.moon_mode,
     )
 
     def products_done(result: NightProducts) -> None:

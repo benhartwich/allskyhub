@@ -27,6 +27,7 @@ class LocalArchive:
         out: list[dict[str, Any]] = []
         for night in self._store.nights():
             frames = self._store.read_index(night)
+            good = [f for f in frames if f.bad is None] or frames
             products = night_products(self._store, night)
             events = self._events.night_events(night) if self._events is not None else []
             if not frames and products is None and not events:
@@ -37,7 +38,8 @@ class LocalArchive:
                     "frames": len(frames),
                     "first": frames[0].captured_at.isoformat() if frames else None,
                     "last": frames[-1].captured_at.isoformat() if frames else None,
-                    "cover": frames[len(frames) // 2].name if frames else None,
+                    "bad": len(frames) - sum(f.bad is None for f in frames),
+                    "cover": good[len(good) // 2].name if good else None,
                     "products": [p.model_dump(mode="json") for p in products.products]
                     if products is not None
                     else [],
@@ -46,8 +48,13 @@ class LocalArchive:
             )
         return out
 
-    def frames(self, night: str, offset: int = 0, limit: int = MAX_FRAMES) -> dict[str, Any]:
+    def frames(
+        self, night: str, offset: int = 0, limit: int = MAX_FRAMES, bad: bool = False
+    ) -> dict[str, Any]:
+        """A page of the night's frames; bad frames (SPEC §4.9) only with `bad`."""
         frames = self._store.read_index(night) if night.isdigit() and len(night) == 8 else []
+        if not bad:
+            frames = [f for f in frames if f.bad is None]
         page = frames[max(0, offset) : max(0, offset) + max(1, min(limit, MAX_FRAMES))]
         return {"total": len(frames), "frames": [f.model_dump(mode="json") for f in page]}
 
@@ -59,7 +66,7 @@ class LocalArchive:
             out += [
                 f.model_dump(mode="json")
                 for f in self._store.read_index(night)
-                if f.captured_at >= since
+                if f.captured_at >= since and f.bad is None
             ]
         out.sort(key=lambda f: f["captured_at"])
         return out

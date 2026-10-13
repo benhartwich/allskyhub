@@ -167,11 +167,13 @@ def timelapse(paths: list[Path], out: Path, cfg: ProductConfig) -> str | None:
 
 
 def build_night(store: ImageStore, night: str, cfg: ProductConfig | None = None) -> NightProducts:
-    """Build keogram, startrails and timelapse of a night's night-mode frames (SPEC §5.2)."""
+    """Build keogram, startrails and timelapse of a night's good night-mode frames (SPEC §5.2)."""
     cfg = cfg or ProductConfig()
     result = NightProducts(night)
     folder = store.night_dir(night)
-    frames: list[FrameInfo] = [f for f in store.read_index(night) if f.mode is Mode.NIGHT]
+    frames: list[FrameInfo] = [
+        f for f in store.read_index(night) if f.mode is Mode.NIGHT and f.bad is None
+    ]  # SPEC §4.9: bad frames are left out
     present = [(folder / f.name, f) for f in frames if (folder / f.name).is_file()]
     result.frames = len(present)
     if not present:

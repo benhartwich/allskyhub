@@ -218,3 +218,22 @@ def test_products_switched_off(tmp_path: Path) -> None:
     assert result.built == [STARTRAILS]
     assert result.skipped == {KEOGRAM: "switched off", TIMELAPSE: "switched off"}
     assert not (tmp_path / "images" / "20261006" / KEOGRAM).exists()
+
+
+def test_bad_frames_stay_out_of_the_products(tmp_path: Path) -> None:
+    """SPEC §4.9: bad frames are left out of keogram, startrails and timelapse."""
+    store, frames = _simulate_night(tmp_path)
+    night = [f for f in frames if f.mode is Mode.NIGHT]
+    index = store.night_dir("20261006") / "frames.jsonl"
+    lines = [
+        f.model_copy(update={"bad": "bright"}) if i % 4 == 0 and f.mode is Mode.NIGHT else f
+        for i, f in enumerate(frames)
+        if f.night_id == "20261006"
+    ]
+    index.write_text("".join(f.model_dump_json() + "\n" for f in lines))
+    bad = sum(1 for f in lines if f.bad)
+    result = build_night(store, "20261006", ProductConfig(timelapse=False))
+    assert bad > 5
+    assert result.frames == len(night) - bad
+    with PILImage.open(store.night_dir("20261006") / KEOGRAM) as keo:
+        assert keo.size[0] == len(night) - bad

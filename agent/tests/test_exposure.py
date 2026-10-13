@@ -93,3 +93,16 @@ def test_gain_is_traded_back_for_exposure_after_focus_mode() -> None:
     nxt = ae.update(Mode.NIGHT, ae.current(Mode.NIGHT), 0.20)  # on target, no change wanted
     assert nxt.gain == 0.0
     assert nxt.exposure_us == pytest.approx(20_000_000, rel=0.01)  # +20 dB = 10x exposure
+
+
+def test_moon_mode_lowers_only_the_night_target() -> None:
+    """SPEC §4.3: a bright moon up → night target 0.12; day and focus unchanged."""
+    assert CFG.limits(Mode.NIGHT, moon=True).target_mean == pytest.approx(0.12)
+    assert CFG.limits(Mode.NIGHT).target_mean == pytest.approx(0.20)
+    assert CFG.limits(Mode.DAY, moon=True).target_mean == pytest.approx(0.35)
+    assert CFG.limits(Mode.NIGHT, focus=True, moon=True).target_mean == pytest.approx(0.20)
+    ae = AutoExposure(CFG)
+    cur = ae.current(Mode.NIGHT)
+    for _ in range(30):
+        cur = ae.update(Mode.NIGHT, cur, mean_of(cur, 0.01), moon=True)
+    assert mean_of(cur, 0.01) == pytest.approx(0.12, rel=0.05)

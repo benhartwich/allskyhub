@@ -334,12 +334,27 @@ base64url-encoded without padding.
   stars}` measured on the newest frame. `at` is that frame's `captured_at` and
   `night_id` its night (§4.5); status repeats the last `sky` until a new frame is
   measured, so the hub keeps one sample per `at`. `cloud_cover` (0..1) comes from the
-  stars visible in the upper sky at night (sun ≤ −12°), from the sky's colour by day (sun
-  ≥ 3°, roadmap L22: the share of unsaturated sky pixels inside the sky mask whose
-  blue-to-red ratio is below 1.15, i.e. white or grey instead of blue; pixels within 15°
-  of the sun are left out), else null (twilight). `sqm_mag` (mag/arcsec², approximate until calibrated) is the
+  stars visible in the upper sky at night (sun ≤ −12°), by day (sun ≥ 3°) once
+  roadmap L22 has a method that works on real frames, else null. (A blue-to-red ratio
+  fails on cameras without an IR cut filter such as the ASI678MC, where an overcast sky
+  stays bluish; the method is chosen on the test camera's day frames first, Benjamin,
+  2026-10-13.) `sqm_mag` (mag/arcsec², approximate until calibrated) is the
   sky background normalised by exposure and gain, only at astronomical night (sun ≤
   −18°), else null. `stars` is the number of stars detected at night, else null.
+  `cloud_map` (optional, roadmap H4; null or missing unless all of: sun ≤ −12°, a trusted
+  clock and an orientation, §4.8): cloud cover per sky cell, a list of 24 values, each
+  0..1 or null (not judgeable). Cells are 8 azimuth sectors × 3 altitude bands, listed band
+  by band from the horizon up and within a band by sector: index = 8·band + sector. Sector
+  k (0..7) covers azimuth (k·45° − 22.5°) .. (k·45° + 22.5°), azimuth from north over east,
+  so sector 0 is centred on north, 2 on east, 4 on south, 6 on west. Bands: 0 = altitude
+  15°..40°, 1 = 40°..65°, 2 = 65°..90°; a direction on a limit belongs to the higher sector
+  or band, altitude below 15° to none. A cell's value is 1 − found/expected over the
+  catalogue stars down to magnitude 4.0 whose position at the frame's mid-exposure lies in
+  the cell and inside the sky mask (§4.7): expected counts them, found those with a
+  detected star within 1° of the position (§4.8 lens). A cell is null with fewer than 3
+  expected stars (mostly obstructed or too small) and when its centre is within 25° of a
+  moon that is at least 25 % lit. The map is not smoothed over time; the hub averages
+  if it wants to.
   `orientation` (null until solved, §4.8): `{north_deg, mirrored, solved_at, stars,
   rms_deg}`. `north_deg` (0..360) is the image direction of north at the horizon, 0 = up,
   clockwise, like `direction_deg` in events; `mirrored` true means east is

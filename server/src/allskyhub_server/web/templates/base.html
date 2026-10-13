@@ -18,7 +18,7 @@
 </head>
 <body {% if csrf_token %}hx-headers='{"X-CSRF-Token": "{{ csrf_token }}"}'{% endif %}>
   <header class="appbar">
-    <a class="brand" href="/"><img src="{{ asset('favicon.svg') }}" width="28" height="28" alt="">allskyhub</a>
+    <a class="brand" href="/"><img src="{{ asset('favicon.svg') }}" width="28" height="28" alt=""><span class="brand-name">allskyhub</span></a>
     <nav class="appbar-end" aria-label="Hauptmenü">
       <button type="button" class="nav-link" data-theme-toggle title="Rotlicht für die Nacht" aria-label="Rotlicht für die Nacht">
         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 14.5A8 8 0 0 1 9.5 4a8 8 0 1 0 10.5 10.5z"/></svg></button>

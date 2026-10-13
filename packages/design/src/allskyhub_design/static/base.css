@@ -52,6 +52,14 @@ a:hover { color: #a9c1ff; }
 button.nav-link { color: var(--text-2); padding: 0 11px; }
 button.nav-link:hover { color: var(--danger); background: rgba(255, 122, 147, .1); }
 @media (max-width: 30rem) { .nav-link span { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; } .nav-link { padding: 0 11px; } .appbar { padding: 8px 12px; } }
+/* Signed in, the menu has up to six icons: on a phone only the logo stays of the brand,
+   its name still read out. */
+@media (max-width: 30rem) {
+  .appbar:has(.nav-out) { gap: 4px; }
+  .appbar:has(.nav-out) .appbar-end { gap: 0; }
+  .appbar:has(.nav-out) .nav-link { padding: 0 9px; }
+  .appbar:has(.nav-out) .brand-name { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+}
 
 .muted { color: var(--text-2); font-size: .94em; }
 .stack { display: grid; gap: 14px; }

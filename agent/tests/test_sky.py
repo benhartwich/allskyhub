@@ -115,3 +115,22 @@ def test_learned_mask_keeps_trees_out_of_cloud_cover() -> None:
     assert clear is not None
     assert without < with_tree - 0.15
     assert abs(without - clear) < 0.1  # as if the tree were not there
+
+
+def test_cloud_map_comes_from_the_mapper_at_night_only() -> None:
+    """SPEC §6.3 `cloud_map`: asked for at night with the detected stars, never by day."""
+    meter = SkyMeter()
+    calls: list[int] = []
+
+    def mapper(
+        f: FrameInfo, shape: tuple[int, int], sky: np.ndarray, xs: np.ndarray, ys: np.ndarray
+    ) -> list[float | None]:
+        calls.append(int(xs.size))
+        assert shape == (H, W)
+        return [0.5] * 24
+
+    meter.set_mapper(mapper)
+    assert meter.measure(frame(-30), starry(40)).cloud_map == [0.5] * 24
+    assert calls[0] > 0
+    assert meter.measure(frame(10), starry(40)).cloud_map is None
+    assert len(calls) == 1

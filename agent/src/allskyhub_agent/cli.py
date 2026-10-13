@@ -40,9 +40,10 @@ from allskyhub_agent.core.exposure import AutoExposure
 from allskyhub_agent.core.quality import FrameQuality
 from allskyhub_agent.core.sun import sun_elevation
 from allskyhub_agent.detect import tuning
+from allskyhub_agent.detect.cloudmap import cloud_map
 from allskyhub_agent.detect.events import DetectionWorker, EventStore
 from allskyhub_agent.detect.nlc import NlcDetector
-from allskyhub_agent.detect.sky import SkyConfig, SkyMeter
+from allskyhub_agent.detect.sky import Mask, Points, SkyConfig, SkyMeter
 from allskyhub_agent.discovery import Announcer
 from allskyhub_agent.hub.identity import DEFAULT_KEY_PATH, DeviceIdentity
 from allskyhub_agent.hub.pairing import PairingState
@@ -812,6 +813,19 @@ def main(argv: list[str] | None = None) -> int:
         location=lambda: (here.lat, here.lon),
         time_trusted=system.time_trusted if settings_path else lambda: True,
     )
+    trusted = system.time_trusted if settings_path else lambda: True
+
+    def map_clouds(
+        frame: FrameInfo, shape: tuple[int, int], sky: Mask, xs: Points, ys: Points
+    ) -> list[float | None] | None:
+        """SPEC §6.3 `cloud_map`: only with an orientation and a trusted clock."""
+        sol = orienter.solution
+        if sol is None or not trusted():
+            return None
+        return cloud_map(sol, shape, sky, xs, ys, frame.captured_at, frame.exposure_us,
+                         here.lat, here.lon)  # fmt: skip
+
+    sky_meter.set_mapper(map_clouds)
     tuned = load_settings()
     # SPEC §7.5: the camera as safety monitor for observatory software (roadmap L16).
     safety = SafetyMonitor(

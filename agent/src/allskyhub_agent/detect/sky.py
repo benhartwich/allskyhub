@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import math
 import threading
+from collections.abc import Callable
 from dataclasses import dataclass
 
 import cv2
@@ -29,6 +30,11 @@ from allskyhub_agent.core.metering import circle_mask
 from allskyhub_protocol import FrameInfo, SkyMetrics
 
 Mask = npt.NDArray[np.bool_]
+Points = npt.NDArray[np.intp]
+# (frame, (h, w), sky mask, star xs, star ys) -> the cloud map (SPEC §6.3) or None.
+CloudMapper = Callable[
+    [FrameInfo, tuple[int, int], Mask, Points, Points], list[float | None] | None
+]
 
 
 @dataclass(frozen=True)
@@ -110,6 +116,11 @@ class SkyMeter:
         self._learned: Mask | None = None
         self._lock = threading.Lock()
         self._latest: SkyMetrics | None = None
+        self._mapper: CloudMapper | None = None
+
+    def set_mapper(self, mapper: CloudMapper) -> None:
+        """Cloud cover per sky cell (SPEC §6.3 `cloud_map`), once the camera can be oriented."""
+        self._mapper = mapper
 
     @property
     def latest(self) -> SkyMetrics | None:
@@ -145,11 +156,14 @@ class SkyMeter:
         cloud: float | None = None
         stars: int | None = None
         mag: float | None = None
+        cloud_map: list[float | None] | None = None
         if sun <= cfg.night_sun_deg:
             xs, ys = star_points(gray, mask, cfg.star_threshold)
             stars = count_stars(xs, ys)
             up = inner[ys, xs]
             cloud = night_cloud_cover((h, w), inner, xs[up], ys[up], cfg.cells_across)
+            if self._mapper is not None:
+                cloud_map = self._mapper(frame, (h, w), mask, xs, ys)
             if sun <= cfg.sqm_sun_deg:
                 # The mean over the sky, as the offset was calibrated with.
                 mag = sqm(float(gray[mask].mean()), frame.exposure_us, frame.gain, cfg.sqm_offset)
@@ -159,6 +173,7 @@ class SkyMeter:
             cloud_cover=cloud,
             sqm_mag=mag,
             stars=stars,
+            cloud_map=cloud_map,
         )
         with self._lock:
             self._latest = m

@@ -470,11 +470,12 @@ class HubClient {
     String cameraId, {
     bool? enabled,
     Map<String, dynamic>? profile,
+    bool? onHome,
   }) async => PublicState.fromJson(
     await _send(
           'PUT',
           '/cameras/$cameraId/public/profile',
-          body: {'enabled': ?enabled, 'profile': ?profile},
+          body: {'enabled': ?enabled, 'profile': ?profile, 'on_home': ?onHome},
         )
         as Map<String, dynamic>,
   );
@@ -827,10 +828,14 @@ class PublicState {
   PublicState.fromJson(Map<String, dynamic> json)
     : enabled = json['enabled'] as bool,
       url = json['url'] as String?,
-      profile = json['profile'] as Map<String, dynamic>;
+      profile = json['profile'] as Map<String, dynamic>,
+      onHome = json['on_home'] as bool? ?? false;
 
   final bool enabled;
   final String? url;
+
+  /// Also listed on the hub's start page (the hub's own switch, not in the profile).
+  final bool onHome;
 
   /// title, location_label, show_coordinates, camera, lens, computer, owner, notes and
   /// `sections` (live, loop, archive, events, sky, aurora, observatory). Sent back whole

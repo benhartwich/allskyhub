@@ -213,7 +213,10 @@ async def test_night_deleted(app: FastAPI, client: httpx.AsyncClient, live_app: 
     picture.write_bytes(b"x")
     async with device_ws(live_app, token) as ws:
         await send(ws, NightDeleted(night_id=NIGHT))
-        await asyncio.sleep(0.3)
+        for _ in range(100):  # a fixed sleep raced on a loaded machine
+            if not (store.root / dev.device_id / NIGHT).exists():
+                break
+            await asyncio.sleep(0.05)
     maker: async_sessionmaker[AsyncSession] = app.state.sessionmaker
     async with maker() as db:
         left = await db.scalar(

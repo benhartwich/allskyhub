@@ -69,6 +69,13 @@ async def test_public_profile(client: httpx.AsyncClient) -> None:
     assert state["url"].startswith("http")
     assert state["profile"]["title"] == "Sternwarte"
     assert state["profile"]["sections"]["observatory"] is True
+    assert state["on_home"] is False
+
+    # The start page: the hub's own switch, beside the profile.
+    r = await client.put(url, json={"on_home": True}, headers=auth)
+    assert r.json()["on_home"] is True
+    assert "on_home" not in r.json()["profile"]
+    assert r.json()["profile"]["title"] == "Sternwarte"
 
     r = await client.put(url, json={"profile": {"title": "x" * 101}}, headers=auth)
     assert r.status_code == 422

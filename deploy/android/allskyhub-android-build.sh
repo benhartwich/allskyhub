@@ -16,7 +16,10 @@ main() {
     local OUT=${ALLSKYHUB_ANDROID_OUT:-/var/lib/allskyhub-server/app-builds/android-test}
     local HUB_USER=${ALLSKYHUB_HUB_USER:-allskyhub-server}
     local REPO_URL=${ALLSKYHUB_REPO_URL:-https://github.com/benhartwich/allskyhub.git}
-    local IMAGE=${ALLSKYHUB_FLUTTER_IMAGE:-ghcr.io/cirruslabs/flutter:stable}
+    # Pinned by digest (like the SHA-pinned actions): the build sees the test key, so a
+    # changed image must not get there unreviewed. Update: docker pull the tag, put its
+    # RepoDigest here. Flutter 3.44.0.
+    local IMAGE=${ALLSKYHUB_FLUTTER_IMAGE:-ghcr.io/cirruslabs/flutter@sha256:46691e311715845de03a3ba4753a475476936805b29431b1f00f1816981033f8}
     local BRANCH=${ALLSKYHUB_ANDROID_BRANCH:-main}  # another only for trying a branch out
     local PROXY_HOST=172.17.0.1 PROXY_PORT=8471
     local HERE

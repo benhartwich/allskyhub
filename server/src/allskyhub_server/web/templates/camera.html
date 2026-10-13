@@ -136,6 +136,13 @@
   {% set url = request.base_url ~ "sky/" ~ device.public_slug %}
   <p>Jeder mit diesem Link sieht, was du für die Seite ausgewählt hast:</p>
   <p><a href="/sky/{{ device.public_slug }}" class="code-link">{{ url }}</a></p>
+  <form method="post" action="/cameras/{{ device.id }}/public/visibility" class="stack">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    {% set profile = public_profile %}
+    {% include "_public_visibility.html" %}
+    {% if public_profile.show_coordinates and not public_coordinates %}<p class="muted">Die Kamera kennt ihren Standort noch nicht; ohne ihn erscheint sie nicht auf der Karte.</p>{% endif %}
+    <button type="submit" class="secondary">Sichtbarkeit speichern</button>
+  </form>
   <p><a class="button secondary" href="/cameras/{{ device.id }}/public/edit">Seite gestalten</a></p>
   <form method="post" action="/cameras/{{ device.id }}/public">
     <input type="hidden" name="csrf_token" value="{{ csrf_token }}">

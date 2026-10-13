@@ -9,9 +9,8 @@
   <div class="card stack">
     <h2>Texte</h2>
     <label>Titel<input name="title" maxlength="100" value="{{ profile.title }}" placeholder="{{ device.name }}"></label>
-    <label>Ort<input name="location_label" maxlength="200" value="{{ profile.location_label }}" placeholder="z. B. Hofkirchen im Traunkreis, Österreich"></label>
-    <label class="check"><input type="checkbox" name="show_coordinates"{% if profile.show_coordinates %} checked{% endif %}> Koordinaten zeigen und auf der <a href="/karte">Kamerakarte</a> erscheinen (auf 0,1° gerundet, etwa 10 km)</label>
-    <label class="check"><input type="checkbox" name="on_home"{% if device.public_on_home %} checked{% endif %}> Auf der Startseite von allskyhub zeigen (Titel, Ort und aktuelles Bild, mit Link zu dieser Seite)</label>
+    <label>Ort<input name="location_label" maxlength="200" value="{{ profile.location_label }}" placeholder="z. B. Hofkirchen, Österreich"></label>
+    {% include "_public_visibility.html" %}
     <div class="grid-2">
       <label>Kamera<input name="camera" maxlength="200" value="{{ profile.camera }}" placeholder="ZWO ASI678MC"></label>
       <label>Objektiv<input name="lens" maxlength="200" value="{{ profile.lens }}" placeholder="2,5 mm f/1.2"></label>

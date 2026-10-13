@@ -23,7 +23,7 @@ from allskyhub_server.devices import settings as camera_settings
 from allskyhub_server.models import Device
 from tests.fake_device import FakeDevice
 from tests.helpers import PASSWORD, csrf_from, owner_email
-from tests.ws_helpers import device_ws, paired_token
+from tests.ws_helpers import device_ws, online, paired_token
 
 TS = dt.datetime(2026, 10, 8, 20, 0, tzinfo=dt.UTC)
 
@@ -66,7 +66,7 @@ async def test_app_api_settings(app: FastAPI, client: httpx.AsyncClient, live_ap
     assert invalid.status_code == 400  # latitude without longitude, checked by the hub
 
     async with device_ws(live_app, token) as ws:
-        await asyncio.sleep(0.1)
+        await online(app, dev.device_id)
         put = asyncio.create_task(
             client.put(
                 url,
@@ -120,7 +120,7 @@ async def test_web_settings_form(app: FastAPI, client: httpx.AsyncClient, live_a
     assert "beide oder keine" in bad.text
 
     async with device_ws(live_app, token) as ws:
-        await asyncio.sleep(0.1)
+        await online(app, dev.device_id)
         page = (await client.get(f"/cameras/{dev.device_id}")).text
         post = asyncio.create_task(
             client.post(

@@ -14,7 +14,7 @@ from allskyhub_protocol import Ack, Command, CommandName, Envelope, Hello, parse
 from allskyhub_server.models import Device
 from tests.fake_device import FakeDevice
 from tests.helpers import PASSWORD, csrf_from, owner_email
-from tests.ws_helpers import TS, device_ws, paired_token, send
+from tests.ws_helpers import TS, device_ws, online, paired_token, send
 
 SCHEMA: list[dict[str, Any]] = [
     {"key": "location", "type": "location", "label": "Standort", "group": "Standort"},
@@ -85,7 +85,7 @@ async def test_form_from_schema(app: FastAPI, client: httpx.AsyncClient, live_ap
     assert 'value="700"' in too_high.text  # the input is kept
 
     async with device_ws(live_app, token) as ws:
-        await asyncio.sleep(0.1)
+        await online(app, dev.device_id)
         form = {"latitude": "48,1", "longitude": "14,4", "max_gain": "450", "flip": "h",
                 "overlay__present": "1", "title": "", "csrf_token": csrf_from(page)}  # fmt: skip
         post = asyncio.create_task(client.post(url, data=form))
@@ -124,7 +124,7 @@ async def test_app_api_checks_against_the_schema(
     assert bad.status_code == 400
     assert bad.json()["detail"] == "Ungültige Angabe: Höchster Gain."
     async with device_ws(live_app, token) as ws:
-        await asyncio.sleep(0.1)
+        await online(app, dev.device_id)
         put = asyncio.create_task(new_client.put(url, json={"title": None}, headers=auth))
         await answer_any(ws, {"title": None})
         assert (await put).status_code == 200

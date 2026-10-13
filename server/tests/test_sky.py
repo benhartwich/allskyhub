@@ -16,7 +16,7 @@ from allskyhub_server.models import SkySample
 from allskyhub_server.settings import Settings
 from tests.fake_device import FakeDevice
 from tests.helpers import PASSWORD, home_csrf, owner_email
-from tests.ws_helpers import device_ws, paired_token, send
+from tests.ws_helpers import device_ws, paired_token, send, until
 
 NIGHT = "20261008"
 T0 = dt.datetime(2026, 10, 8, 19, 0, tzinfo=dt.UTC)
@@ -41,10 +41,12 @@ async def test_sky_samples_stored_charted_and_purged(
         await send(ws, status(30, 0.9, 18.8, 40))
         await send(ws, status(30, 0.9, 18.8, 40))  # repeated until the next frame
         await send(ws, status(60, 0.05, 20.8, 900))
-        await asyncio.sleep(0.3)
 
-    async with app.state.sessionmaker() as db:
-        assert await db.scalar(select(func.count()).select_from(SkySample)) == 3
+        async def stored() -> bool:
+            async with app.state.sessionmaker() as db:
+                return await db.scalar(select(func.count()).select_from(SkySample)) == 3
+
+        await until(stored)
 
     r = await client.post(
         "/api/v1/auth/login",

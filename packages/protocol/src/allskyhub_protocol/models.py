@@ -332,6 +332,8 @@ class Status(_Body):
     observatory: Observatory | None = None
     # SPEC §7.5: why the Alpaca server does not run although it is switched on.
     alpaca_error: str | None = Field(default=None, max_length=40)
+    # SPEC §4.1: the owner paused capture (cleaning the dome); no warnings meanwhile.
+    capture_paused: bool = False
 
 
 class FrameInfo(_Body):
@@ -481,6 +483,7 @@ class CommandName(StrEnum):
     UPLOAD_PRODUCT = "upload_product"
     UPLOAD_EVENT = "upload_event"
     LOCAL_ACCESS = "local_access"
+    LABEL_EVENT = "label_event"
 
 
 class Command(_Body):
@@ -507,11 +510,55 @@ class ErrorReply(_Body):
     message: str = ""
 
 
-Body = Hello | Status | FrameInfo | Products | Event | Command | Ack | ErrorReply
+LabelName = Literal["confirmed", "false_positive"]
+LabelReason = Literal["aircraft", "satellite", "artifact", "other"]
+
+
+class EventLabel(_Body):
+    """The owner's label of a detection, set on the camera (SPEC §6.4 Labels); the same
+    fields are the `args` of the `label_event` command (SPEC §6.5)."""
+
+    TYPE: ClassVar[str] = "event_label"
+    night_id: str = Field(pattern=r"^\d{8}$")
+    event_id: str = Field(pattern=EVENT_ID_PATTERN)
+    label: LabelName | None = None  # null removes the label
+    reason: LabelReason | None = None  # only with false_positive
+    at: AwareDatetime
+
+    @model_validator(mode="after")
+    def _reason_only_for_false_positive(self) -> EventLabel:
+        if self.reason is not None and self.label != "false_positive":
+            raise ValueError("reason only with false_positive")
+        return self
+
+
+class NightDeleted(_Body):
+    """The owner deleted a whole night on the camera (SPEC §6.3, §7)."""
+
+    TYPE: ClassVar[str] = "night_deleted"
+    night_id: str = Field(pattern=r"^\d{8}$")
+
+
+Body = (
+    Hello
+    | Status
+    | FrameInfo
+    | Products
+    | Event
+    | Command
+    | Ack
+    | ErrorReply
+    | EventLabel
+    | NightDeleted
+)
 
 _BODY_TYPES: dict[str, type[_Body]] = {
-    m.TYPE: m for m in (Hello, Status, FrameInfo, Products, Event, Command, Ack, ErrorReply)
-}
+    m.TYPE: m
+    for m in (
+        Hello, Status, FrameInfo, Products, Event, Command, Ack, ErrorReply, EventLabel,
+        NightDeleted,
+    )
+}  # fmt: skip
 
 
 class Envelope(BaseModel):

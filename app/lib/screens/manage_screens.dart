@@ -208,6 +208,7 @@ class _PublicPageScreenState extends State<PublicPageScreen> {
   PublicState? _state;
   Map<String, dynamic> _profile = {};
   Map<String, dynamic> _sections = {};
+  bool _onHome = false;
   String? _message;
   bool _messageIsError = false;
   bool _busy = false;
@@ -229,6 +230,7 @@ class _PublicPageScreenState extends State<PublicPageScreen> {
   void _take(PublicState state) {
     _state = state;
     _profile = Map.of(state.profile);
+    _onHome = state.onHome;
     _sections = Map.of(
       (state.profile['sections'] as Map<String, dynamic>?) ?? const {},
     );
@@ -266,6 +268,7 @@ class _PublicPageScreenState extends State<PublicPageScreen> {
         widget.camera.id,
         enabled: enabled,
         profile: profile,
+        onHome: _onHome,
       );
       if (mounted) setState(() => _take(state));
       _show(switch (enabled) {
@@ -352,6 +355,16 @@ class _PublicPageScreenState extends State<PublicPageScreen> {
                   onChanged: (on) => setState(
                     () => _profile['show_coordinates'] = on ?? false,
                   ),
+                ),
+                CheckboxListTile(
+                  key: const Key('on-home'),
+                  contentPadding: EdgeInsets.zero,
+                  title: const Text('Auf der Startseite von allskyhub zeigen'),
+                  subtitle: const Text(
+                    'Titel, Ort und aktuelles Bild, mit Link zur Seite.',
+                  ),
+                  value: _onHome,
+                  onChanged: (on) => setState(() => _onHome = on ?? false),
                 ),
                 const SizedBox(height: 16),
                 Text('Über die Kamera', style: theme.textTheme.titleMedium),

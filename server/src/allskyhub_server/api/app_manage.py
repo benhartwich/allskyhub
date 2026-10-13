@@ -83,23 +83,38 @@ async def me(user: AppUser) -> MemberItem:
     return MemberItem(user_id=user.id, email=user.email, role="owner")
 
 
+class AppPublicState(PublicState):
+    """SPEC §6.8 plus the hub's own start-page switch (not part of the profile)."""
+
+    on_home: bool = False
+
+
+class AppPublicUpdate(PublicUpdate):
+    on_home: bool | None = None
+
+
+def _app_state(request: Request, device: Device) -> AppPublicState:
+    state = public.state(device, request.app.state.settings.base_url)
+    return AppPublicState(**state.model_dump(), on_home=device.public_on_home)
+
+
 @router.get("/cameras/{device_id}/public/profile")
 async def public_profile(
     request: Request, db: DbSession, user: AppUser, device_id: str
-) -> PublicState:
+) -> AppPublicState:
     device = await _own(db, user, device_id, "owner")
-    return public.state(device, request.app.state.settings.base_url)
+    return _app_state(request, device)
 
 
 @router.put("/cameras/{device_id}/public/profile")
 async def public_profile_put(
     request: Request, db: DbSession, user: AppUser, device_id: str
-) -> PublicState:
+) -> AppPublicState:
     """Like ``PUT /device/v1/public`` (SPEC §6.8): switch the page and/or replace the whole
     profile; 422 with a German sentence."""
     device = await _own(db, user, device_id, "owner")
     try:
-        body = PublicUpdate.model_validate_json(await request.body())
+        body = AppPublicUpdate.model_validate_json(await request.body())
     except ValidationError as exc:
         raise HTTPException(422, public.describe_error(exc)) from None
     if body.profile is not None:
@@ -108,8 +123,10 @@ async def public_profile_put(
         public.enable(device)
     elif body.enabled is False:
         public.disable(device)
+    if body.on_home is not None:
+        device.public_on_home = body.on_home
     await db.commit()
-    return public.state(device, request.app.state.settings.base_url)
+    return _app_state(request, device)
 
 
 class PeriodItem(BaseModel):

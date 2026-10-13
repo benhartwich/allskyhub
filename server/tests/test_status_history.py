@@ -11,6 +11,7 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from allskyhub_protocol import Mode, Status
+from allskyhub_server.devices.tonight import zone_for
 from allskyhub_server.models import StatusSample
 from tests.fake_device import FakeDevice
 from tests.ws_helpers import device_ws, paired_token, send
@@ -51,7 +52,9 @@ async def test_status_is_kept_every_five_minutes(
     data = (await client.get(f"/cameras/{dev.device_id}/charts/data", params={"hours": 24})).json()
     assert data["status"]["exposure"][-1] == 20.0
 
-    night = dt.datetime.now(dt.UTC).astimezone(dt.timezone(dt.timedelta(hours=1)))
+    # The hub's default zone (summer time included), not a fixed offset: a fixed +1 h
+    # named the wrong night between 10 and 11 UTC in summer.
+    night = dt.datetime.now(dt.UTC).astimezone(zone_for(None))
     night_id = (night - dt.timedelta(hours=12)).strftime("%Y%m%d")
     night_page = (await client.get(f"/cameras/{dev.device_id}/nights/{night_id}")).text
     assert f'data-default="{night_id}"' in night_page  # the viewer, camera state included

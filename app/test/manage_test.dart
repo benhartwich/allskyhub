@@ -18,6 +18,7 @@ class FakeManageHub {
   var discordTests = 0;
   final members = <Map<String, dynamic>>[];
   var enabled = false;
+  var onHome = false;
   var profile = <String, dynamic>{
     'title': '',
     'location_label': '',
@@ -62,11 +63,13 @@ class FakeManageHub {
           final body = jsonDecode(request.body) as Map<String, dynamic>;
           if (body['enabled'] is bool) enabled = body['enabled'] as bool;
           if (body['profile'] case final Map<String, dynamic> p) profile = p;
+          if (body['on_home'] is bool) onHome = body['on_home'] as bool;
         }
         return _json({
           'enabled': enabled,
           'url': enabled ? 'https://hub.example/sky/abc' : null,
           'profile': profile,
+          'on_home': onHome,
         });
       }
       if (path == '/api/v1/cameras/cam1/stats') {
@@ -249,11 +252,17 @@ void main() {
     await tester.enterText(find.byKey(const Key('public-title')), 'Sternwarte');
     await tester.tap(find.byKey(const Key('section-observatory')));
     await tester.tap(find.byKey(const Key('show-coordinates')));
+    await tester.tap(find.byKey(const Key('on-home')));
     await tester.tap(find.byKey(const Key('public-save')));
     await tester.pumpAndSettle();
     expect(find.text('Gespeichert.'), findsOneWidget);
     expect(hub.profile['title'], 'Sternwarte');
     expect(hub.profile['show_coordinates'], isTrue);
+    expect(hub.onHome, isTrue);
+    expect(
+      hub.profile.containsKey('on_home'),
+      isFalse,
+    ); // not part of the profile
     expect((hub.profile['sections'] as Map)['observatory'], isTrue);
     expect((hub.profile['sections'] as Map)['live'], isTrue);
     expect(hub.profile['future_field'], 'kept');

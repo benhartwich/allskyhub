@@ -56,6 +56,7 @@ FIELD_NAMES = {
     "notes": "Notizen",
     "sections": "Abschnitte",
     "enabled": "Öffentliche Seite",
+    "on_home": "Startseite",
 }
 
 

@@ -259,6 +259,39 @@ void main() {
     },
   );
 
+  testWidgets('an automatic label names the aircraft and can be undone', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(400, 2000);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    final hub = FakeEventHub(fullAfter: 0);
+    final event = SkyEvent.fromJson({
+      ...meteorJson('meteor-20261008T214512Z', '2026-10-08T21:45:12Z'),
+      'label': 'false_positive',
+      'label_reason': 'aircraft',
+      'label_auto': true,
+      'label_detail': 'DLH4AB 3c6444',
+    });
+    expect(event.labelAuto, isTrue);
+    await tester.pumpWidget(
+      MaterialApp(
+        home: EventScreen(client: hub.client, cameraId: 'cam1', event: event),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(
+      find.text(
+        'Automatisch als „kein Meteor“ markiert: Flugzeug DLH4AB 3c6444.',
+      ),
+      findsOneWidget,
+    );
+    await tester.tap(find.byKey(const Key('clear-label')));
+    await tester.pumpAndSettle();
+    expect(hub.labels, [null]);
+    expect(find.byKey(const Key('confirm')), findsOneWidget);
+  });
+
   Map<String, Object?> flashJson(
     int minute,
     double area, {

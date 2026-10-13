@@ -578,6 +578,8 @@ class _EventScreenState extends State<EventScreen> {
   String? _note;
   late String? _label = widget.event.label;
   late String? _reason = widget.event.labelReason;
+  late bool _auto = widget.event.labelAuto;
+  late final String? _detail = widget.event.labelDetail;
   bool _saving = false;
 
   Future<void> _setLabel(String? label, {String? reason}) async {
@@ -593,6 +595,7 @@ class _EventScreenState extends State<EventScreen> {
         setState(() {
           _label = updated.label;
           _reason = updated.labelReason;
+          _auto = updated.labelAuto;
         });
       }
     } on Exception {
@@ -655,7 +658,11 @@ class _EventScreenState extends State<EventScreen> {
             children: [
               Expanded(
                 child: Text(
-                  _label == 'false_positive'
+                  _label == 'false_positive' && _auto
+                      ? 'Automatisch als „kein $title“ markiert: '
+                            '${labelReasons[_reason] ?? 'Fehlalarm'}'
+                            '${_detail == null ? '' : ' $_detail'}.'
+                      : _label == 'false_positive'
                       ? 'Als „kein $title“ markiert'
                             '${labelReasons[_reason] == null ? '' : ' (${labelReasons[_reason]})'}.'
                       : 'Als echt bestätigt.',

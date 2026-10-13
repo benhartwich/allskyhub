@@ -24,6 +24,7 @@ from allskyhub_protocol import (
     EVENT_ID_PATTERN,
     PRODUCT_NAMES,
     Ack,
+    Aircraft,
     ChallengeRequest,
     ChallengeResponse,
     CloseCode,
@@ -50,6 +51,7 @@ from allskyhub_server.auth import ratelimit
 from allskyhub_server.auth.accounts import DEFAULT_EVENT_KEEP_DAYS
 from allskyhub_server.auth.hub_keys import HubKeys
 from allskyhub_server.devices import (
+    aircraft,
     labels,
     local_access,
     meteor_pairs,
@@ -521,6 +523,10 @@ async def _handle(
     elif isinstance(body, EventLabel):
         async with maker() as db:
             await labels.from_device(db, conn.device_id, body)
+    elif isinstance(body, Aircraft):
+        # SPEC §6.3, §7.8: the owner's receiver; kept for the overlay and the match only.
+        if aircraft.current is not None:
+            aircraft.current.receive(conn.device_id, body.at, body.aircraft)
     elif isinstance(body, NightDeleted):
         async with maker() as db:
             await labels.delete_night(db, store, conn.device_id, body.night_id)

@@ -3,11 +3,13 @@
 <figure class="live">
   {% if device.latest_image_at %}
   {% set ov = sky_overlay(device) %}
+  {% set air = air_overlay(device) if profile.sections.aircraft else none %}
   <div class="sky-frame">
   <a href="/sky/{{ slug }}/latest.jpg?t={{ device.latest_image_at.timestamp() | int }}" title="Vollbild" data-lightbox data-caption="Aktuelles Himmelsbild · {{ device.latest_image_at | clock }} Uhr"><img src="/sky/{{ slug }}/latest.jpg?t={{ device.latest_image_at.timestamp() | int }}" alt="Aktuelles Himmelsbild"></a>
   {% if ov %}{% include "_sky_overlay.html" %}{% endif %}
+  {% if air %}{% include "_air_overlay.html" %}{% endif %}
   </div>
-  {% if ov %}<button type="button" class="secondary small overlay-toggle" data-overlay-toggle aria-pressed="false">Sternbilder</button>{% endif %}
+  {% if ov or air %}<p class="actions">{% if ov %}<button type="button" class="secondary small overlay-toggle" data-overlay-toggle aria-pressed="false">Sternbilder</button>{% endif %}{% if air %} <button type="button" class="secondary small overlay-toggle" data-overlay-toggle="air" aria-pressed="false">Flugzeuge</button><span class="air-credit muted"> {{ air.credit }}</span>{% endif %}</p>{% endif %}
   <figcaption class="now-facts">
     <span class="fact"><small>Aufgenommen</small>{{ device.latest_image_at | clock }} Uhr · {{ device.latest_image_at | age }}</span>
     {% if fr.mode is defined %}<span class="fact"><small>Modus</small>{{ 'Nacht' if fr.mode == 'night' else 'Tag' }}</span>{% endif %}

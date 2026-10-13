@@ -15,7 +15,7 @@
     {% if e.is_storm is defined %}
     <span class="muted">{{ e.start | localtime }} – {{ e.end | clock }}</span>
     {% else %}
-    <span class="muted">{{ e.start | localtime }} · {{ (e.confidence * 100) | round | int }} %{% if e.label == "false_positive" %} · aussortiert{% elif e.label == "confirmed" %} · bestätigt{% endif %}</span>
+    <span class="muted">{{ e.start | localtime }} · {{ (e.confidence * 100) | round | int }} %{% if e.label == "false_positive" and e.label_auto %} · {{ e.label_detail or "Flugzeug" }}{% elif e.label == "false_positive" %} · aussortiert{% elif e.label == "confirmed" %} · bestätigt{% endif %}</span>
     {% endif %}
   </li>
   {% endfor %}

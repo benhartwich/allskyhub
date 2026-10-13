@@ -10,7 +10,15 @@ from fastapi import APIRouter, HTTPException, Path, Query, Request
 from fastapi.responses import FileResponse, JSONResponse, Response
 
 from allskyhub_protocol import FrameVariant
-from allskyhub_server.devices import archive, public, series, sky_chart, space_weather, tonight
+from allskyhub_server.devices import (
+    aircraft,
+    archive,
+    public,
+    series,
+    sky_chart,
+    space_weather,
+    tonight,
+)
 from allskyhub_server.devices import camera_map as camera_map_mod
 from allskyhub_server.devices.event_text import EVENT_TITLES, meteor_summary
 from allskyhub_server.devices.images import ImageStore
@@ -149,7 +157,10 @@ async def sky_page(request: Request, db: DbSession, slug: str) -> Response:
 async def sky_now(request: Request, db: DbSession, slug: str) -> Response:
     """The latest image and its facts; polled by the page."""
     device = await _device(db, slug)
-    return render(request, "_public_now.html", {"device": device, "slug": slug})
+    profile = public.profile(device)
+    if profile.sections.aircraft and aircraft.current is not None:
+        aircraft.current.watched(device.id)  # SPEC §7.8: someone watches the live image
+    return render(request, "_public_now.html", {"device": device, "slug": slug, "profile": profile})
 
 
 @router.get("/sky/{slug}/latest.jpg")

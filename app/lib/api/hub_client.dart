@@ -237,6 +237,8 @@ class SkyEvent {
     this.data = const {},
     this.label,
     this.labelReason,
+    this.labelAuto = false,
+    this.labelDetail,
     this.imageRev = 1,
   });
 
@@ -253,6 +255,8 @@ class SkyEvent {
     data: (json['data'] as Map<String, dynamic>?) ?? const {},
     label: json['label'] as String?,
     labelReason: json['label_reason'] as String?,
+    labelAuto: json['label_auto'] as bool? ?? false,
+    labelDetail: json['label_detail'] as String?,
     imageRev: (json['image_rev'] as int?) ?? 1,
   );
 
@@ -274,6 +278,10 @@ class SkyEvent {
 
   /// Why it is a false positive (SPEC §6.4 Labels): aircraft, satellite, artifact, other.
   final String? labelReason;
+
+  /// Set by a matcher (SPEC §7.8: an aircraft), not by a person; [labelDetail] names it.
+  final bool labelAuto;
+  final String? labelDetail;
 
   /// SPEC §6.4: revision of a replaceable picture (a growing aurora); part of image URLs.
   final int imageRev;

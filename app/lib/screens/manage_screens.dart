@@ -202,6 +202,7 @@ class _PublicPageScreenState extends State<PublicPageScreen> {
     'aurora': 'Polarlicht-Aussichten (Kp-Index)',
     'archive': 'Nachtarchiv mit Keogramm, Sternspuren und Zeitraffer',
     'observatory': 'Was das Teleskop gerade aufnimmt (N.I.N.A.)',
+    'aircraft': 'Flugzeuge über dem aktuellen Bild (Daten: adsb.lol)',
   };
 
   final _fields = {for (final key in texts.keys) key: TextEditingController()};

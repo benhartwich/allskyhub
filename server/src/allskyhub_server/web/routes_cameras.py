@@ -256,6 +256,7 @@ PUBLIC_SECTIONS = {
     "aurora": "Polarlicht-Aussichten (Kp-Index)",
     "archive": "Nachtarchiv mit Keogramm und Sternspuren",
     "observatory": "Was das Teleskop gerade aufnimmt (N.I.N.A.: Ziel, Sequenz, letztes Bild)",
+    "aircraft": "Flugzeuge über dem aktuellen Bild (Daten: adsb.lol)",
 }
 
 

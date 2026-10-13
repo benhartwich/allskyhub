@@ -13,7 +13,7 @@ from enum import StrEnum
 from typing import Annotated, Any, ClassVar, Literal, cast
 from uuid import uuid4
 
-from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, model_validator
+from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, field_validator, model_validator
 
 PROTOCOL_VERSION: Literal[1] = 1
 
@@ -430,12 +430,35 @@ class ProductFile(BaseModel):
         return self
 
 
+# Upper bound of a `products` list, with room for kinds a newer agent adds.
+MAX_PRODUCTS = 20
+
+
 class Products(_Body):
     """The night products of one night (SPEC §6.3)."""
 
     TYPE: ClassVar[str] = "products"
     night_id: str = Field(pattern=r"^\d{8}$")
-    products: list[ProductFile] = Field(min_length=1, max_length=len(PRODUCT_NAMES))
+    products: list[ProductFile] = Field(max_length=MAX_PRODUCTS)
+
+    @field_validator("products", mode="before")
+    @classmethod
+    def _skip_unknown_kinds(cls, value: object) -> object:
+        """SPEC §6.1: entries of a kind this side does not know yet are skipped, so a
+        newer agent's products never make an older hub refuse the whole message."""
+        if not isinstance(value, list):
+            return value
+        items = cast(list[object], value)
+        if not items:
+            raise ValueError("at least one product")
+        known = {k.value for k in ProductKind}
+        kept: list[object] = []
+        for item in items:
+            entry: object = item
+            if isinstance(entry, dict) and cast(dict[str, object], entry).get("kind") not in known:
+                continue
+            kept.append(item)
+        return kept
 
 
 class CommandName(StrEnum):

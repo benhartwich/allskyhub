@@ -132,6 +132,25 @@ def test_products_roundtrip_and_name_kind_check() -> None:
         )
     with pytest.raises(ValidationError):
         Products(night_id="20261006", products=[])
+    # SPEC §6.1: a kind this side does not know yet is skipped, not the whole message.
+    newer = Products.model_validate(
+        {
+            "night_id": "20261006",
+            "products": [
+                {"kind": "day_timelapse", "name": "day-timelapse.mp4",
+                 "content_type": "video/mp4", "size": 5, "thumbnail": True},
+                {"kind": "keogram", "name": "keogram.jpg", "content_type": "image/jpeg",
+                 "size": 5, "thumbnail": True},
+            ],
+        }
+    )  # fmt: skip
+    assert [p.kind for p in newer.products] == [ProductKind.KEOGRAM]
+    only_new = Products.model_validate(
+        {"night_id": "20261006", "products": [{"kind": "keolapse", "name": "x.jpg",
+                                               "content_type": "image/jpeg", "size": 1,
+                                               "thumbnail": False}]}
+    )  # fmt: skip
+    assert only_new.products == []
 
 
 def test_upload_product_args() -> None:

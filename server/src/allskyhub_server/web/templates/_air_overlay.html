@@ -1,0 +1,8 @@
+{# Roadmap H3: aircraft over the image (devices/sky_overlay.py build_aircraft); needs `air`. #}
+<svg class="air-overlay" viewBox="0 0 {{ air.width }} {{ air.height }}" preserveAspectRatio="xMidYMid meet" aria-hidden="true">
+  {% for a in air.items %}
+  {% if a.trail %}<path class="air-trail" d="{{ a.trail }}"/>{% endif %}
+  <circle class="air-dot" cx="{{ '%.0f' | format(a.x) }}" cy="{{ '%.0f' | format(a.y) }}" r="{{ air.font * 0.35 }}"/>
+  <text class="air-name" x="{{ '%.0f' | format(a.x + air.font * 0.7) }}" y="{{ '%.0f' | format(a.y) }}" font-size="{{ air.font }}">{{ a.text }}</text>
+  {% endfor %}
+</svg>

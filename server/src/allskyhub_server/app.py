@@ -10,6 +10,7 @@ from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 from urllib.parse import quote
 
+import httpx
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse, PlainTextResponse, RedirectResponse, Response
@@ -24,7 +25,7 @@ from allskyhub_server.api import app_manage, app_overview
 from allskyhub_server.api import device as device_api
 from allskyhub_server.auth.hub_keys import HubKeys
 from allskyhub_server.db import create_engine, create_sessionmaker
-from allskyhub_server.devices import domains
+from allskyhub_server.devices import aircraft, domains
 from allskyhub_server.devices.connections import ConnectionRegistry
 from allskyhub_server.devices.discord import Discord, Poster
 from allskyhub_server.devices.domains import HostMap
@@ -207,6 +208,12 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             app.state.sessionmaker, app.state.images, Poster(), settings.base_url
         )
         app.state.renderer = Renderer(app.state.sessionmaker, app.state.images, settings)
+        adsb_client = httpx.AsyncClient(headers={"User-Agent": f"allskyhub ({settings.base_url})"})
+        app.state.aircraft = aircraft.Watch(
+            app.state.sessionmaker,
+            app.state.connections,
+            aircraft.http_fetch(adsb_client) if settings.adsb else None,
+        )
         tasks = [
             cleanup,
             asyncio.create_task(app.state.renderer.run_forever()),
@@ -214,6 +221,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 domains.run_forever(app.state.sessionmaker, settings.data_dir, app.state.hosts)
             ),
             asyncio.create_task(app.state.notifier.discord.run_forever()),
+            asyncio.create_task(app.state.aircraft.run_forever()),
         ]
         if sender is not None or app.state.mailer.enabled:
             tasks.append(
@@ -226,6 +234,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 task.cancel()
                 with contextlib.suppress(asyncio.CancelledError):
                     await task
+            await adsb_client.aclose()
             await engine.dispose()
 
     app = FastAPI(

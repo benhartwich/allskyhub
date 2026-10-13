@@ -318,6 +318,20 @@ a[data-lightbox] { cursor: zoom-in; }
 .live > .overlay-toggle { justify-self: start; }
 [data-theme="red"] .sky-lines { stroke: rgb(255 60 60 / .55); }
 [data-theme="red"] .sky-name { fill: rgb(255 110 110 / .85); }
+/* Aircraft over the live image (roadmap H3), a switch of its own */
+.air-overlay { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; display: none;
+  font-family: var(--body); }
+.air-on .air-overlay { display: block; }
+.air-credit { display: none; }
+.air-on .air-credit { display: inline; }
+.air-trail { fill: none; stroke: rgb(255 196 92 / .55); stroke-width: 1.5; stroke-dasharray: 4 3;
+  vector-effect: non-scaling-stroke; }
+.air-dot { fill: rgb(255 196 92); stroke: rgb(0 0 0 / .6); stroke-width: 1; vector-effect: non-scaling-stroke; }
+.air-name { fill: rgb(255 214 140 / .95); dominant-baseline: middle;
+  paint-order: stroke; stroke: rgb(0 0 0 / .65); stroke-width: 3px; vector-effect: non-scaling-stroke; }
+[data-theme="red"] .air-dot { fill: rgb(255 80 80); }
+[data-theme="red"] .air-trail { stroke: rgb(255 60 60 / .5); }
+[data-theme="red"] .air-name { fill: rgb(255 120 120 / .9); }
 .public-video { display: block; margin: 4px 0 6px; }
 
 /* Foldable cards and settings groups (fold.js). */

@@ -57,6 +57,8 @@ class Settings(BaseSettings):
     session_cookie_secure: bool = True
     # Trust X-Real-IP from the reverse proxy (only when listening behind nginx).
     trust_proxy_headers: bool = False
+    # Roadmap H3 (SPEC §7.8): fetch aircraft from adsb.lol for the cameras that need them.
+    adsb: bool = True
 
     log_level: str = "INFO"
     log_format: Literal["json", "console"] = "json"

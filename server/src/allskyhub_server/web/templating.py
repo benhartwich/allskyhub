@@ -102,7 +102,18 @@ def sky_overlay(device: Any) -> Any:
     return overlay.build(device.last_status, at)
 
 
+def air_overlay(device: Any) -> Any:
+    """Roadmap H3: aircraft over the device's latest image, None without a lens."""
+    from allskyhub_server.devices import aircraft
+
+    if device.latest_image_at is None or aircraft.current is None:
+        return None
+    at = overlay.image_time(device.last_frame, device.latest_image_at)
+    return overlay.build_aircraft(device.last_status, at, aircraft.current.tracks)
+
+
 cast(dict[str, Any], templates.env.globals)["asset"] = asset
+cast(dict[str, Any], templates.env.globals)["air_overlay"] = air_overlay
 cast(dict[str, Any], templates.env.globals)["sky_overlay"] = sky_overlay
 _filters = cast(dict[str, Any], templates.env.filters)
 _filters["age"] = age

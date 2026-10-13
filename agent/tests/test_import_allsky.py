@@ -186,3 +186,45 @@ def test_import_keeps_what_it_took_over(tmp_path: Path) -> None:
     s = AgentSettings.load(path)
     assert s.keep_days >= 60  # Allsky's 60, or more if the oldest night is older
     assert s.latitude == 48.13601
+
+
+def test_lightning_and_episodes(tmp_path: Path) -> None:
+    """Benjamin's lightning and NLC modules (roadmap L18): bolts with storms, candidate
+    pictures grouped into episodes; only for the nights that are taken over."""
+    home = make_allsky(tmp_path)
+    web = home / "html" / "allsky"
+    _jpeg(web / "lightning" / "lightning-20261011223000.jpg", 220)
+    _jpeg(web / "lightning" / "lightning-20261011224500.jpg", 220)
+    (web / "lightning" / "lightning.json").write_text(json.dumps([
+        {"time": "20261011223000", "file": "lightning-20261011223000.jpg", "area": 1440,
+         "peak": 153, "period": "night", "exposure_ms": 2000},
+        {"time": "20261011224500", "file": "lightning-20261011224500.jpg", "area": 2880,
+         "peak": 204, "period": "night", "exposure_ms": 2000},
+        {"time": "20260801224500", "file": "gone.jpg", "area": 10, "peak": 1},  # no folder
+    ]))  # fmt: skip
+    for stamp in ("20261012_052000", "20261012_052500", "20261012_061000"):
+        _jpeg(web / "nlc" / f"nlc-{stamp}.jpg", 120)
+    (web / "nlc.json").write_text(json.dumps([
+        {"t": 0, "index": 4.5, "blue": 47.9, "dir": "E", "nlc": True,
+         "thumb": "nlc-20261012_052500.jpg"},
+    ]))  # fmt: skip
+    imp, _, events = make_importer(tmp_path, home)
+    dry = imp.run(dry=True)
+    assert (dry.lightning, dry.episodes) == (2, 2)
+    report = imp.run()
+    assert (report.lightning, report.episodes) == (2, 2)
+    got = sorted(events.night_events("20261011"), key=lambda e: (e.kind.value, e.start))
+    bolts = [e for e in got if e.kind is EventKind.LIGHTNING]
+    assert [e.data["storm_flashes"] for e in bolts] == [1, 2]
+    assert {e.data["storm"] for e in bolts} == {"storm-20261011T203000Z"}
+    assert bolts[1].data["area_frac"] == 0.2  # 2880 of 160 x 90 pixels
+    assert bolts[0].imported
+    assert bolts[0].has_image
+    nlc = [e for e in got if e.kind is EventKind.NLC]
+    assert len(nlc) == 2  # 05:20 + 05:25 one episode, 06:10 another
+    assert nlc[0].data["frames"] == 2
+    assert nlc[0].data["peak_index"] == 4.5
+    assert nlc[0].data["azimuth_deg"] == 90.0
+    assert nlc[1].data["peak_index"] is None
+    again = imp.run()
+    assert (again.lightning, again.episodes) == (0, 0)

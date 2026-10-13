@@ -219,7 +219,8 @@ def run_import(args: argparse.Namespace) -> int:
     verb = "would take over" if args.dry_run else "took over"
     print(
         f"{verb}: {r.images} images ({r.images_skipped} already there), {r.products} products, "
-        f"{r.meteors} meteors, {r.sky} sky samples, {len(r.nights)} nights, {r.bytes / 1e9:.1f} GB"
+        f"{r.meteors} meteors, {r.lightning} lightning, {r.episodes} aurora/NLC, "
+        f"{r.sky} sky samples, {len(r.nights)} nights, {r.bytes / 1e9:.1f} GB"
         + ("" if args.dry_run else f"; {r.linked} hard links, {r.copied} copies")
     )
     if args.dry_run:

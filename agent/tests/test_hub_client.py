@@ -92,6 +92,8 @@ class FakeHub:
 
     register_unpaired: int = 2
     close_code: int = 4403
+    token_limited: int = 0  # answer this many token requests with 429
+    token_times: list[float] = field(default_factory=list[float])
     public_key: bytes | None = None
     registers: int = 0
     tokens: int = 0
@@ -145,6 +147,10 @@ class FakeHub:
                 )
             return httpx.Response(200, json={"device_id": did, "paired": True})
         if path == "/device/v1/token":
+            self.token_times.append(time.monotonic())
+            if self.token_limited > 0:
+                self.token_limited -= 1
+                return httpx.Response(429, headers={"Retry-After": "1"})
             body = json.loads(req.content)
             if not self._verify(Purpose.TOKEN, body["device_id"], body["nonce"], body["signature"]):
                 return httpx.Response(401, json={"detail": "bad signature"})
@@ -774,3 +780,45 @@ def test_labels_both_ways(tmp_path: Path) -> None:
     assert isinstance(bad, ErrorReply)
     assert bad.code == "invalid_args"
     assert [s.label for s in stored] == ["confirmed"]
+
+
+def _run_for(hub: FakeHub, tmp_path: Path, seconds: float) -> None:
+    store, _, _ = _store_with_frame(tmp_path)
+    identity = DeviceIdentity.load_or_create(tmp_path / "device.key")
+    status = Status(mode=Mode.NIGHT, exposure_us=1, gain=0, mean=0.2, uptime_s=5, time_trusted=True)
+
+    async def scenario() -> None:
+        async with serve(hub.ws_handler, "127.0.0.1", 0) as server:
+            port = server.sockets[0].getsockname()[1]
+            cfg = HubConfig(hub_url=f"http://127.0.0.1:{port}", register_interval_s=0.01)
+            pairing = PairingState(identity.device_id, cfg.hub_url, "sim", "0.1.0")
+            async with httpx.AsyncClient(
+                transport=httpx.MockTransport(hub.handle), base_url=cfg.hub_url
+            ) as http:
+                session = HubSession(
+                    cfg, identity, pairing, store, LiveState(), "sim", "0.1.0", lambda: status,
+                    http,
+                )  # fmt: skip
+                stop = asyncio.Event()
+                task = asyncio.create_task(session.run(stop))
+                await asyncio.sleep(seconds)
+                stop.set()
+                await asyncio.wait_for(task, 10)
+
+    asyncio.run(scenario())
+
+
+def test_token_refused_right_away_backs_off(tmp_path: Path) -> None:
+    """SPEC §6.1: a hub that closes every session at once with 4401 is not asked for a new
+    token at once each time (2026-10-13: the camera ran into the hub's token limit)."""
+    hub = FakeHub(register_unpaired=0, close_code=4401)
+    _run_for(hub, tmp_path, 3.2)
+    # Each session lasts about 0.5 s; without backoff that would be 6 or more tokens.
+    assert 2 <= len(hub.token_times) <= 3
+
+
+def test_too_many_requests_waits_for_retry_after(tmp_path: Path) -> None:
+    hub = FakeHub(register_unpaired=0, close_code=1000, token_limited=1)
+    _run_for(hub, tmp_path, 1.6)
+    assert len(hub.token_times) >= 2
+    assert hub.token_times[1] - hub.token_times[0] >= 0.99  # Retry-After: 1, not 0.5 s

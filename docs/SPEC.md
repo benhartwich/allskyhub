@@ -292,7 +292,10 @@ The WebSocket upgrade and every upload carry `Authorization: Bearer <access_toke
 | 4403 | device is no longer paired | registers again (§6.2) |
 | 4409 | a newer connection of the same device took over | does not reconnect on this socket |
 
-The agent reconnects with exponential backoff (1 s doubling to 5 min, with jitter).
+The agent reconnects with exponential backoff (1 s doubling to 5 min, with jitter). The
+backoff starts anew only after a connection stayed up for 60 s; a 4401 within that time
+waits like any other failure, only an expired token is renewed at once. A 429 or 503 waits
+at least its `Retry-After` (seconds, at most 1 h).
 
 ### 6.2 Identity and pairing
 

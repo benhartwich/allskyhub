@@ -258,6 +258,7 @@ const T = {
     "pub.section.sky": "Himmel (Charts)",
     "pub.section.aurora": "Polarlicht-Lage",
     "pub.section.observatory": "Sternwarte (N.I.N.A.)",
+    "pub.section.aircraft": "Flugzeuge",
     "pub.text.title": "Titel",
     "pub.text.location_label": "Ort",
     "pub.text.camera": "Kamera",
@@ -673,6 +674,7 @@ const T = {
     "pub.section.sky": "Sky (charts)",
     "pub.section.aurora": "Aurora outlook",
     "pub.section.observatory": "Observatory (N.I.N.A.)",
+    "pub.section.aircraft": "Aircraft",
     "pub.text.title": "Title",
     "pub.text.location_label": "Location",
     "pub.text.camera": "Camera",
@@ -1940,7 +1942,7 @@ async function viewCalibration() {
 // --- Public page on the hub (L10, SPEC §6.8) --------------------------------------------
 // The sections and text fields of the page; their names are "pub.section.<key>" and
 // "pub.text.<key>" in the dictionary.
-const SECTIONS = ["live", "loop", "archive", "events", "sky", "aurora", "observatory"];
+const SECTIONS = ["live", "loop", "archive", "events", "sky", "aurora", "observatory", "aircraft"];
 const TEXTS = [["title", 100], ["location_label", 200], ["camera", 200],
   ["lens", 200], ["computer", 200], ["owner", 200]];
 

@@ -152,3 +152,19 @@ def test_public_profile_limits() -> None:
     with pytest.raises(ValidationError):
         PublicProfile.model_validate({"colour": "red"})
     assert PublicUpdate().enabled is None
+
+
+def test_public_state_from_hub_ignores_what_it_does_not_know() -> None:
+    """SPEC §6.1: a newer hub's answer with new sections or profile keys still parses."""
+    import json
+
+    from allskyhub_protocol import PublicState
+
+    raw = json.dumps({
+        "enabled": True, "url": "https://allskyhub.org/sky/x", "extra": 1,
+        "profile": {"title": "Sternwarte", "banner": "new",
+                    "sections": {"live": False, "future_section": True}},
+    })  # fmt: skip
+    state = PublicState.from_hub(raw)
+    assert state.profile.title == "Sternwarte"
+    assert state.profile.sections.live is False

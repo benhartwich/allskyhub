@@ -12,7 +12,7 @@ import hashlib
 import json
 import re
 from enum import StrEnum
-from typing import Literal
+from typing import Any, Literal, cast
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from pydantic import (
@@ -348,6 +348,25 @@ class PublicState(_Model):
     enabled: bool
     url: str | None
     profile: PublicProfile
+
+    @classmethod
+    def from_hub(cls, raw: str | bytes) -> PublicState:
+        """The hub's answer, ignoring profile keys and sections this version does not know
+        (SPEC §6.1: unknown fields are ignored; the forbid is only for the owner's input)."""
+        data: object = json.loads(raw)
+        if isinstance(data, dict):
+            d = cast("dict[str, Any]", data)
+            prof: object = d.get("profile")
+            if isinstance(prof, dict):
+                p = {k: v for k, v in cast("dict[str, Any]", prof).items()
+                     if k in PublicProfile.model_fields}  # fmt: skip
+                sec: object = p.get("sections")
+                if isinstance(sec, dict):
+                    p["sections"] = {k: v for k, v in cast("dict[str, Any]", sec).items()
+                                     if k in PublicSections.model_fields}  # fmt: skip
+                d = {**d, "profile": p}
+            data = d
+        return cls.model_validate(data)
 
 
 class PublicUpdate(_Model):

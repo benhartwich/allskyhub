@@ -80,9 +80,11 @@ class PublicPage:
             if r.status_code != 200:
                 raise HubUnreachable(f"hub answered {r.status_code}")
             try:
-                state = PublicState.model_validate_json(r.content)
+                state = PublicState.from_hub(r.content)
             except ValidationError as exc:
                 raise HubUnreachable(f"unexpected answer: {exc.error_count()} errors") from None
+            except ValueError:
+                raise HubUnreachable("unexpected answer: not JSON") from None
             self.last = state
             return state
 

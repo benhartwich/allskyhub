@@ -148,6 +148,8 @@ async def _camera_context(
     current = settings_form.current_values(device)
     return {
         "device": device,
+        "public_profile": public.profile(device),
+        "public_coordinates": public.coordinates(device),
         "tonight": await tonight.for_device(
             forecast, device.last_status, now, request.app.state.tles
         ),
@@ -255,6 +257,22 @@ PUBLIC_SECTIONS = {
     "archive": "Nachtarchiv mit Keogramm und Sternspuren",
     "observatory": "Was das Teleskop gerade aufnimmt (N.I.N.A.: Ziel, Sequenz, letztes Bild)",
 }
+
+
+@router.post("/cameras/{device_id}/public/visibility")
+async def public_visibility(
+    request: Request, db: DbSession, session: CurrentSession, device_id: str
+) -> Response:
+    """The two switches from the camera page: on the camera map, on the start page."""
+    device = await _own_device(db, session, device_id)
+    form = await request.form()
+    profile = public.profile(device).model_copy(
+        update={"show_coordinates": form.get("show_coordinates") == "on"}
+    )
+    device.public_profile = profile.model_dump()
+    device.public_on_home = form.get("on_home") == "on"
+    await db.commit()
+    return RedirectResponse(f"/cameras/{device.id}#oeffentlich", status_code=303)
 
 
 @router.get("/cameras/{device_id}/public/edit")

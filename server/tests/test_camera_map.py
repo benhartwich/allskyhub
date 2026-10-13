@@ -103,3 +103,30 @@ async def test_start_page_lists_only_cameras_whose_owner_wants_it(
         data={"csrf_token": await home_csrf(client), "enabled": "false"},
     )
     assert "Öffentliche Kameras" not in (await new_client.get("/")).text
+
+
+async def test_switches_on_the_camera_page(
+    app: FastAPI, client: httpx.AsyncClient, new_client: httpx.AsyncClient
+) -> None:
+    """Map and start page right in the "Öffentliche Seite" box, texts untouched."""
+    device_id, slug = await _public(app, client, new_client)
+    await _add_archive(app, device_id)
+    await _save(client, device_id, title="Lanzenberg")
+    page = (await client.get(f"/cameras/{device_id}")).text
+    assert f'action="/cameras/{device_id}/public/visibility"' in page
+    r = await client.post(
+        f"/cameras/{device_id}/public/visibility",
+        data={"csrf_token": await home_csrf(client), "show_coordinates": "on", "on_home": "on"},
+    )
+    assert r.status_code == 303
+    assert f'href="/sky/{slug}"' in (await new_client.get("/karte")).text
+    assert f'href="/sky/{slug}"' in (await new_client.get("/")).text
+    edit = (await client.get(f"/cameras/{device_id}/public/edit")).text
+    assert 'value="Lanzenberg"' in edit
+    assert 'name="show_coordinates" checked' in edit
+
+    await client.post(
+        f"/cameras/{device_id}/public/visibility", data={"csrf_token": await home_csrf(client)}
+    )
+    assert "Noch keine Kamera" in (await new_client.get("/karte")).text
+    assert f"/sky/{slug}" not in (await new_client.get("/")).text

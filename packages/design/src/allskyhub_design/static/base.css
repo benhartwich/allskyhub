@@ -127,6 +127,7 @@ button.danger { background: transparent; color: var(--danger); border: 1px solid
 button.danger:hover { background: rgba(255, 122, 147, .12); color: var(--danger); }
 button:disabled { opacity: .45; cursor: not-allowed; transform: none; filter: none; }
 .grid-2 { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+@media (max-width: 30rem) { .grid-2 { grid-template-columns: minmax(0, 1fr); } }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation: none !important; transition: none !important; }
 }

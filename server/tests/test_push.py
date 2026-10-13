@@ -152,8 +152,13 @@ async def test_event_notifications(
     async with device_ws(live_app, token) as ws:
         old = meteor().model_copy(update={"id": "meteor-20261001T215112Z"})
         await send(ws, old)
+        # SPEC §6.4: an imported detection never notifies, however recent.
+        imported = first.model_copy(update={"id": "meteor-20261008T215212Z", "imported": True})
+        await send(ws, imported)
         await asyncio.sleep(0.3)
     assert fake_push.sent == []
+    listed = (await client.get(f"/api/v1/cameras/{dev.device_id}/events", headers=auth)).json()
+    assert {e["id"]: e["data"].get("imported") for e in listed}["meteor-20261008T215212Z"] is True
 
     removed = await client.post("/api/v1/push/tokens/delete", json=reg, headers=auth)
     assert removed.status_code == 204

@@ -674,7 +674,8 @@ async def _on_event(
         "end": body.end,
         "confidence": body.confidence,
         "has_image": body.has_image,
-        "data": dict(body.data),
+        # SPEC §6.4 imported: kept with the data, where push and Discord look for it.
+        "data": dict(body.data) | ({"imported": True} if body.imported else {}),
     }
     async with maker() as db:
         if not await _still_paired(db, conn.device_id):

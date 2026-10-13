@@ -42,7 +42,7 @@ class Network(Protocol):
     def wifi_connected(self) -> bool: ...
     def has_internet(self) -> bool: ...
     def scan(self) -> list[WifiNetwork]: ...
-    def start_hotspot(self, ssid: str) -> None: ...
+    def start_hotspot(self, ssid: str, key: str | None) -> None: ...
     def stop_hotspot(self) -> None: ...
     def join(self, ssid: str, password: str | None, country: str) -> JoinError | None: ...
 
@@ -167,16 +167,31 @@ class NmcliNetwork:
         tmp.replace(self._country_file)
         time.sleep(self._country_wait_s)  # the path unit applies it before we join
 
-    def start_hotspot(self, ssid: str) -> None:
+    def start_hotspot(self, ssid: str, key: str | None) -> None:
+        """The setup network (SPEC §7.1): WPA2 with the setup key as passphrase; open only
+        without a key (an image from before the setup key)."""
         self._run("con", "delete", SETUP_CONNECTION, check=False)
-        self._run(
+        args = [
             "con", "add", "type", "wifi", "ifname", self._if, "con-name", SETUP_CONNECTION,
             "autoconnect", "no", "ssid", ssid,
             "802-11-wireless.mode", "ap", "802-11-wireless.band", "bg",
             "ipv4.method", "shared", "ipv4.addresses", f"{SETUP_ADDRESS}/24",
             "ipv6.method", "disabled",
-        )  # fmt: skip
-        self._run("con", "up", SETUP_CONNECTION)
+        ]  # fmt: skip
+        if key:
+            args += ["wifi-sec.key-mgmt", "wpa-psk", "wifi-sec.proto", "rsn",
+                     "wifi-sec.pairwise", "ccmp", "wifi-sec.group", "ccmp",
+                     "wifi-sec.psk-flags", "0"]  # fmt: skip
+        self._run(*args)
+        # As for joining: the key never appears on a command line.
+        fd, tmp = tempfile.mkstemp(prefix="allskyhub-psk-")
+        try:
+            with os.fdopen(fd, "w") as f:
+                if key:
+                    f.write(f"802-11-wireless-security.psk:{key}\n")
+            self._run("con", "up", SETUP_CONNECTION, "passwd-file", tmp)
+        finally:
+            Path(tmp).unlink(missing_ok=True)
 
     def stop_hotspot(self) -> None:
         self._run("con", "down", SETUP_CONNECTION, check=False)
@@ -227,6 +242,7 @@ class SimNetwork:
         self.configured: str | None = None
         self.connected = False
         self.hotspot: str | None = None
+        self.hotspot_key: str | None = None
         self.internet = True
 
     def has_internet(self) -> bool:
@@ -244,8 +260,9 @@ class SimNetwork:
     def scan(self) -> list[WifiNetwork]:
         return sort_networks(self.networks)
 
-    def start_hotspot(self, ssid: str) -> None:
+    def start_hotspot(self, ssid: str, key: str | None) -> None:
         self.hotspot = ssid
+        self.hotspot_key = key
 
     def stop_hotspot(self) -> None:
         self.hotspot = None

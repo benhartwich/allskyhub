@@ -126,7 +126,7 @@ rm -rf /tmp/uv-cache /tmp/allskyhub-src /usr/local/bin/uv
 apt-get clean
 rm -rf /var/lib/apt/lists/*
 
-systemctl enable allskyhub-firstboot.service allskyhub-setupfile.service \
+systemctl enable allskyhub-firstboot.service allskyhub-setupfile.service allskyhub-setup-key.service \
     allskyhub-agent.service allskyhub-wifi-country.path nftables.service \
     allskyhub-updater.timer allskyhub-updater.path allskyhub-watchdog.timer
 # The agent announces itself over mDNS (SPEC §7.2) with its own responder; avahi would hold

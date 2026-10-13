@@ -368,3 +368,24 @@ def test_wifi_country_handed_to_root_helper(tmp_path: Path) -> None:
         net.set_country(bad)
     assert f.read_text() == "AT\n"
     NmcliNetwork(country_wait_s=0).set_country("DE")  # without a file: nothing happens
+
+
+def test_setup_network_uses_the_setup_key(tmp_path: Path) -> None:
+    """SPEC §7.1: WPA2 with the camera's setup key; open only without one."""
+    from allskyhub_agent.setup.controller import read_setup_key
+
+    key_file = tmp_path / "setup-key"
+    key_file.write_text("abcd-efgh-jkmn\n")
+    assert read_setup_key(key_file) == "ABCDEFGHJKMN"
+    for bad in ("ABCD-EFGH-JKM1", "short", ""):
+        key_file.write_text(bad)
+        assert read_setup_key(key_file) is None
+    assert read_setup_key(tmp_path / "missing") is None
+
+    net = SimNetwork()
+    ctl = SetupController(net, DEVICE, sleep=lambda s: None, key=lambda: "ABCDEFGHJKMN")
+    ctl.tick(0.0)
+    assert net.hotspot == setup_ssid(DEVICE)
+    assert net.hotspot_key == "ABCDEFGHJKMN"
+    old, _, _ = make(SimNetwork())  # no key file: open, as before the setup key
+    old.tick(0.0)

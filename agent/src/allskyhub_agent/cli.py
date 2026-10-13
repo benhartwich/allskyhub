@@ -73,7 +73,12 @@ from allskyhub_agent.services import HubManager, run_announcer
 from allskyhub_agent.settings import DEFAULT_PATH as SETTINGS_PATH
 from allskyhub_agent.settings import TIMELAPSE_CRF, AgentSettings
 from allskyhub_agent.settings_schema import build_schema
-from allskyhub_agent.setup.controller import NetworkRequest, SetupController
+from allskyhub_agent.setup.controller import (
+    SETUP_KEY_NAME,
+    NetworkRequest,
+    SetupController,
+    read_setup_key,
+)
 from allskyhub_agent.setup.setup_file import DEFAULT_PATH as SETUP_FILE_PATH
 from allskyhub_agent.setup.setup_file import apply_once as apply_setup_file
 from allskyhub_agent.store.images import ImageStore
@@ -702,7 +707,12 @@ def main(argv: list[str] | None = None) -> int:
                 if after.hub_url != before:
                     hub_manager.restart(after.hub_url)
 
-            setup = SetupController(network, identity.device_id, on_joined=joined)
+            setup = SetupController(
+                network,
+                identity.device_id,
+                on_joined=joined,
+                key=lambda: read_setup_key(Path(args.data) / SETUP_KEY_NAME),
+            )
             threading.Thread(target=setup.run, args=(stop_bg,), name="setup", daemon=True).start()
 
     def where() -> tuple[float, float] | None:

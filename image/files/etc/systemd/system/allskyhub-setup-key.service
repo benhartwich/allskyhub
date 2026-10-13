@@ -1,0 +1,11 @@
+[Unit]
+Description=allskyhub: the setup key on the boot partition, made if missing (SPEC §7.1)
+After=allskyhub-firstboot.service
+Before=allskyhub-agent.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/allskyhub-setup-key
+
+[Install]
+WantedBy=multi-user.target

@@ -13,8 +13,10 @@ import threading
 import time
 from collections.abc import Callable
 from dataclasses import dataclass
+from pathlib import Path
 
 from allskyhub_agent.adapters.network import JoinError, Network, WifiNetwork
+from allskyhub_protocol import PAIRING_CODE_ALPHABET, normalize_pairing_code
 
 log = logging.getLogger(__name__)
 
@@ -25,6 +27,23 @@ INTERNET_WAIT_S = 30.0  # after joining, how long to wait for internet
 
 def setup_ssid(device_id: str) -> str:
     return f"allskyhub-{device_id[:4].upper()}"
+
+
+SETUP_KEY_LENGTH = 12
+SETUP_KEY_NAME = "setup-key"  # the boot service's copy in <data> (image)
+
+
+def read_setup_key(path: Path) -> str | None:
+    """The setup key's passphrase (SPEC §7.1): 12 characters of the pairing alphabet,
+    without hyphens; None if the file is missing or unusable."""
+    try:
+        raw = path.read_text(encoding="ascii", errors="replace")
+    except OSError:
+        return None
+    key = normalize_pairing_code(raw.strip())
+    if len(key) != SETUP_KEY_LENGTH or any(ch not in PAIRING_CODE_ALPHABET for ch in key):
+        return None
+    return key
 
 
 @dataclass(frozen=True)
@@ -46,9 +65,11 @@ class SetupController:
         on_joined: Callable[[NetworkRequest], None] | None = None,
         sleep: Callable[[float], None] | None = None,
         monotonic: Callable[[], float] | None = None,
+        key: Callable[[], str | None] = lambda: None,
     ) -> None:
         self._net = network
         self._ssid = setup_ssid(device_id)
+        self._key = key
         self._on_joined = on_joined
         self._sleep = sleep or time.sleep
         self._monotonic = monotonic or time.monotonic
@@ -116,8 +137,12 @@ class SetupController:
             self._start(now)
 
     def _start(self, now: float) -> None:
-        log.info("opening setup network %s", self._ssid)
-        self._net.start_hotspot(self._ssid)
+        key = self._key()
+        if key is None:
+            log.warning("no setup key: the setup network %s is open (SPEC §7.1)", self._ssid)
+        else:
+            log.info("opening setup network %s (WPA2)", self._ssid)
+        self._net.start_hotspot(self._ssid, key)
         with self._lock:
             self._active = True
             self._last_request = now

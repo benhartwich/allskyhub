@@ -39,8 +39,10 @@ Details about the image, its services and the setup file: [image.md](image.md).
 Without a setup file and without Ethernet the camera opens a Wi-Fi called
 `allskyhub-XXXX` after the first boot. In the app tap **Neue Kamera einrichten**: the app
 connects to that Wi-Fi, gives the camera your home network, location and time zone, finds it
-again on your home network and pairs it with your account. You type nothing but the Wi-Fi
-password.
+again on your home network and pairs it with your account. The setup Wi-Fi is protected:
+the app asks for the camera's setup key, from the QR label of a bought camera or from
+`allskyhub-setup-key.txt` on the SD card (docs/image.md). Then you type nothing but your
+Wi-Fi password.
 
 ### 2.3 Set up without the app
 

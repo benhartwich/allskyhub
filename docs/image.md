@@ -16,6 +16,13 @@ and everything setup mode needs (SPEC §7.1–7.3). It is built by GitHub Action
 Without a setup file and without Ethernet the camera opens the Wi-Fi `allskyhub-XXXX` after
 the first boot. The app sets it up from there: Wi-Fi, location, time zone and pairing.
 
+The setup Wi-Fi is protected by the camera's **setup key** (SPEC §7.1), 12 characters like
+`ABCD-EFGH-JKMN` in `allskyhub-setup-key.txt` on the boot partition. Write your own there
+before the first boot (letters and digits of `ABCDEFGHJKMNPQRSTUVWXYZ23456789`), or let
+the camera make one on its first boot and read it from the card afterwards. The app asks
+for it, or scans it as a Wi-Fi QR code. The file stays on the card; a new key takes
+effect at the next boot.
+
 ## Setup file
 
 `allskyhub-setup.json` on the boot partition (SPEC §7.3) sets the camera up without the

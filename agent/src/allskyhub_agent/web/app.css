@@ -97,3 +97,4 @@ label.button { cursor: pointer; }
   .event { grid-template-columns: 88px 1fr; }
   .event img { width: 88px; }
 }
+.keolapse { width: 100%; height: auto; border-radius: 8px; image-rendering: auto; }

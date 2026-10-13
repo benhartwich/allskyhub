@@ -143,6 +143,8 @@ function viewLive() {
         <input type="range" id="loopPos" min="0" max="0" value="0" aria-label="Position">
         <span class="muted small" id="loopTime"></span>
       </div>
+      <video class="live-img" id="mini" controls muted loop playsinline preload="none" hidden
+        aria-label="Mini-Zeitraffer der letzten Stunde"></video>
     </section>
     <section class="card stack">
       <h2>Fokus</h2>
@@ -230,6 +232,13 @@ function viewLive() {
   $("resetBtn").onclick = () => post("reset");
   every(() => getJSON("api/status").then(render).catch(() => {}), 2000);
 
+  // SPEC §5.2: the mini timelapse, when it is switched on and built.
+  fetch("api/mini.mp4", { method: "HEAD" }).then((r) => {
+    if (!r.ok) return;
+    const v = $("mini");
+    v.src = "api/mini.mp4?t=" + Date.now();
+    v.hidden = false;
+  }).catch(() => {});
   // The loop: thumbnails of the last hour, refreshed every minute.
   let frames = [];
   let playing = null;
@@ -258,9 +267,11 @@ function viewLive() {
 // --- Archive (L4) --------------------------------------------------------------------
 async function viewArchive(night) {
   if (night) return viewNight(night);
-  page.innerHTML = `<h1>Archiv</h1><div class="nights" id="nights"><p class="muted">Lade …</p></div>`;
+  page.innerHTML = `<h1>Archiv</h1><section class="card stack" id="keolapse" hidden></section>
+    <div class="nights" id="nights"><p class="muted">Lade …</p></div>`;
   const nights = await getJSON("api/nights");
   if (!nights.length) { $("nights").innerHTML = `<p class="empty">Noch keine Nächte gespeichert.</p>`; return; }
+  keolapseCard(nights);
   $("nights").innerHTML = nights.map((n) => `
     <a class="night" href="#archiv/${n.night_id}">
       <div class="card stack">
@@ -268,11 +279,34 @@ async function viewArchive(night) {
         <h2>${fmtNight(n.night_id)}</h2>
         <p class="muted small">${n.frames} Bilder${n.first ? ` · ${fmtTime(n.first)}–${fmtTime(n.last)}` : ""}</p>
         <div class="badges">
-          ${n.products.map((p) => `<span class="badge ok">${esc({ keogram: "Keogramm", startrails: "Sternspuren", timelapse: "Zeitraffer" }[p.kind] || p.kind)}</span>`).join("")}
+          ${[...n.products, ...(n.day_products || [])].map((p) => `<span class="badge ok">${esc({ keogram: "Keogramm", startrails: "Sternspuren", timelapse: "Zeitraffer", day_timelapse: "Tageszeitraffer", day_keogram: "Tageskeogramm" }[p.kind] || p.kind)}</span>`).join("")}
           ${n.events ? `<span class="badge">${n.events} Ereignisse</span>` : ""}
         </div>
       </div>
     </a>`).join("");
+}
+
+// SPEC §5.4: the keograms of a range of nights side by side, built on request.
+function keolapseCard(nights) {
+  const withKeo = nights.filter((n) => n.products.some((p) => p.kind === "keogram"));
+  if (withKeo.length < 2) return;
+  const box = $("keolapse");
+  const opts = (sel) => withKeo.map((n) => `<option value="${n.night_id}"${n.night_id === sel ? " selected" : ""}>${fmtNight(n.night_id)}</option>`).join("");
+  const last = withKeo[0].night_id;
+  const first = withKeo[Math.min(withKeo.length, 30) - 1].night_id;
+  box.innerHTML = `<h2>Keolapse</h2>
+    <p class="muted small">Die Keogramme mehrerer Nächte nebeneinander, die älteste links.</p>
+    <div class="row"><label>Von <select id="keoFrom">${opts(first)}</select></label>
+      <label>Bis <select id="keoTo">${opts(last)}</select></label>
+      <button type="button" class="secondary small" id="keoShow">Zeigen</button></div>
+    <a id="keoLink" target="_blank" rel="noopener" hidden><img id="keoImg" class="keolapse" alt="Keolapse"></a>`;
+  box.hidden = false;
+  $("keoShow").onclick = () => {
+    const src = `api/keolapse.jpg?from=${$("keoFrom").value}&to=${$("keoTo").value}`;
+    $("keoImg").src = src;
+    $("keoLink").href = src;
+    $("keoLink").hidden = false;
+  };
 }
 
 async function viewNight(night) {
@@ -283,10 +317,11 @@ async function viewNight(night) {
         <button type="button" class="secondary" id="bad" hidden aria-pressed="false"></button></div></section>`;
   const nights = await getJSON("api/nights");
   const n = nights.find((x) => x.night_id === night);
-  const names = { keogram: "Keogramm", startrails: "Sternspuren", timelapse: "Zeitraffer" };
-  $("products").innerHTML = (n ? n.products : []).map((p) => {
+  const names = { keogram: "Keogramm", startrails: "Sternspuren", timelapse: "Zeitraffer",
+    day_timelapse: "Zeitraffer vom Tag", day_keogram: "Keogramm vom Tag" };
+  $("products").innerHTML = (n ? [...n.products, ...(n.day_products || [])] : []).map((p) => {
     const src = `files/${night}/products/${p.name}`;
-    const media = p.kind === "timelapse"
+    const media = p.content_type === "video/mp4"
       ? `<video controls preload="metadata" src="${src}" poster="${src}?thumb=1"></video>`
       : `<a href="${src}" target="_blank" rel="noopener"><img loading="lazy" src="${src}?thumb=1" alt=""></a>`;
     return `<section class="card stack product"><h2>${names[p.kind] || esc(p.kind)}</h2>${media}

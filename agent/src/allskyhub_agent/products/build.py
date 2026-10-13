@@ -67,13 +67,13 @@ def _load(path: Path) -> U8 | None:
         return None
 
 
-def _save_jpeg(arr: U8, path: Path, quality: int = 90) -> None:
+def save_jpeg(arr: U8, path: Path, quality: int = 90) -> None:
     tmp = path.with_name(path.stem + ".tmp.jpg")
     PILImage.fromarray(arr).save(tmp, format="JPEG", quality=quality)
     tmp.replace(path)
 
 
-def _thumbnail(src: Path | U8, dest: Path) -> None:
+def thumbnail(src: Path | U8, dest: Path) -> None:
     dest.parent.mkdir(parents=True, exist_ok=True)
     im = PILImage.open(src) if isinstance(src, Path) else PILImage.fromarray(src)
     with im:
@@ -189,8 +189,8 @@ def build_night(store: ImageStore, night: str, cfg: ProductConfig | None = None)
     elif keo is None:
         result.skipped[KEOGRAM] = "no readable frames"
     else:
-        _save_jpeg(keo, folder / KEOGRAM)
-        _thumbnail(keo, thumbs / KEOGRAM)
+        save_jpeg(keo, folder / KEOGRAM)
+        thumbnail(keo, thumbs / KEOGRAM)
         result.built.append(KEOGRAM)
 
     st = startrails([(p, f.mean) for p, f in present], cfg) if cfg.startrails else None
@@ -201,8 +201,8 @@ def build_night(store: ImageStore, night: str, cfg: ProductConfig | None = None)
             f"fewer than {cfg.startrails_min_frames} frames darker than {cfg.startrails_max_mean}"
         )
     else:
-        _save_jpeg(st, folder / STARTRAILS)
-        _thumbnail(st, thumbs / STARTRAILS)
+        save_jpeg(st, folder / STARTRAILS)
+        thumbnail(st, thumbs / STARTRAILS)
         result.built.append(STARTRAILS)
 
     reason = timelapse(paths, folder / TIMELAPSE, cfg) if cfg.timelapse else "switched off"
@@ -210,7 +210,7 @@ def build_night(store: ImageStore, night: str, cfg: ProductConfig | None = None)
         result.skipped[TIMELAPSE] = reason
     else:
         # The middle frame stands in as the timelapse's thumbnail.
-        _thumbnail(paths[len(paths) // 2], thumbs / "timelapse.jpg")
+        thumbnail(paths[len(paths) // 2], thumbs / "timelapse.jpg")
         result.built.append(TIMELAPSE)
 
     for name, why in result.skipped.items():

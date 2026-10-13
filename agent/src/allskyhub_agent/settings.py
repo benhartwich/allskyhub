@@ -23,6 +23,9 @@ _PRODUCT_SWITCHES = (
     "product_keogram",
     "product_startrails",
     "product_timelapse",
+    "product_day_timelapse",
+    "product_day_keogram",
+    "product_mini_timelapse",
     "alpaca_enabled",
     "bad_frames",
     "moon_mode",
@@ -88,6 +91,10 @@ class AgentSettings:
     product_keogram: bool = True
     product_startrails: bool = True
     product_timelapse: bool = True
+    # Day products and the mini timelapse (roadmap L21, SPEC §5.2).
+    product_day_timelapse: bool = True
+    product_day_keogram: bool = False
+    product_mini_timelapse: bool = False
     timelapse_fps: int = 25
     timelapse_quality: str = "normal"
     # ASCOM Alpaca for observatory software (SPEC §7.5, roadmap L16).

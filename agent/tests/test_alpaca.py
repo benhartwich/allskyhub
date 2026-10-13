@@ -127,7 +127,8 @@ def test_members(alpaca: tuple[Alpaca, SafetyMonitor, list[datetime]]) -> None:
     safety.observe(sky(2, None))  # day: no values
     assert ask(a, oc, "cloudcover", "GET", {})[1] == VALUE_NOT_SET
     state: list[dict[str, Any]] = ask(a, oc, "devicestate", "GET", {})[0]
-    assert [x["Name"] for x in state] == ["TimeSinceLastUpdate", "TimeStamp"]
+    # Only operational properties (ConformU): no TimeSinceLastUpdate.
+    assert [x["Name"] for x in state] == ["TimeStamp"]
     ids = {d["UniqueID"] for d in a.configured()}
     assert len(ids) == 2
     assert ids == {d["UniqueID"] for d in Alpaca(DEVICE, "9", safety).configured()}  # stable
@@ -164,8 +165,10 @@ def test_http(server: AlpacaServer) -> None:
     assert status == 200
     assert "Value" not in body
     assert (body["ErrorNumber"], body["ClientTransactionID"]) == (0, 0)
-    status, body = _http(p, "GET", "/api/v1/SafetyMonitor/0/IsSafe")  # names are case-insensitive
+    status, body = _http(p, "GET", "/api/v1/safetymonitor/0/issafe")
     assert (status, body["Value"]) == (200, False)
+    # Paths are lowercase; ConformU expects 400 for another case.
+    assert _http(p, "GET", "/api/v1/SafetyMonitor/0/IsSafe")[0] == 400
     assert _http(p, "GET", "/api/v1/safetymonitor/0/flyaway")[0] == 400
     assert _http(p, "GET", "/api/v1/safetymonitor/1/issafe")[0] == 400
     assert (

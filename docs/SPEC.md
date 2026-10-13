@@ -863,16 +863,18 @@ ASCOM (Platform 7, `InterfaceVersion` 3 for SafetyMonitor, 2 for ObservingCondit
 `GET` with query parameters, `PUT` form-encoded, parameter names case-insensitive, every
 answer `{Value, ClientTransactionID, ServerTransactionID, ErrorNumber, ErrorMessage}`.
 `ClientID` and `ClientTransactionID` may come in the query or the form body;
-`ClientTransactionID` is returned unchanged (0 if missing or not an unsigned 32-bit
+Query parameter names of a GET are case insensitive, those of a PUT body are not (`AveragePeriod`, `Connected`, `ClientTransactionID` exactly); a PUT without its parameter is answered with HTTP 400. The server keeps connections open (HTTP/1.1). `ClientTransactionID` is returned unchanged (0 if missing or not an unsigned 32-bit
 number), `ServerTransactionID` counts up per process (unsigned 32-bit, wrapping).
 `connected`, `connect`, `disconnect`, `connecting`, `description`, `driverinfo`,
 `driverversion`, `interfaceversion`, `name`, `supportedactions` (empty) and
 `devicestate` work for both. `devicestate` lists `[{Name, Value}]` with `IsSafe` for the
-SafetyMonitor and `CloudCover`, `SkyQuality` and `TimeSinceLastUpdate` (only those with a
-value) for ObservingConditions, plus `TimeStamp`. `action`, `commandblind`, `commandbool`
+SafetyMonitor and `CloudCover` and `SkyQuality` (only those with a value) for
+ObservingConditions, plus `TimeStamp`; `TimeSinceLastUpdate` is not an operational
+property and stays out (ConformU 4.5.0, 2026-10-13). `action`, `commandblind`, `commandbool`
 and `commandstring` and the interface members named below as not implemented answer
-`0x400` (not implemented). A path that is not a member of the interface is answered with
-HTTP 400 and a plain-text body, as Alpaca specifies. Reading a property other than
+`0x400` (not implemented). A path that is not a member of the interface, or not all
+lowercase (`/api/v1/SAFETYMONITOR/0/…`), is answered with HTTP 400 and a plain-text body, as
+Alpaca specifies. Reading a property other than
 `connected`, `connecting` and the descriptive ones while not connected answers `0x407`
 (not connected).
 

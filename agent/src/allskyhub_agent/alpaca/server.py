@@ -149,7 +149,9 @@ class Alpaca:
 
     def _put(self, d: _Device, member: str, params: dict[str, str]) -> tuple[Any, int, str] | None:
         if member == "connected":
-            value = params.get("connected", "").lower()
+            if "connected" not in params:
+                raise MissingParameter("Connected")
+            value = params["connected"].lower()
             if value not in ("true", "false"):
                 return None, INVALID_VALUE, "Connected must be true or false"
             d.connected = value == "true"
@@ -161,6 +163,8 @@ class Alpaca:
             d.connected = False
             return None, 0, ""
         if d.kind == "observingconditions" and member == "averageperiod":
+            if "averageperiod" not in params:
+                raise MissingParameter("AveragePeriod")
             try:
                 period = float(params.get("averageperiod", ""))
             except ValueError:
@@ -218,11 +222,17 @@ class Alpaca:
                 out.append({"Name": "CloudCover", "Value": round(100.0 * m.cloud_cover, 1)})
             if m is not None and m.sqm_mag is not None:
                 out.append({"Name": "SkyQuality", "Value": m.sqm_mag})
-            if m is not None:
-                out.append({"Name": "TimeSinceLastUpdate",
-                            "Value": _age(now, m.at)})  # fmt: skip
         out.append({"Name": "TimeStamp", "Value": now.isoformat().replace("+00:00", "Z")})
         return out
+
+
+class MissingParameter(Exception):
+    """A PUT without its parameter (names are case sensitive there): HTTP 400."""
+
+
+# PUT parameter names are case sensitive in Alpaca; only these exact spellings count.
+_PUT_NAMES = {"ClientID", "ClientTransactionID", "Connected", "AveragePeriod", "Action",
+              "Parameters", "Command", "Raw"}  # fmt: skip
 
 
 def _age(now: datetime, at: datetime) -> float:
@@ -241,14 +251,20 @@ def _client_tx(params: dict[str, str]) -> int:
 def make_handler(alpaca: Alpaca, blocked: Callable[[], bool]) -> type[BaseHTTPRequestHandler]:
     class Handler(BaseHTTPRequestHandler):
         server_version = "allskyhub-alpaca"
+        # Keep-alive: clients such as ConformU reuse connections; every answer has a
+        # Content-Length, so HTTP/1.1 is safe.
+        protocol_version = "HTTP/1.1"
 
         def log_message(self, format: str, *args: object) -> None:
             return
 
         def _params(self, body: bytes) -> dict[str, str]:
+            """GET query names are case insensitive, PUT body names are not (Alpaca)."""
+            if self.command == "PUT":
+                raw = parse_qs(body.decode(errors="replace"), keep_blank_values=True)
+                return {k.lower(): v[0] for k, v in raw.items() if v and k in _PUT_NAMES}
             q = self.path.split("?", 1)[1] if "?" in self.path else ""
-            raw = parse_qs(q) | (parse_qs(body.decode(errors="replace")) if body else {})
-            return {k.lower(): v[0] for k, v in raw.items() if v}
+            return {k.lower(): v[0] for k, v in parse_qs(q).items() if v}
 
         def _send(self, status: HTTPStatus, body: bytes, ctype: str) -> None:
             self.send_response(status)
@@ -281,7 +297,11 @@ def make_handler(alpaca: Alpaca, blocked: Callable[[], bool]) -> type[BaseHTTPRe
                 self._send(HTTPStatus.SERVICE_UNAVAILABLE, b"setup mode", "text/plain")
                 return
             params = self._params(body)
-            parts = [p for p in self.path.split("?", 1)[0].lower().split("/") if p]
+            parts = [p for p in self.path.split("?", 1)[0].split("/") if p]
+            if any(p != p.lower() for p in parts):
+                # Alpaca paths are lowercase; ConformU expects 400 for SAFETYMONITOR etc.
+                self._bad("Alpaca paths are lowercase")
+                return
             if parts[:1] == ["management"] and self.command == "GET":
                 if parts == ["management", "apiversions"]:
                     self._reply(params, [1])
@@ -296,7 +316,11 @@ def make_handler(alpaca: Alpaca, blocked: Callable[[], bool]) -> type[BaseHTTPRe
                 if parts[3] != "0":
                     self._bad(f"no {parts[2]} number {parts[3]}")
                     return
-                answer = alpaca.member(parts[2], parts[4], self.command, params)
+                try:
+                    answer = alpaca.member(parts[2], parts[4], self.command, params)
+                except MissingParameter as exc:
+                    self._bad(f"missing parameter {exc}")
+                    return
                 if answer is None:
                     self._bad(f"{parts[4]} is not a {self.command} member of {parts[2]}")
                     return

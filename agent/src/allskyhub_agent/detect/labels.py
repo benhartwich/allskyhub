@@ -1,8 +1,8 @@
 """The owner's labels of detections (SPEC §6.4 Labels).
 
 `confirmed` or `false_positive` (with a reason), set in the local UI or on the hub; the
-newer `at` wins. An automatic label (`auto`, aircraft matching, SPEC §7.8) never replaces
-one and any owner's label replaces it. Kept per night in
+newer `at` wins. An automatic label (`auto`, SPEC §6.4, §7.8, §7.9) never replaces the
+owner's, which always replaces it. Kept per night in
 `<data>/images/<night>/events/labels.json` next to the events; a false positive is never
 deleted, only hidden and left out of counts.
 """

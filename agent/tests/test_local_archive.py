@@ -232,7 +232,8 @@ def test_auto_label_gives_way(tmp_path: Path) -> None:
     auto = EventLabel(night_id=NIGHT, event_id=eid, label="false_positive", reason="aircraft",
                       auto=True, detail="DLH4AB 3c6444", at=t)  # fmt: skip
     assert labels.set(auto)
-    assert not labels.set(auto.model_copy(update={"at": t + timedelta(minutes=1)}))
+    assert not labels.set(auto.model_copy(update={"at": t - timedelta(minutes=1)}))
+    assert labels.set(auto.model_copy(update={"at": t + timedelta(minutes=1)}))
     owner = EventLabel(night_id=NIGHT, event_id=eid, label="confirmed", at=t - timedelta(hours=1))
     assert labels.set(owner)  # older, but the owner's
     assert labels.night(NIGHT)[eid] == owner

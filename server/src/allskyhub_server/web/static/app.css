@@ -128,6 +128,13 @@ table.stats { width: 100%; border-collapse: collapse; font-size: 14px; }
 table.stats th, table.stats td { padding: 8px 10px; text-align: right; border-bottom: 1px solid var(--line); white-space: nowrap; }
 table.stats th:first-child, table.stats td:first-child { text-align: left; }
 table.stats th { color: var(--text-2); font-weight: 600; }
+/* „Ziel frei?“ (roadmap H4). */
+table.stats.target-hours td.verdict { font-weight: 600; text-align: left; }
+table.stats.target-hours th:nth-child(2) { text-align: left; }
+@media (max-width: 480px) { table.stats.target-hours th, table.stats.target-hours td { padding: 8px 5px; } }
+.target-hours .verdict-clear td.verdict, .target-now.verdict-clear strong { color: var(--ok); }
+.target-hours .verdict-partly td.verdict, .target-now.verdict-partly strong { color: var(--warn); }
+.target-hours .verdict-low, .target-hours .verdict-bright { color: var(--text-2); }
 
 /* Camera health (roadmap C14). */
 .health-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
@@ -144,6 +151,17 @@ table.stats th { color: var(--text-2); font-weight: 600; }
 .camera-map .dot { fill: var(--aurora); stroke: #fff; stroke-width: 2; vector-effect: non-scaling-stroke; }
 .camera-map .halo { fill: rgba(79, 227, 176, .25); }
 .camera-map a:hover .dot { fill: #fff; }
+/* Roadmap H4: sky brightness, colours like the usual light-pollution maps (dark → bright). */
+.dot.sqm-1 { fill: #2846b8; } .swatch.sqm-1 { background: #2846b8; }
+.dot.sqm-2 { fill: #2f9e5b; } .swatch.sqm-2 { background: #2f9e5b; }
+.dot.sqm-3 { fill: #d4c62b; } .swatch.sqm-3 { background: #d4c62b; }
+.dot.sqm-4 { fill: #ec8a1c; } .swatch.sqm-4 { background: #ec8a1c; }
+.dot.sqm-5 { fill: #d8392b; } .swatch.sqm-5 { background: #d8392b; }
+.dot.sqm-6 { fill: #f2f2f2; } .swatch.sqm-6 { background: #f2f2f2; }
+.dot.sqm-none { fill: #8a8f99; } .swatch.sqm-none { background: #8a8f99; }
+.sqm-legend { list-style: none; padding: 0; margin: 8px 0 16px; display: flex; flex-wrap: wrap; gap: 6px 16px; font-size: .9em; }
+.sqm-legend li { display: flex; align-items: center; gap: 6px; }
+.sqm-legend .swatch { width: 12px; height: 12px; border-radius: 50%; border: 1px solid var(--line, #888); display: inline-block; }
 /* Settings form from the camera's schema (SPEC §6.9). */
 .settings-form fieldset { border: 0; padding: 0; margin: 0; }
 .settings-form legend { font-family: var(--display); font-weight: 600; font-size: 15px; color: var(--text-2);

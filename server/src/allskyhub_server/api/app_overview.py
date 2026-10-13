@@ -14,11 +14,12 @@ from fastapi import APIRouter, HTTPException, Query, Request
 from pydantic import BaseModel
 
 from allskyhub_server.api.app import AppUser
-from allskyhub_server.devices import health, night_summary, queries, series, tonight
+from allskyhub_server.devices import health, night_summary, queries, series, target, tonight
 from allskyhub_server.devices.connections import ConnectionRegistry
 from allskyhub_server.devices.tonight import ForecastCache
 from allskyhub_server.models import Device, User
 from allskyhub_server.web.deps import DbSession
+from allskyhub_sky.objects import catalogue
 
 router = APIRouter(prefix="/api/v1")
 
@@ -134,3 +135,94 @@ async def measurement_series(
     device = await _own(db, user, device_id)
     rng = await series.resolve(db, device, night, hours, dt.datetime.now(dt.UTC))
     return await series.load(db, device, rng, with_status=True, public=False)
+
+
+class TargetItem(BaseModel):
+    key: str
+    label: str
+    kind: str
+    mag: float | None
+
+
+class TargetHourItem(BaseModel):
+    at: dt.datetime
+    alt: float
+    az: float
+    direction: str
+    clouds: int | None
+    moon_near: bool
+    # clear, partly, cloudy, low (below 20°), bright (sun above -12°)
+    verdict: str
+    verdict_text: str
+
+
+class TargetPlan(BaseModel):
+    """Roadmap H4. ``now.cloud_cover`` is the camera's own value (0..1) or null."""
+
+    key: str
+    label: str
+    summary: str
+    tz: str
+    alt: float
+    az: float
+    direction: str
+    cloud_cover: float | None
+    verdict: str
+    verdict_text: str
+    best_start: dt.datetime | None
+    best_end: dt.datetime | None
+    hours: list[TargetHourItem]
+
+
+@router.get("/targets")
+async def targets(user: AppUser) -> list[TargetItem]:
+    """The objects to choose from: planets, then M1 … M110."""
+    return [TargetItem(key=o.key, label=o.label, kind=o.kind, mag=o.mag) for o in catalogue()]
+
+
+@router.get("/cameras/{device_id}/target")
+async def target_plan(
+    request: Request, db: DbSession, user: AppUser, device_id: str, key: str = Query(max_length=20)
+) -> TargetPlan:
+    """404 for an unknown object, 409 when the camera's location is unknown."""
+    device = await _own(db, user, device_id)
+    chosen = target.find(key)
+    if chosen is None:
+        raise HTTPException(404, "Dieses Objekt kenne ich nicht.")
+    settings: dict[str, Any] = (device.last_status or {}).get("settings") or {}
+    lat, lon = settings.get("latitude"), settings.get("longitude")
+    hours: list[tonight.Hour] = []
+    if isinstance(lat, int | float) and isinstance(lon, int | float):
+        forecast: ForecastCache = request.app.state.forecast
+        hours = await forecast.get(float(lat), float(lon))
+    found = target.plan(chosen, device.last_status, hours, dt.datetime.now(dt.UTC))
+    if found is None:
+        raise HTTPException(409, "Die Kamera kennt ihren Standort noch nicht.")
+    best = found.best
+    return TargetPlan(
+        key=chosen.key,
+        label=chosen.label,
+        summary=found.summary(),
+        tz=found.tz,
+        alt=round(found.now.alt, 1),
+        az=round(found.now.az, 1),
+        direction=found.now.direction,
+        cloud_cover=found.now.cloud_cover,
+        verdict=found.now.verdict,
+        verdict_text=target.VERDICT_TEXT[found.now.verdict],
+        best_start=best[0] if best else None,
+        best_end=best[1] if best else None,
+        hours=[
+            TargetHourItem(
+                at=h.at,
+                alt=round(h.alt, 1),
+                az=round(h.az, 1),
+                direction=h.direction,
+                clouds=h.clouds,
+                moon_near=h.moon_near,
+                verdict=h.verdict,
+                verdict_text=target.VERDICT_TEXT[h.verdict],
+            )
+            for h in found.hours
+        ],
+    )

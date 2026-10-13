@@ -478,6 +478,19 @@ class HubClient {
     return response.bodyBytes;
   }
 
+  /// Roadmap H4: the objects to choose from (planets, then Messier).
+  Future<List<TargetItem>> targets() async => [
+    for (final t in await _send('GET', '/targets') as List<dynamic>)
+      TargetItem.fromJson(t as Map<String, dynamic>),
+  ];
+
+  /// Roadmap H4: is [key] clear now and in the next hours? 409: location unknown.
+  Future<TargetPlan> target(String cameraId, String key) async =>
+      TargetPlan.fromJson(
+        await _sendUri('GET', _uri('/cameras/$cameraId/target', {'key': key}))
+            as Map<String, dynamic>,
+      );
+
   /// Roadmap C7: one year in months; [year] 0 is this year.
   Future<YearStats> stats(String cameraId, {int year = 0}) async =>
       YearStats.fromJson(
@@ -888,4 +901,65 @@ class DiscordState {
 
   /// Every kind that can go to the channel, with its German label.
   final Map<String, String> available;
+}
+
+/// An object for "Ziel frei?" (roadmap H4), e.g. `M31` or `jupiter`.
+class TargetItem {
+  TargetItem.fromJson(Map<String, dynamic> json)
+    : key = json['key'] as String,
+      label = json['label'] as String,
+      kind = json['kind'] as String;
+
+  final String key;
+  final String label;
+
+  /// `planet`, or the Messier type (`gx`, `gc`, `oc`, …).
+  final String kind;
+}
+
+class TargetHourItem {
+  TargetHourItem.fromJson(Map<String, dynamic> json)
+    : at = DateTime.parse(json['at'] as String),
+      alt = (json['alt'] as num).toDouble(),
+      direction = json['direction'] as String,
+      clouds = json['clouds'] as int?,
+      moonNear = json['moon_near'] as bool,
+      verdict = json['verdict'] as String,
+      verdictText = json['verdict_text'] as String;
+
+  final DateTime at;
+  final double alt;
+  final String direction;
+  final int? clouds;
+  final bool moonNear;
+
+  /// `clear`, `partly`, `cloudy`, `low` or `bright`.
+  final String verdict;
+  final String verdictText;
+}
+
+class TargetPlan {
+  TargetPlan.fromJson(Map<String, dynamic> json)
+    : label = json['label'] as String,
+      summary = json['summary'] as String,
+      alt = (json['alt'] as num).toDouble(),
+      direction = json['direction'] as String,
+      cloudCover = (json['cloud_cover'] as num?)?.toDouble(),
+      verdict = json['verdict'] as String,
+      verdictText = json['verdict_text'] as String,
+      hours = [
+        for (final h in json['hours'] as List<dynamic>)
+          TargetHourItem.fromJson(h as Map<String, dynamic>),
+      ];
+
+  final String label;
+  final String summary;
+  final double alt;
+  final String direction;
+
+  /// What the camera sees now (0..1), or null without a fresh value.
+  final double? cloudCover;
+  final String verdict;
+  final String verdictText;
+  final List<TargetHourItem> hours;
 }

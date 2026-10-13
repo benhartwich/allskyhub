@@ -91,6 +91,13 @@ def sun_altitude(t: dt.datetime, lat: float, lon: float) -> float:
     return _altitude(ra, dec, t, lat, lon)
 
 
+def moon_radec(t: dt.datetime) -> tuple[float, float]:
+    """Geocentric right ascension and declination of the moon (degrees, equinox of date)."""
+    d = _days(t)
+    mlon, mlat, _ = _moon_ecliptic(d)
+    return _equatorial(mlon, mlat, d)
+
+
 def moon_altitude(t: dt.datetime, lat: float, lon: float) -> float:
     """Topocentric (parallax applied), centre of the disc, without refraction."""
     d = _days(t)

@@ -63,6 +63,6 @@ SPDX-FileCopyrightText = "Natural Earth (public domain), via world-atlas (Mike B
 SPDX-License-Identifier = "LicenseRef-NaturalEarth-PublicDomain"
 
 [[annotations]]
-path = "packages/sky/src/allskyhub_sky/data/constellations.json"
+path = ["packages/sky/src/allskyhub_sky/data/constellations.json", "packages/sky/src/allskyhub_sky/data/messier.json"]
 SPDX-FileCopyrightText = "2015 Olaf Frohn (d3-celestial)"
 SPDX-License-Identifier = "BSD-3-Clause"

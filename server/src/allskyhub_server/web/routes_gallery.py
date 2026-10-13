@@ -24,15 +24,18 @@ from allskyhub_server.devices import (
     series,
     sky_chart,
     stats,
+    target,
     tonight,
 )
 from allskyhub_server.devices.connections import ConnectionRegistry
 from allskyhub_server.devices.event_text import EVENT_TITLES, event_rows, meteor_summary
 from allskyhub_server.devices.images import ImageStore
 from allskyhub_server.devices.queries import Role
+from allskyhub_server.devices.tonight import ForecastCache
 from allskyhub_server.models import Device, EventRecord, RenderJob
 from allskyhub_server.web.deps import CurrentSession, DbSession, csrf_protect
 from allskyhub_server.web.render import render
+from allskyhub_sky.objects import catalogue
 
 router = APIRouter(dependencies=[Depends(csrf_protect)])
 
@@ -606,4 +609,39 @@ async def export_csv(db: DbSession, session: CurrentSession, device_id: str, nam
         body,
         media_type="text/csv; charset=utf-8",
         headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
+
+@router.get("/cameras/{device_id}/ziel")
+async def target_page(
+    request: Request,
+    db: DbSession,
+    session: CurrentSession,
+    device_id: str,
+    objekt: Annotated[str, Query(max_length=20)] = "",
+) -> Response:
+    """Roadmap H4: is an object clear now and in the next hours?"""
+    device = await _own(db, session, device_id)
+    chosen = target.find(objekt) if objekt else None
+    found = None
+    if chosen is not None:
+        settings: dict[str, Any] = (device.last_status or {}).get("settings") or {}
+        lat, lon = settings.get("latitude"), settings.get("longitude")
+        hours: list[tonight.Hour] = []
+        if isinstance(lat, int | float) and isinstance(lon, int | float):
+            forecast: ForecastCache = request.app.state.forecast
+            hours = await forecast.get(float(lat), float(lon))
+        found = target.plan(chosen, device.last_status, hours, dt.datetime.now(dt.UTC))
+    return render(
+        request,
+        "target.html",
+        {
+            "device": device,
+            "objects": catalogue(),
+            "chosen": chosen,
+            "plan": found,
+            "unknown": bool(objekt) and chosen is None,
+            "verdicts": target.VERDICT_TEXT,
+        },
+        session=session,
     )

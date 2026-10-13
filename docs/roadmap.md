@@ -36,7 +36,7 @@ postkasten.cloud). Changes to `packages/protocol` and `docs/SPEC.md` have one ow
 | 13 | ~~Web UI: gallery and night products like in the app~~ | hub | done |
 | 14 | ~~App: "Standort ändern" and camera settings via `set_settings`~~ | hub | done |
 | 15 | ~~E-mail from the hub~~ done | hub | Mailcow on postkasten.cloud as no-reply@allskyhub.org: invitations, password reset, offline after 6 h, and on request all notices but single detections (problems, aurora, morning summary, clear night ahead, telescope unsafe) |
-| 16 | Public sky page like astronomy.garden, manageable on the hub and on the camera | hub + agent | done: sections, profile, `GET/PUT /device/v1/public`, loop, nights, events, sky charts, aurora, Kp, map, widget, Atom feed, lightbox. Open: constellation overlay (needs the lens model in `status.orientation`, SPEC proposal 2026-10-15) and the camera's local editor (L10) |
+| 16 | ~~Public sky page like astronomy.garden, manageable on the hub and on the camera~~ done | hub + agent | sections, profile, `GET/PUT /device/v1/public`, loop, nights, events, sky charts, aurora, Kp, map, widget, Atom feed, lightbox, constellation overlay (H1), the camera's local editor (L10) |
 | 17 | ~~Own domain for a public page~~ done | hub | CNAME check, Let's Encrypt via certbot standalone (nginx stopped for seconds, Benjamin agreed), root helper `deploy/domains/` |
 
 ## Local web portal (agent)
@@ -115,8 +115,8 @@ hub side. Push needs the Firebase project; until then the same messages show on 
 
 | # | Item | Owner | Notes |
 |---|---|---|---|
-| H1 | Constellation lines, names and N/E/S/W over the live image on the public page | hub (+ agent: lens model in status) | waits for the SPEC change |
-| H2 | Flutter app catches up with the web: charts, lightbox, sharing, statistics, "Heute Nacht", exports, e-mail notification switches | hub | done 2026-10 (in parallel with the local work) |
+| H1 | ~~Constellation lines, names and N/E/S/W over the live image on the public page~~ done | hub (+ agent: lens model in status) | lens in `status.orientation` (SPEC §4.8, §6.3), #135; shared drawing in `packages/sky` (#142) |
+| H2 | ~~Flutter app catches up with the web: charts, lightbox, sharing, statistics, "Heute Nacht", exports, e-mail notification switches~~ done | hub | done 2026-10 (in parallel with the local work) |
 | H3 | Aircraft from ADS-B: label planes in the live image and drop their trails from meteor detections | hub | Benjamin, 2026-10-13 (indi-allsky ADS-B); an open ADS-B feed or the owner's own receiver |
 | H4 | "Ziel frei?": is a chosen object (or a sky area) clear now and in the next hours, from the camera's cloud map and the forecast; light-pollution map next to it | hub | Benjamin, 2026-10-13; from the roadmap brainstorm 2026-09-26. Done: planets and Messier, height, darkness, moon and forecast per hour, the camera's overall cloud cover now (web and app); light-pollution view on the camera map from the cameras' own SQM (Benjamin, 2026-10-13). Also done: the cell of the camera's cloud map (SPEC §6.3 `cloud_map`) in the object's direction |
 | H5 | Upload the night's timelapse to YouTube and post detections to Discord | hub | Benjamin, 2026-10-13 (indi-allsky/Allsky); the owner connects the accounts on the hub, never on the camera. Done: Discord (webhook per camera, web and app). Open: YouTube (needs a Google Cloud project with YouTube API access from Benjamin) |

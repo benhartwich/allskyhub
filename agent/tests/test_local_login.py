@@ -6,6 +6,8 @@ import http.client
 import json
 import os
 import stat
+import threading
+import time
 from collections.abc import Iterator
 from pathlib import Path
 from urllib.parse import parse_qs, urlencode, urlsplit
@@ -112,6 +114,46 @@ def test_five_failures_lock_the_code_for_15_minutes(tmp_path: Path, verifier: st
     assert auth.check_code(CODE) == "locked"  # even the right code
     mono.t += FAILURE_WINDOW_S
     assert auth.check_code(CODE) == "ok"
+
+
+def test_parallel_guesses_cannot_pass_the_limit(
+    tmp_path: Path, verifier: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Security review 2026-10-13: each guess is counted before Argon2 runs, and only one
+    Argon2 runs at a time, so a burst of requests cannot fill the Pi's memory."""
+    from cryptography.exceptions import InvalidKey
+
+    from allskyhub_agent.web import auth as auth_module
+
+    auth, _, _ = make_auth(tmp_path)
+    auth.set_verifier(verifier)
+    release = threading.Event()
+    running: list[int] = []
+    peak: list[int] = [0]
+
+    def slow(*_: object) -> None:
+        running.append(1)
+        peak[0] = max(peak[0], len(running))
+        release.wait(5)
+        running.pop()
+        raise InvalidKey
+
+    class SlowArgon:
+        verify_phc_encoded = staticmethod(slow)
+
+    monkeypatch.setattr(auth_module, "Argon2id", SlowArgon)
+    results: list[str] = []
+    threads = [threading.Thread(target=lambda: results.append(auth.check_code(CODE)))
+               for _ in range(12)]  # fmt: skip
+    for t in threads:
+        t.start()
+    time.sleep(0.2)
+    release.set()
+    for t in threads:
+        t.join(5)
+    assert results.count("wrong") == 5
+    assert results.count("locked") == 7
+    assert peak[0] == 1
 
 
 def test_new_verifier_ends_code_sessions_only(tmp_path: Path, verifier: str) -> None:

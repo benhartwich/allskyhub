@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import os
+import tempfile
 import threading
 from pathlib import Path
 from typing import Any, cast
@@ -28,16 +29,19 @@ class Backlog:
         if not nights:
             self._path.unlink(missing_ok=True)
             return
-        tmp = self._path.with_suffix(".tmp")
-        tmp.write_text(json.dumps(nights))
-        tmp.replace(self._path)
+        # A fresh, random name (O_EXCL): the import runs as root in the agent's folder and
+        # must never write through a link planted there.
+        fd, name = tempfile.mkstemp(prefix=".backlog-", dir=self._path.parent)
+        with os.fdopen(fd, "w") as f:
+            f.write(json.dumps(nights))
+        Path(name).replace(self._path)
 
     def add(self, nights: list[str], owner: tuple[int, int] | None = None) -> None:
         with self._lock:
             merged = sorted(set(self._read()) | set(nights))
             self._write(merged)
             if owner is not None and self._path.exists() and os.geteuid() == 0:
-                os.chown(self._path, *owner)
+                os.chown(self._path, *owner, follow_symlinks=False)
 
     def next(self) -> str | None:
         with self._lock:

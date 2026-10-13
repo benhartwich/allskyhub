@@ -52,6 +52,10 @@ class ImageStore:
     def images_dir(self) -> Path:
         return self._images
 
+    @property
+    def local_tz(self) -> tzinfo:
+        return self._tz
+
     def save(self, image: Image, captured_at: datetime) -> StoredFrame:
         nid = night_id(captured_at, self._tz)
         stamp = captured_at.astimezone(self._tz).strftime("%Y%m%d%H%M%S")

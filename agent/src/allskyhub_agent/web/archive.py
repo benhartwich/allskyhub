@@ -6,6 +6,7 @@ sky log come from the data directory (SPEC §4.5, §5).
 
 from __future__ import annotations
 
+import re
 from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any
@@ -15,6 +16,7 @@ from allskyhub_agent.products.build import night_products, product_path
 from allskyhub_agent.products.day import MINI
 from allskyhub_agent.products.keolapse import keolapse
 from allskyhub_agent.store.images import ImageStore
+from allskyhub_protocol import FrameInfo
 
 LOOP_WINDOW = timedelta(hours=1)
 MAX_FRAMES = 2000  # one night at 15 s pauses; the UI pages through more
@@ -52,14 +54,49 @@ class LocalArchive:
         return out
 
     def frames(
-        self, night: str, offset: int = 0, limit: int = MAX_FRAMES, bad: bool = False
+        self,
+        night: str,
+        offset: int = 0,
+        limit: int = MAX_FRAMES,
+        bad: bool = False,
+        at: str | None = None,
     ) -> dict[str, Any]:
-        """A page of the night's frames; bad frames (SPEC §4.9) only with `bad`."""
+        """A page of the night's frames; bad frames (SPEC §4.9) only with `bad`.
+
+        `at` ("HH:MM", camera time) starts the page at the first frame from then on, for
+        jumping to a time: afternoon and evening belong to the night's date, the hours
+        before noon to the next morning (SPEC §4.5).
+        """
         frames = self._store.read_index(night) if night.isdigit() and len(night) == 8 else []
         if not bad:
             frames = [f for f in frames if f.bad is None]
-        page = frames[max(0, offset) : max(0, offset) + max(1, min(limit, MAX_FRAMES))]
-        return {"total": len(frames), "frames": [f.model_dump(mode="json") for f in page]}
+        if at is not None:
+            when = self._night_time(night, at)
+            if when is not None:
+                offset = next(
+                    (i for i, f in enumerate(frames) if f.captured_at >= when), len(frames)
+                )
+                offset = max(0, min(offset, len(frames) - 1))
+        offset = max(0, offset)
+        page = frames[offset : offset + max(1, min(limit, MAX_FRAMES))]
+        return {
+            "total": len(frames),
+            "offset": offset,
+            "frames": [f.model_dump(mode="json") for f in page],
+        }
+
+    def _night_time(self, night: str, at: str) -> datetime | None:
+        m = re.fullmatch(r"(\d{1,2}):(\d{2})", at)
+        if m is None or int(m[1]) > 23 or int(m[2]) > 59:
+            return None
+        try:
+            day = datetime.strptime(night, "%Y%m%d").date()  # noqa: DTZ007
+        except ValueError:
+            return None
+        if int(m[1]) < 12:
+            day += timedelta(days=1)
+        local = datetime(day.year, day.month, day.day, int(m[1]), int(m[2]))  # noqa: DTZ001
+        return local.replace(tzinfo=self._store.local_tz)
 
     def loop(self, now: datetime) -> list[dict[str, Any]]:
         """Frames of the last hour, oldest first (the live loop, roadmap L3)."""
@@ -78,7 +115,13 @@ class LocalArchive:
         if self._events is None or not (night.isdigit() and len(night) == 8):
             return []
         events = sorted(self._events.night_events(night), key=lambda e: e.start)
-        return [e.model_dump(mode="json") for e in events]
+        frames = self._store.read_index(night)
+        out: list[dict[str, Any]] = []
+        for e in events:
+            d = e.model_dump(mode="json")
+            d["frame"] = _frame_of(frames, e.start)
+            out.append(d)
+        return out
 
     def sky(self, night: str) -> list[dict[str, Any]]:
         return [m.model_dump(mode="json") for m in self._store.read_sky(night)]
@@ -102,3 +145,14 @@ class LocalArchive:
         if self._events is None:
             return None
         return self._events.image_path(night, eid, thumbnail)
+
+
+def _frame_of(frames: list[FrameInfo], at: datetime) -> str | None:
+    """The stored frame an event was seen on: the one starting at the event's start, else
+    the nearest within 2 minutes (imported events carry the other program's times)."""
+    best: tuple[float, str] | None = None
+    for f in frames:
+        gap = abs((f.captured_at - at).total_seconds())
+        if gap <= 120 and (best is None or gap < best[0]):
+            best = (gap, f.name)
+    return best[1] if best is not None else None

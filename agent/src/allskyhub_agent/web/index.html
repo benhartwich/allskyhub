@@ -47,14 +47,16 @@
     <a href="https://github.com/benhartwich/allskyhub">Open Source (GPL-3.0)</a></footer>
 </main>
 <dialog id="lightbox" aria-label="Bild">
-  <img id="lightboxImg" alt="">
+  <div class="lb-stage" id="lbStage"><img id="lightboxImg" alt=""></div>
+  <p class="muted small" id="lbCaption"></p>
   <div class="actions">
     <button type="button" class="secondary" id="lbPrev" aria-label="Vorheriges Bild">‹</button>
     <a class="button secondary" id="lbDownload" download>Herunterladen</a>
+    <button type="button" class="secondary" id="lbZoom" aria-label="Vergrößern" title="Zoom (Doppelklick, Mausrad)">⤢</button>
+    <span id="lbExtra"></span>
     <button type="button" class="secondary" id="lbNext" aria-label="Nächstes Bild">›</button>
     <button type="button" id="lbClose">Schließen</button>
   </div>
-  <p class="muted small" id="lbCaption"></p>
 </dialog>
 <script src="app.js"></script>
 </body>

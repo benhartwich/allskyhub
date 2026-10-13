@@ -15,7 +15,7 @@ Routes:
     POST /api/setup/network   join a Wi-Fi network (setup mode only, SPEC §7.1)
     POST /api/focus           body "on" | "off" | "reset"
     GET  /api/nights          nights with frame count, products and events (roadmap L4)
-    GET  /api/nights/<n>/frames?offset=&limit=   the night's frame index (SPEC §5.1)
+    GET  /api/nights/<n>/frames?offset=&limit=&bad=&at=HH:MM   the night's frame index (SPEC §5.1)
     GET  /api/nights/<n>/events   detections of the night (SPEC §6.4, roadmap L5)
     GET  /api/nights/<n>/sky      sky log of the night (SPEC §5.1, roadmap L6)
     GET  /api/loop            frames of the last hour (roadmap L3)
@@ -384,6 +384,7 @@ def make_handler(
                         self._int("offset", 0),
                         self._int("limit", 2000),
                         bad=self._query().get("bad") == "1",
+                        at=self._query().get("at"),
                     )
                 elif what == "events":
                     data = archive.events(night)

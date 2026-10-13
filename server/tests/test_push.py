@@ -160,6 +160,22 @@ async def test_event_notifications(
     listed = (await client.get(f"/api/v1/cameras/{dev.device_id}/events", headers=auth)).json()
     assert {e["id"]: e["data"].get("imported") for e in listed}["meteor-20261008T215212Z"] is True
 
+    # SPEC §6.4 Trail verdicts: a streak the camera judged no meteor never notifies, also
+    # before its label arrives; a real meteor right after it still does.
+    async with device_ws(live_app, token) as ws:
+        moving = first.model_copy(update={"id": "meteor-20261008T215312Z",
+                                          "data": {**first.data, "trail": "moving"}})  # fmt: skip
+        await send(ws, moving)
+        real = first.model_copy(update={"id": "meteor-20261008T215412Z"})
+        await send(ws, real)
+
+        async def pushed() -> bool:
+            return bool(fake_push.sent)
+
+        await until(pushed)
+    assert [m.data["event"] for _, m in fake_push.sent] == ["meteor-20261008T215412Z"]
+    fake_push.sent.clear()
+
     removed = await client.post("/api/v1/push/tokens/delete", json=reg, headers=auth)
     assert removed.status_code == 204
     async with app.state.sessionmaker() as db:

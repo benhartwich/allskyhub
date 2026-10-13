@@ -18,6 +18,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from allskyhub_server.devices import events
 from allskyhub_server.devices.event_text import shower_name
+from allskyhub_server.devices.events import dismissed
 from allskyhub_server.models import Device, EventRecord, SkySample
 
 # IMO fireball report form; it cannot be prefilled, so the page lists what to enter.
@@ -51,7 +52,7 @@ def _csv(header: list[str], rows: list[list[object]]) -> str:
 def meteors_csv(events: list[EventRecord], lat: float | None, lon: float | None) -> str:
     rows: list[list[object]] = []
     for e in sorted(events, key=lambda e: e.start):
-        if e.kind != "meteor" or e.label == "false_positive":
+        if e.kind != "meteor" or dismissed(e):
             continue  # SPEC §6.4 Labels: a false positive counts nowhere
         d: dict[str, Any] = e.data
         shower = d.get("shower")
@@ -84,7 +85,7 @@ def hourly_counts_csv(events: list[EventRecord]) -> str:
     counts: dict[dt.datetime, dict[str, int]] = defaultdict(lambda: defaultdict(int))
     showers: set[str] = set()
     for e in events:
-        if e.kind != "meteor" or e.label == "false_positive":
+        if e.kind != "meteor" or dismissed(e):
             continue
         hour = e.start.astimezone(dt.UTC).replace(minute=0, second=0, microsecond=0)
         shower = e.data.get("shower")

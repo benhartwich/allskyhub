@@ -16,7 +16,7 @@ from sqlalchemy import or_, select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
-from allskyhub_server.devices import public, triangulation
+from allskyhub_server.devices import events, public, triangulation
 from allskyhub_server.models import Device, EventRecord, MeteorPair
 
 log = logging.getLogger(__name__)
@@ -74,7 +74,7 @@ async def pair_event(maker: async_sessionmaker[AsyncSession], device_id: str, ev
                         EventRecord.device_id != device_id,
                         EventRecord.start <= event.end + SLACK,
                         EventRecord.end >= event.start - SLACK,
-                        or_(EventRecord.label.is_(None), EventRecord.label != "false_positive"),
+                        events.counted(),
                     )
                 )
             ).all()

@@ -19,6 +19,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from allskyhub_protocol import Observatory, PublicProfile, PublicSections, PublicState
+from allskyhub_server.devices import events
 from allskyhub_server.models import Device, EventRecord, Frame, Product
 
 # Products shown publicly as images; the night's timelapse comes separately (night_video).
@@ -155,7 +156,7 @@ async def recent_events(
         EventRecord.device_id == device.id,
         EventRecord.kind.in_(PUBLIC_EVENT_KINDS),
         EventRecord.has_thumb.is_(True),
-        (EventRecord.label.is_(None)) | (EventRecord.label != "false_positive"),
+        events.counted(),
     )
     if night_id is not None:
         query = query.where(EventRecord.night_id == night_id)

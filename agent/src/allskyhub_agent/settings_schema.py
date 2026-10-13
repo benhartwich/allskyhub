@@ -17,8 +17,8 @@ from allskyhub_agent.settings import (
     DETECT_CHOICES,
     DETECTORS,
     AgentSettings,
+    valid_http_url,
     valid_mqtt,
-    valid_nina_url,
 )
 from allskyhub_protocol import SetSettingsArgs, SettingSpec, invalid_settings
 
@@ -189,6 +189,24 @@ def _detector_entries() -> list[dict[str, Any]]:
         }
         for k in DETECTORS
         for de, en, help_de, help_en in [_DETECTOR_TEXT[k]]
+    ] + [
+        {
+            "key": "adsb_url",
+            "type": "string",
+            "label": {"de": "Eigener ADS-B-Empfänger", "en": "Own ADS-B receiver"},
+            "group": {"de": "Erkennung", "en": "Detection"},
+            "max_length": 200,
+            "help": {
+                "de": "Adresse der aircraft.json von readsb, dump1090 oder tar1090, z. B. "
+                "http://192.168.1.40/tar1090/data/aircraft.json. Die Kamera markiert damit "
+                "Flugzeuge unter den Meteoren, auch ohne Hub, und gibt sie an den Hub weiter. "
+                "Leer: aus (der Hub nimmt dann adsb.lol).",
+                "en": "Address of the aircraft.json of readsb, dump1090 or tar1090, e.g. "
+                "http://192.168.1.40/tar1090/data/aircraft.json. The camera uses it to mark "
+                "aircraft among the meteors, also without the hub, and passes them on to the "
+                "hub. Empty: off (the hub then uses adsb.lol).",
+            },
+        },
     ]
 
 
@@ -626,9 +644,10 @@ def check(schema: list[SettingSpec], changes: Mapping[str, Any]) -> list[str]:
     """Invalid keys of a partial update (SPEC §6.5): the schema, then the fixed checks
     (time zone name, location pair) of `SetSettingsArgs`."""
     bad = set(invalid_settings(schema, changes))
-    nina: object = changes.get("nina_url")
-    if isinstance(nina, str) and not valid_nina_url(nina):
-        bad.add("nina_url")
+    for k in ("nina_url", "adsb_url"):
+        url: object = changes.get(k)
+        if isinstance(url, str) and not valid_http_url(url):
+            bad.add(k)
     for k in ("mqtt_host", "mqtt_prefix", "mqtt_user"):
         v: object = changes.get(k)
         if isinstance(v, str) and not valid_mqtt(k, v):

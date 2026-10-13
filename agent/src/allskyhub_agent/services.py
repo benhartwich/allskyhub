@@ -20,6 +20,7 @@ from allskyhub_agent.products.build import newest_products, night_products
 from allskyhub_agent.settings import AgentSettings
 from allskyhub_agent.store.images import ImageStore
 from allskyhub_protocol import (
+    Aircraft,
     Event,
     EventLabel,
     FrameInfo,
@@ -124,7 +125,7 @@ class HubManager:
         if client is not None:
             client.notify_event(event)
 
-    def notify_message(self, body: EventLabel | NightDeleted) -> None:
+    def notify_message(self, body: EventLabel | NightDeleted | Aircraft) -> None:
         with self._lock:
             client = self._client
         if client is not None:

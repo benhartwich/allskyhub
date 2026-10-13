@@ -33,6 +33,7 @@ from allskyhub_agent.adapters.libcamera import LibcameraCamera, list_cameras
 from allskyhub_agent.adapters.network import Network, NmcliNetwork, SimNetwork
 from allskyhub_agent.adapters.sim import SimCamera, sky_radiance
 from allskyhub_agent.adapters.zwo import ZwoCamera, ZwoSettings
+from allskyhub_agent.adsb import AdsbReader
 from allskyhub_agent.alpaca.nina import NinaRelay
 from allskyhub_agent.alpaca.safety import SafetyConfig, SafetyMonitor
 from allskyhub_agent.alpaca.server import Alpaca, AlpacaServer, PortInUse
@@ -93,6 +94,7 @@ from allskyhub_agent.web.server import SettingsForm, SystemPage, TlsSetup, Updat
 from allskyhub_agent.web.support import RecentLog, Support
 from allskyhub_agent.web.tls import Certificates
 from allskyhub_protocol import (
+    AdsbStatus,
     DeviceSettings,
     Event,
     EventKind,
@@ -539,6 +541,7 @@ def main(argv: list[str] | None = None) -> int:
     settings_lock = threading.Lock()
     alpaca_error: list[str | None] = [None]  # SPEC §7.5, for status and the local UI
     observatory: list[Callable[[], Observatory | None]] = [lambda: None]  # N.I.N.A., §6.3
+    adsb_status: list[Callable[[], AdsbStatus | None]] = [lambda: None]  # receiver, §7.8
     # Learned at night, edited in the local UI (roadmap L8) before the camera is open.
     calibration_dir = Path(args.data) / "calibration"
     sky_mask = SkyMask(calibration_dir / "skymask.png")
@@ -656,6 +659,7 @@ def main(argv: list[str] | None = None) -> int:
                 alpaca_error=alpaca_error[0],
                 capture_paused=live.paused,
                 observatory=observatory[0](),
+                adsb=adsb_status[0](),
             )
 
         def device_settings() -> DeviceSettings:
@@ -967,9 +971,42 @@ def main(argv: list[str] | None = None) -> int:
             }
         )
 
+    # SPEC §7.8: the owner's ADS-B receiver marks aircraft among the meteors (roadmap H3).
+    adsb: AdsbReader | None = None
+
+    def aircraft_found(event: Event, detail: str) -> None:
+        label = EventLabel(
+            night_id=event.night_id,
+            event_id=event.id,
+            label="false_positive",
+            reason="aircraft",
+            auto=True,
+            detail=detail,
+            at=datetime.now(UTC),
+        )
+        amended = event_store.amend(event, {"aircraft": detail.split(" ")[0]})
+        stored = labels.set(label)
+        if hub is not None:
+            hub.notify_event(amended)
+            if stored:
+                hub.notify_message(label)
+
+    if tuned.adsb_url:
+        here = loc
+        adsb = reader = AdsbReader(
+            tuned.adsb_url,
+            location=lambda: (here.lat, here.lon),
+            relay=lambda a: hub.notify_message(a) if hub is not None else None,
+            on_match=aircraft_found,
+        )
+        adsb.start()
+        adsb_status[0] = lambda: reader.status
+
     def event_out(event: Event) -> None:
         if event.kind is EventKind.LIGHTNING:
             safety.lightning(event.start)
+        if adsb is not None:
+            adsb.check_later(event)
         if mqtt is not None:
             mqtt.event(event)
         if hub is not None:

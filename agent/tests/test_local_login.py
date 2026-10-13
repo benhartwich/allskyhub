@@ -95,6 +95,11 @@ def test_weak_or_foreign_verifier_is_refused() -> None:
         check_verifier(_verifier(memory=8192))
     with pytest.raises(ValueError, match="Argon2id"):
         check_verifier("$argon2i$v=19$m=19456,t=2,p=1$c2FsdA$aGFzaA")
+    # ... and above m=65536, t=10, p=4: one try must not take the Pi's memory or minutes.
+    with pytest.raises(ValueError, match="too costly"):
+        check_verifier("$argon2id$v=19$m=1048576,t=2,p=1$c2FsdHNhbHQ$aGFzaGhhc2g")
+    with pytest.raises(ValueError, match="too costly"):
+        check_verifier("$argon2id$v=19$m=19456,t=50,p=1$c2FsdHNhbHQ$aGFzaGhhc2g")
 
 
 def test_offline_code_any_case_with_or_without_hyphens(tmp_path: Path, verifier: str) -> None:

@@ -16,7 +16,7 @@ from allskyhub_server.models import Frame, Product
 from allskyhub_server.web.templating import night_title
 from tests.fake_device import FakeDevice
 from tests.helpers import make_account
-from tests.ws_helpers import JPEG, device_ws, next_command, paired_token
+from tests.ws_helpers import JPEG, device_ws, next_command, online, paired_token
 
 NIGHT = "20261006"
 
@@ -83,7 +83,7 @@ async def test_gallery_night_and_products(
 
     # Connected: the page asks the camera once and polls.
     async with device_ws(live_app, token) as ws:
-        await asyncio.sleep(0.1)
+        await online(app, dev.device_id)
         page = await client.get(f"{base}/products/{NIGHT}/timelapse.mp4")
         assert "Wird von der Kamera geholt" in page.text
         cmd = await next_command(ws)

@@ -25,6 +25,7 @@ from tests.ws_helpers import (
     device_ws,
     frame_info,
     next_command,
+    online,
     paired_token,
     send,
 )
@@ -99,12 +100,14 @@ async def test_new_connection_replaces_old(client: httpx.AsyncClient, live_app: 
             assert await closed_with(first) == CloseCode.REPLACED
 
 
-async def test_remove_closes_with_unpaired(client: httpx.AsyncClient, live_app: str) -> None:
+async def test_remove_closes_with_unpaired(
+    app: FastAPI, client: httpx.AsyncClient, live_app: str
+) -> None:
     dev = FakeDevice()
     token = await paired_token(client, dev)
     async with device_ws(live_app, token) as ws:
         await send(ws, Hello(device_id=dev.device_id, profile=dev.profile, agent_version="1"))
-        await asyncio.sleep(0.1)
+        await online(app, dev.device_id)
         await client.post(
             f"/cameras/{dev.device_id}/remove", data={"csrf_token": await home_csrf(client)}
         )

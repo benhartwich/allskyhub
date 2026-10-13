@@ -22,7 +22,7 @@ from allskyhub_server.push.notify import Notifier
 from tests.fake_device import FakeDevice
 from tests.helpers import PASSWORD, owner_email
 from tests.test_events import meteor
-from tests.ws_helpers import device_ws, paired_token, send
+from tests.ws_helpers import device_ws, paired_token, send, until
 
 
 class FakeSender:
@@ -192,12 +192,17 @@ async def test_offline_notification_once_per_outage(
 
     # Back online: a later outage notifies again.
     async with device_ws(live_app, token):
-        await asyncio.sleep(0.2)
-    async with maker() as db:
-        notified = await db.scalar(
-            select(Device.offline_notified_at).where(Device.id == dev.device_id)
-        )
-        assert notified is None
+
+        async def cleared() -> bool:
+            async with maker() as db:
+                return (
+                    await db.scalar(
+                        select(Device.offline_notified_at).where(Device.id == dev.device_id)
+                    )
+                    is None
+                )
+
+        await until(cleared)
 
 
 async def test_push_off_without_credentials(app: FastAPI, client: httpx.AsyncClient) -> None:

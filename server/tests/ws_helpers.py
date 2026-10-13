@@ -4,9 +4,11 @@ from __future__ import annotations
 
 import asyncio
 import datetime as dt
+from collections.abc import Awaitable, Callable
 
 import httpx
 import pytest
+from fastapi import FastAPI
 from websockets.asyncio.client import ClientConnection, connect
 from websockets.exceptions import ConnectionClosed
 
@@ -67,3 +69,22 @@ async def closed_with(ws: ClientConnection) -> int | None:
     with pytest.raises(ConnectionClosed) as info:
         await asyncio.wait_for(ws.recv(), 5)
     return info.value.rcvd.code if info.value.rcvd else None
+
+
+async def until(check: Callable[[], Awaitable[bool]], within: float = 5.0) -> None:
+    """Wait until ``check`` holds; a fixed sleep raced on a loaded CI machine."""
+    loop = asyncio.get_running_loop()
+    end = loop.time() + within
+    while not await check():
+        if loop.time() > end:
+            raise AssertionError("condition not reached in time")
+        await asyncio.sleep(0.05)
+
+
+async def online(app: FastAPI, device_id: str) -> None:
+    """Wait until the hub has registered the device's WebSocket."""
+
+    async def check() -> bool:
+        return bool(app.state.connections.is_online(device_id))
+
+    await until(check)

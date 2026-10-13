@@ -24,7 +24,7 @@ from allskyhub_server.devices.images import ImageStore
 from allskyhub_server.settings import Settings
 from tests.fake_device import FakeDevice
 from tests.helpers import PASSWORD, home_csrf, owner_email
-from tests.ws_helpers import device_ws, next_command, paired_token, send
+from tests.ws_helpers import device_ws, next_command, paired_token, send, until
 
 JPEG = b"\xff\xd8\xff\xe0" + b"\x00" * 64
 MP4 = b"\x00\x00\x00\x20ftypisom" + b"\x00" * 64
@@ -173,7 +173,11 @@ async def test_offline_camera_gives_404_for_missing_video(
         json={"email": await owner_email(app, dev.device_id), "password": PASSWORD},
     )
     auth = {"Authorization": f"Bearer {r.json()['access_token']}"}
-    await asyncio.sleep(0.1)  # the WebSocket is gone
+
+    async def gone() -> bool:
+        return not app.state.connections.is_online(dev.device_id)
+
+    await until(gone)  # the WebSocket is gone
     video = f"/api/v1/cameras/{dev.device_id}/products/{NIGHT}/timelapse.mp4"
     assert (await client.get(video, headers=auth)).status_code == 404
 

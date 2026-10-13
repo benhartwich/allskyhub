@@ -16,7 +16,7 @@ from allskyhub_server.devices.images import ImageStore
 from allskyhub_server.models import EventRecord
 from tests.fake_device import FakeDevice
 from tests.helpers import make_account
-from tests.ws_helpers import JPEG, device_ws, next_command, paired_token
+from tests.ws_helpers import JPEG, device_ws, next_command, online, paired_token
 
 NIGHT = "20261008"
 EVENT = "meteor-20261008T214512Z"
@@ -108,7 +108,7 @@ async def test_web_events(
     assert "Das Vollbild kommt, sobald die Kamera wieder verbunden ist" in offline
 
     async with device_ws(live_app, token) as ws:
-        await asyncio.sleep(0.1)
+        await online(app, dev.device_id)
         page = (await client.get(detail)).text
         assert "Vollbild wird von der Kamera geholt" in page
         cmd = await next_command(ws)

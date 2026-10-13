@@ -27,7 +27,7 @@ from allskyhub_server.models import EventRecord, NightStat
 from tests.fake_device import FakeDevice
 from tests.helpers import PASSWORD, csrf_from, make_account, owner_email
 from tests.test_web_events import EVENT, NIGHT, record
-from tests.ws_helpers import device_ws, paired_token, send
+from tests.ws_helpers import device_ws, online, paired_token, send
 
 
 async def test_labels_in_app_api_and_export(app: FastAPI, client: httpx.AsyncClient) -> None:
@@ -157,7 +157,7 @@ async def test_label_goes_to_the_camera_until_acknowledged(
     # A new label is sent at once while the camera is online; its ack ends it.
     async with device_ws(live_app, token) as ws:
         await send(ws, Hello(device_id=dev.device_id, profile=dev.profile, agent_version="1"))
-        await asyncio.sleep(0.2)
+        await online(app, dev.device_id)
         await client.put(url, json={"label": None}, headers=auth)
         env = parse_envelope(await asyncio.wait_for(ws.recv(), 5))
         assert isinstance(env.body, Command)

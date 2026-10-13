@@ -1,11 +1,14 @@
 {# SPEC §6.9: the settings form from the camera's schema (or the fixed fields). #}
-<form method="post" action="/cameras/{{ device.id }}/settings" class="card stack settings-form">
-  <h2>Einstellungen</h2>
+<details class="card fold" id="einstellungen" data-fold="einstellungen" open>
+<summary><h2>Einstellungen</h2></summary>
+<form method="post" action="/cameras/{{ device.id }}/settings" class="stack settings-form">
   <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
   {% if not settings_reported %}<p class="muted">Die Kamera hat ihre aktuellen Einstellungen noch nicht gemeldet. Leere Felder bleiben unverändert.</p>{% endif %}
   {% for group in settings_groups %}
-  <fieldset class="stack">
-    <legend>{{ group.name }}</legend>
+  {# Benjamin 2026-10-13: groups fold; the first one open, all of them after an error. #}
+  <details class="settings-group" data-fold="einstellungen:{{ group.name }}"{% if loop.first or error %} open{% endif %}{% if error %} data-fold-keep{% endif %}>
+    <summary>{{ group.name }}</summary>
+    <div class="stack">
     {% for f in group.fields %}
     {% set s = f.spec %}
     {% if s.type == 'location' %}
@@ -40,8 +43,10 @@
     {% if f.help %}<p class="muted small">{{ f.help }}</p>{% endif %}
     {% if s.type in ('number', 'int') and (s.min is not none or s.max is not none) %}<p class="muted small">Erlaubt: {{ s.min | int if s.min is not none and s.min == s.min | int else s.min }} bis {{ s.max | int if s.max is not none and s.max == s.max | int else s.max }}{% if s.unit %} {{ s.unit }}{% endif %}.</p>{% endif %}
     {% endfor %}
-  </fieldset>
+    </div>
+  </details>
   {% endfor %}
   <p class="muted">Die Kamera übernimmt die Werte sofort und startet dafür die Aufnahme neu. Das geht nur, solange sie verbunden ist.</p>
   <button type="submit"{% if not online %} disabled{% endif %}>Einstellungen übernehmen</button>
 </form>
+</details>

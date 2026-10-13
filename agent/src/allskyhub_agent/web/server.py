@@ -38,6 +38,7 @@ Routes:
     POST /api/network/wifi    {ssid, password?, country} → 202 {will_join}; as in setup mode,
                               a failed join opens the setup network (SPEC §7.1)
     GET  /api/tls             HTTPS on/off, port, whose certificate, fingerprint (SPEC §7.6)
+    POST /api/nights/<n>/events/<id>/label   {label, reason} (SPEC §6.4 Labels)
     POST /api/tls             {cert, key} PEM → 202 and a restart, or 400 {detail, fields}
     POST /api/tls/remove      back to the self-signed certificate → 202 and a restart
     GET  /api/update          version, installed releases, the updater's state (roadmap L14)
@@ -198,6 +199,7 @@ def _page(name: str = "index.html") -> bytes:
 
 _SYSTEM_ACTION = re.compile(r"^/api/system/(restart|reboot|shutdown)$")
 _NIGHT_API = re.compile(r"^/api/nights/(\d{8})/(frames|events|sky)$")
+_LABEL = re.compile(r"^/api/nights/(\d{8})/events/([a-z]+-\d{8}T\d{6}Z(?:-\d+)?)/label$")
 _FILE = re.compile(r"^/files/(\d{8})/(?:(products|events)/)?([A-Za-z0-9_.-]+)$")
 _TYPES = {".jpg": "image/jpeg", ".mp4": "video/mp4"}
 _RANGE = re.compile(r"^bytes=(\d*)-(\d*)$")
@@ -498,6 +500,25 @@ def make_handler(
                        (("Location", f"https://{host}:{port}{self.path}"),))  # fmt: skip
             return True
 
+        def _post_label(self, night: str, event_id: str) -> None:
+            """SPEC §6.4 Labels: {label, reason} for one detection, sent on to the hub."""
+            raw = self._read_body()
+            if raw is None:
+                return
+            if archive is None:
+                self._text(HTTPStatus.NOT_FOUND, "not found")
+                return
+            try:
+                body: object = json.loads(raw or b"{}")
+                label = archive.set_label(night, event_id, body)
+            except ValueError:
+                self._json(HTTPStatus.BAD_REQUEST, {"detail": "label", "fields": ["label"]})
+                return
+            if label is None:
+                self._json(HTTPStatus.NOT_FOUND, {"detail": "no such event"})
+                return
+            self._json(HTTPStatus.OK, label.model_dump(mode="json"))
+
         def _post_tls(self, path: str) -> None:
             """SPEC §7.6: install the owner's certificate and key (PEM), or drop them."""
             raw = self._read_body()
@@ -752,6 +773,8 @@ def make_handler(
                 self._post_wifi()
             elif path == "/api/restore":
                 self._restore()
+            elif m := _LABEL.match(path):
+                self._post_label(m[1], m[2])
             elif path in ("/api/tls", "/api/tls/remove"):
                 self._post_tls(path)
             elif path in ("/api/update/now", "/api/update/rollback"):

@@ -44,11 +44,13 @@ from allskyhub_protocol import (
     ErrorCode,
     ErrorReply,
     Event,
+    EventLabel,
     FrameInfo,
     FrameVariant,
     Hello,
     HubKey,
     LocalAccessArgs,
+    NightDeleted,
     Products,
     Purpose,
     RegisterRequest,
@@ -73,6 +75,7 @@ CAPABILITIES = [
     "focus_mode",
     "set_settings",
     "local_access",
+    "label_event",
 ]
 
 
@@ -174,8 +177,16 @@ class HubSession:
         backlog: Backlog | None = None,
         night_products: Callable[[str], Products | None] | None = None,
         night_events: Callable[[str], list[Event]] | None = None,
+        resend: Callable[[], list[EventLabel | NightDeleted]] | None = None,
+        on_label: Callable[[EventLabel], bool] | None = None,
     ) -> None:
         self._cfg = cfg
+        # SPEC §6.4 Labels, §7: the owner's labels and deleted nights, sent again after
+        # every hello (the hub keeps the newest); `on_label` stores one from the hub and says
+        # whether the event is known.
+        self._resend = resend
+        self._on_label = on_label
+        self._messages: list[EventLabel | NightDeleted] = []
         self._backlog = backlog
         self._night_products = night_products
         self._night_events = night_events
@@ -222,6 +233,11 @@ class HubSession:
         """Send a detection on the open connection; after a reconnect it is resent anyway."""
         if self._frames is not None:
             self._events.append(event)
+
+    def offer_message(self, body: EventLabel | NightDeleted) -> None:
+        """A label or a deleted night; after a reconnect all are resent anyway."""
+        if self._frames is not None:
+            self._messages.append(body)
 
     # --- main loop ---------------------------------------------------------------------
     async def run(self, stop: asyncio.Event) -> None:
@@ -319,6 +335,8 @@ class HubSession:
                 if self._events_src is not None:
                     # SPEC §6.4/§6.7: the current night's events again; the hub upserts.
                     self._events = await asyncio.to_thread(self._events_src.current_events)
+                if self._resend is not None:
+                    self._messages = await asyncio.to_thread(self._resend)
                 tasks: list[asyncio.Task[Any]] = [
                     asyncio.create_task(self._reader(ws, token)),
                     asyncio.create_task(self._writer(ws)),
@@ -347,6 +365,7 @@ class HubSession:
             self._frames = None
             self._products = None
             self._events = []
+            self._messages = []
             for task in self._uploads:
                 task.cancel()
             self._pairing.set_connected(False)
@@ -354,7 +373,15 @@ class HubSession:
     async def _send(
         self,
         ws: WebSocketLike,
-        body: Hello | Status | FrameInfo | Products | Event | Ack | ErrorReply,
+        body: Hello
+        | Status
+        | FrameInfo
+        | Products
+        | Event
+        | Ack
+        | ErrorReply
+        | EventLabel
+        | NightDeleted,
     ) -> None:
         await ws.send(Envelope.wrap(body, ts=_now()).model_dump_json())
 
@@ -375,6 +402,9 @@ class HubSession:
             events, self._events = self._events, []
             for event in events:
                 await self._send(ws, event)
+            messages, self._messages = self._messages, []
+            for message in messages:
+                await self._send(ws, message)
             if now >= next_status:
                 status = self._status()
                 if status is not None:
@@ -459,6 +489,14 @@ class HubSession:
             # SPEC §6.5: store it and drop the sessions opened with the old code.
             await asyncio.to_thread(self._local_access.set_verifier, local.verifier)
             return Ack(ref=ref)
+        if cmd.name is CommandName.LABEL_EVENT and self._on_label is not None:
+            try:
+                label = EventLabel.model_validate(cmd.args)
+            except ValidationError:
+                return ErrorReply(ref=ref, code=ErrorCode.INVALID_ARGS, message="label")
+            # SPEC §6.5: stored unless a newer one is there; unknown events are not_found.
+            known = await asyncio.to_thread(self._on_label, label)
+            return Ack(ref=ref) if known else ErrorReply(ref=ref, code=ErrorCode.NOT_FOUND)
         if cmd.name is CommandName.FOCUS_MODE:
             on = cmd.args.get("on")
             if not isinstance(on, bool):
@@ -595,6 +633,13 @@ class HubClient:
         if loop is not None and session is not None and not loop.is_closed():
             with contextlib.suppress(RuntimeError):
                 loop.call_soon_threadsafe(session.offer_frame, info)
+
+    def notify_message(self, body: EventLabel | NightDeleted) -> None:
+        """Never blocks; a label or a deleted night (SPEC §6.3)."""
+        loop, session = self._loop, self._session
+        if loop is not None and session is not None and not loop.is_closed():
+            with contextlib.suppress(RuntimeError):
+                loop.call_soon_threadsafe(session.offer_message, body)
 
     def notify_products(self, products: Products) -> None:
         """Never blocks; safe to call from the products worker."""

@@ -44,6 +44,7 @@ from allskyhub_agent.core.sun import sun_elevation
 from allskyhub_agent.detect import tuning
 from allskyhub_agent.detect.cloudmap import cloud_map
 from allskyhub_agent.detect.events import DetectionWorker, EventStore
+from allskyhub_agent.detect.labels import Labels
 from allskyhub_agent.detect.nlc import NlcDetector
 from allskyhub_agent.detect.sky import Mask, Points, SkyConfig, SkyMeter
 from allskyhub_agent.discovery import Announcer, host_name, local_ipv4
@@ -93,6 +94,7 @@ from allskyhub_protocol import (
     DeviceSettings,
     Event,
     EventKind,
+    EventLabel,
     FrameInfo,
     Observatory,
     SetSettingsArgs,
@@ -569,6 +571,15 @@ def main(argv: list[str] | None = None) -> int:
         location=lambda: (loc.lat, loc.lon) if loc is not None else None,
         time_trusted=system.time_trusted if settings_path else lambda: True,
     )
+    # SPEC §6.4 Labels: the owner's "confirmed" / "false positive", in sync with the hub.
+    labels = Labels(store)
+
+    def label_from_hub(label: EventLabel) -> bool:
+        if not any(e.id == label.event_id for e in event_store.night_events(label.night_id)):
+            return False
+        labels.set(label)
+        return True
+
     # Sky condition for status (SPEC §6.3); configured for the profile once it is known.
     sky_meter: SkyMeter | None = None
     # Plate-solved image orientation (SPEC §4.8), created with the detection worker.
@@ -624,6 +635,8 @@ def main(argv: list[str] | None = None) -> int:
             settings_schema=current_schema if settings_path else None,
             backlog=Backlog(args.data / BACKLOG_NAME),
             night_events=event_store.night_events,
+            resend=lambda: [*labels.all()],
+            on_label=label_from_hub,
         )
         hub.start(hub_url)
         print(f"device {identity.device_id}, hub {hub_url}")
@@ -705,7 +718,12 @@ def main(argv: list[str] | None = None) -> int:
             settings_form=SettingsForm(current_schema, settings_values, change_settings)
             if settings_path
             else None,
-            archive=LocalArchive(store, event_store),
+            archive=LocalArchive(
+                store,
+                event_store,
+                labels,
+                on_label=lambda lab: hub.notify_message(lab) if hub is not None else None,
+            ),
             calibration=calibration,
             public=PublicPage(hub_url, identity) if hub_url and identity is not None else None,
             system_page=SystemPage(

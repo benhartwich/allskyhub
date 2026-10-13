@@ -19,7 +19,16 @@ from allskyhub_agent.live import LiveState
 from allskyhub_agent.products.build import newest_products, night_products
 from allskyhub_agent.settings import AgentSettings
 from allskyhub_agent.store.images import ImageStore
-from allskyhub_protocol import Event, FrameInfo, Products, SetSettingsArgs, SettingSpec, Status
+from allskyhub_protocol import (
+    Event,
+    EventLabel,
+    FrameInfo,
+    NightDeleted,
+    Products,
+    SetSettingsArgs,
+    SettingSpec,
+    Status,
+)
 
 log = logging.getLogger(__name__)
 
@@ -42,8 +51,12 @@ class HubManager:
         settings_schema: Callable[[], list[SettingSpec]] | None = None,
         backlog: Backlog | None = None,
         night_events: Callable[[str], list[Event]] | None = None,
+        resend: Callable[[], list[EventLabel | NightDeleted]] | None = None,
+        on_label: Callable[[EventLabel], bool] | None = None,
     ) -> None:
         self._night_events = night_events
+        self._resend = resend
+        self._on_label = on_label
         self._identity = identity
         self._backlog = backlog
         self._local_access = local_access
@@ -81,6 +94,8 @@ class HubManager:
                 backlog=self._backlog,
                 night_products=lambda night: night_products(self._store, night),
                 night_events=self._night_events,
+                resend=self._resend,
+                on_label=self._on_label,
             )
 
         client = HubClient(make_session, cfg)
@@ -108,6 +123,12 @@ class HubManager:
             client = self._client
         if client is not None:
             client.notify_event(event)
+
+    def notify_message(self, body: EventLabel | NightDeleted) -> None:
+        with self._lock:
+            client = self._client
+        if client is not None:
+            client.notify_message(body)
 
     def notify_products(self, products: Products) -> None:
         with self._lock:

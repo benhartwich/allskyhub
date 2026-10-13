@@ -410,8 +410,11 @@ def test_auto_labels_give_way_to_the_owner() -> None:
                 "detail": "DLH4AB 3c6444", "at": t + timedelta(hours=1)}
     )  # fmt: skip
     assert auto.replaces(None)
-    assert not auto.replaces(owner)  # never over an existing label, however new
+    assert not auto.replaces(owner)  # never over the owner's label, however new
     assert not auto.replaces(auto)
+    named = auto.model_copy(update={"detail": "ISS", "at": t + timedelta(hours=2)})
+    assert named.replaces(auto)  # a catalogue name over the trail verdict (SPEC §6.4)
+    assert not auto.replaces(named)
     assert owner.replaces(auto)  # the owner always wins, however old
     later = owner.model_copy(update={"at": t + timedelta(minutes=1)})
     assert later.replaces(owner)

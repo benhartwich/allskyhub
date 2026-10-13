@@ -529,7 +529,8 @@ LabelReason = Literal["aircraft", "satellite", "artifact", "other"]
 class EventLabel(_Body):
     """A label of a detection, set on the camera (SPEC §6.4 Labels); the same fields are
     the `args` of the `label_event` command (SPEC §6.5). `auto` labels come from a
-    matcher (aircraft, SPEC §7.8), never replace a label and give way to the owner's."""
+    matcher (trail verdicts, aircraft, satellites, SPEC §6.4, §7.8, §7.9): never over the
+    owner's label, which always replaces them; between two automatic ones the newer wins."""
 
     TYPE: ClassVar[str] = "event_label"
     night_id: str = Field(pattern=r"^\d{8}$")
@@ -552,9 +553,11 @@ class EventLabel(_Body):
         """Whether this label wins over the stored one (SPEC §6.4 Labels)."""
         if old is None:
             return True
-        if self.auto:
-            return False
-        return old.auto or self.at > old.at
+        if self.auto and not old.auto:
+            return False  # never over the owner's
+        if old.auto and not self.auto:
+            return True  # the owner's always wins
+        return self.at > old.at  # two of the same kind: the newer one
 
 
 class AircraftPosition(BaseModel):

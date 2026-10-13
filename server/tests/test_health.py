@@ -57,6 +57,10 @@ def test_checks() -> None:
     )
     assert health.check(stopped, True, NOW) == []
     assert health.paused(stopped)
+    # SPEC §8: updates waiting for the reboot by day are shown, but are no problem.
+    waiting = _device(last_status={"time_trusted": True, "reboot_required": True})
+    assert health.reboot_required(waiting)
+    assert not health.reboot_required(stopped)
     # SPEC §6.3 alpaca_error: shown with the configured port; unknown values as they are.
     taken = _device(last_status={"alpaca_error": "port_in_use",
                                  "settings": {"alpaca_port": 11111}})  # fmt: skip

@@ -41,6 +41,10 @@ List<StatusRow> statusRows({
     // SPEC §4.1: paused in the camera's local page.
     rows.add(const StatusRow('Aufnahme', 'pausiert', warning: true));
   }
+  if (status['reboot_required'] == true) {
+    // SPEC §8: system updates wait; the camera reboots by day on its own.
+    rows.add(const StatusRow('Neustart', 'tagsüber für Updates'));
+  }
   final mode = status['mode'];
   if (mode is String) {
     rows.add(StatusRow('Modus', mode == 'night' ? 'Nacht' : 'Tag'));

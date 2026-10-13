@@ -50,6 +50,12 @@ def _when(value: object) -> dt.datetime | None:
         return None
 
 
+def reboot_required(device: Device) -> bool:
+    """SPEC §6.3, §8 ``reboot_required``: system updates wait for the camera's reboot,
+    which it does by day on its own."""
+    return (device.last_status or {}).get("reboot_required") is True
+
+
 def paused(device: Device) -> bool:
     """SPEC §4.1, §6.3 ``capture_paused``: the owner paused capture on the camera."""
     return (device.last_status or {}).get("capture_paused") is True

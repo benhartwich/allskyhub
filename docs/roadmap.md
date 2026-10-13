@@ -119,7 +119,7 @@ hub side. Push needs the Firebase project; until then the same messages show on 
 | H2 | Flutter app catches up with the web: charts, lightbox, sharing, statistics, "Heute Nacht", exports, e-mail notification switches | hub | done 2026-10 (in parallel with the local work) |
 | H3 | Aircraft from ADS-B: label planes in the live image and drop their trails from meteor detections | hub | Benjamin, 2026-10-13 (indi-allsky ADS-B); an open ADS-B feed or the owner's own receiver |
 | H4 | "Ziel frei?": is a chosen object (or a sky area) clear now and in the next hours, from the camera's cloud map and the forecast; light-pollution map next to it | hub | Benjamin, 2026-10-13; from the roadmap brainstorm 2026-09-26 |
-| H5 | Upload the night's timelapse to YouTube and post detections to Discord | hub | Benjamin, 2026-10-13 (indi-allsky/Allsky); the owner connects the accounts on the hub, never on the camera |
+| H5 | Upload the night's timelapse to YouTube and post detections to Discord | hub | Benjamin, 2026-10-13 (indi-allsky/Allsky); the owner connects the accounts on the hub, never on the camera. Done: Discord (webhook per camera, web and app). Open: YouTube (needs a Google Cloud project with YouTube API access from Benjamin) |
 
 ## Needs Benjamin / hardware
 

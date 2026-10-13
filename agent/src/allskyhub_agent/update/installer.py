@@ -69,6 +69,11 @@ class Paths:
     keys_dir: Path
 
     @property
+    def key_store(self) -> Path:
+        """The newest accepted key list (SPEC §8 Key revocation), next to the state."""
+        return self.state_file.parent
+
+    @property
     def releases(self) -> Path:
         return self.install_dir / "releases"
 
@@ -157,7 +162,9 @@ class Updater:
     def _update(self, at_night: bool = False) -> None:
         current = self.current_version()
         try:
-            manifest = fetch_manifest(self.http, self.manifest_url, self.paths.keys_dir)
+            manifest = fetch_manifest(
+                self.http, self.manifest_url, self.paths.keys_dir, self.paths.key_store
+            )
         except httpx.HTTPError as exc:
             log.info("no update manifest (offline or nothing published): %s", exc)
             return

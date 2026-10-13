@@ -133,7 +133,7 @@ again in the code. Benjamin decided the open questions on 2026-10-13.
 | S1 | Local UI: refuse cross-site POSTs, no framing; Host allow-list against DNS rebinding with the setting `local_hostnames` | agent | Origin check, X-Frame-Options: #204; Host list: SPEC §7.4 |
 | S2 | Setup network with WPA2 and a per-camera setup key (QR label, file on the boot partition), `hub_url` https only | agent + hub (app) | SPEC §7.1; the app scans the Wi-Fi QR code |
 | S3 | MQTT password deleted when the broker changes; MQTT, N.I.N.A. and ADS-B addresses owner-only on the hub | agent + hub | SPEC §7.7; hub part in #202 |
-| S4 | Release pipeline before update keys exist: protected environment with a reviewer, tag must be on `main`, actions pinned by SHA; key revocation | agent | needs Benjamin to create the GitHub environment |
+| S4 | ✅ Release pipeline before update keys exist: protected environment with a reviewer, tag must be on `main`, actions pinned by SHA; key revocation | agent | #206; revocation with `keys.json`, signed by the emergency key (SPEC §8 Key revocation) |
 | S5 | Root tools never write through links in the agent's folder | agent | #204 |
 | S6 | Offline code: tries counted before Argon2, one at a time, parameters capped | agent | #204; caps in SPEC §6.5 |
 | S7 | Image: nftables input filter, narrower polkit rule for NetworkManager, reboot by day for security updates | agent | SPEC §8 |
@@ -146,4 +146,4 @@ again in the code. Benjamin decided the open questions on 2026-10-13.
 - Apple developer account (open), Play Console via WebInx.
 - Housing: Daniel Nimmervoll's design.
 - ~~Update signing keys~~ done 2026-10-13: both public keys in the image, the main key as
-  secret of the reviewed environment `release` (docs/updates.md). Open: key revocation.
+  secret of the reviewed environment `release` (docs/updates.md); revocation with the key list.

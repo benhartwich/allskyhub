@@ -30,12 +30,13 @@ within 5 minutes, it switches back and does not try that version again. The stat
 
 | Key | Public (in the image) | Private |
 |---|---|---|
-| Main | `image/files/etc/allskyhub-agent/update-keys/allskyhub-2026-main.pem` | GitHub secret `ALLSKYHUB_UPDATE_KEY` and an offline backup with the project owner |
-| Emergency | `…/allskyhub-2026-backup.pem` | offline backup with the project owner only |
+| Main (release) | `image/files/etc/allskyhub-agent/update-keys/allskyhub-2026-main.pem` | GitHub secret `ALLSKYHUB_UPDATE_KEY` and an offline backup with the project owner |
+| Emergency | `…/update-keys/emergency/allskyhub-2026-backup.pem` | offline with the project owner only |
 
-The camera trusts every `*.pem` in `/etc/allskyhub-agent/update-keys/`. An update replaces
-`/opt/allskyhub-agent`, never `/etc`: **cameras learn keys only from an image**, so the keys
-must be in the image before cameras go out.
+The camera trusts every `*.pem` in `/etc/allskyhub-agent/update-keys/` as a release key.
+The emergency keys in `emergency/` sign only the key list (below), never a release. An
+update replaces `/opt/allskyhub-agent`, never `/etc`: **cameras learn keys from an image or
+from the key list**, so both keys must be in the image before cameras go out.
 
 Creating the keys (once, on the owner's computer, never in the repository):
 
@@ -56,8 +57,33 @@ waits for your approval, and the workflow refuses a tag whose commit is not on `
 
 Commit the two `.pem` files; keep both `.key` files offline (e.g. a password manager).
 
-- **Main key lost or leaked:** put the emergency key into the secret, release, and build an
-  image with a new key pair.
+## Key revocation
+
+If the main key leaks (or is lost), revoke it and add a new one with the key list
+(SPEC §8 Key revocation), on the owner's computer, with the offline emergency key:
+
+```bash
+openssl genpkey -algorithm ed25519 -out allskyhub-2027-main.key
+openssl pkey -in allskyhub-2027-main.key -pubout -out allskyhub-2027-main.pem
+K=image/files/etc/allskyhub-agent/update-keys
+tools/release/make_keys.py 1 --revoke $K/allskyhub-2026-main.pem \
+  --add allskyhub-2027-main.pem > keys.json
+openssl pkeyutl -sign -rawin -inkey allskyhub-2026-backup.key -in keys.json -out keys.json.sig
+openssl pkeyutl -verify -pubin -inkey $K/emergency/allskyhub-2026-backup.pem -rawin \
+  -in keys.json -sigfile keys.json.sig
+gh release upload channel-stable keys.json keys.json.sig --clobber
+gh secret set ALLSKYHUB_UPDATE_KEY --env release < allskyhub-2027-main.key
+```
+
+Then commit `allskyhub-2027-main.pem` next to the old key in `update-keys/` (new images
+trust it from the start) and release a new version, signed with the new key. Cameras fetch
+the list before every update, so they refuse anything the old key signs from then on.
+
+- Each list is complete: a later one (serial 2, 3, …) lists every key revoked so far.
+  Cameras take only a higher serial and keep the newest even if it is removed from the
+  channel.
+- **Emergency key leaked:** it could add its own release key. Build an image with a new
+  emergency key pair; cameras with the old image cannot be protected without it.
 - **Never** put a private key into the repository, logs or artifacts.
 
 ## Own channel

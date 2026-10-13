@@ -217,6 +217,11 @@ class SkyMetrics(BaseModel):
     cloud_cover: float | None = Field(default=None, ge=0, le=1)
     sqm_mag: float | None = None  # mag/arcsec², approximate until calibrated
     stars: int | None = Field(default=None, ge=0)
+    # SPEC §6.3: cloud cover per sky cell (8 azimuth sectors x 3 altitude bands, index =
+    # 8·band + sector), each 0..1 or null; null unless the camera is oriented and it is night.
+    cloud_map: list[Annotated[float, Field(ge=0, le=1)] | None] | None = Field(
+        default=None, min_length=24, max_length=24
+    )
 
 
 class Lens(BaseModel):

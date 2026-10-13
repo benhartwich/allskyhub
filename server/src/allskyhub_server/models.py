@@ -138,6 +138,9 @@ class Device(Base):
     public_slug: Mapped[str | None] = mapped_column(String(32), unique=True)
     # What the public page shows and its texts (devices/public.py PublicProfile); None = defaults.
     public_profile: Mapped[dict[str, Any] | None] = mapped_column(JSONB)
+    # The public page also listed on the hub's start page; the owner's choice, kept on the
+    # hub only (not part of the profile of SPEC §6.8).
+    public_on_home: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
     # Roadmap H5: Discord webhook and what goes there (devices/discord.py), and the night
     # whose summary was posted.
     discord: Mapped[dict[str, Any] | None] = mapped_column(JSONB)

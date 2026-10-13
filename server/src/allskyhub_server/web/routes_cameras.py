@@ -15,6 +15,7 @@ from allskyhub_server.auth import ratelimit
 from allskyhub_server.auth.sessions import SessionInfo
 from allskyhub_server.devices import (
     archive,
+    camera_map,
     discord,
     domains,
     events,
@@ -74,7 +75,7 @@ async def _own_device(db: DbSession, session: SessionInfo, device_id: str) -> De
 async def home(request: Request, db: DbSession, session: OptionalSession) -> Response:
     """Signed in: the user's cameras. Otherwise the public start page."""
     if session is None:
-        return render(request, "landing.html")
+        return render(request, "landing.html", {"cameras": await camera_map.home_cameras(db)})
     registry = _registry(request)
     now = dt.datetime.now(dt.UTC)
     cameras = [
@@ -277,6 +278,7 @@ async def public_save(
     form = await request.form()
     data: dict[str, Any] = {key: str(form.get(key) or "") for key in PUBLIC_TEXTS}
     data["show_coordinates"] = form.get("show_coordinates") == "on"
+    device.public_on_home = form.get("on_home") == "on"
     data["sections"] = {key: form.get(f"section_{key}") == "on" for key in PUBLIC_SECTIONS}
     try:
         profile = public.PublicProfile.model_validate(data)

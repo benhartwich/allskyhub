@@ -8,6 +8,7 @@
     <p class="lead">allskyhub ist eine Allsky-Kamera zum Einstecken: Raspberry Pi mit getesteter Kamera, fertiges Image, Einrichtung mit dem Handy. Kein FTP, keine Portfreigabe, keine Installationsorgien.</p>
     <p class="actions">
       <a class="button" href="/login">Anmelden</a>
+      <a class="button secondary" href="/karte">Kamerakarte</a>
       <a class="button secondary" href="https://github.com/benhartwich/allskyhub">Auf GitHub ansehen</a>
     </p>
   </div>
@@ -43,6 +44,22 @@
     </g>
   </svg>
 </section>
+
+{% if cameras %}
+<section class="home-cameras stack" aria-labelledby="home-cameras">
+  <h2 id="home-cameras">Öffentliche Kameras</h2>
+  <ul class="home-camera-grid">
+    {% for c in cameras %}
+    <li><a class="card home-camera" href="/sky/{{ c.slug }}">
+      {% if c.image_at %}<img src="/sky/{{ c.slug }}/latest.jpg?t={{ c.image_at.timestamp() | int }}" alt="Himmel über {{ c.title }}" loading="lazy" width="320" height="320">{% else %}<div class="sky-ph" aria-hidden="true"></div>{% endif %}
+      <strong>{{ c.title }}</strong>
+      {% if c.place %}<span class="muted">{{ c.place }}</span>{% endif %}
+    </a></li>
+    {% endfor %}
+  </ul>
+  <p><a href="/karte">Alle Kameras auf der Karte →</a></p>
+</section>
+{% endif %}
 
 <section class="features">
   <div class="card">

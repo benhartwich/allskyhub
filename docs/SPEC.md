@@ -400,6 +400,7 @@ base64url-encoded without padding.
   `alpaca_error` (null, or `port_in_use` while `alpaca_enabled` is on but the Alpaca
   server could not start, §7.5).
   `capture_paused` (optional, default false): the owner paused capture (§4.1).
+  `reboot_required` (optional, default false): system updates wait for a reboot (§8).
   `adsb` (optional, null unless `adsb_url` is set): the owner's ADS-B receiver (§7.8).
   `update` (null until the updater ran, §8): `{state, version, at, code}` with `state`
   one of `up_to_date`, `downloading`, `waiting` (downloaded, waits for the day),
@@ -581,7 +582,8 @@ answers `ack`, or `error` with `not_found` if the event has no picture or it is 
 **`local_access`** `{verifier}`: the verifier of the camera's offline code (§7.4), a PHC
 string `$argon2id$v=19$m=19456,t=2,p=1$<salt>$<hash>`, or `null` to remove it. The device
 answers `error` `invalid_args` for any other algorithm and for parameters below m=19456,
-t=2. The device
+t=2 or above m=65536, t=10, p=4 (more would cost the camera's memory or minutes per try).
+The camera runs one check at a time and counts a try before it runs. The device
 stores it (replacing an older one), drops all local sessions that were opened with the
 offline code, and answers `ack`. The hub sends it when the owner creates or removes the
 code and, until the device has acknowledged it, again after every `hello`. The hub never
@@ -749,11 +751,22 @@ The camera opens its own Wi-Fi network for setup:
 
 - **When:** on start without any configured Wi-Fi and without Ethernet, or when the
   configured Wi-Fi has been unreachable for 2 minutes and there is no Ethernet.
-- **Network:** open Wi-Fi `allskyhub-XXXX`, where `XXXX` is the first four characters of
-  the device id in upper case. The camera is `10.42.0.1`, hands out addresses by DHCP
+- **Network:** Wi-Fi `allskyhub-XXXX` with WPA2-PSK, where `XXXX` is the first four
+  characters of the device id in upper case, and the camera's **setup key** as passphrase
+  (Benjamin, 2026-10-13: an open network let anyone nearby read the home Wi-Fi password
+  or set the camera up first). The camera is `10.42.0.1`, hands out addresses by DHCP
   and answers every DNS query with `10.42.0.1` (captive portal). The local web UI is at
   `http://10.42.0.1:8080/`; port 80 redirects there.
 - **End:** after the camera has joined a network, or after 15 minutes without a request.
+- **Setup key:** 12 characters from the pairing alphabet, shown as `XXXX-XXXX-XXXX` (the
+  passphrase is the 12 characters without hyphens). It lives in
+  `/boot/firmware/allskyhub-setup-key.txt` and stays there; the camera makes a random one
+  on first boot if the file is missing or unusable. A camera that is sold carries it on a
+  label as the standard Wi-Fi QR code `WIFI:T:WPA;S:allskyhub-XXXX;P:<key>;;`, which the
+  phone's camera and the app both read; the app also takes it typed. Whoever flashes the
+  image can write the file before the first boot (any 12 characters from the alphabet),
+  read the made one from the SD card, or skip the setup network with a setup file (§7.3).
+  `GET /api/setup` never shows it.
 
 Endpoints, only reachable from the setup network:
 
@@ -764,7 +777,9 @@ Endpoints, only reachable from the setup network:
 | `POST /api/setup/network` | `{ssid, password?, country, hub_url?, latitude?, longitude?, timezone?}` → `202 {will_join: ssid}` |
 
 - `country` is the ISO 3166 code for the radio rules (set by a root helper of the image before joining); `hub_url` overrides the configured
-  hub (default `https://allskyhub.org`).
+  hub (default `https://allskyhub.org`) and must be `https` (`400` otherwise; the token
+  for the hub must never go over plain `ws`). The SSID and the password must not contain
+  control characters.
 - `latitude` and `longitude` (degrees, both or neither) and `timezone` (IANA name, e.g.
   `Europe/Vienna`) come from the phone. The camera needs the location for day and night
   (§4.2) and the time zone for its night folders (§4.5); it only starts capturing once it
@@ -807,7 +822,7 @@ For setting up without the app (and for cameras on Ethernet with a fixed hub): a
  "camera": "auto"}
 ```
 
-All keys except `allskyhub_setup` are optional. `camera` is `auto` (default: a ZWO
+All keys except `allskyhub_setup` are optional. `hub_url` must be `https`. `camera` is `auto` (default: a ZWO
 camera if one is connected, else a Raspberry Pi camera), `zwo-asi678mc`, `rpi-hq` or `sim`
 (a simulated camera, for testing an image without a camera). The file is read once at
 boot, applied (Wi-Fi as a NetworkManager connection, country, hub, location, time zone,
@@ -815,6 +830,17 @@ camera) and deleted. An unusable file is renamed to `allskyhub-setup.failed.json
 again.
 
 ### 7.4 Local login
+
+**Addresses** (security review, Benjamin 2026-10-13). Against DNS rebinding the local UI
+answers only requests whose `Host` (without port) is an IP address, `localhost`, a name
+ending in `.local`, a name without a dot (a short name from the home router), or one of
+the names in the setting `local_hostnames` (a list of host names, default empty, e.g.
+`allsky.fritz.box`); also every request in setup mode (the setup network has no other
+sites) and every request from 127.0.0.1 or ::1 (a reverse proxy on the same machine,
+like the one for a public domain). Any other `Host` gets `421` with a short page that
+names the setting. A browser `POST` whose `Origin` is not the address the UI was reached
+under is refused with `403` (cross-site request forgery); requests without `Origin`
+(the app, scripts) are not affected. No page may be framed (`X-Frame-Options: DENY`).
 
 **Unpaired**, nothing changes: no login. **Paired**, every page and API of the local UI
 needs a local session, except `GET /api/setup` (no secrets; the app's onboarding polls
@@ -997,6 +1023,8 @@ connects to the broker on the local network and publishes, with `<base>` =
   with the device's name and id, so the camera appears as one device.
 
 The agent only publishes; it subscribes to nothing and cannot be controlled over MQTT.
+Changing `mqtt_host` or `mqtt_port` deletes the stored password unless the same change
+sets a new one, so nobody (a hub included) can send the password to another broker.
 A broker that cannot be reached is retried with backoff and never slows capture.
 
 ### 7.8 Aircraft (ADS-B)
@@ -1091,6 +1119,12 @@ report healthy within a timeout.
   which reads and deletes it. `now` checks at once and installs also at night;
   `rollback` switches to the previous installed release with the same health check and
   marks the current one as not to be installed again by itself.
+- **System updates:** Debian and Raspberry Pi OS security updates install by themselves
+  (unattended-upgrades, no automatic reboot by apt). When they need a reboot
+  (`/run/reboot-required`, a new kernel), the agent reboots once it is day: sun at least
+  10° up, local time 10:00 to 16:00, no product being built, no update installing, at
+  most once a day (Benjamin, 2026-10-13); until then `status.reboot_required` is true and
+  the local UI and the hub show "Neustart für Sicherheitsupdates ausstehend".
 - Details and key handling: `docs/updates.md`.
 
 ### 8.1 Watchdog

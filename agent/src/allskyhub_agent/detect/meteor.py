@@ -90,12 +90,12 @@ def radiant(name: str, day: date) -> tuple[float, float]:
     return (ra + dra * days) % 360.0, dec + ddec * days
 
 
-def _vec(az: float, alt: float) -> npt.NDArray[np.float64]:
+def sky_unit(az: float, alt: float) -> npt.NDArray[np.float64]:
     a, e = math.radians(az), math.radians(alt)
     return np.array([math.cos(e) * math.sin(a), math.cos(e) * math.cos(a), math.sin(e)])
 
 
-def _angle(a: npt.NDArray[np.float64], b: npt.NDArray[np.float64]) -> float:
+def angle_between(a: npt.NDArray[np.float64], b: npt.NDArray[np.float64]) -> float:
     return math.degrees(math.atan2(float(np.linalg.norm(np.cross(a, b))), float(a @ b)))
 
 
@@ -105,7 +105,7 @@ def radiant_distance(
     """How far (degrees) a radiant at (az, alt) is from the meteor's path between the ends
     (az, alt) extended along its great circle; None if the radiant lies on the trail
     itself: a meteor moves away from its radiant and never crosses it."""
-    p1, p2, r = _vec(*end1), _vec(*end2), _vec(*rad)
+    p1, p2, r = sky_unit(*end1), sky_unit(*end2), sky_unit(*rad)
     n = np.cross(p1, p2)
     norm = float(np.linalg.norm(n))
     if norm < 1e-6:
@@ -117,7 +117,7 @@ def radiant_distance(
     if qn < 1e-9:
         return off  # the radiant is the circle's pole: 90 degrees off anyway
     q = q / qn
-    if _angle(p1, q) + _angle(q, p2) - _angle(p1, p2) < 1e-3:
+    if angle_between(p1, q) + angle_between(q, p2) - angle_between(p1, p2) < 1e-3:
         return None
     return off
 
@@ -420,6 +420,10 @@ class MeteorDetector:
         self._prev_gray: Gray | None = None
         self._pending: _Pending | None = None
         self._hotspots: deque[tuple[float, float, float]] = deque(maxlen=2000)
+
+    @property
+    def config(self) -> MeteorConfig:
+        return self._cfg
 
     def set_mask(self, mask: Mask) -> None:
         """Use the learned sky mask (SPEC §4.7) instead of the image circle."""

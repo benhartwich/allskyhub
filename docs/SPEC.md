@@ -539,8 +539,14 @@ scales with the frame size), `star` and `star_trail` only for streaks up to 130 
 without its disappearance at the same place in the next frame (flicker), one whose light
 is there in the frames before and after too (a drifting star) and every streak of a
 cloudy or twinkling frame are dropped without an event, as before. The camera sets the
-automatic label when it saves the event and sends it as `event_label` (§6.3). At most 300 non-`meteor`
-events are kept per night; beyond that they are only counted in the log. Nothing is deleted:
+automatic label when it saves the event and sends it as `event_label` (§6.3).
+
+The pieces of one moving object (`moving` or `circle`) in frames at most 5 minutes apart,
+each continuing the previous piece or at the same place (a drifting contrail), are one
+event (Benjamin, 2026-10-13): it is sent again with the same id as it grows, `end` and
+`data.frames` grow, `end_*` is the end of the newest piece farther from `start_*`, and the
+picture stays the first piece's. At most 300 non-`meteor`
+events are kept per night (a growing one counts once); beyond that they are only counted in the log. Nothing is deleted:
 the owner sees them with "Aussortierte zeigen" and can label any of them a meteor.
 
 ### 6.5 Hub → device

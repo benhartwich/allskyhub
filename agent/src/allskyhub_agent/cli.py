@@ -1008,6 +1008,8 @@ def main(argv: list[str] | None = None) -> int:
             safety.lightning(event.start)
         # SPEC §6.4 Trail verdicts: a streak that is no meteor is kept with an automatic label.
         label = trail_label(event)
+        if label is not None and event.id in labels.night(event.night_id):
+            label = None  # a pass that grows: labelled with its first piece, or by the owner
         if label is not None:
             labels.set(label)
         if adsb is not None:

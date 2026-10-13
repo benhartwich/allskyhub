@@ -7,13 +7,14 @@ and `events.jsonl` with one `event` body per line.
 from __future__ import annotations
 
 import logging
+import math
 import queue
 import threading
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 import numpy as np
 from PIL import Image as PILImage
@@ -32,7 +33,11 @@ from allskyhub_agent.detect.meteor import (
     MeteorHit,
     Streak,
     active_shower,
+    angle_between,
     match_shower,
+    progressing,
+    similar,
+    sky_unit,
     to_gray,
 )
 from allskyhub_agent.detect.nlc import NlcDetector, NlcUpdate
@@ -212,6 +217,32 @@ class EventStore:
             self._append(event)
         return event
 
+    def extend_pass(self, event: Event, hit: MeteorHit) -> Event:
+        """A further piece of a moving object (SPEC §6.4 Trail verdicts): the same event,
+        later `end`, one more frame, and `end_*` the new piece's end farther from the start."""
+        f, s = hit.frame, hit.streak
+        data = dict(event.data)
+        data["frames"] = int(cast("int", data.get("frames") or 1)) + 1
+        ends = self._track_ends(f, s)
+        a1, z1 = data.get("start_altitude_deg"), data.get("start_azimuth_deg")
+        if isinstance(a1, float | int) and isinstance(z1, float | int):
+            start = sky_unit(float(z1), float(a1))
+            far: tuple[float, float] | None = None
+            best = -1.0
+            for k in ("start", "end"):
+                alt, az = ends[f"{k}_altitude_deg"], ends[f"{k}_azimuth_deg"]
+                if isinstance(alt, float | int) and isinstance(az, float | int):
+                    d = angle_between(start, sky_unit(float(az), float(alt)))
+                    if d > best:
+                        best, far = d, (float(alt), float(az))
+            if far is not None:
+                data["end_altitude_deg"], data["end_azimuth_deg"] = far
+        end = f.captured_at + timedelta(microseconds=f.exposure_us)
+        with self._lock:
+            out = event.model_copy(update={"end": max(event.end, end), "data": data})
+            self._append(out)
+        return out
+
     def save_lightning(self, hit: LightningHit) -> Event:
         """Store the whole frame (scaled), thumbnail and index line (SPEC §6.4)."""
         f = hit.frame
@@ -380,6 +411,17 @@ class EventStore:
         tmp.replace(d / "thumbnails" / f"{eid}.jpg")
 
 
+# SPEC §6.4: pieces of one moving object at most this far apart are one event.
+PASS_GAP = timedelta(minutes=5)
+
+
+@dataclass
+class _Pass:
+    event: Event
+    streak: Streak
+    last: datetime
+
+
 @dataclass(frozen=True)
 class _Job:
     frame: FrameInfo
@@ -435,6 +477,7 @@ class DetectionWorker:
         self._nlc = nlc
         self._mask_version = -1
         self._rejects: dict[str, int] = {}  # streaks per night that are not meteors
+        self._passes: list[_Pass] = []  # moving objects still crossing the sky
         self._q: queue.Queue[_Job | None] = queue.Queue(maxsize=4)
         self._dropped = 0
         self._thread = threading.Thread(target=self._run, name="detect", daemon=True)
@@ -452,8 +495,35 @@ class DetectionWorker:
             if self._dropped % 10 == 1:
                 log.warning("detection behind; %d frame(s) skipped", self._dropped)
 
+    def _continued(self, hit: MeteorHit) -> Event | None:
+        """The open pass this piece of a moving object continues, if any (SPEC §6.4)."""
+        if hit.trail not in ("moving", "circle"):
+            return None
+        cfg = self._meteor.config
+        at = hit.frame.captured_at
+        self._passes = [p for p in self._passes if at - p.last <= PASS_GAP]
+        near = [
+            p
+            for p in self._passes
+            if p.event.night_id == hit.frame.night_id
+            and (progressing(p.streak, hit.streak, cfg) or similar(p.streak, hit.streak, cfg))
+        ]
+        if not near:
+            return None
+        p = min(near, key=lambda q: math.hypot(q.streak.cx - hit.streak.cx,
+                                               q.streak.cy - hit.streak.cy))  # fmt: skip
+        p.event = self.events.extend_pass(p.event, hit)
+        p.streak, p.last = hit.streak, at
+        return p.event
+
     def _emit(self, hits: list[MeteorHit]) -> None:
         for hit in hits:
+            grown = self._continued(hit)
+            if grown is not None:
+                log.debug("moving object %s: %d frames", grown.id, grown.data.get("frames"))
+                if self._on_event is not None:
+                    self._on_event(grown)
+                continue
             if hit.trail != "meteor" and not self._room_for_reject(hit.frame.night_id):
                 log.info("not a meteor (%s), not kept: %d a night at most", hit.trail, MAX_REJECTS)
                 continue
@@ -465,6 +535,8 @@ class DetectionWorker:
                 round(hit.streak.length),
                 hit.streak.peak,
             )
+            if hit.trail in ("moving", "circle"):
+                self._passes.append(_Pass(event, hit.streak, hit.frame.captured_at))
             if self._on_event is not None:
                 self._on_event(event)
 

@@ -456,3 +456,25 @@ def test_automatic_labels() -> None:
                                                              "blinkt")  # fmt: skip
     for verdict in trail.LABELS:
         assert trail.label_for(ev(verdict)) is not None
+
+
+def test_a_moving_object_is_one_event(tmp_path: Path) -> None:
+    """SPEC §6.4: the pieces of one satellite pass are one event that grows."""
+    store = ImageStore(tmp_path, ZoneInfo("Europe/Vienna"))
+    got: list[Event] = []
+    worker = DetectionWorker(store, on_event=got.append)
+    imgs = [sky(0)] + [with_streak(sky(k), 120 + 110 * k, 150, 100, 0) for k in range(1, 5)]
+    imgs.append(sky(9))
+    for i, gray in enumerate(imgs):
+        rgb = np.empty((H, W, 3), dtype=np.uint8)
+        rgb[:, :, :] = gray[:, :, None]
+        stored = store.save(rgb, frame(i).captured_at)
+        f = frame(i).model_copy(update={"name": stored.name, "night_id": stored.night_id})
+        worker.process_frame(f, rgb)
+    assert len({e.id for e in got}) == 1  # sent again as it grows, always the same id
+    last = got[-1]
+    assert last.data["trail"] == "moving"
+    assert last.data["frames"] == len(got) >= 3
+    assert last.end > got[0].end
+    (kept,) = worker.events.night_events(last.night_id)
+    assert kept == last

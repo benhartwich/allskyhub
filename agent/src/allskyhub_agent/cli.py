@@ -48,6 +48,7 @@ from allskyhub_agent.detect.events import DetectionWorker, EventStore
 from allskyhub_agent.detect.labels import Labels
 from allskyhub_agent.detect.nlc import NlcDetector
 from allskyhub_agent.detect.sky import Mask, Points, SkyConfig, SkyMeter
+from allskyhub_agent.detect.trail import label_for as trail_label
 from allskyhub_agent.discovery import Announcer, host_name, local_ipv4
 from allskyhub_agent.hub.identity import DEFAULT_KEY_PATH, DeviceIdentity
 from allskyhub_agent.hub.pairing import PairingState
@@ -1005,12 +1006,18 @@ def main(argv: list[str] | None = None) -> int:
     def event_out(event: Event) -> None:
         if event.kind is EventKind.LIGHTNING:
             safety.lightning(event.start)
+        # SPEC §6.4 Trail verdicts: a streak that is no meteor is kept with an automatic label.
+        label = trail_label(event)
+        if label is not None:
+            labels.set(label)
         if adsb is not None:
             adsb.check_later(event)
-        if mqtt is not None:
+        if mqtt is not None and label is None:  # false positives count nowhere
             mqtt.event(event)
         if hub is not None:
             hub.notify_event(event)
+            if label is not None:
+                hub.notify_message(label)
 
     if tuned.alpaca_enabled:
         alpaca_id = identity.device_id if identity is not None else "local"

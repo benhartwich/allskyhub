@@ -44,6 +44,7 @@ from allskyhub_protocol import Event, EventKind, FrameInfo, Mode, SkyMetrics, ev
 log = logging.getLogger(__name__)
 
 INDEX = "events.jsonl"
+MAX_REJECTS = 300  # SPEC §6.4 Trail verdicts: streaks a night that are not meteors
 CROP_MIN_PX = 480  # the picture shows the meteor with some sky around it
 FULL_MAX_PX = 1920  # a lightning picture is the whole frame, at most this wide
 
@@ -62,6 +63,10 @@ class EventStore:
         # SPEC §4.8: the orientation valid when an event is saved gives its sky position.
         self._orientation = orientation
         self._location = location
+
+    def location(self) -> tuple[float, float] | None:
+        """(latitude, longitude) of the camera, None until known."""
+        return self._location() if self._location is not None else None
 
     def _shower(self, f: FrameInfo, s: Streak) -> dict[str, str | None]:
         """`shower` and `shower_match` (SPEC §6.4): by the radiant once the camera is
@@ -198,6 +203,7 @@ class EventStore:
                     "peak": round(s.peak, 3),
                     "frames": 1,
                     "direction_deg": s.direction_deg,
+                    "trail": hit.trail,  # SPEC §6.4 Trail verdicts
                     **self._shower(f, s),
                     **self._position(f, s.cx, s.cy),
                     **self._track_ends(f, s),
@@ -408,7 +414,13 @@ class DetectionWorker:
         self._on = dict.fromkeys(("meteor", "lightning", "aurora"), True) | dict(enabled or {})
         self.events = events or EventStore(store)
         self._on_event = on_event
-        self._meteor = MeteorDetector(cfg, mask, mask_radius_frac)
+        self._meteor = MeteorDetector(
+            cfg,
+            mask,
+            mask_radius_frac,
+            orientation=(lambda: orienter.solution) if orienter is not None else None,
+            location=self.events.location,
+        )
         self._lightning = LightningDetector(lightning_cfg, mask, mask_radius_frac)
         self._sky = sky
         self._aurora = AuroraDetector(
@@ -422,6 +434,7 @@ class DetectionWorker:
         self._orienter = orienter
         self._nlc = nlc
         self._mask_version = -1
+        self._rejects: dict[str, int] = {}  # streaks per night that are not meteors
         self._q: queue.Queue[_Job | None] = queue.Queue(maxsize=4)
         self._dropped = 0
         self._thread = threading.Thread(target=self._run, name="detect", daemon=True)
@@ -441,12 +454,34 @@ class DetectionWorker:
 
     def _emit(self, hits: list[MeteorHit]) -> None:
         for hit in hits:
+            if hit.trail != "meteor" and not self._room_for_reject(hit.frame.night_id):
+                log.info("not a meteor (%s), not kept: %d a night at most", hit.trail, MAX_REJECTS)
+                continue
             event = self.events.save_meteor(hit)
             log.info(
-                "meteor %s: %d px, peak %.2f", event.id, round(hit.streak.length), hit.streak.peak
+                "%s %s: %d px, peak %.2f",
+                "meteor" if hit.trail == "meteor" else f"not a meteor ({hit.trail})",
+                event.id,
+                round(hit.streak.length),
+                hit.streak.peak,
             )
             if self._on_event is not None:
                 self._on_event(event)
+
+    def _room_for_reject(self, night: str) -> bool:
+        """SPEC §6.4: at most 300 streaks a night that are not meteors are kept."""
+        if night not in self._rejects:
+            self._rejects = {
+                night: sum(
+                    1
+                    for e in self.events.night_events(night)
+                    if e.kind is EventKind.METEOR and e.data.get("trail", "meteor") != "meteor"
+                )
+            }
+        if self._rejects[night] >= MAX_REJECTS:
+            return False
+        self._rejects[night] += 1
+        return True
 
     def _emit_lightning(self, hits: list[LightningHit]) -> None:
         for hit in hits:

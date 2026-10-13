@@ -12,11 +12,13 @@ import numpy as np
 import pytest
 
 from allskyhub_agent.calib.solve import Solution, alt_az, sidereal_deg
+from allskyhub_agent.detect import trail
 from allskyhub_agent.detect.events import DetectionWorker, EventStore
 from allskyhub_agent.detect.meteor import (
     MeteorConfig,
     MeteorDetector,
     MeteorHit,
+    Streak,
     active_shower,
     find_streaks,
     match_shower,
@@ -101,7 +103,10 @@ def test_satellite_over_two_frames_is_rejected() -> None:
         with_streak(sky(3), 330, 173, 120, 10),  # continues along its path
         sky(4),
     ]
-    assert run(frames) == []
+    hits = run(frames)
+    # SPEC §6.4 Trail verdicts: kept, but as a moving object, never as a meteor.
+    assert hits
+    assert {h.trail for h in hits} == {"moving"}
 
 
 def test_twinkling_frame_with_many_streaks_is_ignored() -> None:
@@ -119,7 +124,8 @@ def test_recurring_spot_is_rejected() -> None:
     hits = run(frames)
     # Each appearance and disappearance leaves a hot spot; from the third one on, a streak
     # at that place is a spot that keeps changing (a star, a bloom), not a meteor.
-    assert [h.frame.name for h in hits] == [frame(1).name, frame(3).name]
+    assert [h.frame.name for h in hits if h.trail == "meteor"] == [frame(1).name, frame(3).name]
+    assert {h.trail for h in hits[2:]} == {"repeat"}
 
 
 def test_cloudy_frame_is_skipped() -> None:
@@ -188,7 +194,8 @@ def test_event_store_and_worker(tmp_path: Path) -> None:
     assert set(ev.data) == {"length_px", "peak", "frames", "direction_deg", "shower",
                             "shower_match", "azimuth_deg", "altitude_deg",
                             "start_azimuth_deg", "start_altitude_deg", "end_azimuth_deg",
-                            "end_altitude_deg", "track_ordered"}  # fmt: skip
+                            "end_altitude_deg", "track_ordered", "trail"}  # fmt: skip
+    assert ev.data["trail"] == "meteor"
     assert ev.data["start_azimuth_deg"] is None
     assert ev.data["track_ordered"] is False
     assert ev.data["azimuth_deg"] is None  # no orientation yet
@@ -315,3 +322,137 @@ def test_meteor_event_shower_by_radiant(tmp_path: Path) -> None:
     ev = _meteor_at(tmp_path / "b", across, sol, lat, lon)
     assert ev.data["shower"] is None  # sporadic
     assert ev.data["shower_match"] == "radiant"
+
+
+# --- Trail verdicts (SPEC §6.4, roadmap L25) ---
+
+TLAT, TLON = 48.0, 11.0
+SOL = Solution(
+    cx=W / 2, cy=H / 2, a1=170.0, a3=0.0, rot=0.0, flip=1.0, tilt_east=0.0, tilt_north=0.0,
+    stars=40, rms_px=0.5, rms_deg=0.2, width=W, height=H,
+)  # fmt: skip
+
+
+def _streak(p1: tuple[float, float], p2: tuple[float, float]) -> Streak:
+    cx, cy = (p1[0] + p2[0]) / 2, (p1[1] + p2[1]) / 2
+    return Streak(
+        cx=cx, cy=cy, length=math.dist(p1, p2), elongation=30.0,
+        angle_deg=math.degrees(math.atan2(p2[1] - p1[1], p2[0] - p1[0])) % 180.0,
+        p1=p1, p2=p2, area=200, peak=0.8,
+    )  # fmt: skip
+
+
+def _px(alt: float, az: float) -> tuple[float, float]:
+    x, y = SOL.project(np.array([alt]), np.array([az]))
+    return float(x[0]), float(y[0])
+
+
+def _on_circle(t0: float, t1: float, tilt: float = 0.0) -> Streak:
+    """A piece of the great circle through the zenith along azimuth 30°/210°, from angle t0
+    to t1 (degrees from the northern horizon over the zenith), shifted by `tilt`."""
+
+    def point(t: float) -> tuple[float, float]:
+        alt = 90.0 - abs(90.0 - t)
+        az = 30.0 if t < 90 else 210.0
+        return _px(alt, az + tilt)
+
+    return _streak(point(t0), point(t1))
+
+
+def test_same_circle() -> None:
+    shape = (H, W)
+    a, b = _on_circle(20, 32), _on_circle(50, 62)
+    assert trail.same_circle(a, b, SOL, shape)
+    assert not trail.same_circle(a, _on_circle(50, 62, tilt=12.0), SOL, shape)
+    assert not trail.same_circle(a, _on_circle(24, 36), SOL, shape)  # overlapping, no gap
+    # Short pieces count when the gap fits the speed: 4° in 30 s, the next piece 24° on.
+    c, d = _on_circle(20, 24), _on_circle(44, 48)
+    t = frame(1).captured_at
+    assert trail.same_circle(c, d, SOL, shape, (t, 30.0, frame(3).captured_at, 30.0))  # 2 min
+    assert not trail.same_circle(c, d, SOL, shape, (t, 30.0, frame(11).captured_at, 30.0))
+    assert not trail.same_circle(c, d, SOL, shape)  # short and no times
+
+
+def test_star_trail_angle_is_tangent_to_the_pole() -> None:
+    # Due south at 30°: the stars move parallel to the horizon there.
+    x, y = _px(30.0, 180.0)
+    angle = trail.star_trail_angle(SOL, (H, W), x, y, TLAT)
+    assert angle is not None
+    h1, h2 = _px(30.0, 175.0), _px(30.0, 185.0)
+    horizon = math.degrees(math.atan2(h2[1] - h1[1], h2[0] - h1[0])) % 180.0
+    assert min(abs(angle - horizon), 180 - abs(angle - horizon)) < 3.0
+
+
+def test_star_field_finds_a_catalogue_star() -> None:
+    utc = datetime(2026, 10, 8, 21, 0, tzinfo=UTC)
+    alt, az = alt_az(np.array([279.2347]), np.array([38.7837]), sidereal_deg(utc, TLON), TLAT)
+    x, y = _px(float(alt[0]), float(az[0]))  # Vega
+    stars = trail.StarField()
+    assert stars.near(SOL, (H, W), utc, TLAT, TLON, x, y, 3.0)
+    other = Solution(**{**SOL.__dict__, "width": W * 2, "height": H * 2})
+    assert not stars.near(other, (H, W), utc, TLAT, TLON, x, y, 3.0)  # wrong frame size
+
+
+def test_glare_spike() -> None:
+    gray = sky(1)
+    cv2.circle(gray, (200, 180), 10, 255, -1)  # the moon, saturated
+    sources = trail.glare_sources(gray)
+    assert len(sources) == 1
+    radial = _streak((230.0, 180.0), (330.0, 180.0))
+    assert trail.glare_spike(radial, sources, 10.0, 6.0)
+    across = _streak((280.0, 130.0), (280.0, 230.0))
+    assert not trail.glare_spike(across, sources, 10.0, 6.0)
+
+
+def test_collinear_fragments() -> None:
+    diff = np.zeros((H, W), dtype=np.uint8)
+    s = _streak((250.0, 180.0), (370.0, 180.0))
+    cv2.line(diff, (250, 180), (370, 180), 200, 2)
+    for k in range(6):  # the broken tail, in line beyond the end
+        x = 385 + 15 * k
+        cv2.line(diff, (x, 180), (x + 8, 180), 200, 2)
+    assert trail.collinear_fragments(diff, s, 22) >= 5
+    assert trail.collinear_fragments(np.zeros_like(diff), s, 22) == 0
+
+
+def test_edge_hug() -> None:
+    mask = np.zeros((H, W), dtype=np.bool_)
+    cv2.circle(mask.view(np.uint8), (W // 2, H // 2), 170, 1, -1)
+    dist = trail.edge_distance(mask)
+    rim = _streak((W / 2 - 165, H / 2), (W / 2 - 150, H / 2 + 60))
+    assert trail.edge_hug(rim, dist) < 50
+    inside = _streak((W / 2 - 50, H / 2), (W / 2 + 50, H / 2))
+    assert trail.edge_hug(inside, dist) > 50
+
+
+def test_detector_marks_a_glare_spike() -> None:
+    def moon(img: np.ndarray) -> np.ndarray:
+        cv2.circle(img, (200, 180), 10, 255, -1)
+        return img
+
+    det = MeteorDetector()
+    frames = [moon(sky(1)), moon(with_streak(sky(2), 280, 180, 100, 0)), moon(sky(3))]
+    hits: list[MeteorHit] = []
+    for i, img in enumerate(frames):
+        hits += det.feed(frame(i), img, Path(f"/x/{i}.jpg"))
+    assert [h.trail for h in hits] == ["glare"]
+
+
+def test_automatic_labels() -> None:
+    t = datetime(2026, 10, 8, 21, 0, tzinfo=UTC)
+
+    def ev(verdict: str | None) -> Event:
+        data: dict[str, float | int | str | bool | None] = {}
+        if verdict is not None:
+            data["trail"] = verdict
+        return Event(id="meteor-20261008T210000Z", night_id="20261008", kind=EventKind.METEOR,
+                     start=t, end=t, confidence=0.9, data=data)  # fmt: skip
+
+    assert trail.label_for(ev(None)) is None
+    assert trail.label_for(ev("meteor")) is None
+    lab = trail.label_for(ev("dashed"), t)
+    assert lab is not None
+    assert (lab.label, lab.reason, lab.auto, lab.detail) == ("false_positive", "aircraft", True,
+                                                             "blinkt")  # fmt: skip
+    for verdict in trail.LABELS:
+        assert trail.label_for(ev(verdict)) is not None

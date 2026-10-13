@@ -289,6 +289,9 @@ const T = {
     "sys.agent": "Agent",
     "sys.frames": "Bilder seit Start",
     "sys.powerHelp": "Unterspannung macht Bilder und SD-Karte kaputt: ein Netzteil mit 5,1 V / 3 A nehmen.",
+    "sys.updates": "Systemupdates",
+    "sys.rebootPending": "Neustart für Sicherheitsupdates ausstehend",
+    "sys.rebootPendingHelp": "Die Kamera startet tagsüber zwischen 10 und 16 Uhr von selbst neu, nie nachts.",
     "sys.model": "Modell",
     "sys.os": "System",
     "sys.uptime": "Läuft seit",
@@ -705,6 +708,9 @@ const T = {
     "sys.agent": "Agent",
     "sys.frames": "Images since start",
     "sys.powerHelp": "Under-voltage damages images and the SD card: use a 5.1 V / 3 A power supply.",
+    "sys.updates": "System updates",
+    "sys.rebootPending": "Reboot for security updates pending",
+    "sys.rebootPendingHelp": "The camera reboots by itself during the day between 10:00 and 16:00, never at night.",
     "sys.model": "Model",
     "sys.os": "System",
     "sys.uptime": "Running for",
@@ -2089,6 +2095,8 @@ async function viewSystem() {
       ${hw.disk ? `<dt>${t("storage")}</dt><dd>${t("sys.diskFree", { a: fmtBytes(hw.disk.free), b: fmtBytes(hw.disk.total) })}
           ${meter(hw.disk.total - hw.disk.free, hw.disk.total)}</dd>` : ""}
       ${power}
+      ${hw.reboot_required ? `<dt>${t("sys.updates")}</dt><dd><span class="badge">${t("sys.rebootPending")}</span>
+          <p class="muted small">${t("sys.rebootPendingHelp")}</p></dd>` : ""}
       ${hw.alpaca ? `<dt>ASCOM Alpaca</dt><dd>${!hw.alpaca.enabled ? `<span class="muted">${t("off")}</span>`
         : hw.alpaca.error ? `<span class="badge">${t("sys.portBusy")}</span> <span class="muted small">${t("sys.portBusyHelp", { port: hw.alpaca.port })}</span>`
         : `<span class="badge ok">${t("on")}</span> ${t("sys.port", { port: hw.alpaca.port })}`}</dd>` : ""}

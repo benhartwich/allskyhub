@@ -167,6 +167,9 @@ class TargetPlan(BaseModel):
     az: float
     direction: str
     cloud_cover: float | None
+    # Where cloud_cover comes from: "in Richtung des Objekts" (the camera's cloud map) or
+    # "ganzer Himmel".
+    cloud_source: str
     verdict: str
     verdict_text: str
     best_start: dt.datetime | None
@@ -208,6 +211,7 @@ async def target_plan(
         az=round(found.now.az, 1),
         direction=found.now.direction,
         cloud_cover=found.now.cloud_cover,
+        cloud_source=found.now.source,
         verdict=found.now.verdict,
         verdict_text=target.VERDICT_TEXT[found.now.verdict],
         best_start=best[0] if best else None,

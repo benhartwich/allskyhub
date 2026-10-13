@@ -142,7 +142,8 @@ class _TargetScreenState extends State<TargetScreen> {
                           if (plan.cloudCover case final c?)
                             TextSpan(
                               text:
-                                  ' · die Kamera sieht ${(c * 100).round()} % Wolken',
+                                  ' · die Kamera sieht ${(c * 100).round()} % Wolken'
+                                  '${plan.cloudSource.isEmpty ? '' : ' (${plan.cloudSource})'}',
                             ),
                           const TextSpan(text: ' · '),
                           TextSpan(

@@ -87,6 +87,9 @@ class ConnectionRegistry:
     def is_online(self, device_id: str) -> bool:
         return device_id in self._conns
 
+    def online_ids(self) -> list[str]:
+        return list(self._conns)
+
     async def close(self, device_id: str, code: int) -> None:
         conn = self._conns.get(device_id)
         if conn is not None:

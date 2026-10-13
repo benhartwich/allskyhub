@@ -151,20 +151,38 @@ table.stats.target-hours th:nth-child(2) { text-align: left; }
 .health-line.error { color: var(--danger); } .health-line.error::before { background: var(--danger); box-shadow: 0 0 10px var(--danger); }
 
 /* Camera map (roadmap C5). */
-.camera-map { padding: 8px; }
-.camera-map svg { width: 100%; height: auto; display: block; border-radius: 14px;
-                  background: radial-gradient(ellipse at 50% 40%, #0d1636, #060a1c 75%); }
-.camera-map .dot { fill: var(--aurora); stroke: #fff; stroke-width: 2; vector-effect: non-scaling-stroke; }
-.camera-map .halo { fill: rgba(79, 227, 176, .25); }
-.camera-map a:hover .dot { fill: #fff; }
+.camera-map { padding: 8px; margin: 0; }
+.map { height: min(70vh, 640px); min-height: 360px; border-radius: 14px; background: #0a1130; z-index: 0; }
+.map-tools { display: flex; flex-wrap: wrap; gap: 8px 16px; align-items: flex-start; justify-content: space-between; margin-bottom: 12px; }
+.map-search { position: relative; display: flex; gap: 8px; flex: 1 1 260px; max-width: 420px; }
+.map-search input { flex: 1; min-width: 0; }
+.map-results { position: absolute; top: calc(100% + 4px); left: 0; right: 0; z-index: 1000; list-style: none; margin: 0;
+  padding: 6px; background: var(--surface, #0d1430); border: 1px solid var(--line); border-radius: 12px; box-shadow: 0 8px 24px rgb(0 0 0 / .4); }
+.map-results li { padding: 6px 8px; }
+.map-results button { text-align: left; }
+.map-bases [aria-pressed="true"] { box-shadow: 0 0 0 1px var(--accent) inset; }
+.leaflet-container { font: inherit; }
+.leaflet-interactive.map-dot { fill: var(--aurora); fill-opacity: 1; stroke: #fff; }
+.map path.leaflet-interactive:focus { outline: none; }
+.map.map-dark .leaflet-control-attribution { background: rgb(4 6 15 / .7); color: #b9c2dd; }
+.map.map-dark .leaflet-control-attribution a { color: #9fb7ff; }
+.map .leaflet-popup-content-wrapper, .map .leaflet-popup-tip { background: #0d1430; color: var(--text); border: 1px solid var(--line); }
+.map .leaflet-popup-content { margin: 12px; }
+.map .leaflet-container a.leaflet-popup-close-button, .map a.leaflet-popup-close-button { color: var(--text-2); }
+.map .map-popup a.button { color: #0a0f24; }
+.map-popup { display: flex; flex-direction: column; gap: 4px; }
+.map-popup img { width: 100%; aspect-ratio: 1; object-fit: cover; border-radius: 50%; margin-bottom: 6px; background: #05070f; }
+.map-popup .button { margin-top: 8px; text-align: center; }
+.map-sqm { font-size: .9em; }
+.map .leaflet-tooltip { background: #0d1430; color: var(--text); border-color: var(--line); }
 /* Roadmap H4: sky brightness, colours like the usual light-pollution maps (dark → bright). */
-.dot.sqm-1 { fill: #2846b8; } .swatch.sqm-1 { background: #2846b8; }
-.dot.sqm-2 { fill: #2f9e5b; } .swatch.sqm-2 { background: #2f9e5b; }
-.dot.sqm-3 { fill: #d4c62b; } .swatch.sqm-3 { background: #d4c62b; }
-.dot.sqm-4 { fill: #ec8a1c; } .swatch.sqm-4 { background: #ec8a1c; }
-.dot.sqm-5 { fill: #d8392b; } .swatch.sqm-5 { background: #d8392b; }
-.dot.sqm-6 { fill: #f2f2f2; } .swatch.sqm-6 { background: #f2f2f2; }
-.dot.sqm-none { fill: #8a8f99; } .swatch.sqm-none { background: #8a8f99; }
+.map-dot.sqm-1 { fill: #2846b8; } .swatch.sqm-1 { background: #2846b8; }
+.map-dot.sqm-2 { fill: #2f9e5b; } .swatch.sqm-2 { background: #2f9e5b; }
+.map-dot.sqm-3 { fill: #d4c62b; } .swatch.sqm-3 { background: #d4c62b; }
+.map-dot.sqm-4 { fill: #ec8a1c; } .swatch.sqm-4 { background: #ec8a1c; }
+.map-dot.sqm-5 { fill: #d8392b; } .swatch.sqm-5 { background: #d8392b; }
+.map-dot.sqm-6 { fill: #f2f2f2; } .swatch.sqm-6 { background: #f2f2f2; }
+.map-dot.sqm-none { fill: #8a8f99; } .swatch.sqm-none { background: #8a8f99; }
 .sqm-legend { list-style: none; padding: 0; margin: 8px 0 16px; display: flex; flex-wrap: wrap; gap: 6px 16px; font-size: .9em; }
 .sqm-legend li { display: flex; align-items: center; gap: 6px; }
 .sqm-legend .swatch { width: 12px; height: 12px; border-radius: 50%; border: 1px solid var(--line, #888); display: inline-block; }
@@ -176,13 +194,12 @@ table.stats.target-hours th:nth-child(2) { text-align: left; }
 .passes > li { padding: 8px 0; font-size: 15px; }
 
 /* Red night theme for the hub's own drawings. */
-[data-theme="red"] .dome, [data-theme="red"] .camera-map svg, [data-theme="red"] .sky-chart {
+[data-theme="red"] .dome, [data-theme="red"] .camera-map .map, [data-theme="red"] .sky-chart {
   filter: grayscale(1) sepia(1) saturate(6) hue-rotate(-50deg) brightness(.8);
 }
 [data-theme="red"] .night-bars .good .bar, [data-theme="red"] .month-bars .bar {
   background: var(--accent); box-shadow: none;
 }
-[data-theme="red"] .camera-map .dot { fill: var(--accent); }
 
 /* Telescope next to the camera, from N.I.N.A. (roadmap C15). Width in 5 % steps (no inline styles). */
 .progress { height: 8px; border-radius: 999px; background: var(--surface-2); overflow: hidden; }

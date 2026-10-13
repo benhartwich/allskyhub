@@ -1,43 +1,51 @@
 {% extends "base.html" %}
 {% block title %}Kamerakarte · allskyhub{% endblock %}
+{% block head %}<link rel="stylesheet" href="{{ asset('leaflet/leaflet.css') }}">
+<script src="{{ asset('leaflet/leaflet.js') }}" defer></script>
+<script src="{{ asset('camera_map.js') }}" defer></script>{% endblock %}
 {% block content %}
 <div class="page-head">
   <h1>Kamerakarte</h1>
-  <nav class="actions" aria-label="Region">
-    {% for key, (name, _, _) in regions.items() %}<a class="button small{{ '' if key == region else ' secondary' }}" href="?region={{ key }}{{ '&layer=sqm' if layer }}">{{ name }}</a>{% endfor %}
+  <nav class="actions" aria-label="Ansicht">
+    <a class="button small{{ ' secondary' if layer }}" href="?region={{ region }}">Kameras</a>
+    <a class="button small{{ '' if layer else ' secondary' }}" href="?region={{ region }}&layer=sqm">Himmelshelligkeit</a>
   </nav>
 </div>
-<p class="lead">Allsky-Kameras mit öffentlicher Seite, deren Betreiber den Ort zeigen (auf etwa 10 km gerundet).</p>
-<nav class="actions" aria-label="Ansicht">
-  <a class="button small{{ ' secondary' if layer }}" href="?region={{ region }}">Kameras</a>
-  <a class="button small{{ '' if layer else ' secondary' }}" href="?region={{ region }}&layer=sqm">Himmelshelligkeit</a>
-</nav>
+<p class="lead">Allsky-Kameras mit öffentlicher Seite, deren Betreiber den Ort zeigen (auf etwa 10 km gerundet). Tippe auf eine Kamera für ihr aktuelles Bild.</p>
 {% if layer %}
-<p class="muted small">Gemessen von den Kameras selbst: der Median der dunkelsten Messung klarer Nächte der letzten 60 Tage, in mag/″² (höher = dunkler). Ungefähr, solange die Kameras nicht kalibriert sind. Grau: zu wenige Messungen oder Himmelsqualität nicht öffentlich.</p>
-<ul class="sqm-legend">{% for _, cls, label in sqm_classes %}<li><span class="swatch {{ cls }}"></span>{{ label }}</li>{% endfor %}</ul>
+<div class="card stack sqm-info">
+  <p class="muted small">Im Hintergrund die Lichter der Nacht aus dem All (NASA Black Marble): je heller, desto mehr Lichtverschmutzung. Die Punkte sind die Messungen der Kameras selbst: der Median der dunkelsten Messung klarer Nächte der letzten 60 Tage, in mag/″² (höher = dunkler). Ungefähr, solange die Kameras nicht kalibriert sind. Grau: noch zu wenige klare Nächte gemessen oder Himmelsqualität nicht öffentlich.</p>
+  <ul class="sqm-legend">{% for _, cls, label in sqm_classes %}<li><span class="swatch {{ cls }}"></span>{{ label }}</li>{% endfor %}<li><span class="swatch sqm-none"></span>noch kein Wert</li></ul>
+</div>
 {% endif %}
+<div class="map-tools">
+  <form class="map-search" role="search" data-map-search>
+    <input type="search" name="q" placeholder="Ort suchen, z. B. Linz" aria-label="Ort suchen" autocomplete="off" maxlength="100">
+    <button type="submit" class="secondary small">Suchen</button>
+    <ul class="map-results" data-map-results hidden></ul>
+  </form>
+  <div class="actions map-bases" role="group" aria-label="Hintergrund">
+    <button type="button" class="small secondary" data-map-base="karte">Karte</button>
+    <button type="button" class="small secondary" data-map-base="satellit">Satellit</button>
+    <button type="button" class="small secondary" data-map-base="nacht">Nachtlichter</button>
+  </div>
+</div>
 <figure class="card camera-map">
-  <svg viewBox="{{ view_box }}" role="img" aria-label="Karte {{ region_name }} mit {{ cameras | length }} Kameras">
-    <image href="{{ asset('world-land.svg') }}" x="0" y="0" width="3600" height="1800"/>
-    {% for c in cameras %}
-    <a href="/sky/{{ c.slug }}"><title>{{ c.title }}{% if c.place %} · {{ c.place }}{% endif %}{% if layer and c.sqm %} · {{ '%.2f' | format(c.sqm) | replace('.', ',') }} mag/″²{% endif %}</title>
-      <circle class="halo" cx="{{ c.x }}" cy="{{ c.y }}" r="{{ dot * 2.4 }}"/><circle class="dot{{ ' ' ~ c.sqm_class if layer }}" cx="{{ c.x }}" cy="{{ c.y }}" r="{{ dot }}"/>
-    </a>
-    {% endfor %}
-  </svg>
-  <figcaption class="muted small">Karte: Natural Earth (gemeinfrei).</figcaption>
+  <div id="map" class="map" role="region" aria-label="Karte mit {{ cameras | length }} Kameras"></div>
+  <noscript><p class="muted">Die Karte braucht JavaScript; die Kameras stehen unten als Liste.</p></noscript>
 </figure>
+<script type="application/json" id="map-config">{{ map_config | tojson }}</script>
 {% if cameras %}
 <ul class="cams">
   {% for c in cameras %}
   <li><a class="card cam" href="/sky/{{ c.slug }}">
     {% if c.has_image %}<img src="/sky/{{ c.slug }}/latest.jpg" alt="Himmel über {{ c.title }}" loading="lazy">{% else %}<div class="sky-ph" aria-hidden="true"></div>{% endif %}
     <div class="cam-meta"><strong>{{ c.title }}</strong></div>
-    <span class="muted">{{ c.place or ('%.1f°, %.1f°' | format(c.lat, c.lon)) }}{% if c.sqm %} · {{ '%.2f' | format(c.sqm) | replace('.', ',') }} mag/″²{% endif %}</span>
+    <span class="muted">{{ c.place or ('%.1f°, %.1f°' | format(c.lat, c.lon)) }}{% if layer %} · {{ c.sqm_text }}{% elif c.sqm %} · {{ '%.2f' | format(c.sqm) | replace('.', ',') }} mag/″²{% endif %}</span>
   </a></li>
   {% endfor %}
 </ul>
 {% else %}
-<div class="card empty"><h2>Noch keine Kamera auf der Karte</h2><p class="muted">Betreiber zeigen ihre Kamera hier, wenn sie die öffentliche Seite einschalten und „Koordinaten zeigen“ wählen.</p></div>
+<div class="card empty"><h2>Noch keine Kamera auf der Karte</h2><p class="muted">Betreiber zeigen ihre Kamera hier, wenn sie die öffentliche Seite einschalten und „Auf der Kamerakarte erscheinen“ wählen.</p></div>
 {% endif %}
 {% endblock %}

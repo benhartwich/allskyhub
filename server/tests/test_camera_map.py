@@ -4,11 +4,15 @@
 from __future__ import annotations
 
 import datetime as dt
+import json
+from pathlib import Path
+from typing import Any
 
 import httpx
 from fastapi import FastAPI
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
+from allskyhub_server.devices.map_tiles import MapTiles
 from allskyhub_server.models import NightStat
 from tests.helpers import home_csrf
 from tests.test_public_page import (
@@ -31,13 +35,17 @@ async def test_only_cameras_that_show_their_place(
                 show_coordinates="on")  # fmt: skip
     page = (await new_client.get("/karte")).text
     assert f'href="/sky/{slug}"' in page
-    assert "Lanzenberg · Hofkirchen" in page
-    # Rounded like on the public page: 48.1° N, 14.4° E → x = 1944, y = 419.
-    assert 'cx="1944.0" cy="419.0"' in page
+    assert "Lanzenberg" in page
+    assert "Hofkirchen" in page
+    # Rounded like on the public page: 48.1° N, 14.4° E, in the map's data.
+    config = json.loads(page.split('id="map-config">')[1].split("</script>")[0])
+    camera = config["cameras"][0]
+    assert (camera["lat"], camera["lon"], camera["slug"]) == (48.1, 14.4, slug)
     assert "48.136" not in page
+    assert config["view"] == [50.0, 12.0, 4]
     world = (await new_client.get("/karte?region=welt")).text
-    assert 'viewBox="0 0 3600 1800"' in world
-    assert 'viewBox="1550 180 700 400"' in (await new_client.get("/karte?region=mars")).text
+    assert '"view": [25.0, 10.0, 2]' in world
+    assert '"view": [50.0, 12.0, 4]' in (await new_client.get("/karte?region=mars")).text
     assert 'href="/karte"' in page  # in the footer of every page
 
 
@@ -62,16 +70,64 @@ async def test_sky_brightness_layer(
         await db.commit()
     await _save(client, device_id, title="Lanzenberg", show_coordinates="on", section_sky="on")
     page = (await new_client.get("/karte?layer=sqm")).text
-    assert 'class="dot sqm-2"' in page  # median 21.5: cloudy and old nights left out
-    assert "21,50 mag/″²" in page
-    assert "Himmelshelligkeit" in page
-    plain = (await new_client.get("/karte")).text
-    assert 'class="dot"' in plain
+    camera = _config(page)["cameras"][0]
+    assert camera["sqm_class"] == "sqm-2"  # median 21.5: cloudy and old nights left out
+    assert camera["sqm_text"] == "21,50 mag/″² · dunkel"
+    assert _config(page)["layer"] == "sqm"
+    assert "Nachtlichter" in page
+    assert _config((await new_client.get("/karte")).text)["layer"] == ""
 
     await _save(client, device_id, title="Lanzenberg", show_coordinates="on")  # sky off
     page = (await new_client.get("/karte?layer=sqm")).text
-    assert 'class="dot sqm-none"' in page
+    camera = _config(page)["cameras"][0]
+    assert camera["sqm_class"] == "sqm-none"
+    assert camera["sqm_text"] == "Himmelsqualität nicht öffentlich"
     assert "21,50" not in page
+
+
+def _config(page: str) -> dict[str, Any]:
+    found: dict[str, Any] = json.loads(page.split('id="map-config">')[1].split("</script>")[0])
+    return found
+
+
+class _FakeServices:
+    def __init__(self) -> None:
+        self.paths: list[str] = []
+
+    def __call__(self, request: httpx.Request) -> httpx.Response:
+        self.paths.append(request.url.path)
+        if request.url.host == "nominatim.openstreetmap.org":
+            assert request.url.params["q"] == "Linz"
+            place = {"display_name": "Linz, Oberösterreich", "lat": "48.3", "lon": "14.29",
+                     "boundingbox": ["48.2", "48.4", "14.2", "14.4"]}  # fmt: skip
+            return httpx.Response(200, json=[place])
+        return httpx.Response(200, content=b"\x89PNG fake tile")
+
+
+async def test_tiles_and_search_through_the_hub(tmp_path: Path) -> None:
+    fake = _FakeServices()
+    tiles = MapTiles(tmp_path, httpx.AsyncClient(transport=httpx.MockTransport(fake)))
+    assert await tiles.tile("karte", 5, 17, 11) == b"\x89PNG fake tile"
+    assert await tiles.tile("karte", 5, 17, 11) == b"\x89PNG fake tile"  # from disk
+    assert fake.paths == ["/5/17/11.png"]
+    assert await tiles.tile("karte", 12, 0, 0) is None  # deeper than the cameras' rounding
+    assert await tiles.tile("nacht", 9, 0, 0) is None
+    assert await tiles.tile("karte", 2, 4, 0) is None  # outside the grid
+    assert await tiles.tile("google", 1, 0, 0) is None
+    assert await tiles.tile("satellit", 3, 1, 2) is not None
+    assert fake.paths[-1].endswith("/g/3/2/1.jpg")  # EOX: row before column
+
+    places = await tiles.search("  Linz ")
+    assert places == [{"name": "Linz, Oberösterreich", "lat": 48.3, "lon": 14.29,
+                       "bbox": [48.2, 48.4, 14.2, 14.4]}]  # fmt: skip
+    assert await tiles.search("linz") == places  # cached, no second request
+    assert fake.paths.count("/search") == 1
+    assert await tiles.search("x") == []
+
+
+async def test_tile_route(new_client: httpx.AsyncClient) -> None:
+    assert (await new_client.get("/karte/kacheln/karte/20/0/0")).status_code == 404
+    assert (await new_client.get("/karte/kacheln/google/1/0/0")).status_code == 404
 
 
 async def test_start_page_lists_only_cameras_whose_owner_wants_it(
@@ -130,3 +186,16 @@ async def test_switches_on_the_camera_page(
     )
     assert "Noch keine Kamera" in (await new_client.get("/karte")).text
     assert f"/sky/{slug}" not in (await new_client.get("/")).text
+
+
+async def test_signed_in_stays_signed_in_on_public_pages(
+    app: FastAPI, client: httpx.AsyncClient, new_client: httpx.AsyncClient
+) -> None:
+    """The header shows the account on the map and the public pages, not "Anmelden"."""
+    _, slug = await _public(app, client, new_client)
+    for url in ("/karte", f"/sky/{slug}"):
+        signed_in = (await client.get(url)).text.split("<main>")[0]
+        assert 'href="/account"' in signed_in, url
+        assert 'href="/login"' not in signed_in, url
+        visitor = (await new_client.get(url)).text.split("<main>")[0]
+        assert 'href="/login"' in visitor, url

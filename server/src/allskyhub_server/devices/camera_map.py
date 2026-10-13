@@ -2,8 +2,8 @@
 cameras on the start page.
 
 Only cameras with a public page whose owner shows coordinates, at the same rounding as on
-the page (0.1°). The map is the hub's own Natural Earth outline (static/world-land.svg,
-equirectangular, 10 px per degree), so no map service learns about visitors.
+the page (0.1°). The map (Leaflet) gets its tiles and place search through the hub
+(devices/map_tiles.py), so no map service learns about visitors.
 
 The light-pollution view uses the cameras' own sky brightness (SPEC §6.3 `sqm_mag`): the
 median of the darkest reading of each clear night in the last ``SQM_DAYS`` days, only for
@@ -35,12 +35,11 @@ SQM_CLASSES = (
     (0.0, "sqm-6", "Stadt (< 19,0)"),
 )
 
-# Name → (title, viewBox of world-land.svg, dot radius); x = (lon + 180) * 10,
-# y = (90 - lat) * 10. The radius keeps dots the same size on screen.
+# Name → (title, centre latitude, longitude, zoom): where the map opens.
 REGIONS = {
-    "welt": ("Welt", "0 0 3600 1800", 30),
-    "europa": ("Europa", "1550 180 700 400", 6),
-    "nordamerika": ("Nordamerika", "100 150 1300 600", 11),
+    "welt": ("Welt", 25.0, 10.0, 2),
+    "europa": ("Europa", 50.0, 12.0, 4),
+    "nordamerika": ("Nordamerika", 45.0, -100.0, 3),
 }
 
 
@@ -53,6 +52,7 @@ class MapCamera:
     lon: float
     has_image: bool
     sqm: float | None = None
+    shows_sky: bool = False
 
     @property
     def sqm_class(self) -> str:
@@ -61,12 +61,25 @@ class MapCamera:
         return next(name for low, name, _ in SQM_CLASSES if self.sqm >= low)
 
     @property
-    def x(self) -> float:
-        return (self.lon + 180) * 10
+    def sqm_text(self) -> str:
+        """What the light-pollution view says about this camera."""
+        if self.sqm is not None:
+            label = next(label for low, _, label in SQM_CLASSES if self.sqm >= low)
+            value = f"{self.sqm:.2f}".replace(".", ",")
+            return f"{value} mag/″² · {label.split(' (')[0]}"
+        if not self.shows_sky:
+            return "Himmelsqualität nicht öffentlich"
+        return (
+            f"Noch zu wenige klare Nächte gemessen (mindestens {SQM_MIN_NIGHTS} "
+            f"in {SQM_DAYS} Tagen)"
+        )
 
-    @property
-    def y(self) -> float:
-        return (90 - self.lat) * 10
+    def as_json(self) -> dict[str, object]:
+        return {
+            "slug": self.slug, "title": self.title, "place": self.place,
+            "lat": self.lat, "lon": self.lon, "image": self.has_image,
+            "sqm": self.sqm, "sqm_class": self.sqm_class, "sqm_text": self.sqm_text,
+        }  # fmt: skip
 
 
 async def _sqm(db: AsyncSession, device_ids: list[str], now: dt.datetime) -> dict[str, float]:
@@ -110,6 +123,7 @@ async def cameras(db: AsyncSession, now: dt.datetime | None = None) -> list[MapC
                 lon=coords[1],
                 has_image=device.latest_image_at is not None,
                 sqm=sqm.get(device.id),
+                shows_sky=device.id in shows_sky,
             )
         )
     return sorted(out, key=lambda c: c.title.lower())

@@ -10,9 +10,11 @@ from fastapi import APIRouter, HTTPException, Path, Query, Request
 from fastapi.responses import FileResponse, JSONResponse, Response
 
 from allskyhub_protocol import FrameVariant
+from allskyhub_server.auth import ratelimit
 from allskyhub_server.devices import (
     aircraft,
     archive,
+    map_tiles,
     public,
     series,
     sky_chart,
@@ -22,10 +24,11 @@ from allskyhub_server.devices import (
 from allskyhub_server.devices import camera_map as camera_map_mod
 from allskyhub_server.devices.event_text import EVENT_TITLES, meteor_summary
 from allskyhub_server.devices.images import ImageStore
+from allskyhub_server.devices.map_tiles import MapTiles
 from allskyhub_server.devices.space_weather import KpCache, OvationCache
 from allskyhub_server.devices.tonight import ForecastCache
 from allskyhub_server.models import Device
-from allskyhub_server.web.deps import DbSession
+from allskyhub_server.web.deps import DbSession, OptionalSession, SettingsDep, client_ip
 from allskyhub_server.web.render import render
 from allskyhub_server.web.templating import templates
 
@@ -74,7 +77,9 @@ async def _sky_device(db: DbSession, slug: str) -> Device:
 
 
 @router.get("/sky/{slug}/charts")
-async def sky_charts_page(request: Request, db: DbSession, slug: str) -> Response:
+async def sky_charts_page(
+    request: Request, session: OptionalSession, db: DbSession, slug: str
+) -> Response:
     """The measurement viewer on the public page: sky values only, no camera internals."""
     device = await _sky_device(db, slug)
     return render(
@@ -88,6 +93,7 @@ async def sky_charts_page(request: Request, db: DbSession, slug: str) -> Respons
             "back_title": public.title(device),
             "with_status": False,
         },
+        session=session,
     )
 
 
@@ -105,7 +111,9 @@ async def sky_charts_data(
 
 
 @router.get("/sky/{slug}")
-async def sky_page(request: Request, db: DbSession, slug: str) -> Response:
+async def sky_page(
+    request: Request, session: OptionalSession, db: DbSession, slug: str
+) -> Response:
     device = await _device(db, slug)
     sections = public.profile(device).sections
     now = dt.datetime.now(dt.UTC)
@@ -150,6 +158,7 @@ async def sky_page(request: Request, db: DbSession, slug: str) -> Response:
             "hemisphere": "south" if lat is not None and lat < 0 else "north",
             "base_url": str(request.base_url).rstrip("/"),
         },
+        session=session,
     )
 
 
@@ -171,7 +180,9 @@ async def sky_latest(request: Request, db: DbSession, slug: str) -> Response:
 
 
 @router.get("/sky/{slug}/nights/{night_id}")
-async def sky_night(request: Request, db: DbSession, slug: str, night_id: NightId) -> Response:
+async def sky_night(
+    request: Request, session: OptionalSession, db: DbSession, slug: str, night_id: NightId
+) -> Response:
     device = await _device(db, slug)
     sections = public.profile(device).sections
     if not sections.archive:
@@ -194,6 +205,7 @@ async def sky_night(request: Request, db: DbSession, slug: str, night_id: NightI
                 else []
             ),
         },
+        session=session,
     )
 
 
@@ -300,24 +312,68 @@ async def ovation(request: Request, hemisphere: str) -> Response:
     )
 
 
+@router.get("/karte/kacheln/{layer}/{z}/{x}/{y}")
+async def map_tile(request: Request, layer: str, z: int, x: int, y: int) -> Response:
+    """Roadmap C5: map tiles through the hub, so no map service sees a visitor."""
+    tiles: MapTiles = request.app.state.map_tiles
+    body = await tiles.tile(layer, z, x, y)
+    if body is None:
+        raise HTTPException(404)
+    return Response(
+        body,
+        media_type=map_tiles.LAYERS[layer].media_type,
+        headers={"Cache-Control": "public, max-age=604800"},
+    )
+
+
+@router.get("/karte/suche")
+async def map_search(request: Request, settings: SettingsDep, q: str = "") -> Response:
+    """Places for the map's search box (Nominatim through the hub)."""
+    try:
+        await ratelimit.hit(
+            request.app.state.engine,
+            f"map-search:{client_ip(request, settings)}",
+            ratelimit.MAP_SEARCH_PER_IP,
+        )
+    except ratelimit.RateLimitedError:
+        return JSONResponse({"detail": "Zu viele Suchen. Bitte kurz warten."}, status_code=429)
+    tiles: MapTiles = request.app.state.map_tiles
+    return JSONResponse(await tiles.search(q))
+
+
 @router.get("/karte")
 async def camera_map(
-    request: Request, db: DbSession, region: str = "europa", layer: str = ""
+    request: Request,
+    session: OptionalSession,
+    db: DbSession,
+    region: str = "europa",
+    layer: str = "",
 ) -> Response:
-    """Roadmap C5: all public cameras that show their place; ``layer=sqm`` colours them
-    by how dark their sky is (roadmap H4)."""
-    name, view_box, dot = camera_map_mod.REGIONS.get(region, camera_map_mod.REGIONS["europa"])
+    """Roadmap C5: all public cameras that show their place, on OpenStreetMap or a
+    satellite map; ``layer=sqm`` colours them by how dark their sky is over the night
+    lights (roadmap H4)."""
+    region = region if region in camera_map_mod.REGIONS else "europa"
+    _, lat, lon, zoom = camera_map_mod.REGIONS[region]
+    cameras = await camera_map_mod.cameras(db)
+    config = {
+        "view": [lat, lon, zoom],
+        "layer": "sqm" if layer == "sqm" else "",
+        "maxZoom": map_tiles.MAX_ZOOM,
+        "layers": {
+            key: {"maxZoom": t.max_zoom, "credit": t.credit} for key, t in map_tiles.LAYERS.items()
+        },
+        "cameras": [c.as_json() for c in cameras],
+    }
     return render(
         request,
         "camera_map.html",
         {
-            "cameras": await camera_map_mod.cameras(db),
+            "cameras": cameras,
             "regions": camera_map_mod.REGIONS,
-            "region": region if region in camera_map_mod.REGIONS else "europa",
-            "region_name": name,
-            "view_box": view_box,
-            "dot": dot,
-            "layer": "sqm" if layer == "sqm" else "",
+            "region": region,
+            "layer": config["layer"],
             "sqm_classes": camera_map_mod.SQM_CLASSES,
+            "map_config": config,
         },
+        session=session,
     )

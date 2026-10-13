@@ -68,3 +68,4 @@ CLAIM_PER_USER = (Limit(10, 600), Limit(30, 86400))
 CLAIM_PER_IP = (Limit(30, 600),)
 # Roadmap H5: test posts to a Discord webhook.
 DISCORD_TEST = (Limit(5, 600),)
+MAP_SEARCH_PER_IP = (Limit(20, 60), Limit(200, 3600))

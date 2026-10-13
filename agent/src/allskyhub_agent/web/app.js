@@ -848,6 +848,7 @@ async function viewSystem() {
     <section class="card stack"><h2>Kamera und Hub</h2><dl class="facts" id="sys"></dl></section>
     <section class="card stack" id="hw" hidden><h2>Rechner</h2><dl class="facts" id="hwFacts"></dl></section>
     <section class="card stack" id="net" hidden></section>
+    <section class="card stack" id="tls" hidden></section>
     <section class="card stack" id="upd" hidden></section>
     <section class="card stack" id="support" hidden></section>
     <section class="card stack" id="actions" hidden><h2>Neu starten</h2>
@@ -877,6 +878,7 @@ async function viewSystem() {
     };
   }
   viewNetwork().catch(() => {});
+  viewTls().catch(() => {});
   viewUpdates().catch(() => {});
   viewSupport().catch(() => {});
   every(async () => {
@@ -1061,6 +1063,51 @@ async function viewNetwork() {
     const names = { password: "Passwort (8 bis 63 Zeichen)", country: "Land (zwei Buchstaben)", ssid: "Netz" };
     say("Nicht übernommen: " + ((err.fields || []).map((k) => names[k] || k).join(", ") || err.detail || "ungültig") + ".", false);
   };
+}
+
+// SPEC §7.6: HTTPS for this page (roadmap L24), switched in the settings.
+async function viewTls() {
+  const box = $("tls");
+  const t = await getJSON("api/tls");
+  box.hidden = false;
+  const kind = { own: "eigenes Zertifikat", self: "Zertifikat der Kamera (selbst signiert)" }[t.kind] || "noch keines";
+  const here = location.protocol === "https:";
+  box.innerHTML = `<h2>HTTPS</h2>
+    <dl class="facts">
+      <dt>Status</dt><dd>${t.enabled ? `an, Port ${t.port}${here ? "" : ` · <a href="https://${esc(location.hostname)}:${t.port}/">zur verschlüsselten Seite</a>`}`
+        : 'aus <span class="muted small">(Einstellungen → Sicherheit)</span>'}</dd>
+      <dt>Zertifikat</dt><dd>${esc(kind)}${t.not_after ? ` · gültig bis ${fmtDateTime(t.not_after)}` : ""}</dd>
+      ${t.sha256 ? `<dt>Fingerabdruck</dt><dd><code class="small">${esc(t.sha256)}</code></dd>` : ""}
+      ${t.names ? `<dt>Für</dt><dd>${t.names.map((x) => `<code>${esc(x)}</code>`).join(" ")}</dd>` : ""}
+    </dl>
+    <p class="muted small">Beim selbst signierten Zertifikat warnt der Browser einmal. Vergleiche dann den Fingerabdruck.</p>
+    <details><summary>Eigenes Zertifikat verwenden</summary>
+      <form class="form stack" id="tlsForm" novalidate>
+        <div class="field"><label for="tlsCert">Zertifikat (PEM, mit Zwischenzertifikaten)</label>
+          <textarea id="tlsCert" name="cert" rows="5" spellcheck="false"></textarea></div>
+        <div class="field"><label for="tlsKey">Privater Schlüssel (PEM, ohne Passwort)</label>
+          <textarea id="tlsKey" name="key" rows="5" spellcheck="false"></textarea></div>
+      </form>
+      <div class="actions"><button type="button" id="tlsSave">Übernehmen</button>
+        ${t.kind === "own" ? '<button type="button" class="secondary" id="tlsRemove">Zurück zum Kamera-Zertifikat</button>' : ""}</div>
+    </details>
+    <p class="msg" id="tlsMsg" hidden></p>`;
+  const say = (text, good) => { const m = $("tlsMsg"); m.textContent = text; m.className = "msg " + (good ? "ok" : "error"); m.hidden = false; };
+  const send = async (path, body) => {
+    const r = await fetch(path, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+    if (r.status === 401) { location.href = "local-login"; return; }
+    if (r.ok) { say("Übernommen. Die Kamera startet neu, die Seite ist gleich wieder da.", true); return; }
+    const err = await r.json().catch(() => ({}));
+    const why = { bad_certificate: "Das Zertifikat ist kein gültiges PEM.", bad_key: "Der Schlüssel ist kein gültiges PEM (oder hat ein Passwort).",
+      key_mismatch: "Schlüssel und Zertifikat gehören nicht zusammen.", expired: "Das Zertifikat ist abgelaufen oder noch nicht gültig.",
+      too_large: "Zu groß." }[err.detail];
+    say(why || "Nicht übernommen.", false);
+  };
+  $("tlsSave").onclick = () => {
+    const f = $("tlsForm").elements;
+    send("api/tls", { cert: f.cert.value, key: f.key.value });
+  };
+  if ($("tlsRemove")) $("tlsRemove").onclick = () => send("api/tls/remove", {});
 }
 
 // --- router -------------------------------------------------------------------------

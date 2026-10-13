@@ -8,9 +8,11 @@ allskyhub-agent --lat 0 --lon 0 --asi-sdk /path/libASICamera2.so probe
 from __future__ import annotations
 
 import argparse
+import ipaddress
 import logging
 import os
 import socket
+import ssl
 import subprocess
 import sys
 import threading
@@ -44,7 +46,7 @@ from allskyhub_agent.detect.cloudmap import cloud_map
 from allskyhub_agent.detect.events import DetectionWorker, EventStore
 from allskyhub_agent.detect.nlc import NlcDetector
 from allskyhub_agent.detect.sky import Mask, Points, SkyConfig, SkyMeter
-from allskyhub_agent.discovery import Announcer
+from allskyhub_agent.discovery import Announcer, host_name, local_ipv4
 from allskyhub_agent.hub.identity import DEFAULT_KEY_PATH, DeviceIdentity
 from allskyhub_agent.hub.pairing import PairingState
 from allskyhub_agent.hub.public import PublicPage
@@ -84,8 +86,9 @@ from allskyhub_agent.watchdog import (
 from allskyhub_agent.web.archive import LocalArchive
 from allskyhub_agent.web.auth import LocalAuth
 from allskyhub_agent.web.calibration import LocalCalibration
-from allskyhub_agent.web.server import SettingsForm, SystemPage, UpdatePage, WebServer
+from allskyhub_agent.web.server import SettingsForm, SystemPage, TlsSetup, UpdatePage, WebServer
 from allskyhub_agent.web.support import RecentLog, Support
+from allskyhub_agent.web.tls import Certificates
 from allskyhub_protocol import (
     DeviceSettings,
     Event,
@@ -677,6 +680,19 @@ def main(argv: list[str] | None = None) -> int:
     if args.http:
         host, _, port = str(args.http).rpartition(":")
         host = host or "0.0.0.0"  # noqa: S104 - the local UI is meant for the LAN (SPEC §7)
+        # SPEC §7.6: HTTPS for the local UI (roadmap L24).
+        certs = Certificates(Path(args.data) / "tls")
+        https_on = settings_path is not None and load_settings().https
+        tls_context: ssl.SSLContext | None = None
+        if https_on:
+            names = [socket.gethostname(), f"{socket.gethostname()}.local"]
+            if identity is not None:
+                names.append(f"{host_name(identity.device_id)}.local")
+            addresses = [ipaddress.ip_address(a) for a in local_ipv4()]
+            try:
+                tls_context = certs.context(sorted(set(names)), addresses, datetime.now(UTC))
+            except (OSError, ssl.SSLError, ValueError) as exc:
+                log.warning("HTTPS not started: %s", exc)
         web = WebServer(
             live,
             host,
@@ -718,8 +734,16 @@ def main(argv: list[str] | None = None) -> int:
                 mask_edits=lambda: sky_mask.edits.to_json(),
                 restore=restore_backup,
             ),
+            tls=TlsSetup(
+                certs,
+                https_on and tls_context is not None,
+                on_change=lambda: threading.Timer(2.0, restart_requested.set).start(),
+            ),
+            tls_context=tls_context,
         )
         web.start()
+        if web.tls_port is not None:
+            print(f"web UI on https://{host}:{web.tls_port}/")
         print(f"web UI on http://{host}:{web.port}/")
         if identity is not None:
             announcer = Announcer(identity.device_id, web.port)

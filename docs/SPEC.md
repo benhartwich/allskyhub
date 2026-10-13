@@ -857,7 +857,13 @@ mode 0600). The owner can upload an own certificate and key (PEM) in the local U
 instead; a certificate that does not match its key or has expired is refused. Plain HTTP
 on 8080 then answers every page with a redirect to HTTPS, except `/api/setup` and
 `/api/health`, which the app's onboarding (§7), the updater (§8) and the watchdog (§8.1)
-use. Browsers warn about a self-signed certificate once; the session cookie is `Secure`
+use, everything in setup mode (§7.1, the setup network), and a reverse proxy on the same
+machine (a request from 127.0.0.1 or ::1 with `X-Forwarded-Proto`), which does its own
+TLS. `GET /api/tls` shows whether HTTPS is on, whose certificate is used, until when and
+its SHA-256 fingerprint; `POST /api/tls` `{cert, key}` installs the owner's pair (400
+with `bad_certificate`, `bad_key`, `key_mismatch`, `expired` or `too_large`),
+`POST /api/tls/remove` goes back to the camera's own; both restart the agent. An own
+certificate that has expired is no longer used. Browsers warn about a self-signed certificate once; the session cookie is `Secure`
 over HTTPS (§7.4).
 
 ### 7.7 MQTT

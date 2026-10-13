@@ -243,11 +243,14 @@ def night_products(store: ImageStore, night: str) -> Products | None:
     """The `products` message for a night (SPEC §6.3), or None if it has none."""
     folder = store.night_dir(night)
     durations: dict[str, float] = {}
-    try:
-        data: object = json.loads((folder / MANIFEST).read_text())
-    except (OSError, ValueError):
-        data = None
-    if isinstance(data, dict):
+    # The night's manifest, and the day products' (SPEC §5.2, products/day.py).
+    for manifest in (MANIFEST, "day-products.json"):
+        try:
+            data: object = json.loads((folder / manifest).read_text())
+        except (OSError, ValueError):
+            continue
+        if not isinstance(data, dict):
+            continue
         raw = cast("dict[str, object]", data).get("duration_s")
         if isinstance(raw, dict):
             for k, v in cast("dict[str, object]", raw).items():

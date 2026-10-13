@@ -970,11 +970,14 @@ def main(argv: list[str] | None = None) -> int:
         moon_mode=tuned.moon_mode,
     )
 
-    def products_done(result: NightProducts) -> None:
+    def announce_products(night: str) -> None:
         if hub is not None:
-            announced = night_products(store, result.night_id)
+            announced = night_products(store, night)
             if announced is not None:
                 hub.notify_products(announced)
+
+    def products_done(result: NightProducts) -> None:
+        announce_products(result.night_id)
 
     night_cfg = load_settings()
     # SPEC §8.1: systemd restarts the agent if frames stop (WatchdogSec in the unit).
@@ -994,6 +997,7 @@ def main(argv: list[str] | None = None) -> int:
         if night_cfg.product_day_timelapse or night_cfg.product_day_keogram
         else None,
         local_tz=tz,
+        on_day_done=announce_products,
     )
     products.start()
     # SPEC §5.2: the last hour as a small video for the live page, never archived.

@@ -225,9 +225,10 @@ renamed). Products of a night are kept as long as its folder (§4.5).
 agent builds `day-timelapse.mp4` (`product_day_timelapse`, default on) and
 `day-keogram.jpg` (`product_day_keogram`, default off) the same way from the day frames of
 that local date: the morning's frames are in the previous night id's folder (before
-noon, §4.5), the afternoon's in the current one; the files go into the current one. Day
-products stay local for now: the `products` message (§6.3) lists only the three night
-products until the hub accepts more kinds.
+noon, §4.5), the afternoon's in the current one; the files go into the current one. They
+are listed in that night id's `products` message (§6.3) as `day_timelapse` and
+`day_keogram`, sent again when they have been built; a hub that does not know these
+kinds skips them (§6.1).
 
 **Mini timelapse** (`product_mini_timelapse`, default off): every 10 minutes the agent
 renders the last hour's good frames (at most 640 px wide, 25 fps) to `<data>/live/mini.mp4`
@@ -387,10 +388,11 @@ base64url-encoded without padding.
 - `frame`: frame metadata (§4.4), with `bad` (§4.9) null, `dark` or `bright`; the image itself goes over HTTPS when the hub asks
   for it (§6.5, `upload_frame`).
 - `event`: a detection (§6.4).
-- `products`: the night products (§5.2) of one night, `{night_id, products: [{kind,
+- `products`: the night and day products (§5.2) of one night id, `{night_id, products: [{kind,
   name, content_type, size, thumbnail, duration_s}]}` (`size` in bytes; `duration_s`
-  only for the timelapse, else null) with `kind` `keogram`, `startrails` or
-  `timelapse`, `name` `keogram.jpg`, `startrails.jpg` or `timelapse.mp4`, and
+  only for the two timelapses, else null) with `kind` `keogram`, `startrails`,
+  `timelapse`, `day_timelapse` or `day_keogram` (§5.2), `name` `keogram.jpg`,
+  `startrails.jpg`, `timelapse.mp4`, `day-timelapse.mp4` or `day-keogram.jpg`, and
   `content_type` `image/jpeg` or `video/mp4`. Sent when a night's products have been
   built, and once after every (re)connect for the newest night that has products. Only
   existing products are listed; the files themselves go over HTTPS when the hub asks for

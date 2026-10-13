@@ -12,7 +12,7 @@ from typing import Any
 
 from allskyhub_agent.detect.events import EventStore
 from allskyhub_agent.products.build import night_products, product_path
-from allskyhub_agent.products.day import DAY_NAMES, MINI, day_products
+from allskyhub_agent.products.day import MINI
 from allskyhub_agent.products.keolapse import keolapse
 from allskyhub_agent.store.images import ImageStore
 
@@ -32,9 +32,8 @@ class LocalArchive:
             frames = self._store.read_index(night)
             good = [f for f in frames if f.bad is None] or frames
             products = night_products(self._store, night)
-            local = day_products(self._store, night)
             events = self._events.night_events(night) if self._events is not None else []
-            if not frames and products is None and not local and not events:
+            if not frames and products is None and not events:
                 continue
             out.append(
                 {
@@ -47,7 +46,6 @@ class LocalArchive:
                     "products": [p.model_dump(mode="json") for p in products.products]
                     if products is not None
                     else [],
-                    "day_products": local,
                     "events": len(events),
                 }
             )
@@ -89,12 +87,6 @@ class LocalArchive:
         return self._store.path_for(night, name, thumbnail)
 
     def product(self, night: str, name: str, thumbnail: bool) -> Path | None:
-        if name in DAY_NAMES and len(night) == 8 and night.isdigit():
-            folder = self._store.night_dir(night)
-            path = (
-                folder / "thumbnails" / (Path(name).stem + ".jpg") if thumbnail else folder / name
-            )
-            return path if path.is_file() else None
         return product_path(self._store, night, name, thumbnail)
 
     def keolapse(self, first: str, last: str) -> bytes | None:

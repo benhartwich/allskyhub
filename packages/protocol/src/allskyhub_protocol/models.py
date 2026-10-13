@@ -402,17 +402,21 @@ def event_id(kind: EventKind, start: datetime, seq: int = 1) -> str:
 
 
 class ProductKind(StrEnum):
-    """Night products (SPEC §5.2)."""
+    """Night and day products (SPEC §5.2)."""
 
     KEOGRAM = "keogram"
     STARTRAILS = "startrails"
     TIMELAPSE = "timelapse"
+    DAY_TIMELAPSE = "day_timelapse"
+    DAY_KEOGRAM = "day_keogram"
 
 
 PRODUCT_NAMES: dict[ProductKind, tuple[str, str]] = {
     ProductKind.KEOGRAM: ("keogram.jpg", "image/jpeg"),
     ProductKind.STARTRAILS: ("startrails.jpg", "image/jpeg"),
     ProductKind.TIMELAPSE: ("timelapse.mp4", "video/mp4"),
+    ProductKind.DAY_TIMELAPSE: ("day-timelapse.mp4", "video/mp4"),
+    ProductKind.DAY_KEOGRAM: ("day-keogram.jpg", "image/jpeg"),
 }
 
 

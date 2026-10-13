@@ -137,7 +137,7 @@ def test_products_roundtrip_and_name_kind_check() -> None:
         {
             "night_id": "20261006",
             "products": [
-                {"kind": "day_timelapse", "name": "day-timelapse.mp4",
+                {"kind": "moonlapse", "name": "moonlapse.mp4",
                  "content_type": "video/mp4", "size": 5, "thumbnail": True},
                 {"kind": "keogram", "name": "keogram.jpg", "content_type": "image/jpeg",
                  "size": 5, "thumbnail": True},

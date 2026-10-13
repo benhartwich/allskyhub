@@ -70,6 +70,15 @@ def test_the_iss_is_named() -> None:
     assert sm.match(catalogue, LAT, LON, start, end, far) is None
 
 
+def test_a_long_event_is_still_matched() -> None:
+    """Events last minutes; the coarse pass must not lose the satellite."""
+    catalogue = sm.build(sm.parse(ELEMENTS))
+    start, end = AT - dt.timedelta(seconds=40), AT + dt.timedelta(seconds=40)
+    found = sm.match(catalogue, LAT, LON, start, end, (_where(start), _where(end)))
+    assert found is not None
+    assert found.detail == "ISS"
+
+
 def test_names_in_labels() -> None:
     assert sm.SatMatch("ISS (UNITY)", 25575, 1.0).detail == "ISS"
     assert sm.SatMatch("CSS (TIANHE)", 48274, 1.0).detail == "Tiangong"
@@ -147,6 +156,19 @@ async def test_a_meteor_that_is_the_iss_is_marked(app: FastAPI, client: httpx.As
     )
     assert marked.label_pending
     assert not await watch.check_new(dev.device_id, "meteor-20261013T060330Z")  # said already
+    calls: list[str] = []
+    real = sm.match
+
+    def counted(*args: Any) -> sm.SatMatch | None:
+        calls.append("match")
+        return real(*args)
+
+    sm.match = counted
+    try:  # sent again after a reconnect: not computed again
+        assert not await watch.check_new(dev.device_id, "meteor-20261013T060330Z")
+    finally:
+        sm.match = real
+    assert calls == []
 
     assert not await watch.check_new(dev.device_id, "meteor-20261013T060330Z-2")  # imported
     # The owner's word stands.

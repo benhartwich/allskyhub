@@ -400,6 +400,7 @@ base64url-encoded without padding.
   `alpaca_error` (null, or `port_in_use` while `alpaca_enabled` is on but the Alpaca
   server could not start, §7.5).
   `capture_paused` (optional, default false): the owner paused capture (§4.1).
+  `adsb` (optional, null unless `adsb_url` is set): the owner's ADS-B receiver (§7.8).
   `update` (null until the updater ran, §8): `{state, version, at, code}` with `state`
   one of `up_to_date`, `downloading`, `waiting` (downloaded, waits for the day),
   `installing`, `installed`, `rolled_back`, `failed`; `version` the release it is about,
@@ -410,6 +411,14 @@ base64url-encoded without padding.
 - `event`: a detection (§6.4).
 - `event_label` `{night_id, event_id, label, reason, at}`: the owner labelled a detection
   on the camera (§6.4 Labels).
+- `aircraft` `{at, aircraft: [{hex, flight, lat, lon, alt_m, track_deg, speed_kn, seen_s}]}`:
+  the aircraft the owner's own ADS-B receiver sees (§7.8), at most every 10 s while
+  connected, only while `adsb_url` is set. `at` is when the agent read the receiver;
+  `hex` the ICAO address (6 lowercase hex digits), `flight` the call sign or null, `lat`/
+  `lon` in degrees, `alt_m` the barometric altitude in metres (null if unknown),
+  `track_deg` (0..360) and `speed_kn` or null, `seen_s` how old the position is. Only
+  aircraft with a position no older than 60 s and within 150 km of the camera, at most
+  200, nearest first. Never stored by the hub beyond the matching window (§7.8).
 - `night_deleted` `{night_id}`: the owner deleted a whole night on the camera (§7, archive maintenance); the
   hub deletes its copies of that night's frames, products and events too.
 - `products`: the night and day products (§5.2) of one night id, `{night_id, products: [{kind,
@@ -438,7 +447,7 @@ base64url-encoded without padding.
 
 | kind | keys |
 |---|---|
-| `meteor` | `length_px` (int, track length), `peak` (0..1, peak brightness of the track), `frames` (int, frames it appears in), `direction_deg` (0..360 in the image, 0 = up, clockwise, or null), `shower` (name of a shower, e.g. `Perseids`, or null), `shower_match` (how `shower` was found, below) |
+| `meteor` | `length_px` (int, track length), `peak` (0..1, peak brightness of the track), `frames` (int, frames it appears in), `direction_deg` (0..360 in the image, 0 = up, clockwise, or null), `shower` (name of a shower, e.g. `Perseids`, or null), `shower_match` (how `shower` was found, below), `aircraft` (optional: the call sign, else the ICAO address, of an aircraft the camera's own receiver matched, §7.8, else null) |
 | `lightning` | `area_frac` (0..1, part of the sky that lit up), `peak` (0..1, mean brightening of the lit area), `storm_flashes` (int, flashes in the last 30 min including this one), `storm` (string, `storm-` + UTC start of the storm like an event id; the same for all flashes of a storm, a gap of more than 30 min starts a new one) |
 | `aurora` | one event per episode (below): `peak_index` (0..100, % of the searched band that is aurora-green in the best frame; the band is the low sky (2–36°) within 70° of the pole's azimuth once the camera has an orientation (§4.8), else the whole low ring of the image circle), `green` (mean green over red of those pixels, 8 bit), `frames` (int, candidate frames so far), `direction_deg` (0..360 in the image, 0 = up, clockwise, of the green's centroid; not a compass bearing), `ongoing` (bool), `image_rev` |
 | `nlc` | one episode (below), only with an orientation (§4.8), sun −16° to −9°, in the low sky (12–45°) toward the sun: `peak_index` (0..100, % of that band that is NLC-blue and structured, best frame), `blue` (mean blue over red of those pixels, 8 bit), `frames`, `direction_deg`, `ongoing`, `image_rev` |
@@ -496,6 +505,13 @@ again after every `hello` until acknowledged. The camera keeps them in
 unless asked, and it counts nowhere (night and month statistics, the morning summary,
 pushes still to come, exports, triangulation, MQTT counts). Labels do not change the
 detectors.
+
+A label can also be set automatically (roadmap H3, §7.8): then it carries `auto: true` and
+`detail`, a short text such as the call sign and ICAO address (`"DLH4AB 3c6444"`); both are
+optional, default `false` and null, and only an automatic label has them. An automatic label
+never replaces an existing label, and any label set by the owner replaces an automatic
+one whatever its `at`. The UIs show an automatic label as such ("automatisch: Flugzeug
+DLH4AB") with one click to undo it; undoing sets `label` null by the owner, which stays.
 
 ### 6.5 Hub → device
 
@@ -603,7 +619,7 @@ state.
 `owner` (each ≤ 200), `notes` (≤ 2000), all strings, empty = not shown;
 `show_coordinates` (bool, default false: the coordinates appear rounded to 0.1°);
 `sections`: `{live, loop, archive, events, sky, aurora}`, booleans, default true, and
-`observatory` (§7.5), default false. An
+`observatory` (§7.5), default false, and `aircraft` (§7.8), default true. An
 unknown key, a wrong type or a text that is too long is answered with 422 and a German
 sentence in `detail` that the local UI shows as it is. Models: `PublicProfile`,
 `PublicState`, `PublicUpdate` in `allskyhub_protocol.device_api`.
@@ -955,6 +971,53 @@ connects to the broker on the local network and publishes, with `<base>` =
 
 The agent only publishes; it subscribes to nothing and cannot be controlled over MQTT.
 A broker that cannot be reached is retried with backoff and never slows capture.
+
+### 7.8 Aircraft (ADS-B)
+
+Roadmap H3 (Benjamin, 2026-10-13): aircraft are labelled over the live image, and meteor
+detections that are an aircraft are marked. Two sources:
+
+- **adsb.lol** (hub, always): the hub fetches the aircraft around each camera that is
+  online and has a location from the open adsb.lol API (ODbL, no key), at most every
+  10 s per area while someone watches the live image, and over a short window around
+  every new meteor event. The credit "Aircraft data: adsb.lol (ODbL)" is shown wherever
+  aircraft are drawn.
+- **the owner's receiver** (agent, optional): setting `adsb_url`, empty = off, the URL of a
+  readsb, dump1090-fa or tar1090 `aircraft.json` on the local network (for example
+  `http://192.168.1.40/tar1090/data/aircraft.json`). The agent reads it every 5 s, keeps
+  the last 10 minutes of positions in memory, relays them as `aircraft` (§6.3) and uses
+  them for its own meteor check below, also while the hub is unreachable. A receiver that
+  does not answer is retried and never slows capture; `status.adsb` is `{at, aircraft,
+  error}` (when it was last read, how many aircraft, null or `unreachable`/`bad_data`),
+  null while `adsb_url` is empty.
+
+The hub merges both per ICAO address: the receiver's position wins while it is at most 30 s
+old, else adsb.lol's.
+
+**Matching a meteor.** Only with an orientation (§4.8) and a trusted clock (§4.4). For each
+aircraft the position is interpolated over the event's `start − 30 s .. end + 30 s` (ADS-B
+latency and exposure), turned into altitude and azimuth from the camera (camera height
+taken as sea level, altitude from `alt_m`), giving the aircraft's apparent path. A meteor
+is an aircraft when the aircraft is above 5° altitude for part of that window and both ends
+of the meteor's track (§6.4 `start_*`/`end_*`) lie within 2° of that path. The nearest such
+aircraft is named.
+
+- The agent, with its own receiver, checks every meteor when it saves it: a match fills
+  `data.aircraft` and sets an automatic label `false_positive`/`aircraft` (§6.4 Labels),
+  which goes to the hub as `event_label`. The event is still saved and sent.
+- The hub checks every meteor that has no label yet against the merged positions once
+  `end + 60 s` has passed (or at once for an older event), sets an automatic label the
+  same way and sends it to the camera with `label_event`. An imported event (§6.4) is not
+  checked.
+
+Aircraft positions are kept only for this matching (at most 15 minutes on the hub, 10 on
+the camera); the label's `detail` is all that stays.
+
+**Live image.** The hub draws each aircraft above 0° altitude onto the newest live frame
+with the lens (§4.8, as for constellations) at the frame's capture time: a marker, the
+call sign and the altitude, with a short trail of its last minute. A switch "Flugzeuge"
+next to "Sternbilder" shows them, remembered per browser. On the public page only with
+the section `aircraft` (§6.8).
 
 ## 8. Updates
 

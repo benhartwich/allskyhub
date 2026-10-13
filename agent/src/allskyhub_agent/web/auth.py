@@ -75,6 +75,7 @@ class LocalAuth:
         self._clock = clock
         self._monotonic = monotonic
         self._lock = threading.Lock()
+        self._argon = threading.Lock()  # one Argon2 check at a time
         self._nonces: dict[str, float] = {}
         self._failures: deque[float] = deque()
         self._sessions: dict[str, dict[str, Any]] = {}
@@ -224,19 +225,23 @@ class LocalAuth:
             if len(self._failures) >= MAX_FAILURES:
                 return "locked"
             verifier = self._verifier
-        if verifier is None:
-            return "no_code"
+            if verifier is None:
+                return "no_code"
+            # Counted as a failure before the hash runs, so parallel guesses cannot each
+            # start an Argon2 run (19 MiB each) past the limit; taken back if it fits.
+            self._failures.append(now)
         c = normalize_offline_code(code)
         ok = len(c) == OFFLINE_CODE_LENGTH and all(ch in PAIRING_CODE_ALPHABET for ch in c)
         if ok:
-            try:
-                Argon2id.verify_phc_encoded(c.encode(), verifier)
-            except (InvalidKey, ValueError):
-                ok = False
+            with self._argon:  # one at a time: the Pi's memory belongs to capture
+                try:
+                    Argon2id.verify_phc_encoded(c.encode(), verifier)
+                except (InvalidKey, ValueError):
+                    ok = False
         if ok:
+            with self._lock, contextlib.suppress(ValueError):
+                self._failures.remove(now)
             return "ok"
-        with self._lock:
-            self._failures.append(now)
         return "wrong"
 
     # --- sessions ------------------------------------------------------------------------

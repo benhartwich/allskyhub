@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import os
+import tempfile
 from collections.abc import Mapping
 from dataclasses import asdict, dataclass, replace
 from pathlib import Path
@@ -304,9 +305,11 @@ class AgentSettings:
 
     def save(self, path: Path) -> None:
         path.parent.mkdir(parents=True, exist_ok=True)
-        tmp = path.with_suffix(".tmp")
-        # Only the agent may read it: it can hold the MQTT password (SPEC §7.7).
-        fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+        # Only the agent may read it: it can hold the MQTT password (SPEC §7.7). A fresh,
+        # random name (O_EXCL): root tools must never write through a link the agent's
+        # user planted in its own folder.
+        fd, name = tempfile.mkstemp(prefix=".settings-", dir=path.parent)
+        tmp = Path(name)
         os.fchmod(fd, 0o600)
         try:
             # Root tools (the import, the updater) must leave the file to its owner, the

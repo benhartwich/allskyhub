@@ -119,6 +119,8 @@ _SETUP_NET = ipaddress.ip_network(f"{SETUP_ADDRESS}/24", strict=False)
 def _ssid_bytes(v: str) -> str:
     if len(v.encode()) > 32:
         raise ValueError("ssid has more than 32 bytes")
+    if any(ord(ch) < 32 or ord(ch) == 127 for ch in v):
+        raise ValueError("ssid has control characters")
     return v
 
 
@@ -127,6 +129,10 @@ def _wpa_password(v: str | None) -> str | None:
         return None
     if not 8 <= len(v) <= 63:
         raise ValueError("password must have 8 to 63 characters")
+    # WPA passphrases are printable ASCII; a line break would add lines to nmcli's
+    # passwd-file (adapters/network.py).
+    if not all(32 <= ord(ch) <= 126 for ch in v):
+        raise ValueError("password must be printable ASCII")
     return v
 
 
@@ -297,6 +303,9 @@ def make_handler(
             self.send_header("Content-Type", ctype)
             self.send_header("Content-Length", str(len(body)))
             self.send_header("Cache-Control", "no-store")
+            # No page of the camera may be framed by another site (clickjacking).
+            self.send_header("X-Frame-Options", "DENY")
+            self.send_header("X-Content-Type-Options", "nosniff")
             self.end_headers()
             self.wfile.write(body)
 
@@ -788,9 +797,24 @@ def make_handler(
             else:
                 self._text(HTTPStatus.NOT_FOUND, "not found")
 
+        def _cross_site(self) -> bool:
+            """A browser POST from another site (CSRF): its Origin is not the address the
+            camera was reached under. Without Origin (the app, curl) it is no browser form."""
+            origin = self.headers.get("Origin")
+            if origin is None:
+                return False
+            host = self.headers.get("Host", "")
+            if self._from_loopback():  # behind the local reverse proxy (SPEC §7.6)
+                host = self.headers.get("X-Forwarded-Host", host).split(",")[0].strip()
+            _, sep, rest = origin.partition("://")
+            return not sep or rest.rstrip("/").lower() != host.lower()
+
         def do_POST(self) -> None:
             path = self.path.split("?", 1)[0]
             if self._to_https(path):
+                return
+            if self._cross_site():
+                self._json(HTTPStatus.FORBIDDEN, {"detail": "cross-site request"})
                 return
             if self._login_needed(path):
                 self._refuse(path)

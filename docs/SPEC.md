@@ -67,6 +67,24 @@ exposure controller (§4.3) for exposure and gain, captures, stores (§4.5) and 
 the frame to processing. The pause between frames is configurable per mode (default:
 day 30 s, night 0 s).
 
+By day the setting `day_capture` decides (Benjamin, 2026-10-13): `save` (default) stores
+day frames like night frames; `live` takes them for the live image and the hub's latest
+image but does not store them (no day products, no day frames in the archive); `off`
+takes none and only checks the sun every minute, so the night starts on time.
+
+**Pausing.** The owner can pause capture in the local UI (e.g. to clean the dome) and
+resume it; the pause survives restarts (`<data>/capture-paused`) until resumed. While
+paused the agent takes no frames, reports `capture_paused: true` in `status` (§6.3), and
+neither the heartbeat nor the watchdog (§8.1) counts it as a stall; the hub's monitoring
+(roadmap C14) does not warn about missing pictures.
+
+**Flip and rotation.** `image_flip` (`none` default, `horizontal`, `vertical`) and
+`image_rotate` (0 default, 90, 180, 270, clockwise) turn every frame right after capture,
+before anything else sees it, so stored frames, products, detections and the live image
+all show the turned picture. Hot pixels, the sky mask and the orientation are pixel maps
+of the old picture: a change of either setting discards them and they are learned again
+(§4.6–§4.8).
+
 ### 4.2 Day and night
 
 The mode follows the sun's elevation at the camera's location:
@@ -81,7 +99,8 @@ horizon, more than enough here). Time comes from an injected clock.
 ### 4.3 Auto exposure
 
 The controller aims for a target mean brightness (`target_mean`, 0..1, default day
-0.35, night 0.20) measured inside the mask.
+0.35, night 0.20) measured inside the mask. The owner sets them as `day_target_pct` and
+`night_target_pct` (5..80 %; Allsky's `daymean`/`nightmean`).
 
 - It works in log space: `ratio = target / measured`, damped as
   `ratio ** damping` (default 0.7) and clamped to `[1/8, 8]` per frame, so a single odd
@@ -92,8 +111,8 @@ The controller aims for a target mean brightness (`target_mean`, 0..1, default d
 - On a mode change the controller starts from that mode's last known good values.
 
 **Moon mode** (roadmap L20, setting `moon_mode`, default on). At night, while the moon is
-above the horizon and at least half lit, the night target is 0.12 instead of 0.20
-(`moon_target_mean` of the exposure configuration), so the moonlit sky and the landscape do
+above the horizon and at least half lit, the night target is 0.6 times the night
+target (0.12 for the default 0.20), so the moonlit sky and the landscape do
 not burn out; as always, gain only rises once the exposure is at its maximum. The moon
 position and phase come from `allskyhub_sky.astro` (low precision, Meeus). Switching in or
 out of moon mode only moves the target; the damping above makes the change gradual.
@@ -380,6 +399,7 @@ base64url-encoded without padding.
   are relayed, never N.I.N.A.'s images.
   `alpaca_error` (null, or `port_in_use` while `alpaca_enabled` is on but the Alpaca
   server could not start, §7.5).
+  `capture_paused` (optional, default false): the owner paused capture (§4.1).
   `update` (null until the updater ran, §8): `{state, version, at, code}` with `state`
   one of `up_to_date`, `downloading`, `waiting` (downloaded, waits for the day),
   `installing`, `installed`, `rolled_back`, `failed`; `version` the release it is about,
@@ -388,6 +408,10 @@ base64url-encoded without padding.
 - `frame`: frame metadata (§4.4), with `bad` (§4.9) null, `dark` or `bright`; the image itself goes over HTTPS when the hub asks
   for it (§6.5, `upload_frame`).
 - `event`: a detection (§6.4).
+- `event_label` `{night_id, event_id, label, reason, at}`: the owner labelled a detection
+  on the camera (§6.4 Labels).
+- `night_deleted` `{night_id}`: the owner deleted a whole night on the camera (§7, archive maintenance); the
+  hub deletes its copies of that night's frames, products and events too.
 - `products`: the night and day products (§5.2) of one night id, `{night_id, products: [{kind,
   name, content_type, size, thumbnail, duration_s}]}` (`size` in bytes; `duration_s`
   only for the two timelapses, else null) with `kind` `keogram`, `startrails`,
@@ -461,10 +485,22 @@ keep their picture.
 Events are sent when detected and, after every (re)connect, again for the current
 night (§6.7).
 
+**Labels** (Benjamin, 2026-10-13). The owner can mark a detection as `confirmed` or as
+`false_positive` with a `reason`: `aircraft`, `satellite`, `artifact` or `other`
+(null). A label is `{night_id, event_id, label, reason, at}`, `label` null removes it,
+`at` is when it was set; the newer `at` wins. Labels set in the local UI go to the hub as
+`event_label` (§6.3), sent when set and, after a reconnect, for every label set while
+offline; labels set on the hub go to the camera with the command `label_event` (§6.5),
+again after every `hello` until acknowledged. The camera keeps them in
+`<data>/events/<night>/labels.json`. A false positive is never deleted: lists hide it
+unless asked, and it counts nowhere (night and month statistics, the morning summary,
+pushes still to come, exports, triangulation, MQTT counts). Labels do not change the
+detectors.
+
 ### 6.5 Hub → device
 
 `command`: `set_settings`, `focus_mode` (`{on: bool}`, §7), `restart`, `update`,
-`upload_frame`, `upload_product`, `upload_event`, `local_access`. Each command is acknowledged with `ack` or `error` (`code` one of
+`upload_frame`, `upload_product`, `upload_event`, `local_access`, `label_event`. Each command is acknowledged with `ack` or `error` (`code` one of
 `not_found`, `invalid_args`, `unsupported`, `failed`).
 
 **`set_settings`** with a partial object of keys from `settings_schema` (§6.9), for
@@ -507,6 +543,11 @@ stores it (replacing an older one), drops all local sessions that were opened wi
 offline code, and answers `ack`. The hub sends it when the owner creates or removes the
 code and, until the device has acknowledged it, again after every `hello`. The hub never
 stores the code itself, only the verifier until it is delivered.
+
+**`label_event`** `{night_id, event_id, label, reason, at}` (§6.4 Labels): the device
+stores the label unless it has a newer one for that event and answers `ack`, or `error`
+`not_found` if it does not know the event. An older device answers `unsupported`; the
+hub keeps the label for itself.
 
 ### 6.6 Device HTTP endpoints
 
@@ -635,6 +676,29 @@ seconds, and `connected` says whether the WebSocket to the hub is open.
 Before pairing the local UI has no authentication and is meant for the local network
 only; setup mode (§7.1) stays limited to it. After pairing it needs a local login
 (§7.4).
+
+**Language and units.** `language` (`de` default, `en`) and `temperature_unit` (`c`
+default, `f`) change only how the local UI shows texts and temperatures; the protocol
+stays in °C. Setting texts are already `{de, en}` (§6.9).
+
+**Overlay** (roadmap L11). The owner arranges what is drawn over the image: for each of
+the four corners a list of fields from `time`, `date`, `exposure`, `gain`,
+`sensor_temp`, `sun`, `moon`, `cloud_cover`, `sqm`, `stars`, `mode` and up to two own
+text lines (≤ 60 characters each, e.g. the station's name), a size (`small`, `normal`,
+`large`) and whether to draw the compass and the constellations. It is kept in
+`<data>/overlay.json` (`GET/POST /api/overlay`), the same for every browser, and used
+for the live image, the lightbox and "save with overlay". It is still only drawn over
+the image, never into stored frames.
+
+**Archive maintenance.** The owner can delete a whole night except the current
+one (`POST /api/nights/<id>/delete`, after a confirmation in the UI); the agent removes
+the folder and its events and sends `night_deleted` (§6.3), again after a reconnect if
+the hub was not reachable.
+
+**Camera check.** `GET /api/check` lists checks, each `{id, state, detail}` with `state`
+`ok`, `warn` or `fail`: power (no under-voltage), clock synchronised, free disk, frames
+coming, sharpness against the best seen, sky mask learned, orientation solved, hub
+connected. The UI shows them as a traffic light with what to do.
 
 ### 7.1 Setup mode
 

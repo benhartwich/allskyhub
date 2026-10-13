@@ -58,6 +58,8 @@ def parse(raw: bytes) -> SetupFile:
             password = None
         elif not isinstance(password, str) or not 8 <= len(password) <= 63:
             raise SetupFileError("wifi.password must have 8 to 63 characters")
+        if any(ord(ch) < 32 or ord(ch) == 127 for ch in ssid + (password or "")):
+            raise SetupFileError("wifi must not contain control characters")  # SPEC §7.1
     c = d.get("wifi_country")
     if c is not None:
         if not isinstance(c, str) or not _COUNTRY.match(c.upper()):
@@ -65,8 +67,8 @@ def parse(raw: bytes) -> SetupFile:
         country = c.upper()
     h = d.get("hub_url")
     if h is not None:
-        if not isinstance(h, str) or not h.startswith(("https://", "http://")):
-            raise SetupFileError("hub_url must be an http(s) URL")
+        if not isinstance(h, str) or not h.startswith("https://"):
+            raise SetupFileError("hub_url must be an https URL")  # never plain ws (SPEC §7.3)
         hub = h
     lat = lon = None
     loc = d.get("location")

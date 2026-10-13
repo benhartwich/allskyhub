@@ -17,6 +17,7 @@ from allskyhub_agent.settings import (
     DETECT_CHOICES,
     DETECTORS,
     AgentSettings,
+    valid_hostnames,
     valid_http_url,
     valid_mqtt,
 )
@@ -618,6 +619,23 @@ def build_schema(profile: Profile) -> list[SettingSpec]:
             },
         }
     )
+    entries.append(
+        {
+            "key": "local_hostnames",
+            "type": "string",
+            "label": {"de": "Weitere Adressen", "en": "Further addresses"},
+            "group": {"de": "Sicherheit", "en": "Security"},
+            "max_length": 500,
+            "help": {
+                "de": "Eigene Namen im Heimnetz, unter denen die Kamera erreichbar ist, z. B. "
+                "allsky.fritz.box (mehrere mit Komma). IP-Adressen, .local und Kurznamen gehen "
+                "immer; andere Namen lehnt die Kamera zum Schutz ab.",
+                "en": "Own names in the home network the camera is reached under, e.g. "
+                "allsky.fritz.box (several with commas). IP addresses, .local and short names "
+                "always work; the camera refuses other names for protection.",
+            },
+        }
+    )
     return [SettingSpec.model_validate(e) for e in entries]
 
 
@@ -652,6 +670,9 @@ def check(schema: list[SettingSpec], changes: Mapping[str, Any]) -> list[str]:
         v: object = changes.get(k)
         if isinstance(v, str) and not valid_mqtt(k, v):
             bad.add(k)
+    names: object = changes.get("local_hostnames")
+    if isinstance(names, str) and not valid_hostnames(names):
+        bad.add("local_hostnames")
     if not bad:
         try:
             SetSettingsArgs.model_validate(dict(changes))

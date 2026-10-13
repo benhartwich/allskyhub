@@ -80,3 +80,60 @@ def test_settings_never_written_through_a_planted_link(tmp_path: Path) -> None:
         json.loads((tmp_path / "settings.json").read_text())["hub_url"] == "https://allskyhub.org"
     )
     assert not list(tmp_path.glob(".settings-*"))  # no temp file left
+
+
+def test_host_allow_list() -> None:
+    """SPEC §7.4 Addresses: against DNS rebinding."""
+    from allskyhub_agent.web.server import host_allowed
+
+    for ok in (
+        "192.168.1.5",
+        "192.168.1.5:8080",
+        "[fe80::1]:8443",
+        "localhost:8080",
+        "allskyhub-abcd.local",
+        "allskyhub-abcd.local.",
+        "allsky",
+        "allsky:8080",
+    ):
+        assert host_allowed(ok, []), ok  # fmt: skip
+    for bad in ("evil.example", "evil.example:8080", "192.168.1.5.nip.io", "", "allsky.fritz.box"):
+        assert not host_allowed(bad, []), bad
+    assert host_allowed("Allsky.Fritz.Box:8080", ["allsky.fritz.box"])
+
+
+def test_local_hostnames_setting() -> None:
+    from allskyhub_agent.settings import AgentSettings, valid_hostnames
+
+    assert valid_hostnames("allsky.fritz.box, cam.example.org")
+    assert valid_hostnames("")
+    assert not valid_hostnames("http://x")
+    assert not valid_hostnames("a b c d e f g h i j k")  # more than 10
+    s = AgentSettings().with_values({"local_hostnames": "Allsky.Fritz.Box,cam.example.org"})
+    assert s.local_hostnames == "allsky.fritz.box cam.example.org"
+
+
+def test_mqtt_password_stays_with_its_broker() -> None:
+    """SPEC §7.7: a new broker gets no stored password."""
+    from allskyhub_agent.settings import AgentSettings
+
+    pw, pw2 = "broker-1", "broker-2"
+    s = AgentSettings().with_values({"mqtt_host": "ha.local", "mqtt_password": pw})
+    assert s.mqtt_password == pw
+    assert s.with_values({"mqtt_prefix": "sky"}).mqtt_password == pw
+    assert s.with_values({"mqtt_host": "ha.local"}).mqtt_password == pw  # unchanged
+    assert s.with_values({"mqtt_host": "evil.example"}).mqtt_password is None
+    assert s.with_values({"mqtt_port": 8883}).mqtt_password is None
+    moved = s.with_values({"mqtt_host": "new.local", "mqtt_password": pw2})
+    assert moved.mqtt_password == pw2
+
+
+def test_setup_needs_https_hub() -> None:
+    from pydantic import ValidationError
+
+    from allskyhub_agent.web.server import SetupNetworkBody
+
+    with pytest.raises(ValidationError):
+        SetupNetworkBody.model_validate(
+            {"ssid": "x", "country": "DE", "hub_url": "http://allskyhub.org"}
+        )

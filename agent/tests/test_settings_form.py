@@ -82,6 +82,7 @@ def test_values_report_every_key_and_fit_device_settings() -> None:
         "mqtt_password_set": False,
         "mqtt_prefix": "allskyhub",
         "https": False,
+        "local_hostnames": "",
         "language": "de",
         "temperature_unit": "c",
     }

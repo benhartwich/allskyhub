@@ -93,7 +93,7 @@ from allskyhub_agent.adapters.network import SETUP_ADDRESS
 from allskyhub_agent.hub.pairing import PairingState
 from allskyhub_agent.hub.public import HubUnreachable, PublicPage, PublicRejected
 from allskyhub_agent.live import LiveState
-from allskyhub_agent.settings import AgentSettings, valid_timezone
+from allskyhub_agent.settings import AgentSettings, host_names, valid_timezone
 from allskyhub_agent.setup.controller import NetworkRequest, SetupController
 from allskyhub_agent.web.archive import LocalArchive
 from allskyhub_agent.web.auth import (
@@ -114,6 +114,36 @@ _MAX_BODY = 4096
 _MAX_MASK_BODY = 256 * 1024  # 30 polygons of 200 points as JSON
 _MAX_PUBLIC_BODY = 16 * 1024  # the profile's texts are at most about 3 000 characters
 _SETUP_NET = ipaddress.ip_network(f"{SETUP_ADDRESS}/24", strict=False)
+
+
+def host_allowed(host_header: str, extra: list[str]) -> bool:
+    """SPEC §7.4 Addresses: an IP address, localhost, a .local name, a name without a dot
+    or one of the owner's names; anything else may be a DNS-rebinding page."""
+    host = host_header.strip().lower()
+    if host.startswith("["):  # [IPv6]:port
+        host = host[1 : host.find("]")] if "]" in host else ""
+    elif host.count(":") == 1:
+        host = host.rsplit(":", 1)[0]
+    host = host.rstrip(".")
+    if not host:
+        return False
+    try:
+        ipaddress.ip_address(host)
+        return True
+    except ValueError:
+        pass
+    return host == "localhost" or host.endswith(".local") or "." not in host or host in extra
+
+
+_WRONG_HOST = (
+    "<!doctype html><meta charset=utf-8><title>allskyhub</title>"
+    "<p>Diese Adresse kennt die Kamera nicht. Öffne sie über ihre IP-Adresse oder "
+    "allskyhub-xxxx.local und trage den Namen in den Einstellungen unter "
+    "<b>Sicherheit → Weitere Adressen</b> ein.</p>"
+    "<p>The camera does not know this address. Open it by its IP address or "
+    "allskyhub-xxxx.local and add the name in the settings under "
+    "<b>Security → Further addresses</b>.</p>"
+).encode()
 
 
 def _ssid_bytes(v: str) -> str:
@@ -144,7 +174,7 @@ class SetupNetworkBody(BaseModel):
     ssid: str = Field(min_length=1)
     password: str | None = None
     country: str = Field(pattern=r"^[A-Za-z]{2}$")
-    hub_url: str | None = Field(default=None, pattern=r"^https?://")
+    hub_url: str | None = Field(default=None, pattern=r"^https://")  # never plain ws (SPEC §7.1)
     # From the phone during onboarding: needed for day and night (SPEC §4.2) and the
     # local night folders (SPEC §4.5).
     latitude: float | None = Field(default=None, ge=-90, le=90)
@@ -655,6 +685,8 @@ def make_handler(
 
         def do_GET(self) -> None:
             path = self.path.split("?", 1)[0]
+            if not self._host_ok():
+                return
             if self._to_https(path):
                 return
             if self._login_needed(path):
@@ -797,6 +829,22 @@ def make_handler(
             else:
                 self._text(HTTPStatus.NOT_FOUND, "not found")
 
+        def _host_ok(self) -> bool:
+            """SPEC §7.4 Addresses; a 421 page is sent when not."""
+            if self._from_loopback():
+                return True  # a reverse proxy on this machine
+            if setup is not None and setup.active:
+                try:
+                    if ipaddress.ip_address(self.client_address[0]) in setup_net:
+                        return True  # the setup network has no other sites
+                except ValueError:
+                    pass
+            extra = host_names(settings().local_hostnames) if settings is not None else []
+            if host_allowed(self.headers.get("Host", ""), extra):
+                return True
+            self._send(HTTPStatus.MISDIRECTED_REQUEST, _WRONG_HOST, "text/html; charset=utf-8")
+            return False
+
         def _cross_site(self) -> bool:
             """A browser POST from another site (CSRF): its Origin is not the address the
             camera was reached under. Without Origin (the app, curl) it is no browser form."""
@@ -811,6 +859,8 @@ def make_handler(
 
         def do_POST(self) -> None:
             path = self.path.split("?", 1)[0]
+            if not self._host_ok():
+                return
             if self._to_https(path):
                 return
             if self._cross_site():

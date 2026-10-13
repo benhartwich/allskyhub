@@ -78,6 +78,8 @@ from allskyhub_agent.setup.setup_file import DEFAULT_PATH as SETUP_FILE_PATH
 from allskyhub_agent.setup.setup_file import apply_once as apply_setup_file
 from allskyhub_agent.store.images import ImageStore
 from allskyhub_agent.update.installer import Paths, Updater, read_request
+from allskyhub_agent.update.reboot import STATE_NAME as SECURITY_REBOOT_NAME
+from allskyhub_agent.update.reboot import SecurityReboot
 from allskyhub_agent.update.status import STATE_FILE, update_status
 from allskyhub_agent.watchdog import (
     Heartbeat,
@@ -106,6 +108,7 @@ from allskyhub_protocol import (
     SetSettingsArgs,
     SettingSpec,
     Status,
+    UpdateState,
 )
 from allskyhub_sky.astro import moon_altitude, moon_illumination
 
@@ -543,6 +546,7 @@ def main(argv: list[str] | None = None) -> int:
     alpaca_error: list[str | None] = [None]  # SPEC §7.5, for status and the local UI
     observatory: list[Callable[[], Observatory | None]] = [lambda: None]  # N.I.N.A., §6.3
     adsb_status: list[Callable[[], AdsbStatus | None]] = [lambda: None]  # receiver, §7.8
+    reboot_required: list[Callable[[], bool]] = [lambda: False]  # system updates, §8
     # Learned at night, edited in the local UI (roadmap L8) before the camera is open.
     calibration_dir = Path(args.data) / "calibration"
     sky_mask = SkyMask(calibration_dir / "skymask.png")
@@ -661,6 +665,7 @@ def main(argv: list[str] | None = None) -> int:
                 capture_paused=live.paused,
                 observatory=observatory[0](),
                 adsb=adsb_status[0](),
+                reboot_required=reboot_required[0](),
             )
 
         def device_settings() -> DeviceSettings:
@@ -776,7 +781,11 @@ def main(argv: list[str] | None = None) -> int:
             calibration=calibration,
             public=PublicPage(hub_url, identity) if hub_url and identity is not None else None,
             system_page=SystemPage(
-                lambda: system_facts(Path(args.data)) | observatory_facts(),
+                lambda: (
+                    system_facts(Path(args.data))
+                    | observatory_facts()
+                    | {"reboot_required": reboot_required[0]()}
+                ),
                 lambda action: system_action(action, restart_requested),
             ),
             network_info=lambda: netinfo.summary() | {"country": wifi_country(settings_file)},
@@ -1131,6 +1140,24 @@ def main(argv: list[str] | None = None) -> int:
         mini.start()
     else:
         mini_path.unlink(missing_ok=True)
+
+    # SPEC §8: reboot by day when system security updates need it.
+    def updating() -> bool:
+        st = update_status() if settings_path else None
+        return st is not None and st.state in (UpdateState.DOWNLOADING, UpdateState.INSTALLING)
+
+    here = loc
+    security_reboot = SecurityReboot(
+        Path(args.data) / SECURITY_REBOOT_NAME,
+        tz=lambda: tz,
+        sun_deg=lambda t: sun_elevation(t, here.lat, here.lon),
+        busy=lambda: products.busy,
+        updating=updating,
+        reboot=lambda: system_action("reboot", restart_requested),
+    )
+    if settings_path:
+        security_reboot.start()
+    reboot_required[0] = lambda: security_reboot.required
 
     def show(f: FrameInfo) -> None:
         products.on_frame(f)

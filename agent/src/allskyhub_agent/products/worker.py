@@ -55,10 +55,16 @@ class ProductWorker:
         self._day = day
         self._tz = local_tz
         self._on_day_done = on_day_done
+        self._building = False
         self._thread = threading.Thread(target=self._run, name="products", daemon=True)
 
     def start(self) -> None:
         self._thread.start()
+
+    @property
+    def busy(self) -> bool:
+        """Products are being built or wait to be (SPEC §8: no reboot meanwhile)."""
+        return self._building or not self._q.empty()
 
     def on_frame(self, info: FrameInfo) -> None:
         """Called for every frame from the capture thread; never blocks."""
@@ -81,26 +87,33 @@ class ProductWorker:
                 continue
             if item is None:
                 return
-            what, night = item
-            if what == "day":
-                self._build_day(night)
-                continue
+            self._building = True
             try:
-                result = build_night(self._store, night, self._cfg)
-                log.info("night %s: built %s from %d frames", night, result.built, result.frames)
-                if self._on_done is not None:
-                    self._on_done(result)
-            except Exception:  # a broken night must not stop later ones
-                log.exception("building products of night %s failed", night)
-            if self._keep_days is not None:
-                # Retention by days (SPEC §4.5), once a day after the products are done.
-                try:
-                    removed = self._store.cleanup(datetime.now(UTC), self._keep_days)
-                    if removed:
-                        log.info("removed old nights %s", removed)
-                except OSError:
-                    log.exception("cleanup failed")
-            self._check_free()
+                self._handle(item)
+            finally:
+                self._building = False
+
+    def _handle(self, item: tuple[str, str]) -> None:
+        what, night = item
+        if what == "day":
+            self._build_day(night)
+            return
+        try:
+            result = build_night(self._store, night, self._cfg)
+            log.info("night %s: built %s from %d frames", night, result.built, result.frames)
+            if self._on_done is not None:
+                self._on_done(result)
+        except Exception:  # a broken night must not stop later ones
+            log.exception("building products of night %s failed", night)
+        if self._keep_days is not None:
+            # Retention by days (SPEC §4.5), once a day after the products are done.
+            try:
+                removed = self._store.cleanup(datetime.now(UTC), self._keep_days)
+                if removed:
+                    log.info("removed old nights %s", removed)
+            except OSError:
+                log.exception("cleanup failed")
+        self._check_free()
 
     def _build_day(self, night: str) -> None:
         try:

@@ -10,7 +10,7 @@
   <meta property="og:description" content="{{ profile.location_label or 'Allsky-Kamera' }}: der ganze Himmel, live.">
   <meta property="og:type" content="website">
   <meta property="og:url" content="{{ base_url }}/sky/{{ slug }}">
-  {% if device.latest_image_at %}<meta property="og:image" content="{{ base_url }}/sky/{{ slug }}/latest.jpg">{% endif %}
+  {% if device.latest_image_at and profile.sections.live %}<meta property="og:image" content="{{ base_url }}/sky/{{ slug }}/latest.jpg">{% endif %}
   <meta name="twitter:card" content="summary_large_image">
   {% if profile.sections.events %}<link rel="alternate" type="application/atom+xml" title="{{ title }}: Ereignisse" href="/sky/{{ slug }}/events.atom">{% endif %}
 {% endblock %}

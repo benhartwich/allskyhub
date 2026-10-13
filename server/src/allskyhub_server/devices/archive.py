@@ -19,7 +19,7 @@ from allskyhub_server.devices.images import ImageStore
 from allskyhub_server.models import EventRecord, Frame, Product, SkySample, StatusSample
 
 NIGHT_ID = r"^\d{8}$"
-FRAME_NAME = r"^[A-Za-z0-9._-]{1,128}$"
+FRAME_NAME = r"^[A-Za-z0-9_-][A-Za-z0-9._-]{0,127}$"  # never "." or ".."
 # Every product file name of SPEC §5.2, night and day.
 PRODUCT_NAME = "^(" + "|".join(re.escape(name) for name, _ in PRODUCT_NAMES.values()) + ")$"
 # Archived files never change once stored.

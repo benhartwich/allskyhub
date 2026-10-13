@@ -99,6 +99,21 @@ def coordinates(device: Device) -> tuple[float, float] | None:
     return round(float(lat), 1), round(float(lon), 1)
 
 
+def coarse_status(device: Device) -> dict[str, Any] | None:
+    """The status for what a public page computes from the place ("Heute Nacht": sunset,
+    satellite passes): rounded to 0.5° (about 50 km) unless the owner shows the
+    coordinates, so minute-exact times do not give the place away."""
+    status = device.last_status
+    if status is None or profile(device).show_coordinates:
+        return status
+    settings: dict[str, Any] = dict(status.get("settings") or {})
+    for key in ("latitude", "longitude"):
+        value = settings.get(key)
+        if isinstance(value, int | float):
+            settings[key] = round(float(value) * 2) / 2
+    return {**status, "settings": settings}
+
+
 def latitude(device: Device) -> float | None:
     """For the Kp rule of thumb only; never shown unless ``coordinates`` allows it."""
     settings: dict[str, Any] = (device.last_status or {}).get("settings") or {}

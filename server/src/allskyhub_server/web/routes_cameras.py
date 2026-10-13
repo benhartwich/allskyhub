@@ -340,7 +340,11 @@ async def change_settings(
         form = {}
     elif error is None:
         outcome = await camera_settings.apply(
-            _registry(request), device.id, diff, settings_form.field_labels(schema)
+            _registry(request),
+            device.id,
+            diff,
+            settings_form.field_labels(schema),
+            owner=role == "owner",
         )
         error = outcome.message
         if outcome.ok:

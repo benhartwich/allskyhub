@@ -523,7 +523,10 @@ async def camera_settings(
     """SPEC §6.5 ``set_settings`` (roadmap #2): only the given keys change. Waits for the
     camera's answer; 409 offline, 400 rejected (German message), 504 no answer. The camera
     then restarts its capture and reports the new values in ``status.settings``."""
-    device = await _own(db, user, device_id, "admin")
+    found = await queries.visible_one(db, user.id, device_id, "admin")
+    if found is None:
+        raise HTTPException(404, "Not found")
+    device, role = found
     schema, own = settings_form.schema_of(device)
     changes = body.model_dump(mode="json", exclude_unset=True)
     if own and (bad := invalid_settings(schema, changes)):
@@ -531,7 +534,11 @@ async def camera_settings(
         listed = ", ".join(dict.fromkeys(names.get(k, k) for k in bad))
         raise HTTPException(400, f"Ungültige Angabe: {listed}.")
     outcome = await settings_mod.apply(
-        _registry(request), device.id, changes, settings_form.field_labels(schema)
+        _registry(request),
+        device.id,
+        changes,
+        settings_form.field_labels(schema),
+        owner=role == "owner",
     )
     if not outcome.ok:
         raise HTTPException(outcome.status, outcome.message)

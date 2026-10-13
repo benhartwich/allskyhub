@@ -145,5 +145,5 @@ again in the code. Benjamin decided the open questions on 2026-10-13.
 - Raspberry Pi HQ camera (CS mount) to test the rpi-hq profile; fits the Altair 1.55 mm.
 - Apple developer account (open), Play Console via WebInx.
 - Housing: Daniel Nimmervoll's design.
-- Update signing keys: create the main and emergency key pair, commit the public keys, set
-  the secret `ALLSKYHUB_UPDATE_KEY` (docs/updates.md) before images go to other people.
+- ~~Update signing keys~~ done 2026-10-13: both public keys in the image, the main key as
+  secret of the reviewed environment `release` (docs/updates.md). Open: key revocation.

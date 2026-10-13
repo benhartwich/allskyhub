@@ -138,6 +138,10 @@ class Device(Base):
     public_slug: Mapped[str | None] = mapped_column(String(32), unique=True)
     # What the public page shows and its texts (devices/public.py PublicProfile); None = defaults.
     public_profile: Mapped[dict[str, Any] | None] = mapped_column(JSONB)
+    # Roadmap H5: Discord webhook and what goes there (devices/discord.py), and the night
+    # whose summary was posted.
+    discord: Mapped[dict[str, Any] | None] = mapped_column(JSONB)
+    discord_night: Mapped[str | None] = mapped_column(String(8))
     # Roadmap #17: the public page under the owner's own domain, set up by a root helper
     # (deploy/domains): state "pending", "active", "failed" or "removing".
     custom_domain: Mapped[str | None] = mapped_column(String(253), unique=True)
@@ -294,6 +298,8 @@ class EventRecord(Base):
     # exported for tuning the detector.
     label: Mapped[str | None] = mapped_column(String(16))
     labelled_at: Mapped[dt.datetime | None] = mapped_column(_tz())
+    # Roadmap H5: already posted to the owner's Discord channel.
+    discord_posted: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
     # Retention counts from the first report (privacy policy).
     created_at: Mapped[dt.datetime] = mapped_column(_tz(), server_default=func.now(), index=True)
 

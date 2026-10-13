@@ -80,6 +80,35 @@
     <button type="submit" class="secondary">Freigeben</button>
   </form>
 </div>
+<div class="card" id="discord">
+  <h2>Discord</h2>
+  <p class="muted">Meteore, Polarlicht und die Nacht am Morgen in einem Discord-Kanal, mit Bild. In Discord: Servereinstellungen → Integrationen → Webhooks → Neuer Webhook → Webhook-URL kopieren. Links in den Nachrichten führen zur öffentlichen Seite, wenn sie an ist.</p>
+  {% if discord and discord.broken %}<p class="warn">Discord kennt diesen Webhook nicht mehr. Bitte eine neue Adresse eintragen.</p>{% endif %}
+  <form method="post" action="/cameras/{{ device.id }}/discord" class="stack">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <label>Webhook-Adresse<input type="url" name="webhook" autocomplete="off" {% if discord %}placeholder="{{ masked(discord.webhook) }} (leer lassen = behalten)"{% else %}required placeholder="https://discord.com/api/webhooks/…"{% endif %}></label>
+    <div class="stack">
+      <strong>Was in den Kanal geht</strong>
+      {% for key, label in discord_kinds.items() %}
+      <label class="check"><input type="checkbox" name="kind_{{ key }}" {% if key in (discord.kinds if discord else ['meteor', 'aurora', 'nlc']) %}checked{% endif %}> {{ label }}</label>
+      {% endfor %}
+      <label class="check"><input type="checkbox" name="summary" {% if not discord or discord.summary %}checked{% endif %}> Die Nacht am Morgen (mit Sternspuren oder Keogramm)</label>
+    </div>
+    <button type="submit" class="secondary">Speichern</button>
+  </form>
+  {% if discord %}
+  <div class="actions">
+    <form method="post" action="/cameras/{{ device.id }}/discord/test">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+      <button type="submit" class="secondary">Testnachricht senden</button>
+    </form>
+    <form method="post" action="/cameras/{{ device.id }}/discord/remove">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+      <button type="submit" class="danger">Discord trennen</button>
+    </form>
+  </div>
+  {% endif %}
+</div>
 <div class="card">
   <h2>Lokale Seite der Kamera</h2>
   <p class="muted">Im Heimnetz hat die Kamera eine eigene Seite. Dort meldest du dich mit „Mit allskyhub anmelden“ an. Für Zeiten ohne Internet gibt es einen Offline-Code.</p>

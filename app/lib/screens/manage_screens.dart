@@ -512,3 +512,193 @@ class _ExportScreenState extends State<ExportScreen> {
     );
   }
 }
+
+/// Roadmap H5: detections and the night in the owner's Discord channel.
+class DiscordScreen extends StatefulWidget {
+  const DiscordScreen({super.key, required this.client, required this.camera});
+
+  final HubClient client;
+  final Camera camera;
+
+  @override
+  State<DiscordScreen> createState() => _DiscordScreenState();
+}
+
+class _DiscordScreenState extends State<DiscordScreen> {
+  final _webhook = TextEditingController();
+  DiscordState? _state;
+  Set<String> _kinds = {};
+  bool _summary = true;
+  String? _message;
+  bool _messageIsError = false;
+  bool _busy = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  @override
+  void dispose() {
+    _webhook.dispose();
+    super.dispose();
+  }
+
+  void _take(DiscordState state) {
+    _state = state;
+    _kinds = state.kinds.toSet();
+    _summary = state.summary;
+    _webhook.clear();
+  }
+
+  Future<void> _load() async {
+    try {
+      final state = await widget.client.discord(widget.camera.id);
+      if (mounted) setState(() => _take(state));
+    } on Exception catch (e) {
+      _show(_describe(e), error: true);
+    }
+  }
+
+  void _show(String text, {bool error = false}) {
+    if (!mounted) return;
+    setState(() {
+      _message = text;
+      _messageIsError = error;
+    });
+  }
+
+  Future<void> _run(Future<String> Function() action) async {
+    setState(() => _busy = true);
+    try {
+      _show(await action());
+    } on Exception catch (e) {
+      _show(_describe(e), error: true);
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  Future<void> _save() => _run(() async {
+    final state = await widget.client.updateDiscord(
+      widget.camera.id,
+      webhook: _webhook.text.trim(),
+      kinds: [
+        for (final k in _state!.available.keys)
+          if (_kinds.contains(k)) k,
+      ],
+      summary: _summary,
+    );
+    if (mounted) setState(() => _take(state));
+    return 'Gespeichert.';
+  });
+
+  Future<void> _test() => _run(() async {
+    await widget.client.testDiscord(widget.camera.id);
+    return 'Testnachricht gesendet. Schau in deinen Discord-Kanal.';
+  });
+
+  Future<void> _remove() => _run(() async {
+    final state = await widget.client.removeDiscord(widget.camera.id);
+    if (mounted) setState(() => _take(state));
+    return 'Discord getrennt.';
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final state = _state;
+    return Scaffold(
+      appBar: AppBar(title: const Text('Discord')),
+      body: state == null
+          ? Center(
+              child: _message == null
+                  ? const CircularProgressIndicator()
+                  : Text(_message!),
+            )
+          : ListView(
+              padding: const EdgeInsets.all(16),
+              children: [
+                Text(
+                  'Meteore, Polarlicht und die Nacht am Morgen in einem '
+                  'Discord-Kanal, mit Bild. In Discord: Servereinstellungen → '
+                  'Integrationen → Webhooks → Webhook-URL kopieren.',
+                  style: theme.textTheme.bodyMedium,
+                ),
+                if (state.broken)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 12),
+                    child: Text(
+                      'Discord kennt diesen Webhook nicht mehr. Bitte eine neue '
+                      'Adresse eintragen.',
+                      style: TextStyle(color: theme.colorScheme.error),
+                    ),
+                  ),
+                const SizedBox(height: 16),
+                TextField(
+                  key: const Key('discord-webhook'),
+                  controller: _webhook,
+                  keyboardType: TextInputType.url,
+                  autocorrect: false,
+                  decoration: InputDecoration(
+                    labelText: 'Webhook-Adresse',
+                    helperText: state.webhook == null
+                        ? null
+                        : '${state.webhook} (leer lassen = behalten)',
+                    helperMaxLines: 2,
+                    border: const OutlineInputBorder(),
+                  ),
+                ),
+                const SizedBox(height: 8),
+                for (final MapEntry(:key, :value) in state.available.entries)
+                  CheckboxListTile(
+                    key: Key('discord-$key'),
+                    contentPadding: EdgeInsets.zero,
+                    title: Text(value),
+                    value: _kinds.contains(key),
+                    onChanged: (on) => setState(
+                      () => on == true ? _kinds.add(key) : _kinds.remove(key),
+                    ),
+                  ),
+                CheckboxListTile(
+                  key: const Key('discord-summary'),
+                  contentPadding: EdgeInsets.zero,
+                  title: const Text('Die Nacht am Morgen'),
+                  value: _summary,
+                  onChanged: (on) => setState(() => _summary = on ?? false),
+                ),
+                if (_message case final message?)
+                  Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 8),
+                    child: Text(
+                      message,
+                      key: const Key('discord-message'),
+                      style: _messageIsError
+                          ? TextStyle(color: theme.colorScheme.error)
+                          : theme.textTheme.bodyMedium,
+                    ),
+                  ),
+                FilledButton(
+                  key: const Key('discord-save'),
+                  onPressed: _busy ? null : _save,
+                  child: const Text('Speichern'),
+                ),
+                if (state.configured) ...[
+                  const SizedBox(height: 8),
+                  OutlinedButton(
+                    key: const Key('discord-test'),
+                    onPressed: _busy ? null : _test,
+                    child: const Text('Testnachricht senden'),
+                  ),
+                  TextButton(
+                    key: const Key('discord-remove'),
+                    onPressed: _busy ? null : _remove,
+                    child: const Text('Discord trennen'),
+                  ),
+                ],
+              ],
+            ),
+    );
+  }
+}

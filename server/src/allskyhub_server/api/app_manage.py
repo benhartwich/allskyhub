@@ -18,7 +18,8 @@ from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
 from allskyhub_protocol import PublicState, PublicUpdate
 from allskyhub_server.api.app import AppUser
-from allskyhub_server.devices import public, queries, science, sharing, stats
+from allskyhub_server.auth import ratelimit
+from allskyhub_server.devices import discord, public, queries, science, sharing, stats
 from allskyhub_server.devices.queries import Role
 from allskyhub_server.models import Device, User
 from allskyhub_server.web.deps import DbSession
@@ -178,3 +179,94 @@ async def export_csv(db: DbSession, user: AppUser, device_id: str, name: str) ->
         media_type="text/csv; charset=utf-8",
         headers={"Content-Disposition": f'attachment; filename="{filename}"'},
     )
+
+
+class DiscordState(BaseModel):
+    """Roadmap H5. ``webhook`` is shown without its secret part."""
+
+    configured: bool
+    webhook: str | None
+    kinds: list[str]
+    summary: bool
+    broken: bool
+    # Every kind that can go to the channel, with its German label.
+    available: dict[str, str]
+
+
+class DiscordRequest(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+
+    # Empty keeps the stored address.
+    webhook: str = Field(default="", max_length=300)
+    kinds: list[str] = Field(default_factory=list[str], max_length=10)
+    summary: bool = True
+
+
+def _discord_state(device: Device) -> DiscordState:
+    config = discord.settings_of(device)
+    return DiscordState(
+        configured=config is not None,
+        webhook=discord.masked(config.webhook) if config else None,
+        kinds=list(config.kinds) if config else ["meteor", "aurora", "nlc"],
+        summary=config.summary if config else True,
+        broken=config.broken if config else False,
+        available=discord.KINDS,
+    )
+
+
+@router.get("/cameras/{device_id}/discord")
+async def discord_get(db: DbSession, user: AppUser, device_id: str) -> DiscordState:
+    return _discord_state(await _own(db, user, device_id, "owner"))
+
+
+@router.put("/cameras/{device_id}/discord")
+async def discord_put(
+    db: DbSession, user: AppUser, device_id: str, body: DiscordRequest
+) -> DiscordState:
+    """400 with a German sentence for an address that is not a Discord webhook."""
+    device = await _own(db, user, device_id, "owner")
+    old = discord.settings_of(device)
+    try:
+        config = discord.DiscordSettings.model_validate(
+            {
+                "webhook": body.webhook.strip() or (old.webhook if old else ""),
+                "kinds": [k for k in body.kinds if k in discord.KINDS],
+                "summary": body.summary,
+            }
+        )
+    except ValidationError:
+        raise HTTPException(400, discord.BAD_WEBHOOK) from None
+    device.discord = config.model_dump()
+    await db.commit()
+    return _discord_state(device)
+
+
+@router.delete("/cameras/{device_id}/discord")
+async def discord_delete(db: DbSession, user: AppUser, device_id: str) -> DiscordState:
+    device = await _own(db, user, device_id, "owner")
+    device.discord = None
+    await db.commit()
+    return _discord_state(device)
+
+
+@router.post("/cameras/{device_id}/discord/test", status_code=204)
+async def discord_test(request: Request, db: DbSession, user: AppUser, device_id: str) -> Response:
+    """409 when no webhook is set or Discord does not know it, 502 when unreachable."""
+    device = await _own(db, user, device_id, "owner")
+    try:
+        await ratelimit.hit(
+            request.app.state.engine, f"discord-test:{device.id}", ratelimit.DISCORD_TEST
+        )
+    except ratelimit.RateLimitedError as exc:
+        raise HTTPException(
+            429,
+            "Bitte ein paar Minuten warten, bevor du noch eine Testnachricht schickst.",
+            {"Retry-After": str(exc.retry_after)},
+        ) from None
+    poster: discord.Discord = request.app.state.notifier.discord
+    result = await poster.test(device) if discord.settings_of(device) else "gone"
+    if result == "gone":
+        raise HTTPException(409, "Discord kennt diesen Webhook nicht (mehr).")
+    if result != "ok":
+        raise HTTPException(502, "Discord war nicht erreichbar.")
+    return Response(status_code=204)

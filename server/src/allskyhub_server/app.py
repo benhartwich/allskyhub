@@ -32,6 +32,7 @@ from allskyhub_server.devices.domains import HostMap
 from allskyhub_server.devices.images import ImageStore
 from allskyhub_server.devices.map_tiles import MapTiles
 from allskyhub_server.devices.renders import Renderer
+from allskyhub_server.devices.satellite_match import SatelliteCatalogue
 from allskyhub_server.devices.satellites import TleCache
 from allskyhub_server.devices.space_weather import KpCache, OvationCache
 from allskyhub_server.devices.tonight import ForecastCache
@@ -214,6 +215,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             app.state.sessionmaker,
             app.state.connections,
             aircraft.http_fetch(adsb_client) if settings.adsb else None,
+        )
+        app.state.aircraft.satellites = SatelliteCatalogue(
+            settings.data_dir / "gp", adsb_client if settings.satellites else None
         )
         tasks = [
             cleanup,

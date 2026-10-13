@@ -59,6 +59,8 @@ class Settings(BaseSettings):
     trust_proxy_headers: bool = False
     # Roadmap H3 (SPEC §7.8): fetch aircraft from adsb.lol for the cameras that need them.
     adsb: bool = True
+    # Roadmap H6 (SPEC §7.9): CelesTrak's orbital elements, to name satellites among meteors.
+    satellites: bool = True
 
     log_level: str = "INFO"
     log_format: Literal["json", "console"] = "json"

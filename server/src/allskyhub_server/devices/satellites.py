@@ -73,7 +73,7 @@ def _gmst_rad(t: dt.datetime) -> float:
     return math.radians((280.46061837 + 360.98564736629 * d) % 360)
 
 
-def _sun_unit(t: dt.datetime) -> tuple[float, float, float]:
+def sun_unit(t: dt.datetime) -> tuple[float, float, float]:
     d = (t - dt.datetime(2000, 1, 1, 12, tzinfo=dt.UTC)).total_seconds() / 86400
     lon = math.radians(sky_astro._sun_ecliptic(d))  # pyright: ignore[reportPrivateUsage]
     eps = math.radians(23.439)
@@ -128,7 +128,7 @@ def passes(
                 az, alt = _look(pos, t, lat, lon)
                 visible = (
                     alt >= MIN_ALTITUDE
-                    and _sunlit(pos, _sun_unit(t))
+                    and _sunlit(pos, sun_unit(t))
                     and astro.sun_altitude(t, lat, lon) < SKY_DARK
                 )
                 if visible:

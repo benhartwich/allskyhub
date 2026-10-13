@@ -24,6 +24,9 @@ dependencies = [
   "httpx>=0.28",
   # Satellite passes from TLEs (roadmap C6); the standard SGP4 propagator, MIT.
   "sgp4>=2.24",
+  # SGP4 for the whole catalogue at once (SatrecArray), satellites among meteors (H6);
+  # already in the workspace through the agent.
+  "numpy>=2",
 ]
 
 [tool.uv.sources]

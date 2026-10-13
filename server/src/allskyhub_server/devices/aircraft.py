@@ -22,14 +22,17 @@ import logging
 import math
 from collections.abc import Awaitable, Callable, Iterable
 from dataclasses import dataclass, field
-from typing import Any, Literal, cast
+from typing import TYPE_CHECKING, Any, Literal, cast
 
 import httpx
-from sqlalchemy import select
+from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from allskyhub_server.devices.connections import ConnectionRegistry
 from allskyhub_server.models import Device, EventRecord
+
+if TYPE_CHECKING:
+    from allskyhub_server.devices.satellite_match import SatelliteCatalogue
 
 log = logging.getLogger(__name__)
 
@@ -264,7 +267,7 @@ WINDOW = dt.timedelta(seconds=30)
 STEP = dt.timedelta(seconds=1)
 
 
-def _unit(elevation: float, azimuth: float) -> tuple[float, float, float]:
+def unit(elevation: float, azimuth: float) -> tuple[float, float, float]:
     e, a = math.radians(elevation), math.radians(azimuth)
     return (math.cos(e) * math.sin(a), math.cos(e) * math.cos(a), math.sin(e))
 
@@ -298,7 +301,7 @@ def _to_arc(
     return ends
 
 
-def _path_distance(p: tuple[float, float, float], path: list[tuple[float, float, float]]) -> float:
+def path_distance(p: tuple[float, float, float], path: list[tuple[float, float, float]]) -> float:
     if len(path) == 1:
         return _angle(p, path[0])
     return min(_to_arc(p, a, b) for a, b in itertools.pairwise(path))
@@ -315,13 +318,13 @@ def match(
     """The nearest aircraft whose apparent path over ``start - 30 s .. end + 30 s`` passes
     within 2° of both ends of the meteor's track ((altitude, azimuth) each), above 5° for
     part of it; None if there is none."""
-    ends = [_unit(*e) for e in track_ends]
+    ends = [unit(*e) for e in track_ends]
     paths: dict[str, list[tuple[float, float, float]]] = {}
     seen: dict[str, Plane] = {}
     t = start - WINDOW
     while t <= end + WINDOW:
         for plane in tracks.planes(t, lat, lon, min_elevation=-10.0):
-            paths.setdefault(plane.hex, []).append(_unit(plane.elevation, plane.azimuth))
+            paths.setdefault(plane.hex, []).append(unit(plane.elevation, plane.azimuth))
             if plane.elevation >= MATCH_MIN_ELEVATION:
                 best = seen.get(plane.hex)
                 if best is None or plane.distance_km < best.distance_km:
@@ -330,7 +333,7 @@ def match(
     found = [
         seen[key]
         for key, path in paths.items()
-        if key in seen and all(_path_distance(e, path) <= MATCH_DEG for e in ends)
+        if key in seen and all(path_distance(e, path) <= MATCH_DEG for e in ends)
     ]
     return min(found, key=lambda p: p.distance_km) if found else None
 
@@ -501,6 +504,8 @@ class Watch:
         self.tracks = Tracks()
         self._checked: dict[tuple[str, str], dt.datetime] = {}
         self._watched_until: dict[str, dt.datetime] = {}
+        # Roadmap H6 (SPEC §7.9): set by the app; meteors are checked against both.
+        self.satellites: SatelliteCatalogue | None = None
         global current  # the templates draw from the app's one Watch
         current = self
 
@@ -559,7 +564,7 @@ class Watch:
                     .join(Device, Device.id == EventRecord.device_id)
                     .where(
                         EventRecord.kind == "meteor",
-                        EventRecord.labelled_at.is_(None),
+                        or_(EventRecord.labelled_at.is_(None), EventRecord.label_auto.is_(True)),
                         EventRecord.end <= now - CHECK_AFTER,
                         EventRecord.end >= now - KEEP + WINDOW,
                     )
@@ -580,19 +585,75 @@ class Watch:
                         self._checked[key] = now
                     continue
                 self._checked[key] = now
-                plane = match(self.tracks, *place, event.start, event.end, ends)
-                if plane is not None and await labels.set_auto(
-                    db, event, "aircraft", plane.detail, now
-                ):
+                found = await self._verdict(event, place, ends, with_aircraft=True)
+                if found is not None and await labels.set_auto(db, event, *found, now):
                     log.info(
-                        "meteor is an aircraft",
-                        extra={"device_id": event.device_id, "event": event.event_id},
-                    )
+                        "meteor is no meteor",
+                        extra={"device_id": event.device_id, "event": event.event_id,
+                               "reason": found[0]},
+                    )  # fmt: skip
                     changed.add(event.device_id)
             await db.commit()
         for device_id in changed:
             labels.deliver_later(self._maker, self._registry, device_id)
         return changed
+
+    async def _verdict(
+        self,
+        event: EventRecord,
+        place: tuple[float, float],
+        ends: tuple[tuple[float, float], tuple[float, float]],
+        *,
+        with_aircraft: bool,
+    ) -> tuple[str, str] | None:
+        """(reason, detail) of the nearest aircraft (§7.8) or satellite (§7.9) that is the
+        streak, or None."""
+        from allskyhub_server.devices import satellite_match
+
+        best: tuple[float, str, str] | None = None
+        if with_aircraft:
+            plane = match(self.tracks, *place, event.start, event.end, ends)
+            if plane is not None:
+                best = (plane.distance_km, "aircraft", plane.detail)
+        catalogue = await self.satellites.get() if self.satellites is not None else None
+        if catalogue is not None:
+            sat = await asyncio.to_thread(
+                satellite_match.match, catalogue, *place, event.start, event.end, ends
+            )
+            if sat is not None and (best is None or sat.distance_km < best[0]):
+                best = (sat.distance_km, "satellite", sat.detail)
+        return None if best is None else (best[1], best[2])
+
+    async def check_new(self, device_id: str, event_id: str) -> bool:
+        """SPEC §7.9: a meteor is checked for satellites when it arrives (also from a
+        backlog: orbits can be computed for any time), and for aircraft if the kept
+        positions already cover it. True if it got an automatic label."""
+        from allskyhub_server.devices import labels
+
+        async with self._maker() as db:
+            row = (
+                await db.execute(
+                    select(EventRecord, Device.last_status)
+                    .join(Device, Device.id == EventRecord.device_id)
+                    .where(EventRecord.device_id == device_id, EventRecord.event_id == event_id)
+                )
+            ).one_or_none()
+            if row is None:
+                return False
+            event, status = row
+            if event.kind != "meteor" or (event.labelled_at is not None and not event.label_auto):
+                return False
+            ends = _track_ends(event.data or {})
+            place = _place(status)
+            if (event.data or {}).get("imported") or ends is None or place is None:
+                return False
+            covered = self.tracks.covers(device_id, event.start - WINDOW, event.end + WINDOW)
+            found = await self._verdict(event, place, ends, with_aircraft=covered)
+            if found is None or not await labels.set_auto(db, event, *found, _now()):
+                return False
+            await db.commit()
+        labels.deliver_later(self._maker, self._registry, device_id)
+        return True
 
     async def run_forever(self) -> None:
         while True:

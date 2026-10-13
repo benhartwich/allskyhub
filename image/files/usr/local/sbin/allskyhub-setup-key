@@ -1,0 +1,26 @@
+#!/bin/sh
+# The camera's setup key (SPEC §7.1): the WPA2 passphrase of its setup network. It lives on
+# the boot partition, where the owner can read it or write an own one before the first
+# boot; made here at random when missing or unusable. The agent gets a 0600 copy.
+set -eu
+
+KEY=${ALLSKYHUB_SETUP_KEY:-/boot/firmware/allskyhub-setup-key.txt}
+COPY=${ALLSKYHUB_SETUP_KEY_COPY:-/var/lib/allskyhub-agent/setup-key}
+ALPHABET=ABCDEFGHJKMNPQRSTUVWXYZ23456789
+
+key=$( [ -r "$KEY" ] && tr -d ' \r\n-' < "$KEY" | tr 'a-z' 'A-Z' || true)
+case "$key" in
+    *[!$ALPHABET]*|"") ok=0 ;;
+    *) [ "${#key}" -eq 12 ] && ok=1 || ok=0 ;;
+esac
+if [ "$ok" -ne 1 ]; then
+    key=$(LC_ALL=C tr -dc "$ALPHABET" < /dev/urandom | head -c 12)
+    printf '%s-%s-%s\n' "$(echo "$key" | cut -c1-4)" "$(echo "$key" | cut -c5-8)" \
+        "$(echo "$key" | cut -c9-12)" > "$KEY.tmp"
+    mv "$KEY.tmp" "$KEY"
+fi
+install -d -o allskyhub -g allskyhub -m 0750 /var/lib/allskyhub-agent
+umask 077
+printf '%s\n' "$key" > "$COPY.tmp"
+chown allskyhub:allskyhub "$COPY.tmp"
+mv "$COPY.tmp" "$COPY"

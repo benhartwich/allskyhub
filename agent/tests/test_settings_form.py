@@ -9,6 +9,8 @@ from collections.abc import Mapping
 from pathlib import Path
 from typing import Any
 
+import pytest
+
 from allskyhub_agent.live import LiveState
 from allskyhub_agent.profiles import get_profile, with_night_limits
 from allskyhub_agent.settings import AgentSettings
@@ -217,3 +219,21 @@ def test_targets_and_pixel_maps(tmp_path: Path) -> None:
         (cal / name).write_text("x")
     forget_pixel_maps(cal)
     assert sorted(p.name for p in cal.iterdir()) == ["keep.txt"]
+
+
+def test_save_keeps_the_owner(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """A root tool rewriting settings.json (mode 0600) must leave it to the agent's user."""
+    import os
+
+    path = tmp_path / "settings.json"
+    AgentSettings().save(path)
+    calls: list[tuple[int, int]] = []
+    real = path.stat()
+
+    def fchown(_fd: int, uid: int, gid: int) -> None:
+        calls.append((uid, gid))
+
+    monkeypatch.setattr(os, "geteuid", lambda: 0)
+    monkeypatch.setattr(os, "fchown", fchown)
+    AgentSettings().with_values({"keep_days": 62}).save(path)
+    assert calls == [(real.st_uid, real.st_gid)]  # tests do not run as root

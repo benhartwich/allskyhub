@@ -304,6 +304,14 @@ class AgentSettings:
         # Only the agent may read it: it can hold the MQTT password (SPEC §7.7).
         fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
         os.fchmod(fd, 0o600)
+        try:
+            # Root tools (the import, the updater) must leave the file to its owner, the
+            # agent's user: with mode 0600 nobody else can read it.
+            st = path.stat()
+            if os.geteuid() == 0 and (st.st_uid, st.st_gid) != (0, 0):
+                os.fchown(fd, st.st_uid, st.st_gid)
+        except OSError:
+            pass
         with os.fdopen(fd, "w") as f:
             json.dump(asdict(self), f)
             f.flush()

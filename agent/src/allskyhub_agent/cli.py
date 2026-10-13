@@ -88,6 +88,7 @@ from allskyhub_agent.web.archive import LocalArchive
 from allskyhub_agent.web.auth import LocalAuth
 from allskyhub_agent.web.calibration import LocalCalibration
 from allskyhub_agent.web.check import CheckFacts
+from allskyhub_agent.web.overlay import OverlayLayout
 from allskyhub_agent.web.server import SettingsForm, SystemPage, TlsSetup, UpdatePage, WebServer
 from allskyhub_agent.web.support import RecentLog, Support
 from allskyhub_agent.web.tls import Certificates
@@ -103,6 +104,7 @@ from allskyhub_protocol import (
     SettingSpec,
     Status,
 )
+from allskyhub_sky.astro import moon_altitude, moon_illumination
 
 log = logging.getLogger(__name__)
 
@@ -460,6 +462,20 @@ def open_camera(
     return None, get_profile("zwo-asi678mc" if hint == "auto" else hint)
 
 
+def overlay_values(sky_meter: SkyMeter | None, loc: Location | None) -> dict[str, Any]:
+    """What the overlay shows besides the frame (SPEC §7 Overlay): the newest sky values and
+    the moon now."""
+    sky = sky_meter.latest if sky_meter is not None else None
+    out: dict[str, Any] = {"sky": sky.model_dump(mode="json") if sky is not None else None}
+    if loc is not None:
+        now = datetime.now(UTC)
+        out["moon"] = {
+            "altitude_deg": round(moon_altitude(now, loc.lat, loc.lon), 1),
+            "illumination": round(moon_illumination(now), 2),
+        }
+    return out
+
+
 def main(argv: list[str] | None = None) -> int:
     args = _parser().parse_args(argv)
     if args.cmd == "probe":
@@ -785,6 +801,8 @@ def main(argv: list[str] | None = None) -> int:
                 on_change=lambda: threading.Timer(2.0, restart_requested.set).start(),
             ),
             tls_context=tls_context,
+            overlay=OverlayLayout(Path(args.data) / "overlay.json"),
+            status_extra=lambda: overlay_values(sky_meter, loc),
             check=CheckFacts(
                 power=system.power_flags,
                 time_trusted=system.time_trusted,

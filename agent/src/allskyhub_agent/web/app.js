@@ -17,6 +17,9 @@ const tzOpt = () => (CAMERA_TZ ? { timeZone: CAMERA_TZ } : {});
 const fmtTime = (iso) => new Date(iso).toLocaleTimeString("de-AT", { hour: "2-digit", minute: "2-digit", ...tzOpt() });
 const fmtDateTime = (iso) => new Date(iso).toLocaleString("de-AT",
   { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit", ...tzOpt() });
+// SPEC §7: temperatures as the owner chose (setting temperature_unit), always °C inside.
+let TEMP_UNIT = "c";
+const fmtTemp = (c) => (TEMP_UNIT === "f" ? `${(c * 9 / 5 + 32).toFixed(1)} °F` : `${c.toFixed(1)} °C`);
 const camHour = (iso) => Number(new Date(iso).toLocaleString("en-GB", { hour: "2-digit", hourCycle: "h23", ...tzOpt() }));
 const fmtNight = (id) => `${id.slice(6, 8)}.${id.slice(4, 6)}.${id.slice(0, 4)}`;
 const fmtExposure = (us) => (us >= 1e6 ? (us / 1e6).toFixed(1) + " s" : (us / 1000).toFixed(2) + " ms");
@@ -47,7 +50,7 @@ let lbScale = 1;
 let lbX = 0;
 let lbY = 0;
 function lbApply() {
-  $("lightboxImg").style.transform = `translate(${lbX}px, ${lbY}px) scale(${lbScale})`;
+  $("lbWrap").style.transform = `translate(${lbX}px, ${lbY}px) scale(${lbScale})`;
   $("lbStage").classList.toggle("zoomed", lbScale > 1);
 }
 function lbZoom(scale) {
@@ -77,6 +80,19 @@ function showLightbox() {
   const it = lbItems[lbIndex];
   lbZoom(1);
   $("lightboxImg").src = it.src;
+  // An item may bring the overlay (SPEC §7 Overlay): a function of the picture's size.
+  const ovl = $("lbOverlay");
+  ovl.innerHTML = "";
+  ovl.hidden = !it.overlay;
+  if (it.overlay) {
+    const img = $("lightboxImg");
+    const draw = () => {
+      if (!img.naturalWidth) return;
+      ovl.setAttribute("viewBox", `0 0 1000 ${(1000 * img.naturalHeight / img.naturalWidth).toFixed(1)}`);
+      ovl.innerHTML = it.overlay(img.naturalWidth, img.naturalHeight);
+    };
+    if (img.complete) draw(); else img.addEventListener("load", draw, { once: true });
+  }
   $("lbDownload").href = it.src;
   $("lbCaption").textContent = it.caption || "";
   $("lbPrev").disabled = lbIndex === 0;
@@ -112,14 +128,46 @@ document.addEventListener("keydown", (e) => {
 // Drawn over the image when it is shown; the stored frames stay as the camera took them.
 // On unless this browser switched it off.
 const loadPref = (k) => { try { return localStorage.getItem("ash-ov-" + k) !== "0"; } catch { return true; } };
+// Default closed: only true when this browser opened it before.
+const localPref = (k) => { try { return localStorage.getItem("ash-ov-" + k) === "1"; } catch { return false; } };
 const savePref = (k, on) => { try { localStorage.setItem("ash-ov-" + k, on ? "1" : "0"); } catch { /* private mode */ } };
 
-function overlaySvg(f, orientation, ov, w, h, fixedColours = false, sky = null) {
+// SPEC §7 Overlay: the camera's layout, four corners of fields, own text lines, compass,
+// constellations. `extra` is /api/status's sky and moon.
+const OV_FIELDS = { time: "Uhrzeit", date: "Datum", exposure: "Belichtung", gain: "Gain",
+  sensor_temp: "Sensortemperatur", sun: "Sonne", moon: "Mond", cloud_cover: "Bewölkung",
+  sqm: "Himmelshelligkeit (SQM)", stars: "Sterne", mode: "Tag/Nacht", text1: "Eigener Text 1", text2: "Eigener Text 2" };
+const OV_SIZE = { small: 0.8, normal: 1, large: 1.35 };
+const DEFAULT_LAYOUT = { enabled: true, corners: { tl: ["date", "time"], tr: ["exposure", "gain", "sensor_temp"],
+  bl: ["sun", "moon"], br: ["cloud_cover", "sqm"] }, texts: ["", ""], size: "normal", compass: true, stars: true };
+function ovValue(key, f, extra, layout) {
+  const sky = extra && extra.sky;
+  const moon = extra && extra.moon;
+  const at = f ? new Date(f.captured_at) : null;
+  switch (key) {
+    case "time": return at && at.toLocaleTimeString("de-AT", { hour: "2-digit", minute: "2-digit", second: "2-digit", ...tzOpt() });
+    case "date": return at && at.toLocaleDateString("de-AT", { day: "2-digit", month: "2-digit", year: "numeric", ...tzOpt() });
+    case "exposure": return f && fmtExposure(f.exposure_us);
+    case "gain": return f && `Gain ${f.gain}`;
+    case "sensor_temp": return f && f.sensor_temp_c != null ? fmtTemp(f.sensor_temp_c) : null;
+    case "sun": return f && `Sonne ${f.sun_elevation.toFixed(1)}°`;
+    case "moon": return moon && `Mond ${Math.round(moon.illumination * 100)} % · ${moon.altitude_deg.toFixed(0)}°`;
+    case "cloud_cover": return sky && sky.cloud_cover != null ? `Bewölkung ${Math.round(sky.cloud_cover * 100)} %` : null;
+    case "sqm": return sky && sky.sqm_mag != null ? `SQM ${sky.sqm_mag.toFixed(2)}` : null;
+    case "stars": return sky && sky.stars != null ? `${sky.stars} Sterne` : null;
+    case "mode": return f && (f.mode === "night" ? "Nacht" : "Tag");
+    case "text1": return layout.texts[0] || null;
+    case "text2": return layout.texts[1] || null;
+    default: return null;
+  }
+}
+function overlaySvg(f, extra, orientation, layout, w, h, fixedColours = false, sky = null) {
   const H = w ? 1000 * h / w : 562.5;
-  const fs = 22;  // in viewBox units: about 2 % of the width
+  const fs = 22 * (OV_SIZE[layout.size] || 1);  // in viewBox units: about 2 % of the width
   const cls = fixedColours ? ' fill="#fff" stroke="rgba(0,0,0,.75)" stroke-width="4" paint-order="stroke"' : "";
   let out = "";
-  if (ov.stars && sky) {
+  if (!layout.enabled) return out;
+  if (layout.stars && sky) {
     // Pixels of the solved frame, scaled to the drawing's 1000 units wide.
     const k = 1000 / sky.width;
     const line = fixedColours ? ' stroke="rgba(160,190,255,.7)"' : "";
@@ -129,18 +177,19 @@ function overlaySvg(f, orientation, ov, w, h, fixedColours = false, sky = null) 
       ${sky.names.map((n) => `<text x="${n.x}" y="${n.y}" font-size="${sky.font}" text-anchor="middle"${label}>${esc(n.text)}</text>`).join("")}
     </g>`;
   }
-  if (ov.data && f) {
-    const at = new Date(f.captured_at);
-    const lines = [
-      at.toLocaleDateString("de-AT", { day: "2-digit", month: "2-digit", year: "numeric" }) + " " +
-        at.toLocaleTimeString("de-AT", { hour: "2-digit", minute: "2-digit", second: "2-digit" }),
-      `${fmtExposure(f.exposure_us)} · Gain ${f.gain}${f.sensor_temp_c != null ? ` · ${f.sensor_temp_c.toFixed(1)} °C` : ""}`,
-      `Sonne ${f.sun_elevation.toFixed(1)}° · ${f.mode === "night" ? "Nacht" : "Tag"}`,
-    ];
-    out += lines.map((t, i) => `<text class="ov-text" x="16" y="${16 + fs * (i + 1) * 1.25}" font-size="${fs}"${cls}>${esc(t)}</text>`).join("");
+  const step = fs * 1.25;
+  for (const [corner, keys] of Object.entries(layout.corners)) {
+    const lines = keys.map((k) => ovValue(k, f, extra, layout)).filter((t) => t);
+    const right = corner.endsWith("r");
+    const bottom = corner.startsWith("b");
+    const x = right ? 1000 - 16 : 16;
+    lines.forEach((t, i) => {
+      const y = bottom ? H - 16 - step * (lines.length - 1 - i) : 16 + step * (i + 1) - fs * 0.25;
+      out += `<text class="ov-text" x="${x}" y="${y.toFixed(1)}" font-size="${fs.toFixed(1)}"${right ? ' text-anchor="end"' : ""}${cls}>${esc(t)}</text>`;
+    });
   }
   const o = orientation && orientation.overlay;
-  if (ov.compass && o) {
+  if (layout.compass && o) {
     out += o.points.map((p) => `<text class="ov-compass" x="${(p.x * 1000).toFixed(1)}" y="${(p.y * H).toFixed(1)}" font-size="${fs * 1.6}"
       text-anchor="middle" dominant-baseline="middle"${cls}>${p.label}</text>`).join("");
   }
@@ -181,10 +230,9 @@ function viewLive() {
         <svg id="liveOverlay" class="overlay" viewBox="0 0 1000 562.5" aria-hidden="true"></svg>
       </div>
       <div class="row">
-        <button type="button" class="secondary small" data-ov="data" aria-pressed="false">Daten</button>
-        <button type="button" class="secondary small" data-ov="compass" aria-pressed="false">Himmelsrichtungen</button>
-        <button type="button" class="secondary small" data-ov="stars" aria-pressed="false" hidden>Sternbilder</button>
+        <button type="button" class="secondary small" id="ovShow" aria-pressed="false">Overlay</button>
         <button type="button" class="secondary small" id="ovSave">Mit Overlay speichern</button>
+        <a class="small" href="#einstellungen/overlay">Overlay gestalten</a>
       </div>
       <dl class="facts" id="facts"><dt>Bild</dt><dd>Warte auf das erste Bild …</dd></dl>
       <p class="msg warn" id="pausedMsg" hidden>Aufnahme pausiert. <a href="#system">Unter System fortsetzen</a>.</p>
@@ -219,7 +267,11 @@ function viewLive() {
   let lastFrame = null;
   let orientation = null;
   getJSON("api/calibration").then((c) => { orientation = c.orientation; drawOverlay(); }).catch(() => {});
-  const ov = { data: loadPref("data"), compass: loadPref("compass"), stars: loadPref("stars") };
+  // The layout is the camera's (SPEC §7 Overlay); showing it is this browser's choice.
+  let layout = DEFAULT_LAYOUT;
+  let extra = null;
+  let shown = loadPref("show");
+  getJSON("api/overlay").then((l) => { layout = l; drawOverlay(); }).catch(() => {});
   let sky = null;  // constellations for the shown frame (packages/sky, as on the hub)
   let skyFor = null;
   const loadSky = () => {
@@ -227,33 +279,31 @@ function viewLive() {
     skyFor = lastFrame.captured_at;
     getJSON("api/sky-overlay?at=" + encodeURIComponent(lastFrame.captured_at)).then((s) => {
       sky = s;
-      document.querySelector('[data-ov="stars"]').hidden = false;
       drawOverlay();
     }).catch(() => {});
   };
-  for (const b of document.querySelectorAll("[data-ov]")) {
-    const key = b.dataset.ov;
-    const sync = () => { b.classList.toggle("active", ov[key]); b.setAttribute("aria-pressed", String(ov[key])); };
-    sync();
-    b.onclick = () => { ov[key] = !ov[key]; savePref(key, ov[key]); sync(); drawOverlay(); };
-  }
+  const syncShow = () => { $("ovShow").classList.toggle("active", shown); $("ovShow").setAttribute("aria-pressed", String(shown)); };
+  syncShow();
+  $("ovShow").onclick = () => { shown = !shown; savePref("show", shown); syncShow(); drawOverlay(); };
   // The overlay is drawn on top, never into the stored image (L11): Benjamin, 2026-10-12.
   const drawOverlay = () => {
     const img = $("live"), svg = $("liveOverlay");
     if (!img || !svg) return;
-    svg.innerHTML = overlaySvg(lastFrame, orientation, ov, img.naturalWidth, img.naturalHeight, false, sky);
+    svg.innerHTML = shown ? overlaySvg(lastFrame, extra, orientation, layout, img.naturalWidth, img.naturalHeight, false, sky) : "";
     if (img.naturalWidth) svg.setAttribute("viewBox", `0 0 1000 ${(1000 * img.naturalHeight / img.naturalWidth).toFixed(1)}`);
   };
   $("live").addEventListener("load", drawOverlay);
-  $("ovSave").onclick = () => saveWithOverlay($("live"), overlaySvg(lastFrame, orientation,
-    { data: true, compass: ov.compass, stars: ov.stars }, $("live").naturalWidth, $("live").naturalHeight, true, sky), lastFrame);
-  $("live").onclick = () => lightbox([{ src: $("live").src, caption: "Aktuelles Bild" }], 0);
+  $("ovSave").onclick = () => saveWithOverlay($("live"), overlaySvg(lastFrame, extra, orientation,
+    { ...layout, enabled: true }, $("live").naturalWidth, $("live").naturalHeight, true, sky), lastFrame);
+  $("live").onclick = () => lightbox([{ src: $("live").src, caption: "Aktuelles Bild",
+    overlay: shown ? (w, h) => overlaySvg(lastFrame, extra, orientation, layout, w, h, false, sky) : null }], 0);
   const render = (s) => {
     $("version").textContent = s.version;
     focus = s.focus_mode;
     $("focusBtn").textContent = focus ? "Fokusmodus beenden" : "Fokusmodus starten";
     $("focusPanel").hidden = !focus;
     $("resetBtn").hidden = !focus;
+    extra = { sky: s.sky, moon: s.moon };
     if (s.frame) {
       const f = s.frame;
       lastFrame = f;
@@ -265,7 +315,7 @@ function viewLive() {
         <dt>Gain</dt><dd>${f.gain}</dd>
         <dt>Helligkeit</dt><dd>${f.mean.toFixed(2)}</dd>
         <dt>Sonne</dt><dd>${f.sun_elevation.toFixed(1)}°</dd>
-        ${f.sensor_temp_c != null ? `<dt>Sensor</dt><dd>${f.sensor_temp_c.toFixed(1)} °C</dd>` : ""}`;
+        ${f.sensor_temp_c != null ? `<dt>Sensor</dt><dd>${fmtTemp(f.sensor_temp_c)}</dd>` : ""}`;
     }
     if (focus && s.sharpness != null) {
       $("score").textContent = Math.round(s.sharpness);
@@ -634,7 +684,7 @@ async function viewSky(night) {
       ${chart(null, { series: [{ points: pts(nightFrames, "exposure_us", 1e-6, "captured_at") }], min: 0, fmt: (v) => v.toFixed(0) + " s", label: "Belichtung" })}
       ${chart(null, { series: [{ points: [] }, { points: pts(nightFrames, "gain", 1, "captured_at") }], min: 0, fmt: (v) => Math.round(v), label: "Gain" })}</section>
     <section class="card stack"><h2>Sensortemperatur</h2>
-      ${chart(null, { series: [{ points: pts(frames.frames, "sensor_temp_c", 1, "captured_at") }], fmt: (v) => v.toFixed(0) + " °C", label: "Sensortemperatur" })}</section>`;
+      ${chart(null, { series: [{ points: pts(frames.frames, "sensor_temp_c", 1, "captured_at").map((q) => ({ ...q, v: TEMP_UNIT === "f" ? q.v * 9 / 5 + 32 : q.v })) }], fmt: (v) => v.toFixed(0) + (TEMP_UNIT === "f" ? " °F" : " °C"), label: "Sensortemperatur" })}</section>`;
 }
 
 // --- Settings (L7, SPEC §6.9) -------------------------------------------------------------
@@ -750,8 +800,12 @@ async function viewSettings() {
   page.innerHTML = `<h1>Einstellungen</h1><div class="card stack"><form class="form" id="settingsForm" novalidate></form>
     <div class="actions"><button type="button" id="saveBtn">Speichern</button></div>
     <p class="msg" id="settingsMsg" hidden></p></div>
+    <section class="card stack" id="overlay" hidden></section>
     <section class="card stack" id="calibration" hidden></section>
     <section class="card stack" id="public" hidden></section>`;
+  viewOverlayDesigner().then(() => {
+    if (location.hash === "#einstellungen/overlay") $("overlay").scrollIntoView({ block: "start" });
+  }).catch(() => {});
   viewCalibration().catch(() => {});
   viewPublic().catch(() => {});
   let data;
@@ -767,12 +821,18 @@ async function viewSettings() {
   for (const spec of schema) {
     const g = text(spec.group);
     if (!groups.has(g)) {
+      // One fold-out box per group, the first open; the open ones are remembered per browser.
+      const box = document.createElement("details");
+      box.className = "group";
+      const sum = document.createElement("summary");
+      sum.textContent = g;
+      box.appendChild(sum);
+      box.open = groups.size === 0 ? loadPref("grp-" + g) : localPref("grp-" + g);
+      box.addEventListener("toggle", () => savePref("grp-" + g, box.open));
       const fs = document.createElement("fieldset");
-      const lg = document.createElement("legend");
-      lg.textContent = g;
-      fs.appendChild(lg);
+      box.appendChild(fs);
       groups.set(g, fs);
-      form.appendChild(fs);
+      form.appendChild(box);
     }
     groups.get(g).appendChild(field(spec));
   }
@@ -787,10 +847,86 @@ async function viewSettings() {
     for (const k of err.fields || []) {
       const key = k === "latitude" || k === "longitude" ? "location" : k;
       const wrap = document.querySelector(`.field[data-key="${key}"]`);
-      if (wrap) { wrap.classList.add("bad"); names.push(wrap.querySelector("label").textContent); }
+      if (wrap) {
+        wrap.classList.add("bad");
+        names.push(wrap.querySelector("label").textContent);
+        const box = wrap.closest("details");
+        if (box) box.open = true;  // show the field with the error
+      }
     }
     message("Nicht gespeichert: " + (names.join(", ") || "ungültige Eingabe") + ".", false);
   };
+}
+
+// --- Overlay designer (SPEC §7 Overlay) ---------------------------------------------------
+// Each field goes to a corner (or nowhere); the order within a corner is the list order.
+// The live image with the layout drawn over it shows the result before saving.
+async function viewOverlayDesigner() {
+  const box = $("overlay");
+  let layout;
+  try { layout = await getJSON("api/overlay"); } catch { return; }
+  const [st, cal] = await Promise.all([getJSON("api/status").catch(() => ({})), getJSON("api/calibration").catch(() => ({}))]);
+  const CORNER = { "": "aus", tl: "oben links", tr: "oben rechts", bl: "unten links", br: "unten rechts" };
+  const where = {};
+  for (const [c, keys] of Object.entries(layout.corners)) for (const k of keys) where[k] = c;
+  const order = [...Object.values(layout.corners).flat(), ...Object.keys(OV_FIELDS).filter((k) => !where[k])];
+  box.hidden = false;
+  box.innerHTML = `<h2>Overlay</h2>
+    <p class="muted small">Was über dem Bild steht: im Livebild, beim Speichern mit Overlay. Es wird nie in die gespeicherten Bilder geschrieben.</p>
+    <div class="live-stage"><img class="live-img" id="ovPrevImg" alt="Vorschau" src="api/live.jpg?n=${Date.now()}">
+      <svg id="ovPrev" class="overlay" viewBox="0 0 1000 562.5" aria-hidden="true"></svg></div>
+    <form class="form stack" id="ovForm" novalidate>
+      <label class="check"><input type="checkbox" name="enabled"${layout.enabled ? " checked" : ""}> Overlay anzeigen</label>
+      <div class="ov-grid">${order.map((k) => `<div class="field ov-field" data-k="${k}">
+        <label for="ov-${k}">${esc(OV_FIELDS[k])}</label>
+        <div class="row"><select id="ov-${k}" name="${k}">${Object.entries(CORNER).map(([v, t]) => `<option value="${v}"${(where[k] || "") === v ? " selected" : ""}>${t}</option>`).join("")}</select>
+          <button type="button" class="chip" data-up="${k}" aria-label="${esc(OV_FIELDS[k])} nach oben">↑</button></div>
+        ${k.startsWith("text") ? `<input name="t-${k}" maxlength="60" placeholder="z. B. Sternwarte am Berg" value="${esc(layout.texts[k === "text1" ? 0 : 1])}">` : ""}
+      </div>`).join("")}</div>
+      <div class="field"><label for="ovSize">Schriftgröße</label><select id="ovSize" name="size">
+        ${Object.entries({ small: "klein", normal: "normal", large: "groß" }).map(([v, t]) => `<option value="${v}"${layout.size === v ? " selected" : ""}>${t}</option>`).join("")}</select></div>
+      <label class="check"><input type="checkbox" name="compass"${layout.compass ? " checked" : ""}> Himmelsrichtungen</label>
+      <label class="check"><input type="checkbox" name="stars"${layout.stars ? " checked" : ""}> Sternbilder (sobald die Ausrichtung bestimmt ist)</label>
+    </form>
+    <div class="actions"><button type="button" id="ovSaveLayout">Overlay speichern</button>
+      <button type="button" class="secondary" id="ovReset">Standard</button></div>
+    <p class="msg" id="ovMsg" hidden></p>`;
+  let sky = null;
+  if (st.frame) getJSON("api/sky-overlay?at=" + encodeURIComponent(st.frame.captured_at)).then((x) => { sky = x; preview(); }).catch(() => {});
+  const read = () => {
+    const f = $("ovForm").elements;
+    const corners = { tl: [], tr: [], bl: [], br: [] };
+    const rows = [...$("ovForm").querySelectorAll(".ov-field")].map((el) => el.dataset.k);
+    for (const k of rows) { const c = f[k].value; if (c) corners[c].push(k); }
+    return { enabled: f.enabled.checked, corners, size: f.size.value, compass: f.compass.checked, stars: f.stars.checked,
+      texts: [f["t-text1"].value.trim(), f["t-text2"].value.trim()] };
+  };
+  const preview = () => {
+    const img = $("ovPrevImg");
+    if (!img.naturalWidth) return;
+    $("ovPrev").setAttribute("viewBox", `0 0 1000 ${(1000 * img.naturalHeight / img.naturalWidth).toFixed(1)}`);
+    $("ovPrev").innerHTML = overlaySvg(st.frame, { sky: st.sky, moon: st.moon }, cal.orientation, read(),
+      img.naturalWidth, img.naturalHeight, false, sky);
+  };
+  $("ovPrevImg").addEventListener("load", preview);
+  $("ovForm").addEventListener("input", preview);
+  $("ovForm").addEventListener("change", preview);
+  $("ovForm").onclick = (e) => {
+    const k = e.target.dataset && e.target.dataset.up;
+    if (!k) return;
+    const el = $("ovForm").querySelector(`.ov-field[data-k="${k}"]`);
+    if (el.previousElementSibling) el.parentNode.insertBefore(el, el.previousElementSibling);
+    preview();
+  };
+  const say = (t, ok) => { const m = $("ovMsg"); m.textContent = t; m.className = "msg " + (ok ? "ok" : "error"); m.hidden = false; };
+  const save = async (body) => {
+    const r = await fetch("api/overlay", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+    if (r.status === 401) { location.href = "local-login"; return; }
+    if (r.ok) { say("Overlay gespeichert.", true); return; }
+    say("Nicht gespeichert: ungültiges Layout.", false);
+  };
+  $("ovSaveLayout").onclick = () => save(read());
+  $("ovReset").onclick = async () => { await save(DEFAULT_LAYOUT); viewOverlayDesigner(); };
 }
 
 // --- Sky mask and orientation (L8) ----------------------------------------------------
@@ -1072,7 +1208,7 @@ async function viewSystem() {
     $("sys").innerHTML = `
       <dt>Agent</dt><dd>${esc(st.version)}</dd>${hub}
       <dt>Bilder seit Start</dt><dd>${st.frames}</dd>
-      ${st.frame && st.frame.sensor_temp_c != null ? `<dt>Sensor</dt><dd>${st.frame.sensor_temp_c.toFixed(1)} °C</dd>` : ""}`;
+      ${st.frame && st.frame.sensor_temp_c != null ? `<dt>Sensor</dt><dd>${fmtTemp(st.frame.sensor_temp_c)}</dd>` : ""}`;
     if (!hw) return;
     $("hw").hidden = false;
     $("actions").hidden = false;
@@ -1084,7 +1220,7 @@ async function viewSystem() {
       ${hw.model ? `<dt>Modell</dt><dd>${esc(hw.model)}</dd>` : ""}
       ${hw.os ? `<dt>System</dt><dd>${esc(hw.os)}</dd>` : ""}
       <dt>Läuft seit</dt><dd>${fmtUptime(hw.uptime_s)}</dd>
-      ${hw.cpu_temp_c != null ? `<dt>CPU</dt><dd>${hw.cpu_temp_c.toFixed(1)} °C${hw.load ? ` · Last ${hw.load[0].toFixed(2)} (${hw.cpus || "?"} Kerne)` : ""}</dd>` : ""}
+      ${hw.cpu_temp_c != null ? `<dt>CPU</dt><dd>${fmtTemp(hw.cpu_temp_c)}${hw.load ? ` · Last ${hw.load[0].toFixed(2)} (${hw.cpus || "?"} Kerne)` : ""}</dd>` : ""}
       ${hw.memory ? `<dt>Arbeitsspeicher</dt><dd>${fmtBytes(hw.memory.total - hw.memory.available)} von ${fmtBytes(hw.memory.total)}
           ${meter(hw.memory.total - hw.memory.available, hw.memory.total)}</dd>` : ""}
       ${hw.disk ? `<dt>Speicher</dt><dd>${fmtBytes(hw.disk.free)} frei von ${fmtBytes(hw.disk.total)}
@@ -1354,6 +1490,7 @@ function route() {
   window.scrollTo(0, 0);
 }
 window.addEventListener("hashchange", route);
+getJSON("api/settings").then((d) => { if (d.values && d.values.temperature_unit) TEMP_UNIT = d.values.temperature_unit; }).catch(() => {});
 getJSON("api/setup").then((st) => {
   try { if (st.timezone) { new Date().toLocaleString("de-AT", { timeZone: st.timezone }); CAMERA_TZ = st.timezone; } } catch { /* unknown zone: browser time */ }
 }).catch(() => {}).finally(route);

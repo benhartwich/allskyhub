@@ -977,10 +977,11 @@ A broker that cannot be reached is retried with backoff and never slows capture.
 Roadmap H3 (Benjamin, 2026-10-13): aircraft are labelled over the live image, and meteor
 detections that are an aircraft are marked. Two sources:
 
-- **adsb.lol** (hub, always): the hub fetches the aircraft around each camera that is
-  online and has a location from the open adsb.lol API (ODbL, no key), at most every
-  10 s per area while someone watches the live image, and over a short window around
-  every new meteor event. The credit "Aircraft data: adsb.lol (ODbL)" is shown wherever
+- **adsb.lol** (hub, always): adsb.lol (ODbL, no key) gives only current positions, so the
+  hub fetches the aircraft within 150 km of a camera every 10 s while that camera is
+  online and has a location, and either it is night there (sun below −6°) with meteor
+  detection not off, or someone watches its live image; cameras within 150 km of each
+  other share one request. The credit "Aircraft data: adsb.lol (ODbL)" is shown wherever
   aircraft are drawn.
 - **the owner's receiver** (agent, optional): setting `adsb_url`, empty = off, the URL of a
   readsb, dump1090-fa or tar1090 `aircraft.json` on the local network (for example
@@ -1006,15 +1007,18 @@ aircraft is named.
   `data.aircraft` and sets an automatic label `false_positive`/`aircraft` (§6.4 Labels),
   which goes to the hub as `event_label`. The event is still saved and sent.
 - The hub checks every meteor that has no label yet against the merged positions once
-  `end + 60 s` has passed (or at once for an older event), sets an automatic label the
-  same way and sends it to the camera with `label_event`. An imported event (§6.4) is not
-  checked.
+  `end + 60 s` has passed, but only when its kept positions cover the whole window
+  `start − 30 s .. end + 30 s`; otherwise (backlog after an outage, a camera offline, an
+  imported event, §6.4) the event stays unchecked. A match sets an automatic label the
+  same way, which goes to the camera with `label_event`.
 
 Aircraft positions are kept only for this matching (at most 15 minutes on the hub, 10 on
 the camera); the label's `detail` is all that stays.
 
 **Live image.** The hub draws each aircraft above 0° altitude onto the newest live frame
-with the lens (§4.8, as for constellations) at the frame's capture time: a marker, the
+with the lens (§4.8, as for constellations) at the frame's capture time, interpolated
+between kept positions, or extrapolated from `track_deg` and `speed_kn` for at most 30 s
+past the newest one (aircraft without them, or older, are not drawn): a marker, the
 call sign and the altitude, with a short trail of its last minute. A switch "Flugzeuge"
 next to "Sternbilder" shows them, remembered per browser. On the public page only with
 the section `aircraft` (§6.8).

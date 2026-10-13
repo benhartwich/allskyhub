@@ -40,6 +40,7 @@ class ProductWorker:
         free_check_s: float = 600.0,
         day: DayConfig | None = None,
         local_tz: tzinfo = UTC,
+        on_day_done: Callable[[str], None] | None = None,
     ) -> None:
         self._store = store
         self._keep_days = keep_days
@@ -53,6 +54,7 @@ class ProductWorker:
         self._dusk = DuskDetector()
         self._day = day
         self._tz = local_tz
+        self._on_day_done = on_day_done
         self._thread = threading.Thread(target=self._run, name="products", daemon=True)
 
     def start(self) -> None:
@@ -104,6 +106,8 @@ class ProductWorker:
         try:
             result = build_day(self._store, night, self._tz, self._day, self._cfg)
             log.info("day %s: built %s from %d frames", night, result.built, result.frames)
+            if result.built and self._on_day_done is not None:
+                self._on_day_done(night)  # SPEC §5.2: announced with the night's products
         except Exception:  # a broken day must not stop the nights
             log.exception("building day products of %s failed", night)
 

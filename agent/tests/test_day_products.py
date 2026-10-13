@@ -11,7 +11,7 @@ from zoneinfo import ZoneInfo
 import numpy as np
 from PIL import Image as PILImage
 
-from allskyhub_agent.products.build import KEOGRAM, ProductConfig
+from allskyhub_agent.products.build import KEOGRAM, ProductConfig, night_products
 from allskyhub_agent.products.day import (
     DAY_KEOGRAM,
     DAY_TIMELAPSE,
@@ -78,6 +78,13 @@ def test_build_day(tmp_path: Path) -> None:
         assert listed[DAY_TIMELAPSE]["duration_s"] == round(22 / 25, 1)
         assert listed[DAY_TIMELAPSE]["kind"] == "day_timelapse"
     assert day_products(store, "20261012") == []
+    # SPEC §5.2/§6.3: announced to the hub with the night id's products.
+    announced = night_products(store, "20261013")
+    assert announced is not None
+    kinds = {p.kind.value: p for p in announced.products}
+    assert "day_keogram" in kinds
+    if HAVE_FFMPEG:
+        assert kinds["day_timelapse"].duration_s == round(22 / 25, 1)
     empty = build_day(store, "20261020", TZ)
     assert empty.frames == 0
     assert not empty.built

@@ -6,7 +6,7 @@
 #   - iOS: an App Store Connect API key as integration "allskyhub_asc" and the bundle id
 #     org.allskyhub.app registered in the Apple Developer account
 #   - Google Play: service account JSON in the env group "google_play"
-# The check workflows need none of that.
+# The check workflow needs none of that.
 
 definitions:
   flutter: &flutter
@@ -25,8 +25,8 @@ definitions:
         flutter test
 
 workflows:
-  # Pull requests and pushes to main touching the app: analyze, test, debug APK, unsigned
-  # iOS build (mac minutes are billed, so not on every branch push).
+  # Manual: analyze, test, debug APK, unsigned iOS build. Every app change is already
+  # compiled on GitHub Actions (.github/workflows/app-build.yml); this one saves mac minutes.
   app-check:
     name: App check
     instance_type: mac_mini_m2
@@ -35,15 +35,6 @@ workflows:
     environment:
       <<: *flutter
       xcode: latest
-    triggering:
-      events: [push, pull_request]
-      branch_patterns:
-        - pattern: main
-          include: true
-          source: true
-      when:
-        changeset:
-          includes: ["app/**", "codemagic.yaml"]
     scripts:
       - *get
       - *check

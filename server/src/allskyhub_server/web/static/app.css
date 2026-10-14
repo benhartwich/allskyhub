@@ -398,3 +398,7 @@ details.settings-group[open] > summary { margin-bottom: 8px; }
 
 /* Roadmap N4: the next hour's clouds. */
 .nowcast-steps { display: grid; gap: 4px; padding: 0; list-style: none; margin: 0; }
+/* Roadmap N5: up to 36 months of sky brightness; narrower gaps, every third label. */
+.sqm-bars { gap: 2px; }
+.sqm-bars li small { visibility: hidden; }
+.sqm-bars li:nth-child(3n+1) small { visibility: visible; }

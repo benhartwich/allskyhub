@@ -19,7 +19,7 @@ from pydantic import BaseModel, ConfigDict, Field, ValidationError
 from allskyhub_protocol import PublicState, PublicUpdate
 from allskyhub_server.api.app import AppUser
 from allskyhub_server.auth import ratelimit
-from allskyhub_server.devices import discord, public, queries, science, sharing, stats
+from allskyhub_server.devices import discord, public, queries, science, sharing, sqm_trend, stats
 from allskyhub_server.devices.queries import Role
 from allskyhub_server.models import Device, User
 from allskyhub_server.web.deps import DbSession
@@ -169,6 +169,11 @@ class YearStats(BaseModel):
     showers: dict[str, int]
     # Years with data, newest first.
     years: list[int]
+    # Roadmap N5: sky brightness per month (mag/″², median of clear moonless nights) and its
+    # trend per year (negative: brighter sky); None with less than a year of data.
+    sqm_months: list[tuple[str, float]] = []
+    sqm_trend: float | None = None
+    sqm_trend_text: str = ""
 
 
 def _period(p: stats.Period) -> PeriodItem:
@@ -181,12 +186,16 @@ async def statistics(db: DbSession, user: AppUser, device_id: str, year: int = 0
     device = await _own(db, user, device_id)
     this_year = dt.datetime.now(dt.UTC).year
     found = await stats.year(db, device.id, year if 2000 <= year <= this_year + 1 else this_year)
+    trend = await sqm_trend.for_device(db, device)
     return YearStats(
         year=found.year,
         months=[_period(m) for m in found.months],
         total=_period(found.total),
         showers=found.showers,
         years=found.years,
+        sqm_months=[(m.label, m.sqm) for m in trend.months],
+        sqm_trend=trend.per_year,
+        sqm_trend_text=trend.text if trend.months else "",
     )
 
 

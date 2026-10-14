@@ -25,6 +25,7 @@ from allskyhub_server.devices import (
     science,
     series,
     sky_chart,
+    sqm_trend,
     stats,
     target,
     tonight,
@@ -399,7 +400,11 @@ async def statistics(
     return render(
         request,
         "stats.html",
-        {"device": device, "stats": await stats.year(db, device.id, chosen)},
+        {
+            "device": device,
+            "stats": await stats.year(db, device.id, chosen),
+            "trend": await sqm_trend.for_device(db, device),
+        },
         session=session,
     )
 

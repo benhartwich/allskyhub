@@ -947,7 +947,15 @@ class YearStats {
         for (final e in (json['showers'] as Map<String, dynamic>).entries)
           e.key: e.value as int,
       },
-      years = [for (final y in json['years'] as List<dynamic>) y as int];
+      years = [for (final y in json['years'] as List<dynamic>) y as int],
+      sqmTrendText = json['sqm_trend_text'] as String? ?? '',
+      sqmMonths = [
+        for (final m in json['sqm_months'] as List<dynamic>? ?? const [])
+          (
+            label: (m as List<dynamic>)[0] as String,
+            sqm: (m[1] as num).toDouble(),
+          ),
+      ];
 
   final int year;
   final List<StatsPeriod> months;
@@ -958,6 +966,11 @@ class YearStats {
 
   /// Years with data, newest first.
   final List<int> years;
+
+  /// Roadmap N5: how the sky brightness changes over the years ('' without data), and
+  /// the monthly values behind it (mag/″², higher is darker).
+  final String sqmTrendText;
+  final List<({String label, double sqm})> sqmMonths;
 }
 
 /// A CSV export (roadmap C11), e.g. `meteors` → `meteors.csv`.

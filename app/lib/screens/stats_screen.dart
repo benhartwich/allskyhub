@@ -167,6 +167,21 @@ class _StatsScreenState extends State<StatsScreen> {
               ],
             ),
           ),
+          if (stats.sqmTrendText.isNotEmpty) ...[
+            const SizedBox(height: 24),
+            Text(
+              'Himmelshelligkeit über die Jahre',
+              style: theme.textTheme.titleMedium,
+            ),
+            const SizedBox(height: 6),
+            Text(stats.sqmTrendText, key: const Key('sqm-trend')),
+            if (stats.sqmMonths.isNotEmpty)
+              Text(
+                'Zuletzt ${stats.sqmMonths.last.label}: '
+                '${stats.sqmMonths.last.sqm.toStringAsFixed(2)} mag/″²',
+                style: theme.textTheme.bodySmall,
+              ),
+          ],
           if (stats.showers.isNotEmpty) ...[
             const SizedBox(height: 24),
             Text('Meteorströme', style: theme.textTheme.titleMedium),

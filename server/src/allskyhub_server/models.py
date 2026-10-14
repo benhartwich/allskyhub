@@ -147,6 +147,10 @@ class Device(Base):
     # are triangulated with the exact places (devices/meteor_pairs.py), which tells the other
     # owner a lot about where this camera stands. The owner's choice, kept on the hub only.
     network: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
+    # Roadmap N7, "Plus": the longer archive (maintenance.py) until ``plus_until``; a gift
+    # (``plus_gift``, set by an admin) never ends. Paid and trial periods come from Paddle.
+    plus_until: Mapped[dt.datetime | None] = mapped_column(_tz())
+    plus_gift: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
     # Roadmap H5: Discord webhook and what goes there (devices/discord.py), and the night
     # whose summary was posted.
     discord: Mapped[dict[str, Any] | None] = mapped_column(JSONB)

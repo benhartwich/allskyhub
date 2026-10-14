@@ -7,11 +7,15 @@ from pathlib import Path
 import httpx
 import pytest
 from fastapi import FastAPI
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from allskyhub_server.admin import deploy
 from allskyhub_server.mail.send import MemoryMailer
+from allskyhub_server.models import Device
 from allskyhub_server.settings import Settings
-from tests.helpers import PASSWORD, csrf_from, make_account
+from tests.fake_device import FakeDevice
+from tests.helpers import PASSWORD, csrf_from, make_account, owner_email
+from tests.ws_helpers import paired_token
 
 NEW = "b" * 40
 
@@ -131,3 +135,33 @@ async def test_mail_test(
     r = await client.post("/admin/mail-test", data={"csrf_token": csrf})
     assert r.status_code == 200
     assert mailer.sent[-1].to == email
+
+
+async def test_admin_gifts_plus(
+    app: FastAPI, client: httpx.AsyncClient, settings: Settings, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Roadmap N7: an admin gives a camera Plus for good, and can take it back."""
+    dev = FakeDevice()
+    await paired_token(client, dev)
+    monkeypatch.setattr(app.state, "github", FakeGitHub())
+    csrf = csrf_from((await client.get("/account")).text)
+    gift = {"device_id": dev.device_id, "gift": "true", "csrf_token": csrf}
+    # Not an admin: as if the route did not exist.
+    assert (await client.post("/admin/plus", data=gift)).status_code == 404
+
+    monkeypatch.setattr(settings, "admin_emails", await owner_email(app, dev.device_id))
+    r = await client.post("/admin/plus", data=gift)
+    assert r.status_code == 200
+    assert "Plus für" in r.text
+    assert "geschenkt" in r.text
+    maker: async_sessionmaker[AsyncSession] = app.state.sessionmaker
+    async with maker() as db:
+        device = await db.get(Device, dev.device_id)
+        assert device is not None
+        assert device.plus_gift
+
+    r = await client.post("/admin/plus", data={"device_id": "nope", "csrf_token": csrf})
+    assert r.status_code == 400
+    r = await client.post("/admin/plus", data={"device_id": dev.device_id, "csrf_token": csrf})
+    assert "Geschenk" in r.text
+    assert "Noch keine Kamera mit Plus" in r.text

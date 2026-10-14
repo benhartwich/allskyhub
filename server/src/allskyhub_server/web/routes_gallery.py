@@ -16,6 +16,7 @@ from allskyhub_server.auth.sessions import SessionInfo
 from allskyhub_server.devices import (
     archive,
     events,
+    fireball,
     labels,
     meteor_pairs,
     public,
@@ -269,6 +270,8 @@ async def event_page(
         other_event = pair.event_b if pair.device_a == device.id else pair.event_a
         seen_too.append({
             "pair": pair,
+            "fireball": fireball.is_fireball(pair),
+            "meteorite": pair.low_km <= fireball.METEORITE_END_KM,
             "name": other.name if own else public.title(other),
             "link": (f"/cameras/{other.id}/events/{other_event[7:15]}/{other_event}" if own
                      else f"/sky/{other.public_slug}" if other.public_slug else None),

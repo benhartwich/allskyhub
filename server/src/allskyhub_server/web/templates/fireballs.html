@@ -1,0 +1,19 @@
+{% extends "base.html" %}
+{% block title %}Feuerkugeln · allskyhub{% endblock %}
+{% block content %}
+<div class="page-head"><h1>Feuerkugeln</h1></div>
+<p class="lead">Helle Meteore, die zwei Kameras im allskyhub-Kameranetz gleichzeitig gesehen haben. Aus beiden Blickwinkeln ergeben sich Bahn und Höhe. Endet das Leuchten unter {{ end_km | round | int }} km, können Meteoriten den Boden erreicht haben.</p>
+{% if items %}
+<ul class="list fireballs">
+  {% for i in items %}{% set p = i.pair %}
+  <li><a class="card fireball-row" href="/feuerkugeln/{{ p.id }}">
+    <strong>{{ p.at | when }} Uhr</strong>
+    <span class="muted">{{ '%.0f' | format(p.high_km) }} km → {{ '%.0f' | format(p.low_km) }} km Höhe, flog nach {{ i.heading }}</span>
+    {% if i.area %}<span class="badge warn">Meteoritenfall möglich</span>{% endif %}
+  </a></li>
+  {% endfor %}
+</ul>
+{% else %}
+<div class="card empty"><h2>Noch keine Feuerkugel</h2><p class="muted">Sobald zwei Kameras im Kameranetz dieselbe Feuerkugel sehen, erscheint sie hier. Besitzer schalten das Kameranetz auf der Seite ihrer Kamera ein.</p></div>
+{% endif %}
+{% endblock %}

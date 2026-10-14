@@ -1,0 +1,14 @@
+{% extends "base.html" %}
+{% block title %}Plus kaufen · allskyhub{% endblock %}
+{% block head %}
+  <script src="https://cdn.paddle.com/paddle/v2/paddle.js" defer></script>
+  <script src="{{ asset('plus_checkout.js') }}" defer></script>
+{% endblock %}
+{% block content %}
+{% if device %}<a class="back" href="/cameras/{{ device.id }}#plus">← {{ device.name }}</a>{% endif %}
+<div class="page-head"><h1>Plus kaufen</h1></div>
+<div class="card stack" id="plus-checkout" data-config="{{ config }}">
+  <p>Die Kasse von Paddle öffnet sich gleich. Falls nicht, lade die Seite neu oder erlaube Inhalte von paddle.com.</p>
+  <p class="muted small">Paddle ist unser Wiederverkäufer und schickt dir die Rechnung. <a href="/agb">AGB und Widerruf</a></p>
+</div>
+{% endblock %}

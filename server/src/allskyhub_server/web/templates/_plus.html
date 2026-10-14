@@ -1,0 +1,40 @@
+<details class="card fold" id="plus" data-fold="plus"{% if plus_message %} open{% endif %}>
+  <summary><h2>Plus</h2></summary>
+  {% if plus_message %}<p class="msg">{{ plus_message }}</p>{% endif %}
+  {% if plus.kind == 'gift' %}
+  <p class="plus-state">Plus ist für diese Kamera freigeschaltet, dauerhaft.</p>
+  {% elif plus.kind == 'paid' %}
+  <p class="plus-state">Plus aktiv{% if plus.until %}, {{ 'verlängert sich am' if plus.renews else 'endet am' }} {{ plus.until | localtime }}{% endif %}.</p>
+  {% if plus.past_due %}<p class="warn">Die letzte Zahlung ist nicht durchgegangen. Bitte unter „Abo verwalten“ die Zahlungsart prüfen.</p>{% endif %}
+  {% elif plus.kind == 'trial' %}
+  <p class="plus-state">Probemonat bis {{ plus.until | localtime }}.</p>
+  {% elif plus.kind == 'ended' %}
+  <p>Plus ist am {{ plus.until | localtime }} abgelaufen. Das lange Archiv bleibt noch 30 Tage danach.</p>
+  {% endif %}
+  {% if not plus.active or plus.kind == 'trial' %}
+  <p class="muted">Plus behält Vollbilder und Zeitraffer 90 Tage und Vorschaubilder, Keogramme und Sternspuren ein Jahr. <a href="/plus">Mehr zu Plus</a></p>
+  {% if plus_trial_free and not plus.active %}
+  <form method="post" action="/cameras/{{ device.id }}/plus/trial" class="inline">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <button type="submit">Einen Monat kostenlos testen</button>
+  </form>
+  <p class="muted small">Ohne Zahlungsdaten; endet von selbst. Einmal pro Konto.</p>
+  {% endif %}
+  {% if billing %}
+  <form method="post" action="/cameras/{{ device.id }}/plus/checkout" class="stack">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <label class="check"><input type="radio" name="plan" value="year" checked> {{ price_year }} im Jahr</label>
+    <label class="check"><input type="radio" name="plan" value="month"> {{ price_month }} im Monat</label>
+    <label class="check"><input type="checkbox" name="consent" value="true" required> Ich stimme den <a href="/agb">AGB</a> zu und verlange, dass Plus sofort beginnt. Mir ist bekannt, dass ich bei einem <a href="/agb#widerruf">Widerruf</a> für die bis dahin genutzte Zeit anteilig zahle.</label>
+    <button type="submit" class="secondary">Plus kaufen</button>
+  </form>
+  {% endif %}
+  {% endif %}
+  {% if plus.kind == 'paid' and plus.subscription_id and billing %}
+  <form method="post" action="/cameras/{{ device.id }}/plus/manage" class="inline">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <button type="submit" class="secondary small">Abo verwalten</button>
+  </form>
+  <p class="muted small">Bei Paddle: kündigen, Zahlungsart ändern, Rechnungen.</p>
+  {% endif %}
+</details>

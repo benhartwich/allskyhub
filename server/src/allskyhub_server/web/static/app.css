@@ -402,3 +402,7 @@ details.settings-group[open] > summary { margin-bottom: 8px; }
 .sqm-bars { gap: 2px; }
 .sqm-bars li small { visibility: hidden; }
 .sqm-bars li:nth-child(3n+1) small { visibility: visible; }
+/* Plus (roadmap N7) */
+.features { padding-left: 20px; margin: 0; }
+.features li + li { margin-top: 4px; }
+.plus-state { font-weight: 600; }

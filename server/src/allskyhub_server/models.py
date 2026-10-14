@@ -68,6 +68,8 @@ class User(Base):
     notify_fireball: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
     # Roadmap #15: the notifications above (all but single detections) also by e-mail.
     notify_by_mail: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
+    # Roadmap N7: when this account started its one free Plus month.
+    plus_trial_at: Mapped[dt.datetime | None] = mapped_column(_tz())
     created_at: Mapped[dt.datetime] = mapped_column(_tz(), server_default=func.now())
 
 
@@ -151,6 +153,8 @@ class Device(Base):
     # (``plus_gift``, set by an admin) never ends. Paid and trial periods come from Paddle.
     plus_until: Mapped[dt.datetime | None] = mapped_column(_tz())
     plus_gift: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
+    # The free trial month (billing/plus.py), once per account; ``plus_until`` covers it too.
+    plus_trial_until: Mapped[dt.datetime | None] = mapped_column(_tz())
     # Roadmap H5: Discord webhook and what goes there (devices/discord.py), and the night
     # whose summary was posted.
     discord: Mapped[dict[str, Any] | None] = mapped_column(JSONB)
@@ -488,3 +492,29 @@ class PasswordReset(Base):
     )
     expires_at: Mapped[dt.datetime] = mapped_column(_tz(), index=True)
     used_at: Mapped[dt.datetime | None] = mapped_column(_tz())
+
+
+class Subscription(Base):
+    """A Plus subscription at Paddle (roadmap N7, billing/paddle.py), as its webhooks last
+    described it. Removing the camera keeps the row (``device_id`` None) until Paddle has
+    cancelled it."""
+
+    __tablename__ = "subscription"
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)  # Paddle's sub_…
+    device_id: Mapped[str | None] = mapped_column(
+        ForeignKey("device.id", ondelete="SET NULL"), index=True
+    )
+    user_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("user_account.id", ondelete="SET NULL"), index=True
+    )
+    customer_id: Mapped[str] = mapped_column(String(64))
+    # Paddle's status: trialing, active, past_due, paused or canceled.
+    status: Mapped[str] = mapped_column(String(16))
+    price_id: Mapped[str] = mapped_column(String(64), default="", server_default="")
+    period_end: Mapped[dt.datetime | None] = mapped_column(_tz())
+    # Set while a cancellation at the end of the period is scheduled.
+    cancel_at: Mapped[dt.datetime | None] = mapped_column(_tz())
+    ended_at: Mapped[dt.datetime | None] = mapped_column(_tz())
+    # Paddle's occurred_at of the event this row reflects; older events are ignored.
+    event_at: Mapped[dt.datetime] = mapped_column(_tz())

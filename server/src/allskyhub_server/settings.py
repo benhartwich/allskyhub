@@ -32,6 +32,14 @@ class Settings(BaseSettings):
     # The same for cameras with Plus (roadmap N7); the privacy policy names both.
     keep_plus_full_days: int = Field(default=90, ge=1)
     keep_plus_thumb_days: int = Field(default=365, ge=1)
+    # Roadmap N7: Paddle Billing for Plus. Off (no checkout, nothing sent to Paddle) until
+    # the API key, client-side token, webhook secret and both price IDs are set.
+    paddle_env: Literal["sandbox", "live"] = "sandbox"
+    paddle_api_key: str = ""
+    paddle_client_token: str = ""
+    paddle_webhook_secret: str = ""
+    paddle_price_month: str = ""
+    paddle_price_year: str = ""
     # Roadmap C8: timelapses and keograms over several nights, made with ffmpeg.
     ffmpeg_path: str = "ffmpeg"
     keep_render_days: int = Field(default=7, ge=1)
@@ -74,6 +82,18 @@ class Settings(BaseSettings):
         if not v.startswith(("postgresql://", "postgres://")):
             raise ValueError("database_url must start with postgresql://")
         return v
+
+    @property
+    def billing(self) -> bool:
+        return all(
+            (
+                self.paddle_api_key,
+                self.paddle_client_token,
+                self.paddle_webhook_secret,
+                self.paddle_price_month,
+                self.paddle_price_year,
+            )
+        )
 
     @property
     def async_database_url(self) -> str:

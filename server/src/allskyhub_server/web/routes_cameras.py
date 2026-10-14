@@ -13,6 +13,7 @@ from pydantic import ValidationError
 from allskyhub_protocol import CloseCode, FrameVariant
 from allskyhub_server.auth import ratelimit
 from allskyhub_server.auth.sessions import SessionInfo
+from allskyhub_server.billing import plus
 from allskyhub_server.devices import (
     archive,
     camera_map,
@@ -35,7 +36,7 @@ from allskyhub_server.devices.event_text import EVENT_TITLES, orientation_line, 
 from allskyhub_server.devices.images import ImageStore
 from allskyhub_server.devices.queries import Role
 from allskyhub_server.devices.tonight import ForecastCache
-from allskyhub_server.models import Device
+from allskyhub_server.models import Device, User
 from allskyhub_server.web.deps import (
     CurrentSession,
     DbSession,
@@ -134,6 +135,14 @@ async def camera(
     return render(request, "camera.html", context, session=session)
 
 
+async def _trial_free(db: DbSession, device: Device) -> bool:
+    """Whether the owner's account may still start the free Plus month."""
+    if device.owner_id is None:
+        return False
+    owner = await db.get(User, device.owner_id)
+    return owner is not None and owner.plus_trial_at is None
+
+
 async def _camera_context(
     request: Request,
     db: DbSession,
@@ -174,6 +183,12 @@ async def _camera_context(
         "charts": await archive.recent_charts(db, device.id, now - dt.timedelta(hours=24)),
         "members": await sharing.members(db, device.id) if role == "owner" else [],
         "discord": discord.settings_of(device) if role == "owner" else None,
+        "plus": await plus.state(db, device, now) if role == "owner" else None,
+        "plus_message": plus.MESSAGES.get(request.query_params.get("plus", "")),
+        "plus_trial_free": role == "owner" and await _trial_free(db, device),
+        "billing": request.app.state.settings.billing,
+        "price_month": plus.PRICE_MONTH,
+        "price_year": plus.PRICE_YEAR,
         "discord_kinds": discord.KINDS,
         "masked": discord.masked,
         **extra,

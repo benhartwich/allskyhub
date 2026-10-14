@@ -59,4 +59,19 @@
 </section>
 {% endif %}
 {% endif %}
+{% if trend.months %}
+<section class="card stack">
+  <h2>Himmelshelligkeit über die Jahre</h2>
+  <p>{{ trend.text }}</p>
+  {% set lo = trend.months | map(attribute='sqm') | min %}{% set hi = trend.months | map(attribute='sqm') | max %}
+  <ol class="month-bars sqm-bars" aria-label="Himmelshelligkeit pro Monat">
+    {% for m in trend.months[-36:] %}
+    {% set level = (((m.sqm - lo) / (hi - lo)) * 9 + 1) | round | int if hi > lo else 5 %}
+    <li class="h{{ level }}" title="{{ m.label }}: {{ '%.2f' | format(m.sqm) | replace('.', ',') }} mag/″² ({{ m.nights }} Nächte)"><span class="bar"></span><small>{{ m.label[:2] }}</small></li>
+    {% endfor %}
+  </ol>
+  <p class="muted small">Median der dunkelsten Messung klarer Nächte ohne viel Mond, je Monat; höher ist dunkler. Die Jahreszeiten (Milchstraße im Zenit, Schnee) verschieben einzelne Monate. Die Kamera ist nicht gegen ein SQM-Messgerät geeicht: Der Trend sagt mehr als der absolute Wert.</p>
+</section>
+{% endif %}
+
 {% endblock %}

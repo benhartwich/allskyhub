@@ -166,19 +166,6 @@ Leftovers of the hub audit (2026-10-13), done 2026-10-14 after Benjamin's "Mach 
   answer over HTTPS); own domains keep plain HSTS, their subdomains are not ours.
 - `/healthz` keeps the commit: the admin deploy checks it, and the code is public anyway.
 
-Leftovers of the hub audit (2026-10-13), done 2026-10-14 after Benjamin's "Mach alles":
-
-- L2: meteors of other owners' cameras are triangulated only when both owners joined the
-  network (`Device.network`, switch "Kameranetz" on the camera page and in the app API);
-  showing rounded coordinates on a public page no longer counts as consent.
-- L5: login attempts count per address and IP (10 per 15 min), plus a cap per address
-  across all IPs (100 per 15 min, 500 per day).
-- L6: the local-login confirm page shows the target host large and warns when it does not
-  look like a home network or VPN address; other addresses stay allowed (SPEC §7.4 A).
-- HSTS with `includeSubDomains` on allskyhub.org (all its names point to this server and
-  answer over HTTPS); own domains keep plain HSTS, their subdomains are not ours.
-- `/healthz` keeps the commit: the admin deploy checks it, and the code is public anyway.
-
 ## Needs Benjamin / hardware
 
 - First boot of the image on the spare Pi 4 (SD card ordered); test with `"camera": "sim"`.

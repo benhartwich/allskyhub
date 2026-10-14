@@ -50,13 +50,13 @@ them most:
 
 | # | Item | Owner | Notes |
 |---|---|---|---|
-| L1 | Local login: hub SSO + offline code | agent + hub | spec PR by the hub session; until then lighttpd basic auth on the test Pi |
-| L2 | `packages/design` + layout with navigation (Live, Archive, Events, Sky, Settings, System), mobile-first, German/English | agent + hub | tokens from #76; red night mode so the screen does not ruin dark adaptation |
-| L3 | Live: image with zoom/fullscreen, frame data (time, exposure, gain, sensor °C, sun elevation, day/night), loop of the last hour | agent | Allsky "Live View" |
-| L4 | Archive: list of nights, image grid with thumbnails, lightbox, download; keogram, startrails, timelapse player per night | agent | Allsky "Images"; data in `ImageStore`, products from `products/build.py` |
-| L5 | Events: meteors, aurora, lightning, NLC with image, time, azimuth; filter by type and night | agent | Allsky "Meteors" and the own modules; data from `detect/events.py` |
-| L6 | Sky: charts per night for sky quality (SQM/Bortle), cloud cover, exposure/gain, sensor temperature | agent | Allsky "Charts"; `status.sky` history |
-| L7 | Camera settings: location (map), time zone, day/night delay, exposure and gain limits, white balance, flip/rotation, JPEG quality | agent | Allsky "Allsky Settings" reduced to what the agent uses; extends `AgentSettings`, same validation as `set_settings`, the hub sees changes in `status` |
+| L1 | ✅ Local login: hub SSO + offline code | agent + hub | spec PR by the hub session; until then lighttpd basic auth on the test Pi. Done: #84, #85 (SSO via the hub and offline code); the test Pi's basic auth is gone |
+| L2 | ✅ `packages/design` + layout with navigation (Live, Archive, Events, Sky, Settings, System), mobile-first, German/English | agent + hub | tokens from #76; red night mode so the screen does not ruin dark adaptation. Done: #113 |
+| L3 | ✅ Live: image with zoom/fullscreen, frame data (time, exposure, gain, sensor °C, sun elevation, day/night), loop of the last hour | agent | Allsky "Live View". Done: #103, #113 |
+| L4 | ✅ Archive: list of nights, image grid with thumbnails, lightbox, download; keogram, startrails, timelapse player per night | agent | Allsky "Images"; data in `ImageStore`, products from `products/build.py`. Done: #103, #113 |
+| L5 | ✅ Events: meteors, aurora, lightning, NLC with image, time, azimuth; filter by type and night | agent | Allsky "Meteors" and the own modules; data from `detect/events.py`. Done: #103, #113 |
+| L6 | ✅ Sky: charts per night for sky quality (SQM/Bortle), cloud cover, exposure/gain, sensor temperature | agent | Allsky "Charts"; `status.sky` history. Done: #103, #113 |
+| L7 | ✅ Camera settings: location (map), time zone, day/night delay, exposure and gain limits, white balance, flip/rotation, JPEG quality | agent | Allsky "Allsky Settings" reduced to what the agent uses; extends `AgentSettings`, same validation as `set_settings`, the hub sees changes in `status`. Done: #113 and the portal round 2 (labels, targets, day capture, flip/rotate) |
 | L8 | ✅ Detection and image setup: detectors on/off and sensitivity, sky-mask editor, orientation check (north, plate-solve result) | agent | replaces Allsky's module manager; no free-form modules. Done: detector levels in the settings schema (hub shows them too), drawn exclude/include areas, horizon and compass from the plate solve over the live image |
 | L9 | ✅ Night products: which ones, timelapse fps/quality, retention | agent | settings `product_keogram/startrails/timelapse`, `timelapse_fps`, `timelapse_quality` (CRF 28/23/19), `keep_days`; the import takes over Allsky's `daystokeep` |
 | L10 | ✅ Public page management (`GET/PUT /device/v1/public`) | agent + hub | read-only (last known state) when the hub is unreachable |
@@ -74,7 +74,7 @@ them most:
 | L22 | Cloud cover by day: estimate cloud cover from daytime frames (sky colour) so the charts and the hub have it around the clock | agent | Benjamin, 2026-10-13; today cloud cover comes from star counts and is night-only; SPEC §6.3. Blue/red fails without an IR cut filter: the method is tested on real day frames first (Benjamin, 2026-10-13) |
 | L23 | ✅ MQTT: publish status, sky values and detections to a local broker (Home Assistant discovery) | agent | Benjamin, 2026-10-13 (indi-allsky, Allsky module); off by default, settings for broker, user, password (`write_only`), topic prefix; SPEC §7.7. Done: own MQTT 3.1.1 publisher, no new dependency; the first `write_only` setting (`mqtt_password`) |
 | L24 | ✅ HTTPS for the local portal: a self-signed certificate made on first boot, optionally the user's own | agent | Benjamin, 2026-10-13 (indi-allsky); off by default (Benjamin, 2026-10-13); SPEC §7.6. Done: setting `https`, port 8443, own certificate upload on the system page |
-| L25 | Trail verdicts: keep every streak, say from the trail why it is not a meteor (moving, great circle, blinking, fragments, star, star trail, glare, edge glow, repeat) and label it automatically | agent | Benjamin, 2026-10-13: like his Allsky modules Meteor Detection and Sky Traffic; mark, never delete; all checks label (no shadow mode); SPEC §6.4 Trail verdicts |
+| L25 | ✅ Trail verdicts: keep every streak, say from the trail why it is not a meteor (moving, great circle, blinking, fragments, star, star trail, glare, edge glow, repeat) and label it automatically | agent | Benjamin, 2026-10-13: like his Allsky modules Meteor Detection and Sky Traffic; mark, never delete; all checks label (no shadow mode); SPEC §6.4 Trail verdicts. Done: #207 (agent), #208 (hub) |
 
 Not ported on purpose: the free-form module manager and file editor (fixed detectors
 instead), the website upload/remote server (the hub and its public page do that).
@@ -130,14 +130,14 @@ again in the code. Benjamin decided the open questions on 2026-10-13.
 
 | # | Item | Owner | Notes |
 |---|---|---|---|
-| S1 | Local UI: refuse cross-site POSTs, no framing; Host allow-list against DNS rebinding with the setting `local_hostnames` | agent | Origin check, X-Frame-Options: #204; Host list: SPEC §7.4 |
-| S2 | Setup network with WPA2 and a per-camera setup key (QR label, file on the boot partition), `hub_url` https only | agent + hub (app) | SPEC §7.1; the app scans the Wi-Fi QR code |
-| S3 | MQTT password deleted when the broker changes; MQTT, N.I.N.A. and ADS-B addresses owner-only on the hub | agent + hub | SPEC §7.7; hub part in #202 |
+| S1 | ✅ Local UI: refuse cross-site POSTs, no framing; Host allow-list against DNS rebinding with the setting `local_hostnames` | agent | Origin check, X-Frame-Options: #204; Host list: SPEC §7.4. Done: #204, #210 |
+| S2 | ✅ Setup network with WPA2 and a per-camera setup key (QR label, file on the boot partition), `hub_url` https only | agent + hub (app) | SPEC §7.1; the app scans the Wi-Fi QR code. Done: #214 (agent, image), #212 (app) |
+| S3 | ✅ MQTT password deleted when the broker changes; MQTT, N.I.N.A. and ADS-B addresses owner-only on the hub | agent + hub | SPEC §7.7; hub part in #202. Done: #210 (agent), #202 (hub) |
 | S4 | ✅ Release pipeline before update keys exist: protected environment with a reviewer, tag must be on `main`, actions pinned by SHA; key revocation | agent | #206; revocation with `keys.json`, signed by the emergency key (SPEC §8 Key revocation) |
-| S5 | Root tools never write through links in the agent's folder | agent | #204 |
-| S6 | Offline code: tries counted before Argon2, one at a time, parameters capped | agent | #204; caps in SPEC §6.5 |
+| S5 | ✅ Root tools never write through links in the agent's folder | agent | #204 |
+| S6 | ✅ Offline code: tries counted before Argon2, one at a time, parameters capped | agent | #204; caps in SPEC §6.5 |
 | S7 | ✅ Image: nftables input filter, narrower polkit rule for NetworkManager, reboot by day for security updates | agent | SPEC §8; reboot: #215 |
-| S8 | Wi-Fi credentials without control characters | agent | #204 |
+| S8 | ✅ Wi-Fi credentials without control characters | agent | #204 |
 
 ## Needs Benjamin / hardware
 

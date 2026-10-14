@@ -65,6 +65,14 @@ async def _page(
                 select(func.count()).select_from(Device).where(Device.owner_id.is_not(None))
             ),
             "repo": settings.deploy_repo,
+            "plus": (
+                await db.execute(
+                    select(Device, User.email)
+                    .join(User, User.id == Device.owner_id)
+                    .where(Device.plus_gift.is_(True) | Device.plus_until.is_not(None))
+                    .order_by(User.email, Device.name)
+                )
+            ).all(),
             **extra,
         },
         session=session,
@@ -122,6 +130,29 @@ async def start_deploy(
     return await _page(
         request, db, session, notice="Deploy angefordert. Der Server holt ihn gleich ab."
     )
+
+
+@router.post("/admin/plus")
+async def gift_plus(
+    request: Request,
+    db: DbSession,
+    session: CurrentSession,
+    settings: SettingsDep,
+    device_id: Annotated[str, Form(max_length=26)],
+    gift: Annotated[bool, Form()] = False,
+) -> Response:
+    """Roadmap N7: Plus as a gift (it never ends), or taking the gift back."""
+    _admin(session, settings)
+    device = await db.get(Device, device_id.strip().lower())
+    if device is None or device.owner_id is None:
+        return await _page(
+            request, db, session, 400, error="Keine gekoppelte Kamera mit dieser ID."
+        )
+    device.plus_gift = gift
+    await db.commit()
+    name = device.name or device.id
+    notice = f"Plus für „{name}“ geschenkt." if gift else f"Plus-Geschenk für „{name}“ beendet."
+    return await _page(request, db, session, notice=notice)
 
 
 @router.post("/admin/mail-test")

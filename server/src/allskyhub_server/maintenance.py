@@ -6,8 +6,9 @@ import asyncio
 import datetime as dt
 import logging
 
-from sqlalchemy import delete, func, select, update
+from sqlalchemy import ColumnElement, and_, delete, func, or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
+from sqlalchemy.orm import InstrumentedAttribute
 
 from allskyhub_protocol import FrameVariant
 from allskyhub_server.auth import password_reset
@@ -39,6 +40,26 @@ INTERVAL = dt.timedelta(hours=6)
 # Privacy policy: invitations that were not accepted are gone 30 days after they expire.
 INVITATION_KEEP = dt.timedelta(days=30)
 RATE_LIMIT_KEEP = dt.timedelta(days=2)
+# Roadmap N7: after Plus ends the longer archive stays this long, so a late renewal or a
+# changed card does not cost the pictures.
+PLUS_GRACE = dt.timedelta(days=30)
+
+
+def _expired(
+    created: InstrumentedAttribute[dt.datetime] | InstrumentedAttribute[dt.datetime | None],
+    device_id: InstrumentedAttribute[str],
+    now: dt.datetime,
+    days: int,
+    plus_days: int,
+) -> ColumnElement[bool]:
+    """Older than ``days``, or than ``plus_days`` for a camera with Plus (or in its grace)."""
+    plus = select(Device.id).where(
+        or_(Device.plus_gift.is_(True), Device.plus_until > now - PLUS_GRACE)
+    )
+    return or_(
+        and_(device_id.not_in(plus), created < now - dt.timedelta(days=days)),
+        created < now - dt.timedelta(days=max(days, plus_days)),
+    )
 
 
 async def purge(
@@ -89,74 +110,70 @@ async def _purge_frames(
     db: AsyncSession, store: ImageStore, settings: Settings, now: dt.datetime
 ) -> None:
     """Archive retention: full images after ``keep_full_days``, the frame with its thumbnail
-    after ``keep_thumb_days`` (counted from arrival at the hub)."""
-    full_cutoff = now - dt.timedelta(days=settings.keep_full_days)
-    thumb_cutoff = now - dt.timedelta(days=settings.keep_thumb_days)
+    after ``keep_thumb_days`` (counted from arrival at the hub); with Plus the longer
+    ``keep_plus_*`` days."""
+    old_full_frame = _expired(
+        Frame.created_at, Frame.device_id, now, settings.keep_full_days,
+        settings.keep_plus_full_days,
+    )  # fmt: skip
+    old_frame = _expired(
+        Frame.created_at, Frame.device_id, now, settings.keep_thumb_days,
+        settings.keep_plus_thumb_days,
+    )  # fmt: skip
     old_full = (
         await db.execute(
             select(Frame.device_id, Frame.night_id, Frame.name).where(
-                Frame.has_full.is_(True), Frame.created_at < full_cutoff
+                Frame.has_full.is_(True), old_full_frame
             )
         )
     ).all()
     for device_id, night_id, name in old_full:
         await asyncio.to_thread(store.delete_frame, device_id, night_id, name, FrameVariant.FULL)
     await db.execute(
-        update(Frame)
-        .where(Frame.has_full.is_(True), Frame.created_at < full_cutoff)
-        .values(has_full=False)
+        update(Frame).where(Frame.has_full.is_(True), old_full_frame).values(has_full=False)
     )
     old = (
-        await db.execute(
-            select(Frame.device_id, Frame.night_id, Frame.name).where(
-                Frame.created_at < thumb_cutoff
-            )
-        )
+        await db.execute(select(Frame.device_id, Frame.night_id, Frame.name).where(old_frame))
     ).all()
     for device_id, night_id, name in old:
         for variant in FrameVariant:
             await asyncio.to_thread(store.delete_frame, device_id, night_id, name, variant)
-    await db.execute(delete(Frame).where(Frame.created_at < thumb_cutoff))
+    await db.execute(delete(Frame).where(old_frame))
 
 
 async def _purge_products(
     db: AsyncSession, store: ImageStore, settings: Settings, now: dt.datetime
 ) -> None:
     """Night products: videos (the timelapses, large) after ``keep_full_days`` from arrival,
-    everything of a night after ``keep_thumb_days`` from the announcement."""
-    full_cutoff = now - dt.timedelta(days=settings.keep_full_days)
-    thumb_cutoff = now - dt.timedelta(days=settings.keep_thumb_days)
+    everything of a night after ``keep_thumb_days`` from the announcement; with Plus the
+    longer ``keep_plus_*`` days."""
+    old_video = and_(
+        Product.content_type == "video/mp4",
+        Product.has_full.is_(True),
+        _expired(
+            Product.full_at, Product.device_id, now, settings.keep_full_days,
+            settings.keep_plus_full_days,
+        ),
+    )  # fmt: skip
+    old_product = _expired(
+        Product.created_at, Product.device_id, now, settings.keep_thumb_days,
+        settings.keep_plus_thumb_days,
+    )  # fmt: skip
     old_videos = (
-        await db.execute(
-            select(Product.device_id, Product.night_id, Product.name).where(
-                Product.content_type == "video/mp4",
-                Product.has_full.is_(True),
-                Product.full_at < full_cutoff,
-            )
-        )
+        await db.execute(select(Product.device_id, Product.night_id, Product.name).where(old_video))
     ).all()
     for device_id, night_id, name in old_videos:
         await asyncio.to_thread(store.delete_product, device_id, night_id, name, FrameVariant.FULL)
-    await db.execute(
-        update(Product)
-        .where(
-            Product.content_type == "video/mp4",
-            Product.has_full.is_(True),
-            Product.full_at < full_cutoff,
-        )
-        .values(has_full=False, full_at=None)
-    )
+    await db.execute(update(Product).where(old_video).values(has_full=False, full_at=None))
     old = (
         await db.execute(
-            select(Product.device_id, Product.night_id, Product.name).where(
-                Product.created_at < thumb_cutoff
-            )
+            select(Product.device_id, Product.night_id, Product.name).where(old_product)
         )
     ).all()
     for device_id, night_id, name in old:
         for variant in FrameVariant:
             await asyncio.to_thread(store.delete_product, device_id, night_id, name, variant)
-    await db.execute(delete(Product).where(Product.created_at < thumb_cutoff))
+    await db.execute(delete(Product).where(old_product))
 
 
 async def _purge_events(

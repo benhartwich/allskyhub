@@ -52,4 +52,36 @@
   </form>
   {% endif %}
 </section>
+<section class="card stack">
+  <h2>Plus</h2>
+  {% if plus %}
+  <div class="table-scroll"><table class="stats">
+    <thead><tr><th>Kamera</th><th>Konto</th><th>Plus</th><th></th></tr></thead>
+    <tbody>
+    {% for device, email in plus %}
+    <tr>
+      <td>{{ device.name or device.id }}<br><code class="small">{{ device.id }}</code></td>
+      <td>{{ email }}</td>
+      <td>{% if device.plus_gift %}geschenkt{% elif device.plus_until %}bis {{ device.plus_until | localtime }}{% endif %}</td>
+      <td>{% if device.plus_gift %}
+        <form method="post" action="/admin/plus" class="inline">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+          <input type="hidden" name="device_id" value="{{ device.id }}">
+          <button type="submit" class="secondary small">Geschenk beenden</button>
+        </form>{% endif %}</td>
+    </tr>
+    {% endfor %}
+    </tbody>
+  </table></div>
+  {% else %}
+  <p class="muted">Noch keine Kamera mit Plus.</p>
+  {% endif %}
+  <form method="post" action="/admin/plus" class="stack">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <input type="hidden" name="gift" value="true">
+    <label>Kamera-ID<input name="device_id" required maxlength="26" autocomplete="off"></label>
+    <p class="muted small">Plus als Geschenk endet nie: 90 Tage Vollbilder und Zeitraffer, ein Jahr Vorschaubilder und Nachtprodukte. Die ID steht in der Adresse der Kameraseite.</p>
+    <button type="submit" class="secondary">Plus schenken</button>
+  </form>
+</section>
 {% endblock %}

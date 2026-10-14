@@ -155,3 +155,61 @@ async def test_bad_frames_stay_out_of_the_archive(
     auth = await _app_auth(client, (await owner_email(app, dev.device_id)))
     nights = (await client.get(f"/api/v1/cameras/{dev.device_id}/nights", headers=auth)).json()
     assert nights == []
+
+
+async def test_plus_keeps_the_archive_longer(
+    app: FastAPI, settings: Settings, client: httpx.AsyncClient, live_app: str
+) -> None:
+    """Roadmap N7: with Plus 90 days of full images and a year of thumbnails, and a grace
+    period after Plus ends before the normal retention applies again."""
+    dev = FakeDevice()
+    token = await paired_token(client, dev)
+    async with device_ws(live_app, token) as ws:
+        await send(ws, frame_info("old.jpg"))
+        await _upload_requested(live_app, token, ws, 2)
+    store: ImageStore = app.state.images
+    maker: async_sessionmaker[AsyncSession] = app.state.sessionmaker
+    full = store.frame_path(dev.device_id, "20261006", "old.jpg", FrameVariant.FULL)
+    thumb = store.frame_path(dev.device_id, "20261006", "old.jpg", FrameVariant.THUMB)
+    now = dt.datetime.now(dt.UTC)
+
+    async def purge(days: int, plus_until: dt.datetime | None) -> None:
+        async with maker() as db:
+            await db.execute(
+                update(Device).where(Device.id == dev.device_id).values(plus_until=plus_until)
+            )
+            await maintenance.purge(db, store, settings, now=now + dt.timedelta(days=days))
+
+    # Plus ran out 20 days ago: still within the grace period.
+    await purge(40, now + dt.timedelta(days=20))
+    assert full.exists()
+    assert thumb.exists()
+    # Paid for a year: 90 days of full images.
+    year = now + dt.timedelta(days=400)
+    await purge(89, year)
+    assert full.exists()
+    await purge(91, year)
+    assert not full.exists()
+    assert thumb.exists()
+    # Plus ended long ago: the normal 30 days apply again.
+    await purge(91, now)
+    assert not thumb.exists()
+
+
+async def test_a_gift_never_ends(
+    app: FastAPI, settings: Settings, client: httpx.AsyncClient, live_app: str
+) -> None:
+    dev = FakeDevice()
+    token = await paired_token(client, dev)
+    async with device_ws(live_app, token) as ws:
+        await send(ws, frame_info("old.jpg"))
+        await _upload_requested(live_app, token, ws, 2)
+    store: ImageStore = app.state.images
+    maker: async_sessionmaker[AsyncSession] = app.state.sessionmaker
+    thumb = store.frame_path(dev.device_id, "20261006", "old.jpg", FrameVariant.THUMB)
+    async with maker() as db:
+        await db.execute(update(Device).where(Device.id == dev.device_id).values(plus_gift=True))
+        await maintenance.purge(
+            db, store, settings, now=dt.datetime.now(dt.UTC) + dt.timedelta(days=300)
+        )
+    assert thumb.exists()

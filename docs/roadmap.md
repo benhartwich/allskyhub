@@ -135,7 +135,7 @@ Benjamin, 2026-10-14: "Mach alles", Firebase last. What a single camera cannot d
 | N4 | Cloud nowcast from neighbouring cameras' `cloud_map` and the wind | hub | done (#235): wind at 700 hPa from Open-Meteo, the own map's upwind sector and network cameras upwind, "Die nächste Stunde" on the camera page and in the app; a push "es klart auf" once real nights show how reliable it is |
 | N5 | Light-pollution trend over the years from the cameras' SQM | hub | done (#236): monthly median of clear moonless nights, Theil–Sen trend per year, statistics page and app |
 | N6 | App: home-screen widget, AR sky view | hub | done for Android: widget with a read-only key (#237), sky view "Himmel" from the phone's sensors (#238). Open: the iOS widget (WidgetKit extension, needs Xcode or Codemagic) |
-| N7 | Paid tier | hub | needs Benjamin's decisions (provider, prices) |
+| N7 | Paid tier "Plus": 90 days of full images, a year of thumbnails and night products; Paddle, 4.99 €/month or 49 €/year, first month free | hub | in progress: Plus retention and admin gift done; Paddle checkout, S3 archive next |
 
 ## Security (review 2026-10-13)
 

@@ -29,6 +29,9 @@ class Settings(BaseSettings):
     # Archive retention (privacy policy): full images and thumbnails.
     keep_full_days: int = Field(default=7, ge=1)
     keep_thumb_days: int = Field(default=30, ge=1)
+    # The same for cameras with Plus (roadmap N7); the privacy policy names both.
+    keep_plus_full_days: int = Field(default=90, ge=1)
+    keep_plus_thumb_days: int = Field(default=365, ge=1)
     # Roadmap C8: timelapses and keograms over several nights, made with ffmpeg.
     ffmpeg_path: str = "ffmpeg"
     keep_render_days: int = Field(default=7, ge=1)

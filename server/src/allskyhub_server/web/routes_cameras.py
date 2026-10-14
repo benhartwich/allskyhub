@@ -432,6 +432,17 @@ async def public_domain_remove(
     return RedirectResponse(f"/cameras/{device.id}/public/edit#domain", status_code=303)
 
 
+@router.post("/cameras/{device_id}/network")
+async def network_save(
+    request: Request, db: DbSession, session: CurrentSession, device_id: str
+) -> Response:
+    """Audit L2: the owner's consent to the network of other owners' cameras."""
+    device = await _own_device(db, session, device_id)
+    device.network = (await request.form()).get("network") == "on"
+    await db.commit()
+    return RedirectResponse(f"/cameras/{device.id}#netz", status_code=303)
+
+
 @router.post("/cameras/{device_id}/discord")
 async def discord_save(
     request: Request, db: DbSession, session: CurrentSession, device_id: str

@@ -98,6 +98,27 @@ def _app_state(request: Request, device: Device) -> AppPublicState:
     return AppPublicState(**state.model_dump(), on_home=device.public_on_home)
 
 
+class NetworkState(BaseModel):
+    """Audit L2: the camera takes part in the network of other owners' cameras."""
+
+    network: bool
+
+
+@router.get("/cameras/{device_id}/network")
+async def network_get(db: DbSession, user: AppUser, device_id: str) -> NetworkState:
+    return NetworkState(network=(await _own(db, user, device_id, "owner")).network)
+
+
+@router.put("/cameras/{device_id}/network")
+async def network_put(
+    db: DbSession, user: AppUser, device_id: str, body: NetworkState
+) -> NetworkState:
+    device = await _own(db, user, device_id, "owner")
+    device.network = body.network
+    await db.commit()
+    return NetworkState(network=device.network)
+
+
 @router.get("/cameras/{device_id}/public/profile")
 async def public_profile(
     request: Request, db: DbSession, user: AppUser, device_id: str

@@ -3,7 +3,10 @@
 Two meteor events pair when their exposures overlap (SPEC §6.4: the meteor happened
 somewhere within ``start``..``end``), both carry their track ends and the triangulation
 gives a plausible trajectory. Only cameras whose data may meet are paired: cameras of
-the same owner, or two cameras whose owners show their location on a public page.
+the same owner, or two cameras whose owners both joined the network (``Device.network``).
+A pair of other owners' cameras tells each owner much about where the other camera stands
+(and a dishonest owner could send made-up meteors to find out), so it takes both owners'
+consent; showing rounded coordinates on a public page is not that.
 """
 
 from __future__ import annotations
@@ -16,7 +19,7 @@ from sqlalchemy import or_, select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
-from allskyhub_server.devices import events, public, triangulation
+from allskyhub_server.devices import events, triangulation
 from allskyhub_server.models import Device, EventRecord, MeteorPair
 
 log = logging.getLogger(__name__)
@@ -46,7 +49,7 @@ def may_pair(a: Device, b: Device) -> bool:
         return False
     if a.owner_id == b.owner_id:
         return True
-    return public.coordinates(a) is not None and public.coordinates(b) is not None
+    return a.network and b.network
 
 
 async def pair_event(maker: async_sessionmaker[AsyncSession], device_id: str, event_id: str) -> int:
@@ -130,10 +133,12 @@ async def for_event(
             )
         )
     )
+    device = await db.get(Device, device_id)
     out: list[tuple[MeteorPair, Device]] = []
     for pair in rows:
         other_id = pair.device_b if pair.device_a == device_id else pair.device_a
         other = await db.get(Device, other_id)
-        if other is not None:
+        # An owner who left the network takes their pairs along.
+        if device is not None and other is not None and may_pair(device, other):
             out.append((pair, other))
     return out

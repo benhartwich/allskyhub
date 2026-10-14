@@ -369,3 +369,6 @@ details.settings-group { border-top: 1px solid var(--line); padding-top: 10px; }
 details.settings-group > summary { font-family: var(--display); font-weight: 600; font-size: 15px;
   color: var(--text-2); text-transform: uppercase; letter-spacing: 1px; padding: 4px 0; }
 details.settings-group[open] > summary { margin-bottom: 8px; }
+
+/* Audit L6: the address the local login goes to, big enough to read. */
+.target-host { margin: 0; font-size: 1.35rem; font-weight: 700; overflow-wrap: anywhere; }

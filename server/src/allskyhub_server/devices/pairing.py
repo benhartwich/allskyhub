@@ -245,6 +245,7 @@ async def unpair(db: AsyncSession, device: Device) -> None:
     # the old owner's Discord, nor their place the map or start page unasked.
     device.public_profile = None
     device.public_on_home = False
+    device.network = False
     device.discord = None
     device.discord_night = None
     # SPEC §7.4: the camera drops its local access itself when it learns it is unpaired.

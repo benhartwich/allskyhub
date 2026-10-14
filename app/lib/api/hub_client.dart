@@ -440,6 +440,18 @@ class HubClient {
       Member.fromJson(m as Map<String, dynamic>),
   ];
 
+  /// Audit L2: whether the camera takes part in the network of other owners' cameras
+  /// (owner only).
+  Future<bool> network(String cameraId) async =>
+      (await _send('GET', '/cameras/$cameraId/network')
+              as Map<String, dynamic>)['network']
+          as bool;
+
+  Future<bool> setNetwork(String cameraId, bool on) async =>
+      (await _send('PUT', '/cameras/$cameraId/network', body: {'network': on})
+              as Map<String, dynamic>)['network']
+          as bool;
+
   /// Roadmap H5: the camera's Discord channel (owner only).
   Future<DiscordState> discord(String cameraId) async => DiscordState.fromJson(
     await _send('GET', '/cameras/$cameraId/discord') as Map<String, dynamic>,

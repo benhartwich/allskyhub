@@ -452,6 +452,12 @@ class HubClient {
               as Map<String, dynamic>)['network']
           as bool;
 
+  /// Roadmap N6: a read-only key for the home-screen widget; replaces an older one.
+  Future<String> widgetKey(String cameraId) async =>
+      (await _send('POST', '/cameras/$cameraId/widget')
+              as Map<String, dynamic>)['token']
+          as String;
+
   /// Roadmap H5: the camera's Discord channel (owner only).
   Future<DiscordState> discord(String cameraId) async => DiscordState.fromJson(
     await _send('GET', '/cameras/$cameraId/discord') as Map<String, dynamic>,

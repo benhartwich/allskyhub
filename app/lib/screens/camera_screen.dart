@@ -6,6 +6,7 @@ import '../design.dart';
 
 import '../api/hub_client.dart';
 import '../platform/location.dart';
+import '../platform/sky_widget.dart';
 import 'camera_settings_screen.dart';
 import 'camera_status.dart';
 import 'manage_screens.dart';
@@ -17,10 +18,18 @@ import 'zoomable.dart';
 /// Live view: polls the latest image with `live=true` every few seconds, so the hub asks
 /// the camera for every frame while this screen is open (SPEC §6.5).
 class CameraScreen extends StatefulWidget {
-  const CameraScreen({super.key, required this.client, required this.camera});
+  const CameraScreen({
+    super.key,
+    required this.client,
+    required this.camera,
+    this.widgetChannel,
+  });
 
   final HubClient client;
   final Camera camera;
+
+  /// Roadmap N6; the platform's by default, a fake in tests.
+  final SkyWidgetChannel? widgetChannel;
 
   @override
   State<CameraScreen> createState() => _CameraScreenState();
@@ -115,6 +124,26 @@ class _CameraScreenState extends State<CameraScreen> {
       return;
     }
     if (mounted) Navigator.of(context).pop();
+  }
+
+  late final SkyWidgetChannel _widget =
+      widget.widgetChannel ?? PlatformSkyWidget();
+
+  Future<void> _showAsWidget() async {
+    final messenger = ScaffoldMessenger.of(context);
+    String text;
+    try {
+      text = switch (await _widget.show(widget.client, _camera)) {
+        WidgetResult.placed => 'Das Widget zeigt jetzt ${_camera.name}.',
+        WidgetResult.asked => 'Bestätige, um das Widget abzulegen.',
+        WidgetResult.manual =>
+          'Lange auf den Startbildschirm drücken, „Widgets“ wählen und '
+              'allskyhub ablegen.',
+      };
+    } on Exception {
+      text = 'Das hat nicht geklappt. Bitte später noch einmal versuchen.';
+    }
+    messenger.showSnackBar(SnackBar(content: Text(text)));
   }
 
   void _open(Widget Function() screen) => Navigator.of(
@@ -330,6 +359,13 @@ class _CameraScreenState extends State<CameraScreen> {
                     () => TargetScreen(client: widget.client, camera: _camera),
                   ),
                 ),
+                if (_widget.available)
+                  OutlinedButton.icon(
+                    key: const Key('as-widget'),
+                    icon: const Icon(Icons.widgets_outlined),
+                    label: const Text('Als Widget'),
+                    onPressed: _showAsWidget,
+                  ),
                 OutlinedButton.icon(
                   key: const Key('open-exports'),
                   icon: const Icon(Icons.download_outlined),

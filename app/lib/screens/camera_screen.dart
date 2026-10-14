@@ -275,6 +275,8 @@ class _CameraScreenState extends State<CameraScreen> {
           ),
           if (_overview case final overview?) ...[
             _HealthCard(health: overview.health),
+            if (overview.nowcast case final nowcast?)
+              _NowcastCard(nowcast: nowcast),
             if (overview.tonight case final tonight?)
               _TonightCard(tonight: tonight),
             if (overview.lastNight case final line?)
@@ -439,6 +441,50 @@ String _hm(DateTime? t) {
   if (t == null) return '–';
   final l = t.toLocal();
   return '${l.hour.toString().padLeft(2, '0')}:${l.minute.toString().padLeft(2, '0')}';
+}
+
+/// Roadmap N4: clouds in the next hour.
+class _NowcastCard extends StatelessWidget {
+  const _NowcastCard({required this.nowcast});
+
+  final Nowcast nowcast;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    String percent(double v) => '${(v * 100).round()} %';
+    return Card(
+      key: const Key('nowcast'),
+      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('Die nächste Stunde', style: theme.textTheme.titleMedium),
+            const SizedBox(height: 6),
+            Text('Jetzt ${percent(nowcast.cover)} Wolken. ${nowcast.summary}'),
+            for (final step in nowcast.steps)
+              Padding(
+                padding: const EdgeInsets.only(top: 4),
+                child: Text(
+                  'in ${step.minutes} Min.: etwa ${percent(step.cover)} '
+                  '(${step.label})',
+                  style: theme.textTheme.bodySmall,
+                ),
+              ),
+            const SizedBox(height: 6),
+            Text(
+              '${nowcast.wind} in etwa 3 km Höhe',
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: theme.colorScheme.onSurfaceVariant,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
 }
 
 class _TonightCard extends StatelessWidget {

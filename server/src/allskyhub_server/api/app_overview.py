@@ -14,7 +14,15 @@ from fastapi import APIRouter, HTTPException, Query, Request
 from pydantic import BaseModel
 
 from allskyhub_server.api.app import AppUser
-from allskyhub_server.devices import health, night_summary, queries, series, target, tonight
+from allskyhub_server.devices import (
+    health,
+    night_summary,
+    nowcast,
+    queries,
+    series,
+    target,
+    tonight,
+)
 from allskyhub_server.devices.connections import ConnectionRegistry
 from allskyhub_server.devices.tonight import ForecastCache
 from allskyhub_server.models import Device, User
@@ -67,11 +75,27 @@ class LastNight(BaseModel):
     best_sqm: float | None
 
 
+class NowcastStep(BaseModel):
+    minutes: int
+    cover: float
+    label: str
+
+
+class NowcastInfo(BaseModel):
+    """Roadmap N4: clouds in the next hour (devices/nowcast.py)."""
+
+    cover: float
+    summary: str
+    wind: str
+    steps: list[NowcastStep]
+
+
 class Overview(BaseModel):
     online: bool
     health: list[HealthItem]
     tonight: TonightInfo | None
     last_night: LastNight | None
+    nowcast: NowcastInfo | None = None
 
 
 @router.get("/cameras/{device_id}/overview")
@@ -115,11 +139,22 @@ async def overview(request: Request, db: DbSession, user: AppUser, device_id: st
             clear_hours=summary.clear_hours,
             best_sqm=summary.best_sqm,
         )
+    soon = await nowcast.for_device(db, forecast, device, now)
     return Overview(
         online=online,
         health=[HealthItem(key=p.key, level=p.level, text=p.text) for p in problems],
         tonight=info,
         last_night=last,
+        nowcast=NowcastInfo(
+            cover=soon.cover,
+            summary=soon.summary,
+            wind=soon.wind_text,
+            steps=[
+                NowcastStep(minutes=s.minutes, cover=s.cover, label=s.label) for s in soon.steps
+            ],
+        )
+        if soon is not None
+        else None,
     )
 
 

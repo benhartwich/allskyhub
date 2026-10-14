@@ -229,6 +229,18 @@ void main() {
                   },
                 ],
               },
+              'nowcast': {
+                'cover': 0.8,
+                'summary': 'Es klart in etwa 30 Minuten auf.',
+                'wind': 'Wind aus Westen, 40 km/h',
+                'steps': [
+                  {
+                    'minutes': 30,
+                    'cover': 0.1,
+                    'label': 'Kamera 20 km westlich',
+                  },
+                ],
+              },
               'last_night': {
                 'night_id': '20261011',
                 'line': '3 Meteore, 4 h klar',
@@ -254,6 +266,11 @@ void main() {
     expect(find.textContaining('Klar und dunkel'), findsOneWidget);
     expect(find.textContaining('zunehmende Sichel, 5 %'), findsOneWidget);
     expect(find.text('3 Meteore, 4 h klar'), findsOneWidget);
+    expect(
+      find.text('Jetzt 80 % Wolken. Es klart in etwa 30 Minuten auf.'),
+      findsOneWidget,
+    );
+    expect(find.textContaining('Kamera 20 km westlich'), findsOneWidget);
     expect(find.byKey(const Key('open-measurements')), findsOneWidget);
     await tester.pumpWidget(const SizedBox()); // stops the refresh timer
   });

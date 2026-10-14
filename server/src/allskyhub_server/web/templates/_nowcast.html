@@ -1,0 +1,13 @@
+{# Roadmap N4: clouds in the next hour from the camera and its neighbours (devices/nowcast.py). #}
+<div class="card nowcast">
+  <div class="cam-meta"><h2>Die nächste Stunde</h2><span class="badge{{ ' ok' if nowcast.cover <= 0.3 }}">jetzt {{ (nowcast.cover * 100) | round | int }} % Wolken</span></div>
+  <p class="tonight-summary">{{ nowcast.summary }}</p>
+  {% if nowcast.steps %}
+  <ol class="list nowcast-steps">
+    {% for s in nowcast.steps %}
+    <li><strong>in {{ s.minutes }} Min.</strong> etwa {{ (s.cover * 100) | round | int }} % Wolken <span class="muted">({{ s.label }})</span></li>
+    {% endfor %}
+  </ol>
+  {% endif %}
+  <p class="muted small">{{ nowcast.wind_text }} in etwa 3 km Höhe. Aus der eigenen Wolkenkarte{% if device.network %} und den Kameras im Kameranetz gegen den Wind{% else %}; mit dem Kameranetz kämen die Kameras gegen den Wind dazu{% endif %}.</p>
+</div>

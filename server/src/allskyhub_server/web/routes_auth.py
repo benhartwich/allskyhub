@@ -80,14 +80,7 @@ async def login(
 ) -> Response:
     engine = request.app.state.engine
     try:
-        await ratelimit.hit(
-            engine, f"login:ip:{client_ip(request, settings)}", ratelimit.LOGIN_PER_IP
-        )
-        await ratelimit.hit(
-            engine,
-            f"login:acct:{accounts.normalize_email(email)}",
-            ratelimit.LOGIN_PER_ACCOUNT,
-        )
+        await ratelimit.login(engine, accounts.normalize_email(email), client_ip(request, settings))
     except ratelimit.RateLimitedError as exc:
         resp = render(
             request,

@@ -281,10 +281,16 @@ async def _limit(request: Request, key: str, limits: tuple[ratelimit.Limit, ...]
 async def login(
     request: Request, body: LoginRequest, db: DbSession, settings: SettingsDep
 ) -> LoginResponse:
-    await _limit(request, f"login:ip:{client_ip(request, settings)}", ratelimit.LOGIN_PER_IP)
-    await _limit(
-        request, f"login:acct:{accounts.normalize_email(body.email)}", ratelimit.LOGIN_PER_ACCOUNT
-    )
+    try:
+        await ratelimit.login(
+            request.app.state.engine,
+            accounts.normalize_email(body.email),
+            client_ip(request, settings),
+        )
+    except ratelimit.RateLimitedError as exc:
+        raise HTTPException(
+            429, "Too many requests", {"Retry-After": str(exc.retry_after)}
+        ) from None
     user = await accounts.authenticate(db, body.email, body.password)
     if user is None:
         raise HTTPException(401, "Wrong email or password")

@@ -141,6 +141,10 @@ class Device(Base):
     # The public page also listed on the hub's start page; the owner's choice, kept on the
     # hub only (not part of the profile of SPEC §6.8).
     public_on_home: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
+    # The camera takes part in the network of other owners' cameras: meteors seen together
+    # are triangulated with the exact places (devices/meteor_pairs.py), which tells the other
+    # owner a lot about where this camera stands. The owner's choice, kept on the hub only.
+    network: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
     # Roadmap H5: Discord webhook and what goes there (devices/discord.py), and the night
     # whose summary was posted.
     discord: Mapped[dict[str, Any] | None] = mapped_column(JSONB)

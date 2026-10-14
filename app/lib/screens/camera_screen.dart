@@ -356,6 +356,15 @@ class _CameraScreenState extends State<CameraScreen> {
                     ),
                   ),
                   OutlinedButton.icon(
+                    key: const Key('open-network'),
+                    icon: const Icon(Icons.hub_outlined),
+                    label: const Text('Kameranetz'),
+                    onPressed: () => _open(
+                      () =>
+                          NetworkScreen(client: widget.client, camera: _camera),
+                    ),
+                  ),
+                  OutlinedButton.icon(
                     key: const Key('open-public'),
                     icon: const Icon(Icons.public),
                     label: const Text('Öffentliche Seite'),

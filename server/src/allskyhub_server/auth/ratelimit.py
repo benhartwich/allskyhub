@@ -54,6 +54,9 @@ async def hit(engine: AsyncEngine, key: str, limits: Sequence[Limit]) -> None:
 
 
 LOGIN_PER_ACCOUNT = (Limit(10, 900),)
+# Audit L5: password guesses for one address count per address and IP, so whoever knows an
+# address cannot lock its owner out from one place; this cap holds across all places.
+LOGIN_PER_ACCOUNT_ALL = (Limit(100, 900), Limit(500, 86400))
 LOGIN_PER_IP = (Limit(50, 900),)
 INVITE_PER_IP = (Limit(20, 3600),)
 # Roadmap #15: "Passwort vergessen" mails, per address and per IP.
@@ -69,3 +72,10 @@ CLAIM_PER_IP = (Limit(30, 600),)
 # Roadmap H5: test posts to a Discord webhook.
 DISCORD_TEST = (Limit(5, 600),)
 MAP_SEARCH_PER_IP = (Limit(20, 60), Limit(200, 3600))
+
+
+async def login(engine: AsyncEngine, email: str, ip: str) -> None:
+    """Count one login attempt (web and app) for ``email`` (normalised) from ``ip``."""
+    await hit(engine, f"login:ip:{ip}", LOGIN_PER_IP)
+    await hit(engine, f"login:acct:{email}|{ip}", LOGIN_PER_ACCOUNT)
+    await hit(engine, f"login:acct:{email}", LOGIN_PER_ACCOUNT_ALL)

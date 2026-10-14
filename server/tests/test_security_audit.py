@@ -42,6 +42,7 @@ async def test_unpairing_forgets_the_owners_choices(
         device = await db.get(Device, device_id)
         assert device
         device.discord = {"webhook": "https://discord.com/api/webhooks/1/x"}
+        device.network = True
         await db.commit()
     r = await client.post(
         f"/cameras/{device_id}/remove", data={"csrf_token": await home_csrf(client)}
@@ -49,6 +50,7 @@ async def test_unpairing_forgets_the_owners_choices(
     assert r.status_code == 303
     device = await _device(app, device_id)
     assert (device.discord, device.public_profile, device.public_on_home) == (None, None, False)
+    assert device.network is False
 
 
 async def test_switched_off_sections_stay_off(

@@ -102,3 +102,14 @@ async def test_stats_and_exports(client: httpx.AsyncClient) -> None:
     assert r.headers["content-type"].startswith("text/csv")
     assert "sqm" in r.headers["content-disposition"]
     assert (await client.get(f"{base}/exports/nope.csv", headers=auth)).status_code == 404
+
+
+async def test_network_switch(client: httpx.AsyncClient) -> None:
+    """Audit L2: the owner joins and leaves the network of other owners' cameras."""
+    device_id, auth = await _camera(client)
+    url = f"/api/v1/cameras/{device_id}/network"
+    assert (await client.get(url, headers=auth)).json() == {"network": False}
+    assert (await client.put(url, json={"network": True}, headers=auth)).json() == {"network": True}
+    assert (await client.get(url, headers=auth)).json() == {"network": True}
+    page = (await client.get(f"/cameras/{device_id}")).text
+    assert 'name="network" checked' in page

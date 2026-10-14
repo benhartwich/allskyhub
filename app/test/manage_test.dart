@@ -16,6 +16,7 @@ final camera = Camera(id: 'cam1', name: 'Garten', profile: 'sim', online: true);
 class FakeManageHub {
   var discord = <String, dynamic>{};
   var discordTests = 0;
+  var network = false;
   final members = <Map<String, dynamic>>[];
   var enabled = false;
   var onHome = false;
@@ -141,6 +142,12 @@ class FakeManageHub {
             'nlc': 'NLC',
           },
         });
+      }
+      if (path == '/api/v1/cameras/cam1/network') {
+        if (request.method == 'PUT') {
+          network = (jsonDecode(request.body) as Map)['network'] as bool;
+        }
+        return _json({'network': network});
       }
       if (path == '/api/v1/targets') {
         return _json([
@@ -375,5 +382,21 @@ void main() {
     });
     expect(shared.isOwner, isFalse);
     expect(shared.canChange, isFalse);
+  });
+
+  testWidgets('network: the owner joins the camera network', (tester) async {
+    final hub = FakeManageHub();
+    await _pump(tester, NetworkScreen(client: hub.client, camera: camera));
+    expect(
+      tester.widget<SwitchListTile>(find.byType(SwitchListTile)).value,
+      false,
+    );
+    await tester.tap(find.byKey(const Key('network-switch')));
+    await tester.pumpAndSettle();
+    expect(hub.network, isTrue);
+    expect(
+      tester.widget<SwitchListTile>(find.byType(SwitchListTile)).value,
+      true,
+    );
   });
 }

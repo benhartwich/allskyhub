@@ -716,3 +716,77 @@ class _DiscordScreenState extends State<DiscordScreen> {
     );
   }
 }
+
+/// Audit L2: meteors seen together with other owners' cameras are triangulated only when
+/// both owners joined the network.
+class NetworkScreen extends StatefulWidget {
+  const NetworkScreen({super.key, required this.client, required this.camera});
+
+  final HubClient client;
+  final Camera camera;
+
+  @override
+  State<NetworkScreen> createState() => _NetworkScreenState();
+}
+
+class _NetworkScreenState extends State<NetworkScreen> {
+  bool? _on;
+  String? _error;
+
+  @override
+  void initState() {
+    super.initState();
+    _run(() => widget.client.network(widget.camera.id));
+  }
+
+  Future<void> _run(Future<bool> Function() action) async {
+    try {
+      final on = await action();
+      if (mounted) {
+        setState(() {
+          _on = on;
+          _error = null;
+        });
+      }
+    } on Exception catch (e) {
+      if (mounted) setState(() => _error = _describe(e));
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final on = _on;
+    return Scaffold(
+      appBar: AppBar(title: const Text('Kameranetz')),
+      body: ListView(
+        padding: const EdgeInsets.all(16),
+        children: [
+          Text(
+            'Sehen deine Kamera und die Kamera eines anderen Teilnehmers '
+            'denselben Meteor, berechnet der Hub aus beiden Blickwinkeln seine '
+            'Bahn und Höhe. Beide Besitzer sehen sie bei ihrem Ereignis. Dafür '
+            'rechnet der Hub mit den genauen Standorten, und aus gemeinsamen '
+            'Meteoren lässt sich ungefähr ablesen, wo die andere Kamera steht. '
+            'Deine eigenen Kameras gleicht der Hub immer miteinander ab.',
+            style: theme.textTheme.bodyMedium,
+          ),
+          const SizedBox(height: 8),
+          if (on == null && _error == null)
+            const Center(child: CircularProgressIndicator())
+          else if (on != null)
+            SwitchListTile(
+              key: const Key('network-switch'),
+              contentPadding: EdgeInsets.zero,
+              title: const Text('Am Kameranetz teilnehmen'),
+              value: on,
+              onChanged: (value) =>
+                  _run(() => widget.client.setNetwork(widget.camera.id, value)),
+            ),
+          if (_error case final error?)
+            Text(error, style: TextStyle(color: theme.colorScheme.error)),
+        ],
+      ),
+    );
+  }
+}

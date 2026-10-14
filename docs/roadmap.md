@@ -123,6 +123,20 @@ hub side. Push needs the Firebase project; until then the same messages show on 
 | H5 | Upload the night's timelapse to YouTube and post detections to Discord | hub | Benjamin, 2026-10-13 (indi-allsky/Allsky); the owner connects the accounts on the hub, never on the camera. Done: Discord (webhook per camera, web and app). Open: YouTube (needs a Google Cloud project with YouTube API access from Benjamin) |
 | H6 | Satellites among the meteors: name them from CelesTrak (SGP4, sunlit), ISS and Tiangong by name, automatic label | hub | Benjamin, 2026-10-13: on the hub, not on the camera; SPEC §7.9 |
 
+## Network features (hub)
+
+Benjamin, 2026-10-14: "Mach alles", Firebase last. What a single camera cannot do.
+
+| # | Item | Owner | Notes |
+|---|---|---|---|
+| N1 | Fireball alarm with a fall area | hub | done: a triangulated meteor ending below 35 km gives a rough fall strip (no speed, no wind), an alarm once per meteor to the cameras' owners and network members within 300 km (`notify_fireball`), public list `/feuerkugeln` when both cameras are in the network |
+| N2 | Aurora network: a real aurora event from a camera further north alerts clear-sky users | hub | |
+| N3 | Live meteor showers: radiant and hourly rate from all cameras, public page | hub | |
+| N4 | Cloud nowcast from neighbouring cameras' `cloud_map` and the wind | hub | |
+| N5 | Light-pollution trend over the years from the cameras' SQM | hub | |
+| N6 | App: home-screen widget, AR sky view | hub | |
+| N7 | Paid tier | hub | needs Benjamin's decisions (provider, prices) |
+
 ## Security (review 2026-10-13)
 
 Read-only reviews of hub and camera by the hub session; the camera points were checked

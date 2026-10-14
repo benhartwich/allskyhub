@@ -134,6 +134,7 @@ async def notifications(
     notify_aurora: Annotated[bool, Form()] = False,
     notify_summary: Annotated[bool, Form()] = False,
     notify_tonight: Annotated[bool, Form()] = False,
+    notify_fireball: Annotated[bool, Form()] = False,
     notify_by_mail: Annotated[bool, Form()] = False,
 ) -> Response:
     """Notifications (roadmap #6, #15, C1–C3), each off until switched on. Without push
@@ -145,6 +146,7 @@ async def notifications(
     user.notify_aurora = notify_aurora
     user.notify_summary = notify_summary
     user.notify_tonight = notify_tonight
+    user.notify_fireball = notify_fireball
     user.notify_by_mail = notify_by_mail
     await db.commit()
     return _page(request, session, notice="Gespeichert.")

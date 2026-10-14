@@ -38,6 +38,7 @@
     <dt>Über</dt><dd>{{ '%.2f' | format(p.high_lat) | replace('.', ',') }}° N, {{ '%.2f' | format(p.high_lon) | replace('.', ',') }}° O → {{ '%.2f' | format(p.low_lat) | replace('.', ',') }}° N, {{ '%.2f' | format(p.low_lon) | replace('.', ',') }}° O</dd>
     <dt>Schnittwinkel</dt><dd>{{ p.convergence_deg | round | int }}° {% if p.convergence_deg < 20 %}<span class="warn">(flach, ungenauer)</span>{% endif %}</dd>
   </dl>
+  {% if s.fireball %}<p>{% if s.meteorite %}<span class="badge warn">Meteoritenfall möglich</span> {% endif %}<a href="/feuerkugeln/{{ p.id }}">Bahn{{ ' und mögliches Fallgebiet' if s.meteorite }} auf der Karte</a></p>{% endif %}
 </div>
 {% endfor %}
 <div class="card">

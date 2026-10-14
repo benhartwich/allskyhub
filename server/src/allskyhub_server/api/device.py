@@ -776,7 +776,7 @@ async def _on_event(
             _background(notifier.discord.event(conn.device_id, body.id, picture_arrived=False))
     if body.kind == "meteor":
         # Roadmap C4: the same meteor at another camera (also when the event was updated).
-        _background(meteor_pairs.pair_event(maker, conn.device_id, body.id))
+        _background(meteor_pairs.pair_event(maker, conn.device_id, body.id, notifier.fireball))
         # Roadmap H6 (SPEC §7.9): a satellite, or an aircraft already covered (§7.8)?
         if aircraft.current is not None:
             _background(aircraft.current.check_new(conn.device_id, body.id))

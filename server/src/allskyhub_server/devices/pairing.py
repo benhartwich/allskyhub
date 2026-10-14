@@ -17,7 +17,7 @@ from dataclasses import dataclass
 
 from cryptography.exceptions import InvalidSignature
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PublicKey
-from sqlalchemy import delete, select
+from sqlalchemy import delete, select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -45,6 +45,7 @@ from allskyhub_server.models import (
     RenderJob,
     SkySample,
     StatusSample,
+    Subscription,
 )
 
 NONCE_TTL = dt.timedelta(minutes=5)
@@ -248,6 +249,14 @@ async def unpair(db: AsyncSession, device: Device) -> None:
     device.network = False
     device.discord = None
     device.discord_night = None
+    # Plus belongs to the pairing as well; the billing task cancels a running subscription
+    # (billing/paddle.py) once it has no camera.
+    device.plus_until = None
+    device.plus_gift = False
+    device.plus_trial_until = None
+    await db.execute(
+        update(Subscription).where(Subscription.device_id == device.id).values(device_id=None)
+    )
     # SPEC §7.4: the camera drops its local access itself when it learns it is unpaired.
     device.local_access_verifier = None
     device.local_access_pending = False

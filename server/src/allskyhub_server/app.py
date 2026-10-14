@@ -25,6 +25,8 @@ from allskyhub_server.api import app_manage, app_overview, sky_view
 from allskyhub_server.api import device as device_api
 from allskyhub_server.api import widget as app_widget
 from allskyhub_server.auth.hub_keys import HubKeys
+from allskyhub_server.billing import task as billing_task
+from allskyhub_server.billing.paddle import Paddle
 from allskyhub_server.db import create_engine, create_sessionmaker
 from allskyhub_server.devices import aircraft, domains
 from allskyhub_server.devices.connections import ConnectionRegistry
@@ -53,6 +55,7 @@ from allskyhub_server.web import (
     routes_gallery,
     routes_legal,
     routes_local,
+    routes_plus,
     routes_public,
     routes_showers,
 )
@@ -234,6 +237,12 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             asyncio.create_task(app.state.aircraft.run_forever()),
             asyncio.create_task(StallWatch().run_forever()),
         ]
+        if settings.billing:
+            tasks.append(
+                asyncio.create_task(
+                    billing_task.run_forever(app.state.sessionmaker, app.state.paddle)
+                )
+            )
         if sender is not None or app.state.mailer.enabled:
             tasks.append(
                 asyncio.create_task(app.state.notifier.run_offline_checks(app.state.connections))
@@ -246,6 +255,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 with contextlib.suppress(asyncio.CancelledError):
                     await task
             await adsb_client.aclose()
+            await app.state.paddle.client.aclose()
             await engine.dispose()
 
     app = FastAPI(
@@ -270,6 +280,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.state.hub_keys = HubKeys(settings.key_dir)
     app.state.forecast = ForecastCache()
     app.state.tles = TleCache()
+    app.state.paddle = Paddle(settings)
     app.state.github = GitHub(settings.deploy_repo, checks=settings.deploy_check_names)
     app.add_middleware(CustomDomainMiddleware, hosts=app.state.hosts)
     app.add_middleware(AccessLogMiddleware)
@@ -288,6 +299,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(routes_admin.router)
     app.include_router(routes_app_builds.router)
     app.include_router(routes_fireballs.router)
+    app.include_router(routes_plus.router)
+    app.include_router(routes_plus.webhook_router)
     app.include_router(device_api.router)
     app.include_router(app_api.router)
     app.include_router(app_overview.router)

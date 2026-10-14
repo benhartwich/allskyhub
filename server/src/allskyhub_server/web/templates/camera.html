@@ -84,6 +84,7 @@
     <button type="submit" class="secondary">Freigeben</button>
   </form>
 </details>
+{% if plus %}{% include "_plus.html" %}{% endif %}
 <details class="card fold" id="netz" data-fold="netz">
   <summary><h2>Kameranetz</h2></summary>
   <p class="muted">Sehen deine Kamera und die Kamera eines anderen Teilnehmers denselben Meteor, berechnet der Hub aus beiden Blickwinkeln seine Bahn und Höhe. Beide Besitzer sehen sie bei ihrem Ereignis. Dafür rechnet der Hub mit den genauen Standorten, und aus gemeinsamen Meteoren lässt sich ungefähr ablesen, wo die andere Kamera steht. Deine eigenen Kameras gleicht der Hub immer miteinander ab.</p>

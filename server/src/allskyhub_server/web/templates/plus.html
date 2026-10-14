@@ -1,0 +1,37 @@
+{% extends "base.html" %}
+{% block title %}Plus · allskyhub{% endblock %}
+{% block content %}
+<div class="page-head"><h1>allskyhub Plus</h1></div>
+<p class="lead">Ein langes Gedächtnis für deine Kamera: Plus behält ihre Bilder viel länger. Alles andere, auch das Kameranetz mit Feuerkugeln, Polarlicht-Alarm und Wolkenvorhersage, bleibt für alle kostenlos.</p>
+
+<div class="grid-2">
+  <section class="card stack">
+    <h2>Kostenlos</h2>
+    <ul class="features">
+      <li>Vollbilder und Zeitraffer-Videos 7 Tage</li>
+      <li>Vorschaubilder, Keogramme und Sternspuren 30 Tage</li>
+      <li>Livebild, Galerie, Ereignisse, Statistik, App</li>
+      <li>Kameranetz, Benachrichtigungen, öffentliche Seite</li>
+    </ul>
+  </section>
+  <section class="card stack">
+    <h2>Plus</h2>
+    <p><strong>{{ price_month }} im Monat</strong> oder <strong>{{ price_year }} im Jahr</strong> pro Kamera, inklusive Umsatzsteuer.</p>
+    <ul class="features">
+      <li>Vollbilder und Zeitraffer-Videos <strong>90 Tage</strong></li>
+      <li>Vorschaubilder, Keogramme und Sternspuren <strong>ein Jahr</strong></li>
+      <li>Alles aus „Kostenlos“</li>
+      <li>Der erste Monat ist kostenlos, ohne Zahlungsdaten</li>
+    </ul>
+  </section>
+</div>
+
+<section class="card stack">
+  <h2>So geht’s</h2>
+  <p>Auf der Seite deiner Kamera unter „Plus“ startest du den kostenlosen Probemonat. Er endet von selbst; nichts verlängert sich, wenn du nicht kaufst. Danach kaufst du Plus dort monatlich oder jährlich.</p>
+  <p>Die Zahlung wickelt unser Wiederverkäufer <strong>Paddle</strong> ab: Karte, PayPal und weitere Zahlungsarten, Rechnung mit Umsatzsteuer kommt von Paddle per E-Mail. Kündigen kannst du jederzeit zum Ende des bezahlten Zeitraums, mit „Abo verwalten“ auf der Kameraseite.</p>
+  <p>Endet Plus, behalten wir das lange Archiv noch 30 Tage, danach gelten wieder die kostenlosen Fristen. Lade dir vorher herunter, was du behalten willst.</p>
+  {% if not billing %}<p class="muted">Der Kauf ist noch nicht freigeschaltet; den Probemonat kannst du schon starten.</p>{% endif %}
+  <p class="muted small"><a href="/agb">AGB und Widerrufsbelehrung</a> · <a href="/datenschutz">Datenschutz</a></p>
+</section>
+{% endblock %}

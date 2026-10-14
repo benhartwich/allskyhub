@@ -395,3 +395,6 @@ details.settings-group[open] > summary { margin-bottom: 8px; }
 .hour-bar .n { color: var(--text); font-weight: 600; min-height: 1.2em; }
 .hour-bar .c { color: var(--ok); min-height: 1.2em; }
 @media (max-width: 600px) { .hour-bar .t { visibility: hidden; } .hour-bar:nth-child(3n+1) .t { visibility: visible; } }
+
+/* Roadmap N4: the next hour's clouds. */
+.nowcast-steps { display: grid; gap: 4px; padding: 0; list-style: none; margin: 0; }

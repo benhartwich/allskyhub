@@ -10,6 +10,7 @@ import 'camera_settings_screen.dart';
 import 'camera_status.dart';
 import 'manage_screens.dart';
 import 'measurements_screen.dart';
+import 'sky_view_screen.dart';
 import 'stats_screen.dart';
 import 'target_screen.dart';
 import 'zoomable.dart';
@@ -318,6 +319,14 @@ class _CameraScreenState extends State<CameraScreen> {
                   label: const Text('Statistik'),
                   onPressed: () => _open(
                     () => StatsScreen(client: widget.client, camera: _camera),
+                  ),
+                ),
+                OutlinedButton.icon(
+                  key: const Key('open-sky-view'),
+                  icon: const Icon(Icons.explore_outlined),
+                  label: const Text('Himmel'),
+                  onPressed: () => _open(
+                    () => SkyViewScreen(client: widget.client, camera: _camera),
                   ),
                 ),
                 OutlinedButton.icon(

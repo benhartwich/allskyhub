@@ -5,7 +5,7 @@ from __future__ import annotations
 import datetime as dt
 
 from allskyhub_protocol import Lens
-from allskyhub_sky import alt_az, overlay, precess, project, sidereal_deg, tilt, usable
+from allskyhub_sky import alt_az, overlay, precess, project, sidereal_deg, sky_lines, tilt, usable
 
 AT = dt.datetime(2026, 10, 15, 21, tzinfo=dt.UTC)
 LENS = Lens(cx=600, cy=600, a1=560, a3=-30, tilt_east_deg=0, tilt_north_deg=0,
@@ -64,3 +64,13 @@ def test_cardinals_stay_in_a_cropped_frame() -> None:
     # Inside the frame nothing moves.
     square = overlay(LENS, 0.0, True, 48.14, 14.39, AT)
     assert square.cardinals[0].y == project(3.0, 0.0, LENS, 0.0, True)[1]
+
+
+def test_sky_lines_are_directions_above_the_horizon() -> None:
+    sky = sky_lines(48.14, 14.39, AT)
+    assert sky.lines
+    assert all(alt >= -5 and 0 <= az < 360 for line in sky.lines for alt, az in line)
+    names = {name: (alt, az) for name, alt, az in sky.names}
+    assert names["Pegasus"][0] > 40  # high in an October night
+    # The same place in the sky as the image overlay uses.
+    assert all(len(line) > 1 for line in sky.lines)

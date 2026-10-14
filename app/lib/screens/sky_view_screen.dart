@@ -1,0 +1,356 @@
+// The sky view (roadmap N6): hold the phone up and see what lies in that direction above
+// the camera: constellations, moon and planets, and where last night's meteors flew.
+//
+// The phone's orientation comes from gravity (accelerometer) and the magnetic field
+// (magnetometer): east = field × up, north = up × east, each in the phone's coordinates
+// (x right, y to the top of the screen, z out of the screen). The back of the phone looks
+// along −z; a direction is drawn where that ray would meet the screen (a pinhole camera
+// with a fixed field of view). Magnetic north differs from true north by a few degrees in
+// Europe; the view does not correct for it.
+
+import 'dart:async';
+import 'dart:math' as math;
+
+import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:sensors_plus/sensors_plus.dart';
+
+import '../api/hub_client.dart';
+import '../design.dart';
+
+typedef Vec = ({double x, double y, double z});
+
+Vec _cross(Vec a, Vec b) => (
+  x: a.y * b.z - a.z * b.y,
+  y: a.z * b.x - a.x * b.z,
+  z: a.x * b.y - a.y * b.x,
+);
+
+Vec? _unit(Vec a) {
+  final n = math.sqrt(a.x * a.x + a.y * a.y + a.z * a.z);
+  return n < 1e-6 ? null : (x: a.x / n, y: a.y / n, z: a.z / n);
+}
+
+/// East, north and up of the world in the phone's coordinates.
+class Pose {
+  const Pose(this.east, this.north, this.up);
+
+  final Vec east;
+  final Vec north;
+  final Vec up;
+
+  /// From gravity (pointing up while the phone rests) and the magnetic field; null when
+  /// they do not give a direction (in free fall, near a magnet, pointing at the pole).
+  static Pose? from(Vec gravity, Vec magnetic) {
+    final up = _unit(gravity);
+    if (up == null) return null;
+    final east = _unit(_cross(magnetic, up));
+    if (east == null) return null;
+    return Pose(east, _cross(up, east), up);
+  }
+
+  /// A sky direction in the phone's coordinates.
+  Vec toPhone(SkyDir d) {
+    final alt = d.alt * math.pi / 180, az = d.az * math.pi / 180;
+    final e = math.cos(alt) * math.sin(az);
+    final n = math.cos(alt) * math.cos(az);
+    final u = math.sin(alt);
+    return (
+      x: e * east.x + n * north.x + u * up.x,
+      y: e * east.y + n * north.y + u * up.y,
+      z: e * east.z + n * north.z + u * up.z,
+    );
+  }
+
+  /// Where the back of the phone points.
+  SkyDir get looking {
+    // −z of the phone in world terms: the world axes' z components, negated.
+    final e = -east.z, n = -north.z, u = -up.z;
+    return (
+      alt: math.asin(u.clamp(-1.0, 1.0)) * 180 / math.pi,
+      az: (math.atan2(e, n) * 180 / math.pi + 360) % 360,
+    );
+  }
+}
+
+/// The phone's orientation; the sensors by default, a fixed pose in tests.
+abstract class PoseSource {
+  Stream<Pose> get poses;
+}
+
+class SensorPoseSource implements PoseSource {
+  /// Low-pass filter: the share of each new reading.
+  static const _alpha = 0.15;
+
+  @override
+  Stream<Pose> get poses {
+    late StreamController<Pose> out;
+    StreamSubscription<AccelerometerEvent>? acc;
+    StreamSubscription<MagnetometerEvent>? mag;
+    Vec? g, m;
+    Vec smooth(Vec? old, double x, double y, double z) => old == null
+        ? (x: x, y: y, z: z)
+        : (
+            x: old.x + _alpha * (x - old.x),
+            y: old.y + _alpha * (y - old.y),
+            z: old.z + _alpha * (z - old.z),
+          );
+    void emit() {
+      if (g == null || m == null) return;
+      final pose = Pose.from(g!, m!);
+      if (pose != null) out.add(pose);
+    }
+
+    out = StreamController<Pose>(
+      onListen: () {
+        acc =
+            accelerometerEventStream(
+              samplingPeriod: SensorInterval.uiInterval,
+            ).listen((e) {
+              g = smooth(g, e.x, e.y, e.z);
+              emit();
+            }, onError: out.addError);
+        mag = magnetometerEventStream(
+          samplingPeriod: SensorInterval.uiInterval,
+        ).listen((e) => m = smooth(m, e.x, e.y, e.z), onError: out.addError);
+      },
+      onCancel: () async {
+        await acc?.cancel();
+        await mag?.cancel();
+      },
+    );
+    return out.stream;
+  }
+}
+
+const _names = ['N', 'NO', 'O', 'SO', 'S', 'SW', 'W', 'NW'];
+
+String compassName(double az) => _names[((az + 22.5) % 360 ~/ 45)];
+
+class SkyViewScreen extends StatefulWidget {
+  const SkyViewScreen({
+    super.key,
+    required this.client,
+    required this.camera,
+    this.poseSource,
+  });
+
+  final HubClient client;
+  final Camera camera;
+  final PoseSource? poseSource;
+
+  @override
+  State<SkyViewScreen> createState() => _SkyViewScreenState();
+}
+
+class _SkyViewScreenState extends State<SkyViewScreen> {
+  SkyViewData? _data;
+  String? _error;
+  Pose? _pose;
+  bool _noSensors = false;
+  StreamSubscription<Pose>? _sub;
+
+  @override
+  void initState() {
+    super.initState();
+    // The phone's axes are those of portrait; a turning screen would swap them.
+    SystemChrome.setPreferredOrientations([DeviceOrientation.portraitUp]);
+    _load();
+    _sub = (widget.poseSource ?? SensorPoseSource()).poses.listen(
+      (pose) {
+        if (mounted) setState(() => _pose = pose);
+      },
+      onError: (Object _) {
+        if (mounted) setState(() => _noSensors = true);
+      },
+    );
+  }
+
+  @override
+  void dispose() {
+    _sub?.cancel();
+    SystemChrome.setPreferredOrientations([]);
+    super.dispose();
+  }
+
+  Future<void> _load() async {
+    try {
+      final data = await widget.client.skyView(widget.camera.id);
+      if (mounted) setState(() => _data = data);
+    } on HubException catch (e) {
+      if (mounted) setState(() => _error = e.message);
+    } on Exception {
+      if (mounted) {
+        setState(() => _error = 'Keine Verbindung zum Hub.');
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final pose = _pose;
+    final data = _data;
+    final looking = pose?.looking;
+    return Scaffold(
+      appBar: AppBar(title: const Text('Himmel')),
+      body: Stack(
+        children: [
+          if (data != null && pose != null)
+            Positioned.fill(
+              child: CustomPaint(
+                key: const Key('sky-view'),
+                painter: SkyPainter(data, pose),
+              ),
+            ),
+          Positioned(
+            left: 16,
+            right: 16,
+            bottom: 24,
+            child: Text(
+              _error ??
+                  (_noSensors
+                      ? 'Dieses Telefon meldet keine Lage- oder Kompasssensoren.'
+                      : data == null
+                      ? 'Lädt …'
+                      : looking == null
+                      ? 'Halte das Telefon in Richtung Himmel.'
+                      : 'Blick nach ${compassName(looking.az)} '
+                            '(${looking.az.round()}°), '
+                            '${looking.alt.round()}° hoch. Meteore der letzten '
+                            '12 Stunden in Violett.'),
+              key: const Key('sky-hint'),
+              textAlign: TextAlign.center,
+              style: theme.textTheme.bodyMedium,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class SkyPainter extends CustomPainter {
+  SkyPainter(this.data, this.pose);
+
+  final SkyViewData data;
+  final Pose pose;
+
+  /// Vertical field of view in degrees.
+  static const fov = 60.0;
+
+  Offset? _at(SkyDir d, Size size) {
+    final p = pose.toPhone(d);
+    if (p.z > -0.05) return null; // behind the phone or at its edge
+    final f = size.height / 2 / math.tan(fov / 2 * math.pi / 180);
+    return Offset(
+      size.width / 2 + f * p.x / -p.z,
+      size.height / 2 - f * p.y / -p.z,
+    );
+  }
+
+  void _line(Canvas canvas, Size size, List<SkyDir> dirs, Paint paint) {
+    Offset? last;
+    for (final d in dirs) {
+      final at = _at(d, size);
+      if (at != null && last != null) canvas.drawLine(last, at, paint);
+      last = at;
+    }
+  }
+
+  void _text(Canvas canvas, Offset at, String text, TextStyle style) {
+    final tp = TextPainter(
+      text: TextSpan(text: text, style: style),
+      textDirection: TextDirection.ltr,
+    )..layout();
+    tp.paint(canvas, at - Offset(tp.width / 2, tp.height + 4));
+  }
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final lines = Paint()
+      ..color = Sky.accent.withValues(alpha: .45)
+      ..strokeWidth = 1.2;
+    for (final line in data.lines) {
+      _line(canvas, size, line, lines);
+    }
+    final horizon = Paint()
+      ..color = Sky.aurora.withValues(alpha: .6)
+      ..strokeWidth = 2;
+    _line(canvas, size, [
+      for (var az = 0.0; az <= 360; az += 5) (alt: 0.0, az: az),
+    ], horizon);
+    for (final (i, name) in ['N', 'O', 'S', 'W'].indexed) {
+      final at = _at((alt: 2.0, az: i * 90.0), size);
+      if (at != null) {
+        _text(
+          canvas,
+          at,
+          name,
+          const TextStyle(
+            color: Sky.aurora,
+            fontSize: 18,
+            fontWeight: FontWeight.w700,
+          ),
+        );
+      }
+    }
+    final meteor = Paint()
+      ..color = Sky.accent2
+      ..strokeWidth = 3
+      ..strokeCap = StrokeCap.round;
+    for (final m in data.meteors) {
+      // Along the great circle, in a few steps, so long tracks bend like the sky.
+      _line(canvas, size, [
+        for (var i = 0; i <= 8; i++)
+          (
+            alt: m.start.alt + (m.end.alt - m.start.alt) * i / 8,
+            az:
+                m.start.az +
+                (((m.end.az - m.start.az + 540) % 360) - 180) * i / 8,
+          ),
+      ], meteor);
+    }
+    for (final o in data.objects) {
+      final at = _at(o.dir, size);
+      if (at == null) continue;
+      final constellation = o.kind == 'constellation';
+      if (!constellation) {
+        canvas.drawCircle(
+          at,
+          o.kind == 'moon' ? 9 : 5,
+          Paint()..color = o.kind == 'moon' ? Sky.text : Sky.warn,
+        );
+      }
+      _text(
+        canvas,
+        at,
+        o.label,
+        TextStyle(
+          color: constellation ? Sky.text2 : Sky.text,
+          fontSize: constellation ? 12 : 14,
+          fontWeight: constellation ? FontWeight.w400 : FontWeight.w600,
+        ),
+      );
+    }
+    // Cross hairs in the middle.
+    final centre = size.center(Offset.zero);
+    final cross = Paint()
+      ..color = Sky.text.withValues(alpha: .5)
+      ..strokeWidth = 1;
+    canvas.drawLine(
+      centre - const Offset(12, 0),
+      centre + const Offset(12, 0),
+      cross,
+    );
+    canvas.drawLine(
+      centre - const Offset(0, 12),
+      centre + const Offset(0, 12),
+      cross,
+    );
+  }
+
+  @override
+  bool shouldRepaint(SkyPainter oldDelegate) =>
+      oldDelegate.pose != pose || oldDelegate.data != data;
+}

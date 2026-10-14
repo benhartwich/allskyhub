@@ -632,6 +632,11 @@ class HubClient {
   }
 
   /// Health, "Heute Nacht" and last night (roadmap C1, C3, C14) for the camera screen.
+  /// Roadmap N6: directions above the camera now, for the sky view.
+  Future<SkyViewData> skyView(String cameraId) async => SkyViewData.fromJson(
+    await _send('GET', '/cameras/$cameraId/sky-view') as Map<String, dynamic>,
+  );
+
   Future<Overview> overview(String cameraId) async => Overview.fromJson(
     await _send('GET', '/cameras/$cameraId/overview') as Map<String, dynamic>,
   );
@@ -1073,4 +1078,42 @@ class TargetPlan {
   final String verdict;
   final String verdictText;
   final List<TargetHourItem> hours;
+}
+
+/// A direction in the sky: altitude and azimuth in degrees.
+typedef SkyDir = ({double alt, double az});
+
+SkyDir _dir(List<dynamic> v) =>
+    (alt: (v[0] as num).toDouble(), az: (v[1] as num).toDouble());
+
+/// Roadmap N6: what lies in which direction above the camera (`GET …/sky-view`).
+class SkyViewData {
+  SkyViewData.fromJson(Map<String, dynamic> json)
+    : lines = [
+        for (final line in json['lines'] as List<dynamic>)
+          [for (final p in line as List<dynamic>) _dir(p as List<dynamic>)],
+      ],
+      objects = [
+        for (final o in json['objects'] as List<dynamic>)
+          (
+            label: (o as Map<String, dynamic>)['label'] as String,
+            kind: o['kind'] as String,
+            dir: (
+              alt: (o['alt'] as num).toDouble(),
+              az: (o['az'] as num).toDouble(),
+            ),
+          ),
+      ],
+      meteors = [
+        for (final m in json['meteors'] as List<dynamic>)
+          (
+            at: DateTime.parse((m as Map<String, dynamic>)['at'] as String),
+            start: _dir(m['start'] as List<dynamic>),
+            end: _dir(m['end'] as List<dynamic>),
+          ),
+      ];
+
+  final List<List<SkyDir>> lines;
+  final List<({String label, String kind, SkyDir dir})> objects;
+  final List<({DateTime at, SkyDir start, SkyDir end})> meteors;
 }

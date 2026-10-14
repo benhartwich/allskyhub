@@ -779,6 +779,9 @@ async def _on_event(
         _background(notifier.event(conn.device_id, body.id))
         if notifier.discord is not None:
             _background(notifier.discord.event(conn.device_id, body.id, picture_arrived=False))
+    if body.kind == "aurora":
+        # Roadmap N2: a sighting (new or growing) tells clear-sky cameras around it.
+        _background(notifier.aurora_seen(conn.device_id, body.id))
     if body.kind == "meteor":
         # Roadmap C4: the same meteor at another camera (also when the event was updated).
         _background(meteor_pairs.pair_event(maker, conn.device_id, body.id, notifier.fireball))

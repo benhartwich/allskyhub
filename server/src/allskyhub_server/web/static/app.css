@@ -377,6 +377,24 @@ details.settings-group[open] > summary { margin-bottom: 8px; }
 .badge.warn { background: rgba(242, 192, 107, .12); color: var(--warn); border-color: rgba(242, 192, 107, .35); }
 .fireballs { display: grid; gap: 10px; padding: 0; list-style: none; }
 .fireball-row { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 14px; text-decoration: none; color: inherit; }
+/* Meteor showers live (routes_showers.py): meteors per hour as bars, heights in tenths
+   (the CSP allows no inline styles). */
+.hour-bars { display: grid; grid-template-columns: repeat(24, minmax(0, 1fr)); gap: 3px; align-items: end; }
+.hour-bar { display: grid; grid-template-rows: 120px auto auto auto; justify-items: center; font-size: 11px; color: var(--text-2); }
+.hour-bar .bar { align-self: end; width: 100%; border-radius: 4px 4px 0 0; background: var(--accent); min-height: 0; height: 0; }
+.hour-bar .bar.h1 { height: 10%; }
+.hour-bar .bar.h2 { height: 20%; }
+.hour-bar .bar.h3 { height: 30%; }
+.hour-bar .bar.h4 { height: 40%; }
+.hour-bar .bar.h5 { height: 50%; }
+.hour-bar .bar.h6 { height: 60%; }
+.hour-bar .bar.h7 { height: 70%; }
+.hour-bar .bar.h8 { height: 80%; }
+.hour-bar .bar.h9 { height: 90%; }
+.hour-bar .bar.h10 { height: 100%; }
+.hour-bar .n { color: var(--text); font-weight: 600; min-height: 1.2em; }
+.hour-bar .c { color: var(--ok); min-height: 1.2em; }
+@media (max-width: 600px) { .hour-bar .t { visibility: hidden; } .hour-bar:nth-child(3n+1) .t { visibility: visible; } }
 
 /* Roadmap N4: the next hour's clouds. */
 .nowcast-steps { display: grid; gap: 4px; padding: 0; list-style: none; margin: 0; }

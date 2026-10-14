@@ -241,8 +241,9 @@ class _AccountScreenState extends State<AccountScreen> {
               ),
               (
                 'notify_aurora',
-                'Polarlicht möglich',
-                'Kp hoch genug und der Himmel über der Kamera klar',
+                'Polarlicht',
+                'Kp hoch genug oder im Kameranetz gesichtet, und der Himmel über '
+                    'der Kamera klar',
               ),
               (
                 'notify_summary',

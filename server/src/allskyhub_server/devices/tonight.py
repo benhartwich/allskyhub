@@ -35,6 +35,9 @@ class Hour:
     mid: int
     high: int
     rain: int | None  # % probability
+    # Wind at 700 hPa (about 3 km, where most clouds drift), for the nowcast (roadmap N4).
+    wind_kmh: float | None = None
+    wind_from: float | None = None  # degrees, where the wind comes from
 
 
 def parse_forecast(payload: Any) -> list[Hour]:
@@ -44,10 +47,14 @@ def parse_forecast(payload: Any) -> list[Hour]:
         return []
     h = cast(dict[str, list[Any]], hourly)
 
-    def at(key: str, i: int) -> int | None:
+    def raw(key: str, i: int) -> float | None:
         values = h.get(key) or []
         v = values[i] if i < len(values) else None
-        return round(v) if isinstance(v, int | float) else None
+        return float(v) if isinstance(v, int | float) else None
+
+    def at(key: str, i: int) -> int | None:
+        v = raw(key, i)
+        return None if v is None else round(v)
 
     hours: list[Hour] = []
     for i, ts in enumerate(h.get("time") or []):
@@ -62,6 +69,8 @@ def parse_forecast(payload: Any) -> list[Hour]:
                 mid=at("cloud_cover_mid", i) or 0,
                 high=at("cloud_cover_high", i) or 0,
                 rain=at("precipitation_probability", i),
+                wind_kmh=raw("wind_speed_700hPa", i),
+                wind_from=raw("wind_direction_700hPa", i),
             )
         )
     return hours
@@ -84,7 +93,7 @@ class ForecastCache:
             "latitude": key[0],
             "longitude": key[1],
             "hourly": "cloud_cover,cloud_cover_low,cloud_cover_mid,cloud_cover_high,"
-            "precipitation_probability",
+            "precipitation_probability,wind_speed_700hPa,wind_direction_700hPa",
             "timezone": "UTC",
             "timeformat": "unixtime",
             "forecast_days": 3,

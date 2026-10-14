@@ -56,6 +56,7 @@ from allskyhub_server.devices import (
     labels,
     local_access,
     meteor_pairs,
+    nowcast,
     pairing,
     public,
     settings_form,
@@ -548,6 +549,10 @@ async def _handle(
             _background(notifier.unsafe(conn.device_id))
         if body.sky is not None:
             await _store_sky(maker, conn.device_id, body.sky)
+            # Roadmap N4: the last minutes of clouds for the nowcast.
+            nowcast.HISTORY.add(
+                conn.device_id, body.sky.model_dump(mode="json"), dt.datetime.now(dt.UTC)
+            )
             _background(notifier.aurora(conn.device_id, kp))
     elif isinstance(body, FrameInfo):
         await _on_frame(body, conn, maker, settings, registry)

@@ -211,6 +211,21 @@ class DeviceToken(Base):
     expires_at: Mapped[dt.datetime] = mapped_column(_tz())
 
 
+class WidgetToken(Base):
+    """Roadmap N6: a home-screen widget's read-only key for one camera (latest image and a
+    few lines), stored as SHA-256. Separate from the app's token, so a widget, which keeps
+    its key outside the app's secure storage, can never do more than show the camera."""
+
+    __tablename__ = "widget_token"
+
+    token_hash: Mapped[bytes] = mapped_column(LargeBinary(32), primary_key=True)
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("user_account.id", ondelete="CASCADE"), index=True
+    )
+    device_id: Mapped[str] = mapped_column(ForeignKey("device.id", ondelete="CASCADE"))
+    created_at: Mapped[dt.datetime] = mapped_column(_tz(), server_default=func.now())
+
+
 class AppToken(Base):
     """Bearer token of a signed-in app (M3), stored as SHA-256."""
 

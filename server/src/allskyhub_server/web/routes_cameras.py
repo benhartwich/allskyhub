@@ -21,6 +21,7 @@ from allskyhub_server.devices import (
     events,
     health,
     night_summary,
+    nowcast,
     pairing,
     public,
     queries,
@@ -153,6 +154,7 @@ async def _camera_context(
         "tonight": await tonight.for_device(
             forecast, device.last_status, now, request.app.state.tles
         ),
+        "nowcast": await nowcast.for_device(db, forecast, device, now),
         "last_night": await _last_night(db, device),
         "health": await health.full_check(db, device, online, now, forecast),
         "paused": health.paused(device),

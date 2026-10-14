@@ -396,6 +396,8 @@ details.settings-group[open] > summary { margin-bottom: 8px; }
 .hour-bar .c { color: var(--ok); min-height: 1.2em; }
 @media (max-width: 600px) { .hour-bar .t { visibility: hidden; } .hour-bar:nth-child(3n+1) .t { visibility: visible; } }
 
+/* Roadmap N4: the next hour's clouds. */
+.nowcast-steps { display: grid; gap: 4px; padding: 0; list-style: none; margin: 0; }
 /* Roadmap N5: up to 36 months of sky brightness; narrower gaps, every third label. */
 .sqm-bars { gap: 2px; }
 .sqm-bars li small { visibility: hidden; }

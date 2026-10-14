@@ -1,6 +1,7 @@
 import 'dart:convert';
 
 import 'package:allskyhub_app/api/hub_client.dart';
+import 'package:allskyhub_app/platform/sky_widget.dart';
 import 'package:allskyhub_app/screens/camera_screen.dart';
 import 'package:allskyhub_app/screens/camera_status.dart';
 import 'package:flutter/material.dart';
@@ -229,6 +230,18 @@ void main() {
                   },
                 ],
               },
+              'nowcast': {
+                'cover': 0.8,
+                'summary': 'Es klart in etwa 30 Minuten auf.',
+                'wind': 'Wind aus Westen, 40 km/h',
+                'steps': [
+                  {
+                    'minutes': 30,
+                    'cover': 0.1,
+                    'label': 'Kamera 20 km westlich',
+                  },
+                ],
+              },
               'last_night': {
                 'night_id': '20261011',
                 'line': '3 Meteore, 4 h klar',
@@ -254,7 +267,59 @@ void main() {
     expect(find.textContaining('Klar und dunkel'), findsOneWidget);
     expect(find.textContaining('zunehmende Sichel, 5 %'), findsOneWidget);
     expect(find.text('3 Meteore, 4 h klar'), findsOneWidget);
+    expect(
+      find.text('Jetzt 80 % Wolken. Es klart in etwa 30 Minuten auf.'),
+      findsOneWidget,
+    );
+    expect(find.textContaining('Kamera 20 km westlich'), findsOneWidget);
     expect(find.byKey(const Key('open-measurements')), findsOneWidget);
     await tester.pumpWidget(const SizedBox()); // stops the refresh timer
   });
+
+  testWidgets('camera screen puts the camera on the home-screen widget', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(400, 2400);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    final camera = Camera.fromJson({...cameraJson, 'latest_image_at': null});
+    final client = HubClient(
+      baseUrl: 'https://hub.example',
+      token: 'tok',
+      httpClient: MockClient(
+        (_) async => http.Response(jsonEncode(cameraJson), 200),
+      ),
+    );
+    final channel = _FakeWidget();
+    await tester.pumpWidget(
+      MaterialApp(
+        home: CameraScreen(
+          client: client,
+          camera: camera,
+          widgetChannel: channel,
+        ),
+      ),
+    );
+    await tester.pump();
+    final button = find.byKey(const Key('as-widget'));
+    await tester.ensureVisible(button);
+    await tester.tap(button);
+    await tester.pump();
+    expect(channel.shown, [camera.id]);
+    expect(find.textContaining('„Widgets“ wählen'), findsOneWidget);
+    await tester.pumpWidget(const SizedBox()); // stops the refresh timer
+  });
+}
+
+class _FakeWidget implements SkyWidgetChannel {
+  final shown = <String>[];
+
+  @override
+  bool get available => true;
+
+  @override
+  Future<WidgetResult> show(HubClient client, Camera camera) async {
+    shown.add(camera.id);
+    return WidgetResult.manual;
+  }
 }

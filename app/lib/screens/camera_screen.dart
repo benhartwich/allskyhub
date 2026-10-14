@@ -6,6 +6,7 @@ import '../design.dart';
 
 import '../api/hub_client.dart';
 import '../platform/location.dart';
+import '../platform/sky_widget.dart';
 import 'camera_settings_screen.dart';
 import 'camera_status.dart';
 import 'manage_screens.dart';
@@ -18,10 +19,18 @@ import 'zoomable.dart';
 /// Live view: polls the latest image with `live=true` every few seconds, so the hub asks
 /// the camera for every frame while this screen is open (SPEC §6.5).
 class CameraScreen extends StatefulWidget {
-  const CameraScreen({super.key, required this.client, required this.camera});
+  const CameraScreen({
+    super.key,
+    required this.client,
+    required this.camera,
+    this.widgetChannel,
+  });
 
   final HubClient client;
   final Camera camera;
+
+  /// Roadmap N6; the platform's by default, a fake in tests.
+  final SkyWidgetChannel? widgetChannel;
 
   @override
   State<CameraScreen> createState() => _CameraScreenState();
@@ -116,6 +125,26 @@ class _CameraScreenState extends State<CameraScreen> {
       return;
     }
     if (mounted) Navigator.of(context).pop();
+  }
+
+  late final SkyWidgetChannel _widget =
+      widget.widgetChannel ?? PlatformSkyWidget();
+
+  Future<void> _showAsWidget() async {
+    final messenger = ScaffoldMessenger.of(context);
+    String text;
+    try {
+      text = switch (await _widget.show(widget.client, _camera)) {
+        WidgetResult.placed => 'Das Widget zeigt jetzt ${_camera.name}.',
+        WidgetResult.asked => 'Bestätige, um das Widget abzulegen.',
+        WidgetResult.manual =>
+          'Lange auf den Startbildschirm drücken, „Widgets“ wählen und '
+              'allskyhub ablegen.',
+      };
+    } on Exception {
+      text = 'Das hat nicht geklappt. Bitte später noch einmal versuchen.';
+    }
+    messenger.showSnackBar(SnackBar(content: Text(text)));
   }
 
   void _open(Widget Function() screen) => Navigator.of(
@@ -276,6 +305,8 @@ class _CameraScreenState extends State<CameraScreen> {
           ),
           if (_overview case final overview?) ...[
             _HealthCard(health: overview.health),
+            if (overview.nowcast case final nowcast?)
+              _NowcastCard(nowcast: nowcast),
             if (overview.tonight case final tonight?)
               _TonightCard(tonight: tonight),
             if (overview.lastNight case final line?)
@@ -337,6 +368,13 @@ class _CameraScreenState extends State<CameraScreen> {
                     () => TargetScreen(client: widget.client, camera: _camera),
                   ),
                 ),
+                if (_widget.available)
+                  OutlinedButton.icon(
+                    key: const Key('as-widget'),
+                    icon: const Icon(Icons.widgets_outlined),
+                    label: const Text('Als Widget'),
+                    onPressed: _showAsWidget,
+                  ),
                 OutlinedButton.icon(
                   key: const Key('open-exports'),
                   icon: const Icon(Icons.download_outlined),
@@ -448,6 +486,50 @@ String _hm(DateTime? t) {
   if (t == null) return '–';
   final l = t.toLocal();
   return '${l.hour.toString().padLeft(2, '0')}:${l.minute.toString().padLeft(2, '0')}';
+}
+
+/// Roadmap N4: clouds in the next hour.
+class _NowcastCard extends StatelessWidget {
+  const _NowcastCard({required this.nowcast});
+
+  final Nowcast nowcast;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    String percent(double v) => '${(v * 100).round()} %';
+    return Card(
+      key: const Key('nowcast'),
+      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('Die nächste Stunde', style: theme.textTheme.titleMedium),
+            const SizedBox(height: 6),
+            Text('Jetzt ${percent(nowcast.cover)} Wolken. ${nowcast.summary}'),
+            for (final step in nowcast.steps)
+              Padding(
+                padding: const EdgeInsets.only(top: 4),
+                child: Text(
+                  'in ${step.minutes} Min.: etwa ${percent(step.cover)} '
+                  '(${step.label})',
+                  style: theme.textTheme.bodySmall,
+                ),
+              ),
+            const SizedBox(height: 6),
+            Text(
+              '${nowcast.wind} in etwa 3 km Höhe',
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: theme.colorScheme.onSurfaceVariant,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
 }
 
 class _TonightCard extends StatelessWidget {

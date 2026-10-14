@@ -452,6 +452,12 @@ class HubClient {
               as Map<String, dynamic>)['network']
           as bool;
 
+  /// Roadmap N6: a read-only key for the home-screen widget; replaces an older one.
+  Future<String> widgetKey(String cameraId) async =>
+      (await _send('POST', '/cameras/$cameraId/widget')
+              as Map<String, dynamic>)['token']
+          as String;
+
   /// Roadmap H5: the camera's Discord channel (owner only).
   Future<DiscordState> discord(String cameraId) async => DiscordState.fromJson(
     await _send('GET', '/cameras/$cameraId/discord') as Map<String, dynamic>,
@@ -796,13 +802,38 @@ class Overview {
       lastNight =
           (json['last_night'] as Map<String, dynamic>?)?['line'] as String?,
       lastNightId =
-          (json['last_night'] as Map<String, dynamic>?)?['night_id'] as String?;
+          (json['last_night'] as Map<String, dynamic>?)?['night_id'] as String?,
+      nowcast = json['nowcast'] == null
+          ? null
+          : Nowcast.fromJson(json['nowcast'] as Map<String, dynamic>);
 
   final bool online;
   final List<HealthItem> health;
   final Tonight? tonight;
   final String? lastNight;
   final String? lastNightId;
+  final Nowcast? nowcast;
+}
+
+/// Roadmap N4: clouds in the next hour from the camera and its neighbours.
+class Nowcast {
+  Nowcast.fromJson(Map<String, dynamic> json)
+    : cover = (json['cover'] as num).toDouble(),
+      summary = json['summary'] as String,
+      wind = json['wind'] as String,
+      steps = [
+        for (final s in json['steps'] as List<dynamic>)
+          (
+            minutes: (s as Map<String, dynamic>)['minutes'] as int,
+            cover: (s['cover'] as num).toDouble(),
+            label: s['label'] as String,
+          ),
+      ];
+
+  final double cover;
+  final String summary;
+  final String wind;
+  final List<({int minutes, double cover, String label})> steps;
 }
 
 /// One table of `GET /cameras/<id>/series`: times (Unix seconds) and value columns;

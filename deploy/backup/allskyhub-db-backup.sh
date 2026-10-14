@@ -14,8 +14,10 @@ mkdir -p "$DIR"
 tmp="$(mktemp "$DIR/.dump-XXXXXX")"
 trap 'rm -f "$tmp"' EXIT
 pg_dump --no-owner --no-privileges "$ALLSKYHUB_SERVER_DATABASE_URL" | gzip -9 > "$tmp"
-# A dump without the schema's last table is broken: refuse to replace a good one.
-gunzip -c "$tmp" | grep -q "CREATE TABLE public.user_account" || {
+# A dump without the user table is broken: refuse to replace a good one. grep reads to
+# the end (no -q): stopping at the first match would kill gunzip with SIGPIPE, and
+# pipefail would call a good dump broken once it outgrows the pipe buffer.
+gunzip -c "$tmp" | grep "CREATE TABLE public.user_account" >/dev/null || {
   echo "allskyhub-db-backup: dump looks incomplete, keeping the previous one" >&2
   exit 1
 }

@@ -130,7 +130,7 @@ Benjamin, 2026-10-14: "Mach alles", Firebase last. What a single camera cannot d
 | # | Item | Owner | Notes |
 |---|---|---|---|
 | N1 | Fireball alarm with a fall area | hub | done: a triangulated meteor ending below 35 km gives a rough fall strip (no speed, no wind), an alarm once per meteor to the cameras' owners and network members within 300 km (`notify_fireball`), public list `/feuerkugeln` when both cameras are in the network |
-| N2 | Aurora network: a real aurora event from a camera further north alerts clear-sky users | hub | |
+| N2 | Aurora network: a real aurora event from a camera further north alerts clear-sky users | hub | done: an aurora event (SPEC §6.4) of an oriented network camera with `peak_index` ≥ 5 alerts owners with `notify_aurora` whose camera is within 800 km, at most 2° further poleward, clear and dark, without its own aurora event; shares the 6 h quiet time with the Kp alarm |
 | N3 | Live meteor showers: radiant and hourly rate from all cameras, public page | hub | |
 | N4 | Cloud nowcast from neighbouring cameras' `cloud_map` and the wind | hub | |
 | N5 | Light-pollution trend over the years from the cameras' SQM | hub | |

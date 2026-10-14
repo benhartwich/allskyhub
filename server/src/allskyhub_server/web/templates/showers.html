@@ -1,0 +1,43 @@
+{% extends "base.html" %}
+{% block title %}Meteorströme live · allskyhub{% endblock %}
+{% block content %}
+<div class="page-head"><h1>Meteorströme live</h1></div>
+<p class="lead">Was die Kameras im allskyhub-Kameranetz gerade zählen: Meteore pro Stunde und klarer Kamera, und wo der Radiant eines Stroms liegt, gemessen aus Meteoren, die zwei Kameras zugleich gesehen haben.</p>
+
+{% for i in items %}{% set s = i.shower %}
+<section class="card stack shower">
+  <h2>{{ s.name }}</h2>
+  <dl class="facts">
+    <dt>Maximum</dt><dd>{% if i.days == 0 %}heute{% elif i.days > 0 %}in {{ i.days }} {{ 'Tag' if i.days == 1 else 'Tagen' }}{% else %}vor {{ -i.days }} {{ 'Tag' if i.days == -1 else 'Tagen' }}{% endif %} ({{ '%02d.%02d.' | format(s.peak[1], s.peak[0]) }}), bis zu {{ s.zhr }} Meteore pro Stunde unter idealem Himmel</dd>
+    <dt>Radiant heute</dt><dd>RA {{ ra_text(i.radiant[0]) }}, Dek. {{ dec_text(i.radiant[1]) }} (Katalog der IMO)</dd>
+    <dt>Im Netz, 24 h</dt><dd>{{ i.total }} {{ 'Meteor' if i.total == 1 else 'Meteore' }} vom Radianten</dd>
+    {% if i.mean %}<dt>Gemessener Radiant</dt><dd>RA {{ ra_text(i.mean[0]) }}, Dek. {{ dec_text(i.mean[1]) }}, aus {{ i.measured | length }} {{ 'Bahn' if i.measured | length == 1 else 'Bahnen' }} der letzten 10 Tage, {{ '%.1f' | format(i.mean_off) | replace('.', ',') }}° neben dem Katalog</dd>{% endif %}
+  </dl>
+</section>
+{% else %}
+<div class="card stack">
+  <h2>Gerade kein großer Strom</h2>
+  <p class="muted">Als Nächstes: <strong>{{ live.next_shower.name }}</strong> ab {{ '%02d.%02d.' | format(live.next_shower.start[1], live.next_shower.start[0]) }}, Maximum am {{ '%02d.%02d.' | format(live.next_shower.peak[1], live.next_shower.peak[0]) }} mit bis zu {{ live.next_shower.zhr }} Meteoren pro Stunde.</p>
+</div>
+{% endfor %}
+
+<section class="card stack">
+  <h2>Die letzten 24 Stunden</h2>
+  {% if live.cameras %}
+  <p class="muted small">{{ live.cameras }} {{ 'Kamera' if live.cameras == 1 else 'Kameras' }} im Kameranetz. Balken: Meteore je Stunde (Uhrzeit hier), darunter wie viele Kameras in der Stunde klaren Himmel hatten.</p>
+  <div class="hour-bars" role="img" aria-label="Meteore je Stunde im Kameranetz">
+    {% for h in live.hours %}
+    <div class="hour-bar" title="{{ h.start | clock }}: {{ h.meteors }} Meteore, {{ h.clear_cameras }} klare Kameras{% if h.rate() is not none %}, {{ '%.1f' | format(h.rate()) | replace('.', ',') }} je Kamera{% endif %}">
+      <span class="bar h{{ (10 * h.meteors / peak) | round(0, 'ceil') | int if peak else 0 }}"></span>
+      <span class="n">{{ h.meteors if h.meteors else '' }}</span>
+      <span class="t">{{ h.start | clock | truncate(2, true, '') }}</span>
+      <span class="c">{{ h.clear_cameras or '' }}</span>
+    </div>
+    {% endfor %}
+  </div>
+  {% else %}
+  <p class="muted">Noch keine Kamera im Kameranetz. Besitzer schalten es auf der Seite ihrer Kamera ein.</p>
+  {% endif %}
+</section>
+<p class="muted small">Gemessene Radianten sind scheinbare Radianten ohne Zenitanziehung und tägliche Aberration; sie können ein bis zwei Grad neben dem wahren liegen. Siehe auch die <a href="/feuerkugeln">Feuerkugeln</a>.</p>
+{% endblock %}

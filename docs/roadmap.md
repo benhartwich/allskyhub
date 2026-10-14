@@ -131,10 +131,10 @@ Benjamin, 2026-10-14: "Mach alles", Firebase last. What a single camera cannot d
 |---|---|---|---|
 | N1 | Fireball alarm with a fall area | hub | done: a triangulated meteor ending below 35 km gives a rough fall strip (no speed, no wind), an alarm once per meteor to the cameras' owners and network members within 300 km (`notify_fireball`), public list `/feuerkugeln` when both cameras are in the network |
 | N2 | Aurora network: a real aurora event from a camera further north alerts clear-sky users | hub | done: an aurora event (SPEC §6.4) of an oriented network camera with `peak_index` ≥ 5 alerts owners with `notify_aurora` whose camera is within 800 km, at most 2° further poleward, clear and dark, without its own aurora event; shares the 6 h quiet time with the Kp alarm |
-| N3 | Live meteor showers: radiant and hourly rate from all cameras, public page | hub | |
-| N4 | Cloud nowcast from neighbouring cameras' `cloud_map` and the wind | hub | |
-| N5 | Light-pollution trend over the years from the cameras' SQM | hub | |
-| N6 | App: home-screen widget, AR sky view | hub | |
+| N3 | Live meteor showers: radiant and hourly rate from all cameras, public page | hub | done (#234): `/meteorstroeme`, active showers from the IMO list, meteors per hour and clear network camera, apparent radiant from triangulated network pairs |
+| N4 | Cloud nowcast from neighbouring cameras' `cloud_map` and the wind | hub | done (#235): wind at 700 hPa from Open-Meteo, the own map's upwind sector and network cameras upwind, "Die nächste Stunde" on the camera page and in the app; a push "es klart auf" once real nights show how reliable it is |
+| N5 | Light-pollution trend over the years from the cameras' SQM | hub | done (#236): monthly median of clear moonless nights, Theil–Sen trend per year, statistics page and app |
+| N6 | App: home-screen widget, AR sky view | hub | done for Android: widget with a read-only key (#237), sky view "Himmel" from the phone's sensors (#238). Open: the iOS widget (WidgetKit extension, needs Xcode or Codemagic) |
 | N7 | Paid tier | hub | needs Benjamin's decisions (provider, prices) |
 
 ## Security (review 2026-10-13)

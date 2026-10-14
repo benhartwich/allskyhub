@@ -81,6 +81,11 @@ def clock(value: dt.datetime | None) -> str:
     return "–" if value is None else value.astimezone(UI_ZONE).strftime("%H:%M")
 
 
+def when(value: dt.datetime) -> str:
+    """ "14.10.2026, 22:14" in the hub's time zone."""
+    return value.astimezone(UI_ZONE).strftime("%d.%m.%Y, %H:%M")
+
+
 def mmss(seconds: float | None) -> str:
     if seconds is None:
         return "–"
@@ -119,6 +124,7 @@ _filters = cast(dict[str, Any], templates.env.filters)
 _filters["age"] = age
 _filters["night_title"] = night_title
 _filters["clock"] = clock
+_filters["when"] = when
 _filters["compass"] = compass
 _filters["mmss"] = mmss
 _filters["filesize"] = filesize

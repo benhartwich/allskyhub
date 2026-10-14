@@ -373,6 +373,10 @@ details.settings-group[open] > summary { margin-bottom: 8px; }
 /* Audit L6: the address the local login goes to, big enough to read. */
 .target-host { margin: 0; font-size: 1.35rem; font-weight: 700; overflow-wrap: anywhere; }
 
+/* Fireballs (routes_fireballs.py). */
+.badge.warn { background: rgba(242, 192, 107, .12); color: var(--warn); border-color: rgba(242, 192, 107, .35); }
+.fireballs { display: grid; gap: 10px; padding: 0; list-style: none; }
+.fireball-row { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 14px; text-decoration: none; color: inherit; }
 /* Meteor showers live (routes_showers.py): meteors per hour as bars, heights in tenths
    (the CSP allows no inline styles). */
 .hour-bars { display: grid; grid-template-columns: repeat(24, minmax(0, 1fr)); gap: 3px; align-items: end; }

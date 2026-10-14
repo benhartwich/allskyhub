@@ -720,6 +720,7 @@ class AccountSettings {
     'notify_aurora',
     'notify_summary',
     'notify_tonight',
+    'notify_fireball',
     'notify_by_mail',
   ];
 

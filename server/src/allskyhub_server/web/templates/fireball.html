@@ -1,0 +1,32 @@
+{% extends "base.html" %}
+{% block title %}Feuerkugel {{ pair.at | when }} · allskyhub{% endblock %}
+{% block head %}<link rel="stylesheet" href="{{ asset('leaflet/leaflet.css') }}">
+<script src="{{ asset('leaflet/leaflet.js') }}" defer></script>
+<script src="{{ asset('fireball_map.js') }}" defer></script>{% endblock %}
+{% block content %}
+<a class="back" href="/feuerkugeln">Alle Feuerkugeln</a>
+<div class="page-head"><h1>Feuerkugel am {{ pair.at | when }} Uhr</h1></div>
+{% if area %}<p class="badge warn">Meteoritenfall möglich</p>{% endif %}
+<figure class="card camera-map">
+  <div id="map" class="map" role="region" aria-label="Karte mit Bahn{% if area %} und möglichem Fallgebiet{% endif %}"></div>
+  <figcaption class="muted small">Blau: die Bahn über dem Boden, vom ersten Aufleuchten ({{ '%.0f' | format(pair.high_km) }} km Höhe) bis zum Erlöschen ({{ '%.0f' | format(pair.low_km) }} km).{% if area %} Orange: das mögliche Fallgebiet.{% endif %}</figcaption>
+</figure>
+<script type="application/json" id="map-config">{{ map_config | tojson }}</script>
+<div class="card">
+  <dl class="facts">
+    <dt>Höhe</dt><dd>{{ '%.0f' | format(pair.high_km) }} km → {{ '%.0f' | format(pair.low_km) }} km</dd>
+    <dt>Länge der Spur</dt><dd>{{ '%.0f' | format(pair.length_km) }} km, flog nach {{ heading }}</dd>
+    {% if area %}<dt>Neigung</dt><dd>{{ area.slope_deg | round | int }}° gegen den Horizont</dd>{% endif %}
+    <dt>Gesehen von</dt><dd>{% for c in cameras %}{% if c.link %}<a href="{{ c.link }}">{{ c.name }}</a>{% else %}{{ c.name }}{% endif %}{{ ' und ' if not loop.last }}{% endfor %}</dd>
+    <dt>Schnittwinkel</dt><dd>{{ pair.convergence_deg | round | int }}° {% if pair.convergence_deg < 20 %}<span class="warn">(flach, ungenauer)</span>{% endif %}</dd>
+  </dl>
+</div>
+{% if area %}
+<div class="card stack">
+  <h2>Mögliches Fallgebiet</h2>
+  <p>Das Leuchten endete in {{ '%.0f' | format(area.end_km) }} km Höhe. So tief kommen nur Brocken, die nicht ganz verglühen. Kleine Stücke fallen fast senkrecht unter das Ende der Leuchtspur, schwere fliegen noch einige Kilometer weiter (dunkler Flug).</p>
+  <p class="muted">Eine grobe Abschätzung: ohne die Geschwindigkeit (eine Belichtung zeigt sie nicht) und ohne den Wind in der Höhe, der die Stücke um Kilometer versetzen kann. Fachleute rechnen mit mehr Kameras genauer. Melde die Feuerkugel deshalb bei der International Meteor Organization, und betritt für eine Suche keine Grundstücke ohne Erlaubnis.</p>
+  <p><a class="button secondary" href="{{ fireball_form }}" rel="noopener" target="_blank">Bei der IMO melden</a></p>
+</div>
+{% endif %}
+{% endblock %}

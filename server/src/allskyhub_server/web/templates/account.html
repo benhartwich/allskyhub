@@ -26,6 +26,7 @@
   <label class="check"><input type="checkbox" name="notify_aurora" value="true" {% if user.notify_aurora %}checked{% endif %}> Polarlicht möglich: Kp-Index hoch genug für den Standort und der Himmel über der Kamera klar</label>
   <label class="check"><input type="checkbox" name="notify_summary" value="true" {% if user.notify_summary %}checked{% endif %}> Morgens eine Zusammenfassung der Nacht</label>
   <label class="check"><input type="checkbox" name="notify_tonight" value="true" {% if user.notify_tonight %}checked{% endif %}> Abends, wenn die Nacht klar wird (mindestens 2 Stunden klar und dunkel laut Vorhersage)</label>
+  <label class="check"><input type="checkbox" name="notify_fireball" value="true" {% if user.notify_fireball %}checked{% endif %}> Feuerkugel mit möglichem Meteoritenfall: von zwei Kameras gesehen, bei dir in der Nähe (300 km) oder von deiner Kamera</label>
   {% if mail_enabled %}<label class="check"><input type="checkbox" name="notify_by_mail" value="true" {% if user.notify_by_mail %}checked{% endif %}> <strong>Auch per E-Mail</strong> an {{ user.email }}</label>{% endif %}
   <button type="submit">Speichern</button>
 </form>

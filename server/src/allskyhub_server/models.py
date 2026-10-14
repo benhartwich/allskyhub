@@ -64,6 +64,8 @@ class User(Base):
     notify_summary: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
     # Roadmap C1: in the evening, when the night ahead looks clear.
     notify_tonight: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
+    # A fireball that may have dropped meteorites, seen by the network near the user's cameras.
+    notify_fireball: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
     # Roadmap #15: the notifications above (all but single detections) also by e-mail.
     notify_by_mail: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
     created_at: Mapped[dt.datetime] = mapped_column(_tz(), server_default=func.now())
@@ -430,6 +432,10 @@ class MeteorPair(Base):
     low_km: Mapped[float] = mapped_column(Float)
     length_km: Mapped[float] = mapped_column(Float)
     convergence_deg: Mapped[float] = mapped_column(Float)
+    # The brighter of the two events' `peak` (SPEC §6.4), for fireballs (devices/fireball.py),
+    # and whether the fireball alarm for this meteor went out.
+    peak: Mapped[float | None] = mapped_column(Float)
+    alerted: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
     created_at: Mapped[dt.datetime] = mapped_column(_tz(), server_default=func.now())
 
 

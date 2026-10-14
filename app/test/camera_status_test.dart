@@ -1,6 +1,7 @@
 import 'dart:convert';
 
 import 'package:allskyhub_app/api/hub_client.dart';
+import 'package:allskyhub_app/platform/sky_widget.dart';
 import 'package:allskyhub_app/screens/camera_screen.dart';
 import 'package:allskyhub_app/screens/camera_status.dart';
 import 'package:flutter/material.dart';
@@ -257,4 +258,51 @@ void main() {
     expect(find.byKey(const Key('open-measurements')), findsOneWidget);
     await tester.pumpWidget(const SizedBox()); // stops the refresh timer
   });
+
+  testWidgets('camera screen puts the camera on the home-screen widget', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(400, 2400);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    final camera = Camera.fromJson({...cameraJson, 'latest_image_at': null});
+    final client = HubClient(
+      baseUrl: 'https://hub.example',
+      token: 'tok',
+      httpClient: MockClient(
+        (_) async => http.Response(jsonEncode(cameraJson), 200),
+      ),
+    );
+    final channel = _FakeWidget();
+    await tester.pumpWidget(
+      MaterialApp(
+        home: CameraScreen(
+          client: client,
+          camera: camera,
+          widgetChannel: channel,
+        ),
+      ),
+    );
+    await tester.pump();
+    final button = find.byKey(const Key('as-widget'));
+    await tester.ensureVisible(button);
+    await tester.tap(button);
+    await tester.pump();
+    expect(channel.shown, [camera.id]);
+    expect(find.textContaining('„Widgets“ wählen'), findsOneWidget);
+    await tester.pumpWidget(const SizedBox()); // stops the refresh timer
+  });
+}
+
+class _FakeWidget implements SkyWidgetChannel {
+  final shown = <String>[];
+
+  @override
+  bool get available => true;
+
+  @override
+  Future<WidgetResult> show(HubClient client, Camera camera) async {
+    shown.add(camera.id);
+    return WidgetResult.manual;
+  }
 }

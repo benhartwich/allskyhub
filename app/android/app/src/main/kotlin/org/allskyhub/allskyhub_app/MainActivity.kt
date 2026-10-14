@@ -1,5 +1,7 @@
 package org.allskyhub.allskyhub_app
 
+import android.appwidget.AppWidgetManager
+import android.content.ComponentName
 import android.content.Context
 import android.net.ConnectivityManager
 import android.net.Network
@@ -18,6 +20,22 @@ class MainActivity : FlutterActivity() {
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
+        // lib/platform/sky_widget.dart: which camera the home-screen widget shows (roadmap N6).
+        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "org.allskyhub.app/widget")
+            .setMethodCallHandler { call, result ->
+                when (call.method) {
+                    "configure" -> {
+                        SkyWidget.configure(
+                            this,
+                            call.argument<String>("hub") ?: "",
+                            call.argument<String>("key") ?: "",
+                            call.argument<String>("name") ?: "allskyhub",
+                        )
+                        result.success(pinWidget(call.argument<Boolean>("pin") == true))
+                    }
+                    else -> result.notImplemented()
+                }
+            }
         // lib/platform/wifi_binding.dart: keep traffic on the camera's setup Wi-Fi, which has
         // no internet, instead of falling back to mobile data; join it from the app.
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "org.allskyhub.app/wifi")
@@ -48,6 +66,17 @@ class MainActivity : FlutterActivity() {
                     else -> result.notImplemented()
                 }
             }
+    }
+
+    // Offers to put the widget on the home screen (Android 8+, if the launcher can);
+    // "placed" when there already is one.
+    private fun pinWidget(pin: Boolean): String {
+        val manager = AppWidgetManager.getInstance(this)
+        val provider = ComponentName(this, SkyWidget::class.java)
+        if (manager.getAppWidgetIds(provider).isNotEmpty()) return "placed"
+        if (!pin || Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return "manual"
+        if (!manager.isRequestPinAppWidgetSupported) return "manual"
+        return if (manager.requestPinAppWidget(provider, null, null)) "asked" else "manual"
     }
 
     // SPEC §7.1: the setup network allskyhub-XXXX, WPA2 with the setup key (or open for an

@@ -23,6 +23,7 @@ from allskyhub_server.admin.deploy import GitHub
 from allskyhub_server.api import app as app_api
 from allskyhub_server.api import app_manage, app_overview
 from allskyhub_server.api import device as device_api
+from allskyhub_server.api import widget as app_widget
 from allskyhub_server.auth.hub_keys import HubKeys
 from allskyhub_server.db import create_engine, create_sessionmaker
 from allskyhub_server.devices import aircraft, domains
@@ -289,6 +290,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(app_api.router)
     app.include_router(app_overview.router)
     app.include_router(app_manage.router)
+    app.include_router(app_widget.router)
 
     @app.get("/healthz", include_in_schema=False)
     async def healthz() -> dict[str, str]:  # pyright: ignore[reportUnusedFunction]

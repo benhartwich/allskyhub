@@ -76,7 +76,7 @@ async def test_longer_retention_fetches_and_keeps_the_full_picture(
     ):
         async with device_ws(live_app, token) as ws:
             await send(ws, meteor())
-            asked = {(await expect_request(ws)).variant for _ in expected}
+            asked = {FrameVariant((await expect_request(ws)).variant) for _ in expected}
             assert asked == expected
         for variant in asked:  # as if the device had uploaded them
             path = store.event_path(dev.device_id, NIGHT, METEOR, variant)

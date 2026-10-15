@@ -15,7 +15,7 @@
 </div>
 
 {% if tracks %}
-<p><strong>{{ count }}</strong>{% if mapped | length < tracks | length %} <span class="muted small">· {{ tracks | length - mapped | length }} ohne Himmelsrichtung, nur in der Liste</span>{% endif %}</p>
+<p><strong>{{ count or "Keine Überflüge" }}</strong>{% if meteor_count %} · {{ meteor_count }} {{ "Meteor" if meteor_count == 1 else "Meteore" }} zum Vergleich{% endif %}{% if mapped | length < tracks | length %} <span class="muted small">· {{ tracks | length - mapped | length }} ohne Himmelsrichtung, nur in der Liste</span>{% endif %}</p>
 
 {% if mapped %}
 <section class="card stack ovf" data-ovf data-zone="{{ zone }}">
@@ -81,6 +81,6 @@
   </table></div>
 </section>
 {% else %}
-<div class="card empty"><p class="muted">Keine Überflüge {% if night_id %}in dieser Nacht{% else %}bisher{% endif %}. Satelliten und Flugzeuge findet der Meteordetektor nachts; sie erscheinen hier statt bei den Meteoren.</p></div>
+<div class="card empty"><p class="muted">Keine Überflüge und Meteore {% if night_id %}in dieser Nacht{% else %}bisher{% endif %}. Satelliten und Flugzeuge findet der Meteordetektor nachts; sie erscheinen hier statt bei den Meteoren.</p></div>
 {% endif %}
 {% endblock %}

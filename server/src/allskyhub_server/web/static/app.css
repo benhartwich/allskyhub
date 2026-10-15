@@ -442,7 +442,7 @@ pre { margin: 0; padding: 12px 14px; overflow-x: auto; border-radius: 12px; back
 pre code { white-space: pre; }
 
 /* Overflights on the sky map (roadmap L29, overflights.js) */
-.ovf { --ovf-sat: var(--accent); --ovf-air: var(--warn); --ovf-unk: var(--accent-2); }
+.ovf { --ovf-sat: var(--accent); --ovf-air: var(--warn); --ovf-unk: var(--text-2); --ovf-met: var(--accent-2); }
 .ovf-map { width: 100%; max-width: 560px; height: auto; margin: 0 auto; display: block; }
 .ovf-sky { fill: #050a1f; stroke: var(--line); }
 .ovf-ring { fill: none; stroke: var(--line); stroke-dasharray: 3 4; }
@@ -452,7 +452,7 @@ pre code { white-space: pre; }
 .ovf-track { cursor: pointer; }
 .ovf-track .ovf-line { fill: none; stroke-width: 2; stroke-linecap: round; }
 .ovf-track .ovf-hit { fill: none; stroke: transparent; stroke-width: 12; }
-.ovf-track.satellite { color: var(--ovf-sat); } .ovf-track.aircraft { color: var(--ovf-air); } .ovf-track.unknown { color: var(--ovf-unk); }
+.ovf-track.satellite { color: var(--ovf-sat); } .ovf-track.aircraft { color: var(--ovf-air); } .ovf-track.unknown { color: var(--ovf-unk); } .ovf-track.meteor { color: var(--ovf-met); }
 .ovf-track .ovf-line { stroke: currentColor; } .ovf-track .ovf-head { fill: currentColor; }
 .ovf-track.old { opacity: .25; }
 .ovf-track.on .ovf-line, .ovf-track:focus .ovf-line { stroke-width: 4; }
@@ -461,7 +461,8 @@ pre code { white-space: pre; }
 .ovf-key::after, .ovf-dot { content: ""; display: inline-block; width: 18px; height: 3px; border-radius: 2px; margin-left: 2px; vertical-align: middle; }
 .ovf-key.satellite::after, .ovf-dot.satellite { background: var(--accent); }
 .ovf-key.aircraft::after, .ovf-dot.aircraft { background: var(--warn); }
-.ovf-key.unknown::after, .ovf-dot.unknown { background: var(--accent-2); }
+.ovf-key.unknown::after, .ovf-dot.unknown { background: var(--text-2); }
+.ovf-key.meteor::after, .ovf-dot.meteor { background: var(--accent-2); }
 .ovf-dot { margin: 0 6px 0 0; }
 .ovf-player { display: flex; gap: 10px; align-items: center; }
 .ovf-player input[type="range"] { flex: 1; min-width: 0; }

@@ -1,4 +1,5 @@
-"""The night's overflights on a sky map (SPEC §6.4 Overflights, roadmap L29).
+"""The night's overflights on a sky map (SPEC §6.4 Overflights, roadmap L29), with the
+possible meteors of the night as their own kind (Benjamin, 2026-10-15).
 
 A polar map of the whole sky as seen looking up: the zenith in the middle, the horizon as
 the circle, north at the top and east on the left. Each overflight is a line along the
@@ -15,6 +16,7 @@ from dataclasses import dataclass
 from typing import Any
 
 from allskyhub_server.devices import events
+from allskyhub_server.devices.event_text import shower_name
 from allskyhub_server.models import EventRecord
 from allskyhub_sky import sky_lines
 
@@ -76,7 +78,7 @@ def _ends(event: EventRecord) -> tuple[tuple[float, float], tuple[float, float]]
 @dataclass(frozen=True)
 class Track:
     event: EventRecord
-    group: str  # satellite, aircraft, unknown
+    group: str  # satellite, aircraft, unknown, meteor
     name: str | None
     path: str | None  # SVG path on the map, None without an orientation
     head: tuple[float, float] | None  # where it ended, for the arrow dot
@@ -90,16 +92,24 @@ class Sky:
     names: list[tuple[str, float, float]]
 
 
+def _shower(event: EventRecord) -> str | None:
+    shower = (event.data or {}).get("shower")
+    return shower_name(shower) if isinstance(shower, str) and shower else None
+
+
 def tracks(rows: list[EventRecord]) -> list[Track]:
     out: list[Track] = []
     for e in rows:
         group = events.overflight(e)
         if group is None:
-            continue
+            # Possible meteors (not dismissed) as their own kind, for comparison.
+            if e.kind != "meteor" or events.dismissed(e):
+                continue
+            group = "meteor"
         ends = _ends(e)
         out.append(
             Track(
-                e, group, events.overflight_name(e),
+                e, group, events.overflight_name(e) if group != "meteor" else _shower(e),
                 _path(great_circle(*ends)) if ends else None,
                 xy(*ends[1]) if ends else None,
                 events.overflight_path(e),

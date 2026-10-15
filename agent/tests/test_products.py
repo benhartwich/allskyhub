@@ -265,6 +265,7 @@ def test_flash_frames_stay_out_of_the_startrails(tmp_path: Path) -> None:
     """SPEC §5.2 (roadmap L32): the lit frame is not in the startrails, the rest is."""
     store = ImageStore(tmp_path, TZ)
     t0 = datetime(2026, 10, 14, 20, 0, tzinfo=UTC)
+    nights: set[str] = set()
     for i in range(12):
         lamp = i == 5
         rgb = np.full((40, 60, 3), 200 if lamp else 40, dtype=np.uint8)
@@ -272,7 +273,8 @@ def test_flash_frames_stay_out_of_the_startrails(tmp_path: Path) -> None:
         mean = 200 / 255 if lamp else 40 / 255
         frame = _frame(stored.night_id, stored.name, Mode.NIGHT, t0 + timedelta(minutes=i), mean)
         store.append_index(frame)
-    night = store.read_index(stored.night_id)[0].night_id
+        nights.add(stored.night_id)
+    (night,) = nights
     build_night(store, night, ProductConfig(timelapse=False, startrails_max_mean=0.9))
     with PILImage.open(store.night_dir(night) / STARTRAILS) as st:
         assert int(np.asarray(st).max()) < 100

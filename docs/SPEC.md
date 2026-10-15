@@ -462,6 +462,15 @@ the meteor's midpoint, the centroid of the lit area, of the green or of the blue
 agent computes them with the orientation (§4.8) valid when it saves the event, so they
 stay right after a later re-solve; both are null while the camera has no orientation.
 
+**Original frame** (Benjamin, 2026-10-15, roadmap L28). An event with a picture also names
+the stored frame it was found in and where its picture lies in it, so the owner can judge it
+in the whole sky: `frame` (that frame's name, §4.5, as for `upload_frame`) and `crop_x`,
+`crop_y`, `crop_w`, `crop_h` (the picture's window in that frame's pixels, all four null
+when the picture is the whole frame, as for lightning). An episode's (`aurora`, `nlc`)
+`frame` is that of its current picture and changes with `image_rev`. Events without
+`frame` (agents before this rule, imported events whose source does not name the frame)
+have no original.
+
 A `meteor` also carries the two ends of its track for triangulation between cameras
 (roadmap C4): `start_azimuth_deg`, `start_altitude_deg`, `end_azimuth_deg`,
 `end_altitude_deg` (same orientation and nulls as above) and `track_ordered` (bool). A
@@ -553,6 +562,18 @@ picture stays the first piece's. At most 300 non-`meteor`
 events are kept per night (a growing one counts once); beyond that they are only counted in the log. Nothing is deleted:
 the owner sees them with "Aussortierte zeigen" and can label any of them a meteor.
 
+**Overflights** (Benjamin, 2026-10-15, roadmap L29). Meteor events whose `trail` is
+`moving`, `circle` or `dashed`, or whose label (automatic or the owner's) has the reason
+`aircraft` or `satellite`, are overflights. The local UI and the hub list them per night
+under "Überflüge", apart from the meteors and from "Aussortierte", grouped as Satelliten,
+Flugzeuge and Unbekannt: time (`start`–`end`), path across the sky from `start_*` to
+`end_*` as compass points and altitudes (if known), picture and original frame, and the
+name from the label's `detail` (a satellite's name and NORAD number, an aircraft's call
+sign). The night's summary counts them ("23 Überflüge: 6 Satelliten, 3 Flugzeuge,
+14 unbekannt"); they still count nowhere as meteors. The camera shows the names it got
+from the hub with `label_event`; without the hub only its own verdicts. Overflights are
+found by the meteor detector and therefore only at night.
+
 ### 6.5 Hub → device
 
 `command`: `set_settings`, `focus_mode` (`{on: bool}`, §7), `restart`, `update`,
@@ -590,6 +611,15 @@ right away and the full product when someone opens it.
 device uploads the event's picture with
 `PUT /device/v1/events/{night_id}/{event_id}?variant=<variant>` (`image/jpeg`), then
 answers `ack`, or `error` with `not_found` if the event has no picture or it is gone.
+
+With `variant` `original` (roadmap L28) it uploads the whole frame named by the event's
+`frame` (§6.4) in full size instead, and answers `not_found` once retention (§4.5) removed
+that frame; an older device answers `invalid_args`. The hub fetches the original right away
+for every event that is not a false positive and keeps it with the event's full picture;
+for a false positive, overflights included, only when someone opens the event, while the
+camera still has the frame. Both UIs show the event's picture and, one click away, the
+original frame with the picture's window outlined (for lightning, the lit area's centroid
+marked).
 
 **`local_access`** `{verifier}`: the verifier of the camera's offline code (§7.4), a PHC
 string `$argon2id$v=19$m=19456,t=2,p=1$<salt>$<hash>`, or `null` to remove it. The device
@@ -1117,6 +1147,25 @@ counts. A match sets the automatic label `false_positive`/`satellite` with `deta
 satellite's name and NORAD number (`"STARLINK-1234 44238"`; the ISS and Tiangong as
 `"ISS"` and `"Tiangong"`), which goes to the camera with `label_event`. Events are checked
 when they arrive, also after an outage, since orbits can be computed for any time.
+
+### 7.10 Lightning cross-check
+
+Roadmap H8 (Benjamin, 2026-10-15): the camera sees a flash only as sky that lights up for
+one frame, which a lamp or a car near the camera does as well; its storms on calm October
+nights were such light. The hub therefore checks lightning against the flashes the
+Lightning Imager on Meteosat Third Generation (MTG-I, EUMETSAT open data, a free account)
+saw from space.
+
+The hub loads LI's flash product (LI-2-LFL) every 10 minutes for Europe and keeps 48 hours
+of flashes (time, latitude, longitude). A lightning event is near a storm when LI saw a
+flash within 400 km of the camera in `start − 60 s .. end + 60 s`; farther, its light is
+below the horizon. The hub shows that next to the event ("Blitzsatellit: Blitze in 230 km
+Richtung NW"). When LI saw no flash within 400 km during a whole storm (every event with
+the same `data.storm`, §6.4), each of its events gets the automatic label
+`false_positive`/`other` with detail `kein Gewitter (Blitzsatellit)`, which goes to the
+camera with `label_event`. Not checked, and shown as unchecked: imported events, events
+older than the kept flashes and events whose window LI data does not cover (an outage on
+either side). Labels set by the owner win as always (§6.4 Labels).
 
 ## 8. Updates
 

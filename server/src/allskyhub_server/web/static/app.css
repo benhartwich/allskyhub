@@ -406,3 +406,22 @@ details.settings-group[open] > summary { margin-bottom: 8px; }
 .features { padding-left: 20px; margin: 0; }
 .features li + li { margin-top: 4px; }
 .plus-state { font-weight: 600; }
+
+/* Access request, parts list and first steps (web/routes_access.py) */
+.hp { position: absolute; left: -10000px; width: 1px; height: 1px; overflow: hidden; }
+fieldset { border: 0; padding: 0; margin: 0; }
+legend { margin-bottom: 6px; }
+label.check { display: flex; gap: 8px; align-items: baseline; }
+.parts { list-style: none; padding: 0; margin: 0; display: grid; gap: 14px; }
+.parts li { display: grid; gap: 4px; }
+.part-head { display: flex; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+.part-price { color: var(--text-2); white-space: nowrap; }
+.part-links { display: flex; gap: 14px; flex-wrap: wrap; }
+.wizard-steps { list-style: none; padding: 0; margin: 0 0 16px; display: flex; gap: 8px; flex-wrap: wrap; }
+.wizard-steps a { display: inline-flex; align-items: center; gap: 6px; padding: 6px 12px; border-radius: 999px; border: 1px solid var(--line); color: var(--text-2); text-decoration: none; }
+.wizard-steps .current a { color: var(--text); border-color: var(--accent); }
+.wizard-steps .done a { color: var(--text); }
+.wizard-num { display: inline-grid; place-items: center; width: 22px; height: 22px; border-radius: 50%; background: var(--surface-2); font-size: 13px; }
+.wizard-steps .current .wizard-num { background: var(--accent); color: var(--accent-ink); }
+.howto { padding-left: 22px; margin: 0; display: grid; gap: 10px; }
+.wizard-nav { display: flex; gap: 10px; justify-content: space-between; }

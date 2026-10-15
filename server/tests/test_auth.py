@@ -84,7 +84,7 @@ async def test_no_invitation_for_existing_account(client: httpx.AsyncClient) -> 
 async def test_sign_up_is_gone(client: httpx.AsyncClient) -> None:
     assert (await client.get("/signup")).status_code == 404
     login = await client.get("/login")
-    assert "nur auf Einladung" in login.text
+    assert 'href="/zugang"' in login.text
     assert "/signup" not in (await client.get("/")).text
 
 

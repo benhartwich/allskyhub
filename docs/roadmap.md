@@ -140,6 +140,7 @@ Benjamin, 2026-10-14: "Mach alles", Firebase last. What a single camera cannot d
 | N5 | Light-pollution trend over the years from the cameras' SQM | hub | done (#236): monthly median of clear moonless nights, Theil–Sen trend per year, statistics page and app |
 | N6 | App: home-screen widget, AR sky view | hub | done for Android: widget with a read-only key (#237), sky view "Himmel" from the phone's sensors (#238). Open: the iOS widget (WidgetKit extension, needs Xcode or Codemagic) |
 | N7 | Paid tier "Plus": 90 days of full images, a year of thumbnails and night products; Paddle, 4.99 €/month or 49 €/year, first month free | hub | in progress: Plus retention, admin gift, trial month, Paddle checkout and webhooks, terms (AGB) done; S3 archive next |
+| N8 | Go-live: "Zugang beantragen" instead of open sign-up, parts list with Daniel Nimmervoll's housing, first steps for new accounts | hub | Benjamin, 2026-10-15: requests like on portal.eu, admins invite or decline; `/zugang`, `/hardware`, `/start` |
 
 ## Security (review 2026-10-13)
 

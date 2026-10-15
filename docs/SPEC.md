@@ -1223,7 +1223,8 @@ default `0x03`, interrupt on `lightning_sensor_irq_gpio`, BCM pin, no default), 
 housing that dampens). The agent calibrates the sensor's antenna once at start, reads a
 strike on its interrupt (estimated distance 1..40 km or "out of range", energy) and counts
 disturbers and noise; it never slows capture. `status.lightning_sensor` is `{at, strikes_30min,
-nearest_km, last_strike_at, error}`, null while off.
+nearest_km, last_strike_at, error}` (`error` null, `not_found`, `no_interrupt` when the
+interrupt line stays silent while the antenna is tuned, or `bad_data`), null while off.
 
 - **Confirmation.** While the sensor is on, every `lightning` event (§6.4) gets
   `data.sensor_km`: the nearest strike the sensor heard in `start − 60 s .. end + 60 s`,

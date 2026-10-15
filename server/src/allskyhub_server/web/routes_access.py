@@ -12,7 +12,7 @@ import logging
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, Form, HTTPException, Request
-from fastapi.responses import Response
+from fastapi.responses import RedirectResponse, Response
 
 from allskyhub_server.auth import access_requests, ratelimit
 from allskyhub_server.auth.accounts import AccountError
@@ -26,6 +26,7 @@ from allskyhub_server.web.deps import (
     client_ip,
     csrf_protect,
 )
+from allskyhub_server.web.image_download import LatestImage
 from allskyhub_server.web.render import render
 
 log = logging.getLogger(__name__)
@@ -42,6 +43,9 @@ def _hardware_context() -> dict[str, object]:
         "videos": hardware.VIDEOS,
         "total_hq": hardware.TOTAL_HQ,
         "total_zwo": hardware.TOTAL_ZWO,
+        "voucher": hardware.VOUCHER,
+        "voucher_from": hardware.VOUCHER_FROM,
+        "voucher_off": hardware.VOUCHER_OFF,
     }
 
 
@@ -120,6 +124,14 @@ async def allsky_guide(request: Request, session: OptionalSession, lang: str = "
     return render(request, "allsky_guide.html", {"en": lang == "en"}, session=session)
 
 
+@router.get("/download/image")
+async def download_image(request: Request) -> Response:
+    """The newest SD card image (the latest release on GitHub), for links in posts."""
+    latest: LatestImage = request.app.state.latest_image
+    image = await latest.get()
+    return RedirectResponse(image.url if image else latest.releases_url, status_code=302)
+
+
 @router.get("/start")
 async def first_steps(
     request: Request, session: CurrentSession, schritt: str = STEPS[0]
@@ -127,11 +139,13 @@ async def first_steps(
     if schritt not in STEPS:
         raise HTTPException(404)
     index = STEPS.index(schritt)
+    latest: LatestImage = request.app.state.latest_image
     return render(
         request,
         "start.html",
         {
             **_hardware_context(),
+            "image": await latest.get() if schritt == "image" else None,
             "step": schritt,
             "index": index,
             "steps": STEPS,

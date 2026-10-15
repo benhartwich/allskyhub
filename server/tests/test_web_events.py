@@ -113,7 +113,7 @@ async def test_web_events(
         assert "Vollbild wird von der Kamera geholt" in page
         cmd = await next_command(ws)
         assert cmd.name is CommandName.UPLOAD_EVENT
-        assert UploadEventArgs.model_validate(cmd.args).variant is FrameVariant.FULL
+        assert UploadEventArgs.model_validate(cmd.args).variant == FrameVariant.FULL
         state = (await client.get(f"{detail}/state")).text
         assert "Vollbild wird von der Kamera geholt" in state
         with pytest.raises(TimeoutError):  # asked only once

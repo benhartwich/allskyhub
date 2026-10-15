@@ -68,7 +68,7 @@ async def test_gallery_lists_archived_frames_and_thumbs_come_more_often(
             await db.commit()
         await send(ws, frame_info("image-2.jpg"))
         second = await _upload_requested(live_app, token, ws, 1)
-        assert second[0].variant is FrameVariant.THUMB
+        assert second[0].variant == FrameVariant.THUMB
         with pytest.raises(TimeoutError):
             await asyncio.wait_for(ws.recv(), 0.3)
 

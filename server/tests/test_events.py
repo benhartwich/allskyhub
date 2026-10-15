@@ -104,7 +104,7 @@ async def test_events_flow(
         # The full picture is fetched when someone opens it.
         assert (await client.get(image, headers=auth)).status_code == 202
         full = await expect_request(ws)
-        assert full.variant is FrameVariant.FULL
+        assert full.variant == FrameVariant.FULL
         assert (await client.get(image, headers=auth)).status_code == 202  # no second command
         assert await put(live_app, token, FrameVariant.FULL, JPEG) == 204
         assert (await client.get(image, headers=auth)).content == JPEG

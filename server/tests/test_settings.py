@@ -100,7 +100,7 @@ async def test_web_settings_form(app: FastAPI, client: httpx.AsyncClient, live_a
             .where(Device.id == dev.device_id)
             .values(
                 last_status={
-                    "settings": {"latitude": 48.14, "longitude": 14.39, "timezone": "Europe/Vienna",
+                    "settings": {"latitude": 48.31, "longitude": 14.29, "timezone": "Europe/Vienna",
                                  "camera": "zwo-asi678mc", "day_delay_s": 30.0,
                                  "night_delay_s": 0.0},
                 }
@@ -108,7 +108,7 @@ async def test_web_settings_form(app: FastAPI, client: httpx.AsyncClient, live_a
         )  # fmt: skip
         await db.commit()
     page = (await client.get(f"/cameras/{dev.device_id}")).text
-    assert 'value="48.14"' in page
+    assert 'value="48.31"' in page
     assert 'value="zwo-asi678mc" selected' in page
     assert "disabled" in page  # offline: cannot apply
     url = f"/cameras/{dev.device_id}/settings"

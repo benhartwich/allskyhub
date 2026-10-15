@@ -57,7 +57,7 @@ except `allskyhub_setup` are optional):
 {"allskyhub_setup": 1,
  "wifi": {"ssid": "Home", "password": "secret-password"}, "wifi_country": "AT",
  "hub_url": "https://allskyhub.org",
- "location": {"latitude": 48.14, "longitude": 14.39}, "timezone": "Europe/Vienna",
+ "location": {"latitude": 48.31, "longitude": 14.29}, "timezone": "Europe/Vienna",
  "camera": "auto"}
 ```
 
@@ -136,7 +136,7 @@ keeps its own network setup.
    and start with a settings file (owned by `allskyhub`):
 
    ```json
-   {"latitude": 48.14, "longitude": 14.39, "timezone": "Europe/Vienna", "camera": "zwo-asi678mc"}
+   {"latitude": 48.31, "longitude": 14.29, "timezone": "Europe/Vienna", "camera": "zwo-asi678mc"}
    ```
 
    `--lat`, `--lon`, `--tz` and `--profile` on the command line would override the file,
@@ -336,7 +336,7 @@ uv run ruff check . && uv run ruff format --check .
 uv run pyright
 uvx --from 'reuse[charset-normalizer]' reuse lint
 tools/dev-postgres.sh                      # PostgreSQL in Docker for the hub's tests
-uv run allskyhub-agent --sim --lat 48.14 --lon 14.39 run --frames 20 --data /tmp/ash
+uv run allskyhub-agent --sim --lat 48.31 --lon 14.29 run --frames 20 --data /tmp/ash
 ```
 
 The protocol between camera and hub is specified in [SPEC.md](SPEC.md).

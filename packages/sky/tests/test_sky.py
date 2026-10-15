@@ -28,8 +28,8 @@ def test_tilt_moves_the_zenith_toward_its_lean() -> None:
 
 
 def test_polaris_stands_at_the_latitude() -> None:
-    alt, az = alt_az(*precess(37.95, 89.26, AT), sidereal_deg(AT, 14.39), 48.14)
-    assert abs(alt - 48.14) < 1.0
+    alt, az = alt_az(*precess(37.95, 89.26, AT), sidereal_deg(AT, 14.29), 48.31)
+    assert abs(alt - 48.31) < 1.0
     assert az < 2 or az > 358
 
 
@@ -37,7 +37,7 @@ def test_overlay() -> None:
     assert usable(LENS)
     assert not usable(LENS.model_copy(update={"width": 0}))
     assert not usable(None)
-    drawn = overlay(LENS, 0.0, True, 48.14, 14.39, AT)
+    drawn = overlay(LENS, 0.0, True, 48.31, 14.29, AT)
     assert drawn.paths
     assert (drawn.width, drawn.height) == (1200, 1200)
     assert {label.text for label in drawn.cardinals} == {"N", "O", "S", "W"}
@@ -49,7 +49,7 @@ def test_cardinals_stay_in_a_cropped_frame() -> None:
     their true direction from the centre."""
     wide = Lens(cx=1920, cy=1080, a1=2010, a3=0, tilt_east_deg=0, tilt_north_deg=0,
                 width=3840, height=2160)  # fmt: skip
-    drawn = overlay(wide, 0.0, True, 48.14, 14.39, AT)
+    drawn = overlay(wide, 0.0, True, 48.31, 14.29, AT)
     margin = drawn.font
     found = {label.text: label for label in drawn.cardinals}
     for label in drawn.cardinals:
@@ -62,12 +62,12 @@ def test_cardinals_stay_in_a_cropped_frame() -> None:
     assert abs(found["O"].x - margin) < 1e-6
     assert abs(found["O"].y - project(3.0, 90, wide, 0.0, True)[1]) < 1.0
     # Inside the frame nothing moves.
-    square = overlay(LENS, 0.0, True, 48.14, 14.39, AT)
+    square = overlay(LENS, 0.0, True, 48.31, 14.29, AT)
     assert square.cardinals[0].y == project(3.0, 0.0, LENS, 0.0, True)[1]
 
 
 def test_sky_lines_are_directions_above_the_horizon() -> None:
-    sky = sky_lines(48.14, 14.39, AT)
+    sky = sky_lines(48.31, 14.29, AT)
     assert sky.lines
     assert all(alt >= -5 and 0 <= az < 360 for line in sky.lines for alt, az in line)
     names = {name: (alt, az) for name, alt, az in sky.names}

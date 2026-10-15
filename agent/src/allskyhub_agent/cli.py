@@ -1,7 +1,7 @@
 """Command line.
 
-allskyhub-agent --sim --lat 48.14 --lon 14.39 run --frames 20 --data /tmp/ash
-allskyhub-agent --lat 48.14 --lon 14.39 --asi-sdk /path/libASICamera2.so run --data DIR
+allskyhub-agent --sim --lat 48.31 --lon 14.29 run --frames 20 --data /tmp/ash
+allskyhub-agent --lat 48.31 --lon 14.29 --asi-sdk /path/libASICamera2.so run --data DIR
 allskyhub-agent --lat 0 --lon 0 --asi-sdk /path/libASICamera2.so probe
 """
 

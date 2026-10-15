@@ -19,7 +19,7 @@ EVENING = dt.datetime(2026, 10, 15, 20, 10, tzinfo=dt.UTC)  # 22:10 in Vienna, m
 
 def _status(cloud: float | None = 0.05, at: dt.datetime = EVENING) -> dict[str, Any]:
     return {
-        "settings": {"latitude": 48.14, "longitude": 14.39, "timezone": "Europe/Vienna"},
+        "settings": {"latitude": 48.31, "longitude": 14.29, "timezone": "Europe/Vienna"},
         "sky": {"at": at.isoformat(), "night_id": "20261015", "cloud_cover": cloud},
     }
 

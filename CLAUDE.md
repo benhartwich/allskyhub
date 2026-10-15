@@ -60,7 +60,7 @@ uv run pytest
 uv run ruff check . && uv run ruff format --check .
 uv run pyright
 uvx --from 'reuse[charset-normalizer]' reuse lint
-uv run allskyhub-agent --sim --lat 48.14 --lon 14.39 run --frames 20 --data /tmp/ash
+uv run allskyhub-agent --sim --lat 48.31 --lon 14.29 run --frames 20 --data /tmp/ash
 ```
 
 Vor jedem Commit: Tests, ruff, pyright und `reuse lint` grün.

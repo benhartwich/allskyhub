@@ -65,9 +65,9 @@ def test_ephemeris_has_night_at_midnight() -> None:
 
 
 def test_public_place_is_rounded() -> None:
-    device = Device(last_status={"settings": {"latitude": 48.137, "longitude": 14.392}})
-    assert series.location(device, public=True) == (48.0, 14.5)
-    assert series.location(device, public=False) == (48.137, 14.392)
+    device = Device(last_status={"settings": {"latitude": 48.307, "longitude": 14.287}})
+    assert series.location(device, public=True) == (48.5, 14.5)
+    assert series.location(device, public=False) == (48.307, 14.287)
 
 
 async def _camera(app: FastAPI, client: httpx.AsyncClient, new_client: httpx.AsyncClient) -> str:
@@ -84,7 +84,7 @@ async def _camera(app: FastAPI, client: httpx.AsyncClient, new_client: httpx.Asy
             .where(Device.id == dev.device_id)
             .values(
                 last_status={
-                    "settings": {"latitude": 48.14, "longitude": 14.39, "timezone": "Europe/Vienna"}
+                    "settings": {"latitude": 48.31, "longitude": 14.29, "timezone": "Europe/Vienna"}
                 }
             )
         )

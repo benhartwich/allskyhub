@@ -15,7 +15,7 @@ from allskyhub_server.models import Device
 from tests.fake_device import FakeDevice
 from tests.ws_helpers import paired_token
 
-LAT, LON = 48.14, 14.39
+LAT, LON = 48.31, 14.29
 T0 = dt.datetime(2026, 10, 13, 20, 0, 0, tzinfo=dt.UTC)
 
 
@@ -131,10 +131,10 @@ def test_parse_adsb_lol() -> None:
 
 
 def test_cameras_nearby_share_a_request() -> None:
-    found = aircraft.areas([("a", 48.14, 14.39), ("b", 48.3, 14.3), ("c", 52.5, 13.4)])
+    found = aircraft.areas([("a", 48.16, 14.03), ("b", 48.3, 14.3), ("c", 52.5, 13.4)])
     assert [a.devices for a in found] == [("a", "b"), ("c",)]
     assert found[0].nm > aircraft.RADIUS_KM / 1.852
-    assert (found[0].lat, found[0].lon) == (48.1, 14.4)  # never the exact place
+    assert (found[0].lat, found[0].lon) == (48.2, 14.0)  # never the exact place
     assert found[1].nm <= round(aircraft.RADIUS_KM / 1.852) + 6
 
 

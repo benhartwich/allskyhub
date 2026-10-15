@@ -883,7 +883,7 @@ For setting up without the app (and for cameras on Ethernet with a fixed hub): a
 ```json
 {"allskyhub_setup": 1, "wifi": {"ssid": "Home", "password": "secret"},
  "wifi_country": "AT", "hub_url": "https://allskyhub.org",
- "location": {"latitude": 48.14, "longitude": 14.39}, "timezone": "Europe/Vienna",
+ "location": {"latitude": 48.31, "longitude": 14.29}, "timezone": "Europe/Vienna",
  "camera": "auto"}
 ```
 

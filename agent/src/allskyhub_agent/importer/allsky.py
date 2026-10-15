@@ -44,7 +44,7 @@ _CAMERAS = {("ZWO", "ASI678MC"): "zwo-asi678mc"}
 
 
 def coordinate(value: object) -> float | None:
-    """Allsky writes "48.136010N" / "14.389510E" (or a plain number)."""
+    """Allsky writes "48.305840N" / "14.286400E" (or a plain number)."""
     if isinstance(value, int | float) and not isinstance(value, bool):
         return float(value)
     if not isinstance(value, str):

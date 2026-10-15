@@ -43,7 +43,7 @@ class FakeBinding implements WifiBinding {
 
 class FakeLocation implements LocationSource {
   LocationResult result = LocationResult.found(
-    CameraLocation(48.1372, 14.3951),
+    CameraLocation(48.3058, 14.2864),
   );
 
   @override
@@ -136,14 +136,14 @@ void main() {
 
       expect(f.controller.timezone, 'Europe/Vienna');
       await f.controller.locate();
-      expect(f.controller.location?.latitude, 48.14); // rounded to about 1 km
+      expect(f.controller.location?.latitude, 48.31); // rounded to about 1 km
       await f.controller.send(ssid: 'Home', password: 'secret', country: 'de');
       expect(f.sent, {
         'ssid': 'Home',
         'password': 'secret',
         'country': 'DE',
         'hub_url': hubUrl,
-        'latitude': 48.14,
+        'latitude': 48.31,
         'longitude': 14.4,
         'timezone': 'Europe/Vienna',
       });

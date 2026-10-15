@@ -18,7 +18,7 @@ from tests.helpers import PASSWORD, owner_email
 from tests.test_web_events import EVENT, NIGHT, record
 from tests.ws_helpers import device_ws, paired_token, send
 
-LAT, LON = 48.14, 14.39
+LAT, LON = 48.31, 14.29
 
 
 async def _camera(

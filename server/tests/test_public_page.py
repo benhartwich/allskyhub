@@ -63,7 +63,7 @@ async def _add_archive(app: FastAPI, device_id: str) -> None:
         await db.execute(
             update(Device)
             .where(Device.id == device_id)
-            .values(last_status={"settings": {"latitude": 48.13601, "longitude": 14.38951}})
+            .values(last_status={"settings": {"latitude": 48.30584, "longitude": 14.28640}})
         )
         await db.commit()
 
@@ -75,22 +75,22 @@ async def test_profile_texts_and_coordinates(
     await _add_archive(app, device_id)
     assert "Seite gestalten" in (await client.get(f"/cameras/{device_id}")).text
     r = await _save(
-        client, device_id, title="Allsky Lanzenberg", location_label="Hofkirchen",
+        client, device_id, title="Allsky Pöstlingberg", location_label="Linz",
         camera="ZWO ASI678MC", lens="2,5 mm", computer="Pi 4", owner="Ben",
         notes="<script>x</script>", section_live="on", section_aurora="on",
     )  # fmt: skip
     assert r.status_code == 303
     page = (await new_client.get(f"/sky/{slug}")).text
-    for text in ("Allsky Lanzenberg", "Hofkirchen", "ZWO ASI678MC", "2,5 mm", "Pi 4", "Ben"):
+    for text in ("Allsky Pöstlingberg", "Linz", "ZWO ASI678MC", "2,5 mm", "Pi 4", "Ben"):
         assert text in page
     assert "<script>x</script>" not in page  # escaped
-    assert "48.1°" not in page  # coordinates only on request
+    assert "48.3°" not in page  # coordinates only on request
     assert 'property="og:image"' in page
 
     await _save(client, device_id, show_coordinates="on")
     page = (await new_client.get(f"/sky/{slug}")).text
-    assert "48.1° N, 14.4° O" in page
-    assert "48.136" not in page
+    assert "48.3° N, 14.3° O" in page
+    assert "48.306" not in page
 
     too_long = await _save(client, device_id, title="x" * 101)
     assert too_long.status_code == 400

@@ -21,7 +21,7 @@ EVENING = dt.datetime(2026, 10, 12, 19, tzinfo=dt.UTC)
 
 
 async def _setup(
-    app: FastAPI, client: httpx.AsyncClient, *, lat: float = 48.14, **user: bool
+    app: FastAPI, client: httpx.AsyncClient, *, lat: float = 48.31, **user: bool
 ) -> tuple[str, FakeSender, Notifier]:
     dev = FakeDevice()
     await paired_token(client, dev)
@@ -32,7 +32,7 @@ async def _setup(
         device = await db.get(Device, dev.device_id)
         assert device
         device.last_status = {
-            "settings": {"latitude": lat, "longitude": 14.39, "timezone": "Europe/Vienna"},
+            "settings": {"latitude": lat, "longitude": 14.29, "timezone": "Europe/Vienna"},
             "sky": {"at": dt.datetime.now(dt.UTC).isoformat(), "night_id": NIGHT,
                     "cloud_cover": 0.1, "sqm_mag": 21.0, "stars": 400},
         }  # fmt: skip
@@ -177,7 +177,7 @@ async def test_aurora_network_alerts_clear_cameras_around(
         "settings": {"latitude": 50.0, "longitude": 40.0},
         "sky": {"at": dt.datetime.now(dt.UTC).isoformat(), "cloud_cover": 0.0}})  # fmt: skip
     await _set(app, cloudy, last_status={
-        "settings": {"latitude": 53.0, "longitude": 14.39},
+        "settings": {"latitude": 53.0, "longitude": 14.29},
         "sky": {"at": dt.datetime.now(dt.UTC).isoformat(), "cloud_cover": 0.9}})  # fmt: skip
     now = dt.datetime.now(dt.UTC)
     maker: async_sessionmaker[AsyncSession] = app.state.sessionmaker

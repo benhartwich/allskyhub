@@ -12,12 +12,12 @@ from allskyhub_agent.core.sun import sun_elevation
     [
         # Equinox noon at Greenwich on the equator: sun near the zenith.
         (datetime(2026, 3, 20, 12, 7, tzinfo=UTC), 0.0, 0.0, 89.9),
-        # June solstice, local solar noon at 48.14 N: 90 - 48.14 + 23.44.
-        (datetime(2026, 6, 21, 11, 2, tzinfo=UTC), 48.14, 14.39, 65.3),
-        # December solstice, solar noon at 48.14 N: 90 - 48.14 - 23.44.
-        (datetime(2026, 12, 21, 10, 56, tzinfo=UTC), 48.14, 14.39, 18.4),
+        # June solstice, local solar noon at 48.31 N: 90 - 48.31 + 23.44.
+        (datetime(2026, 6, 21, 11, 2, tzinfo=UTC), 48.31, 14.29, 65.1),
+        # December solstice, solar noon at 48.31 N: 90 - 48.31 - 23.44.
+        (datetime(2026, 12, 21, 10, 56, tzinfo=UTC), 48.31, 14.29, 18.2),
         # Linz, 2026-10-05 19:07 CEST: civil twilight just ended (checked against NOAA).
-        (datetime(2026, 10, 5, 17, 7, tzinfo=UTC), 48.14, 14.39, -6.5),
+        (datetime(2026, 10, 5, 17, 7, tzinfo=UTC), 48.31, 14.29, -6.3),
     ],
 )
 def test_reference_elevations(t: datetime, lat: float, lon: float, expected: float) -> None:
@@ -25,7 +25,7 @@ def test_reference_elevations(t: datetime, lat: float, lon: float, expected: flo
 
 
 def test_midnight_is_below_horizon() -> None:
-    assert sun_elevation(datetime(2026, 10, 6, 23, 0, tzinfo=UTC), 48.14, 14.39) < -30
+    assert sun_elevation(datetime(2026, 10, 6, 23, 0, tzinfo=UTC), 48.31, 14.29) < -30
 
 
 def test_naive_time_rejected() -> None:

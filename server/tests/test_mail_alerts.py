@@ -48,7 +48,7 @@ async def _setup(
         device = await db.get(Device, dev.device_id)
         assert device
         device.last_status = {
-            "settings": {"latitude": 48.14, "longitude": 14.39, "timezone": "Europe/Vienna"}
+            "settings": {"latitude": 48.31, "longitude": 14.29, "timezone": "Europe/Vienna"}
         }
         await db.execute(update(User).where(User.id == device.owner_id).values(**user))
         await db.commit()

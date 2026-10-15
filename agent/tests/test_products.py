@@ -35,7 +35,7 @@ from allskyhub_agent.store.images import INDEX_NAME, ImageStore
 from allskyhub_protocol import FrameInfo, Mode
 
 TZ = ZoneInfo("Europe/Vienna")
-LOC = Location(48.14, 14.39)
+LOC = Location(48.31, 14.29)
 HAVE_FFMPEG = shutil.which("ffmpeg") is not None
 
 

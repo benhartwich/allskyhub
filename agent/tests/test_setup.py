@@ -273,10 +273,10 @@ def test_settings_location_timezone_camera(tmp_path: Path) -> None:
 
 def test_setup_file_location_timezone_camera(tmp_path: Path) -> None:
     f = parse(
-        b'{"allskyhub_setup": 1, "location": {"latitude": 48.14, "longitude": 14.39},'
+        b'{"allskyhub_setup": 1, "location": {"latitude": 48.31, "longitude": 14.29},'
         b' "timezone": "Europe/Vienna", "camera": "sim"}'
     )
-    assert (f.latitude, f.longitude, f.timezone, f.camera) == (48.14, 14.39, "Europe/Vienna", "sim")
+    assert (f.latitude, f.longitude, f.timezone, f.camera) == (48.31, 14.29, "Europe/Vienna", "sim")
     for bad in (
         b'{"allskyhub_setup": 1, "location": {"latitude": 99, "longitude": 0}}',
         b'{"allskyhub_setup": 1, "timezone": "Nowhere/Town"}',

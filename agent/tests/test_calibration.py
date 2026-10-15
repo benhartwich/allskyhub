@@ -182,8 +182,8 @@ def test_sky_overlay(web: tuple[int, Path]) -> None:
     port, cal = web
     assert _call(port, "/api/sky-overlay?at=2026-10-12T21:00:00Z")[0] == 404  # no location
     calibration = LocalCalibration(SkyMask(cal / "skymask.png"), cal / "orientation.json",
-                                   lambda: (48.14, 14.39))  # fmt: skip
-    ov = calibration.sky_overlay(datetime(2026, 10, 12, 21, 0, tzinfo=UTC), (48.14, 14.39))
+                                   lambda: (48.31, 14.29))  # fmt: skip
+    ov = calibration.sky_overlay(datetime(2026, 10, 12, 21, 0, tzinfo=UTC), (48.31, 14.29))
     assert ov is not None
     assert (ov["width"], ov["height"]) == (W, H)
     assert ov["paths"]

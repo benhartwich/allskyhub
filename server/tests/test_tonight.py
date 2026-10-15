@@ -15,7 +15,7 @@ from allskyhub_server.models import Device
 from tests.fake_device import FakeDevice
 from tests.ws_helpers import paired_token
 
-LAT, LON = 48.136, 14.39  # Hofkirchen im Traunkreis
+LAT, LON = 48.306, 14.29  # Linz
 VIENNA = ZoneInfo("Europe/Vienna")
 
 
@@ -29,10 +29,10 @@ def test_night_times_and_moon() -> None:
     (SPEC §4.2) to 0.01°, the moon with the lunation (new 10 Oct, full 26 Oct)."""
     noon = dt.datetime(2026, 10, 12, 10, tzinfo=dt.UTC)
     n = astro.night_after(noon, LAT, LON)
-    assert _local(n.sunset) == "12. 18:19"
+    assert _local(n.sunset) == "12. 18:20"
     assert _local(n.dusk) == "12. 20:03"
     assert _local(n.dawn) == "13. 05:35"
-    assert _local(n.sunrise) == "13. 07:18"
+    assert _local(n.sunrise) == "13. 07:19"
     assert n.moon_waxing
     assert n.moon_illumination < 0.1  # new moon on 10 October
     full = astro.moon_illumination(dt.datetime(2026, 10, 26, tzinfo=dt.UTC))

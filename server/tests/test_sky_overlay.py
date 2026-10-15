@@ -28,7 +28,7 @@ def _status(lens: Lens | None = LENS) -> dict[str, Any]:
     }  # fmt: skip
     if lens is not None:
         orientation["lens"] = lens.model_dump()
-    return {"settings": {"latitude": 48.14, "longitude": 14.39}, "orientation": orientation}
+    return {"settings": {"latitude": 48.31, "longitude": 14.29}, "orientation": orientation}
 
 
 def test_overlay_needs_a_usable_lens() -> None:

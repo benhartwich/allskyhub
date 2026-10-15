@@ -22,7 +22,7 @@ async def test_sky_view(app: FastAPI, client: httpx.AsyncClient) -> None:
     async with maker() as db:
         device = await db.get(Device, device_id)
         assert device
-        device.last_status = {"settings": {"latitude": 48.14, "longitude": 14.39}}
+        device.last_status = {"settings": {"latitude": 48.31, "longitude": 14.29}}
         db.add(EventRecord(device_id=device_id, event_id="meteor-1", night_id="20261013",
                            kind="meteor", start=now - dt.timedelta(hours=1),
                            end=now - dt.timedelta(minutes=59), confidence=0.9,

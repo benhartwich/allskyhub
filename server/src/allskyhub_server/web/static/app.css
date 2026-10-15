@@ -440,3 +440,32 @@ label.check { display: flex; gap: 8px; align-items: baseline; }
 /* Command blocks (/allsky) */
 pre { margin: 0; padding: 12px 14px; overflow-x: auto; border-radius: 12px; background: var(--surface-2); border: 1px solid var(--line); }
 pre code { white-space: pre; }
+
+/* Overflights on the sky map (roadmap L29, overflights.js) */
+.ovf { --ovf-sat: var(--accent); --ovf-air: var(--warn); --ovf-unk: var(--accent-2); }
+.ovf-map { width: 100%; max-width: 560px; height: auto; margin: 0 auto; display: block; }
+.ovf-sky { fill: #050a1f; stroke: var(--line); }
+.ovf-ring { fill: none; stroke: var(--line); stroke-dasharray: 3 4; }
+.ovf-stars path { fill: none; stroke: var(--text-2); stroke-opacity: .28; stroke-width: .8; }
+.ovf-stars text { fill: var(--text-2); fill-opacity: .55; font-size: 9px; text-anchor: middle; }
+.ovf-compass { fill: var(--text-2); font-size: 13px; font-weight: 600; text-anchor: middle; }
+.ovf-track { cursor: pointer; }
+.ovf-track .ovf-line { fill: none; stroke-width: 2; stroke-linecap: round; }
+.ovf-track .ovf-hit { fill: none; stroke: transparent; stroke-width: 12; }
+.ovf-track.satellite { color: var(--ovf-sat); } .ovf-track.aircraft { color: var(--ovf-air); } .ovf-track.unknown { color: var(--ovf-unk); }
+.ovf-track .ovf-line { stroke: currentColor; } .ovf-track .ovf-head { fill: currentColor; }
+.ovf-track.old { opacity: .25; }
+.ovf-track.on .ovf-line, .ovf-track:focus .ovf-line { stroke-width: 4; }
+.ovf-track.on { opacity: 1; }
+.ovf-legend { display: flex; gap: 14px; flex-wrap: wrap; }
+.ovf-key::after, .ovf-dot { content: ""; display: inline-block; width: 18px; height: 3px; border-radius: 2px; margin-left: 2px; vertical-align: middle; }
+.ovf-key.satellite::after, .ovf-dot.satellite { background: var(--accent); }
+.ovf-key.aircraft::after, .ovf-dot.aircraft { background: var(--warn); }
+.ovf-key.unknown::after, .ovf-dot.unknown { background: var(--accent-2); }
+.ovf-dot { margin: 0 6px 0 0; }
+.ovf-player { display: flex; gap: 10px; align-items: center; }
+.ovf-player input[type="range"] { flex: 1; min-width: 0; }
+.ovf-player output { min-width: 3.5em; font-variant-numeric: tabular-nums; }
+.ovf-list tbody tr { cursor: pointer; }
+.ovf-list tbody tr.on { background: var(--surface-2); }
+table.stats.ovf-list th, table.stats.ovf-list td { text-align: left; }

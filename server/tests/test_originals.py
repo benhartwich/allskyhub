@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import asyncio
 import datetime as dt
+import re
 from typing import Any
 
 import httpx
@@ -59,14 +60,17 @@ async def _put(host: str, token: str, ev: Event, variant: EventVariant, body: by
         return r.status_code
 
 
-async def _requests(ws: ClientConnection) -> list[tuple[str, EventVariant]]:
-    """Every upload_event the hub sends until it is quiet."""
+async def _requests(ws: ClientConnection, first: float = 3.0) -> list[tuple[str, EventVariant]]:
+    """Every upload_event the hub sends until it is quiet: up to ``first`` seconds for the
+    first command (slow CI runners), then 0.5 s of silence ends it."""
     out: list[tuple[str, EventVariant]] = []
+    wait = first
     while True:
         try:
-            cmd = await asyncio.wait_for(next_command(ws), 0.3)
+            cmd = await asyncio.wait_for(next_command(ws), wait)
         except TimeoutError:
             return out
+        wait = 0.5
         if cmd.name is CommandName.UPLOAD_EVENT:
             out.append((cmd.args["event_id"], EventVariant(cmd.args["variant"])))
 
@@ -198,6 +202,16 @@ async def test_overflight_page_and_summary(
     assert summary.meteor_count == 1
     assert summary.overflights == "2 Überflüge: 2 unbekannt"
     assert "2 Überflüge" in summary.line()
+    # On the map: the oriented one as a track, the other only in the list.
+    assert page.text.count('class="ovf-track') == 1
+    assert "1 ohne Himmelsrichtung" in page.text
+    assert 'data-ovf-group="satellite"' in page.text
+    # The event says what it is and leads back to the overflights.
+    link = re.search(r'href="(/cameras/[^"]+\?von=ueberfluege)"', page.text)
+    assert link is not None
+    event_page = await client.get(link.group(1).replace("&amp;", "&"))
+    assert "<h1>Unbekanntes Objekt</h1>" in event_page.text
+    assert f'href="/cameras/{dev.device_id}/ueberfluege?nacht={NIGHT}"' in event_page.text
     empty = await client.get(f"/cameras/{dev.device_id}/ueberfluege", params={"nacht": "20261001"})
     assert "Keine Überflüge" in empty.text
 
@@ -211,3 +225,19 @@ async def test_original_upload_needs_a_request(
     ev = _event(0, FRAME)
     async with device_ws(live_app, token):
         assert await _put(live_app, token, ev, EventVariant(variant), _jpeg(10, 10)) == 404
+
+
+def test_tracks_follow_the_great_circle() -> None:
+    from allskyhub_server.devices import overflight_map
+
+    assert overflight_map.xy(90, 0) == (overflight_map.CENTRE, overflight_map.CENTRE)
+    north = overflight_map.xy(0, 0)
+    east = overflight_map.xy(0, 90)
+    assert north[1] < overflight_map.CENTRE  # north at the top
+    assert east[0] < overflight_map.CENTRE  # east on the left, as seen looking up
+    # From low in the north to low in the south: over the zenith, not along the horizon.
+    points = overflight_map.great_circle((10.0, 0.0), (10.0, 180.0), 4)
+    assert points[2][0] == pytest.approx(90.0)
+    assert points[0] == pytest.approx((10.0, 0.0), abs=1e-9)
+    # Opposite points on the horizon have no single great circle: no division by zero.
+    assert len(overflight_map.great_circle((0.0, 0.0), (0.0, 180.0), 4)) == 5

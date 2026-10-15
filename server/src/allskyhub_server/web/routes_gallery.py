@@ -9,7 +9,7 @@ from zoneinfo import ZoneInfo
 
 from fastapi import APIRouter, Depends, Form, HTTPException, Path, Query, Request
 from fastapi.responses import FileResponse, JSONResponse, RedirectResponse, Response
-from sqlalchemy import select
+from sqlalchemy import or_, select
 
 from allskyhub_protocol import EVENT_ID_PATTERN, EventVariant, FrameVariant
 from allskyhub_server.auth.sessions import SessionInfo
@@ -19,6 +19,7 @@ from allskyhub_server.devices import (
     fireball,
     labels,
     meteor_pairs,
+    overflight_map,
     public,
     queries,
     renders,
@@ -241,21 +242,28 @@ async def overflights(
     device_id: str,
     nacht: Annotated[str | None, Query(pattern=r"^\d{8}$")] = None,
 ) -> Response:
-    """SPEC §6.4 Overflights (roadmap L29): satellites, aircraft and unknown objects of a
-    night, apart from the meteors and the other dismissed streaks."""
+    """SPEC §6.4 Overflights (roadmap L29): the night's satellites, aircraft and unknown
+    objects on a sky map that plays like a timelapse, and as a compact list."""
     device = await _own(db, session, device_id)
     nights = list(
         await db.scalars(
             select(EventRecord.night_id)
-            .where(EventRecord.device_id == device.id, EventRecord.kind == "meteor")
+            .where(
+                EventRecord.device_id == device.id,
+                EventRecord.kind == "meteor",
+                or_(
+                    EventRecord.data["trail"].astext.in_(events.OVERFLIGHT_TRAILS),
+                    EventRecord.label_reason.in_(("aircraft", "satellite")),
+                ),
+            )
             .group_by(EventRecord.night_id)
             .order_by(EventRecord.night_id.desc())
-            .limit(60)
+            .limit(90)
         )
     )
     night_id = nacht or (nights[0] if nights else None)
-    groups: dict[str, list[EventRecord]] = {key: [] for key in events.OVERFLIGHT_GROUPS}
-    count = None
+    tracks: list[overflight_map.Track] = []
+    skies: list[overflight_map.Sky] = []
     if night_id is not None:
         rows = await db.scalars(
             select(EventRecord)
@@ -266,10 +274,12 @@ async def overflights(
             )
             .order_by(EventRecord.start)
         )
-        found = [e for e in rows if events.overflight(e) is not None]
-        for e in found:
-            groups[events.overflight(e) or "unknown"].append(e)
-        count = events.overflight_count(found)
+        tracks = overflight_map.tracks(list(rows))
+    if tracks:
+        first, last = tracks[0].event.start, max(t.event.end for t in tracks)
+        skies = overflight_map.skies(series.location(device, public=False), first, last)
+    newer = [n for n in nights if night_id and n > night_id]
+    older = [n for n in nights if night_id and n < night_id]
     return render(
         request,
         "overflights.html",
@@ -277,15 +287,23 @@ async def overflights(
             "device": device,
             "night_id": night_id,
             "nights": nights,
-            "groups": groups,
+            "newer": newer[-1] if newer else None,
+            "older": older[0] if older else None,
+            "tracks": tracks,
+            "mapped": [t for t in tracks if t.path],
+            "skies": skies,
             "group_titles": events.OVERFLIGHT_GROUPS,
-            "count": count,
-            "name_of": events.overflight_name,
-            "path_of": events.overflight_path,
-            "event_titles": EVENT_TITLES,
+            "one": OVERFLIGHT_TITLES,
+            "count": events.overflight_count([t.event for t in tracks]),
+            "zone": str(series.zone(device)),
+            "map": overflight_map,
         },
         session=session,
     )
+
+
+OVERFLIGHT_TITLES = {"satellite": "Satellit", "aircraft": "Flugzeug", "unknown": "Unbekannt"}
+OVERFLIGHT_HEADINGS = {**OVERFLIGHT_TITLES, "unknown": "Unbekanntes Objekt"}
 
 
 async def _event(db: DbSession, device: Device, night_id: str, event_id: str) -> EventRecord:
@@ -317,6 +335,7 @@ async def event_page(
     device_id: str,
     night_id: NightId,
     event_id: EventId,
+    von: str = "",
 ) -> Response:
     device = await _own(db, session, device_id)
     event = await _event(db, device, night_id, event_id)
@@ -341,6 +360,13 @@ async def event_page(
             "state": await _event_state(request, device, event),
             "rows": event_rows(event),
             "has_frame": events.has_frame(event),
+            # SPEC §6.4 Overflights: named as what they are, and back to their list.
+            "heading": (
+                OVERFLIGHT_HEADINGS[group]
+                if (group := events.overflight(event))
+                else EVENT_TITLES.get(event.kind, event.kind)
+            ),
+            "back_overflights": von == "ueberfluege",
             "original_state": "ready" if event.has_original else "none",
             "crop": events.crop(event),
             "seen_too": seen_too,

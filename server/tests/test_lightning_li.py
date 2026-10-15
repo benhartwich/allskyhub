@@ -25,6 +25,9 @@ NIGHT = "20261014"
 READ = dt.datetime(2026, 10, 15, 0, 0, tzinfo=dt.UTC)
 
 
+ROW = "Blitzsatellit (Quelle: EUMETSAT)"
+
+
 def body(flashes: list[tuple[dt.datetime, float, float]], packed: bool = True) -> bytes:
     """A small LFL BODY file: lat/lon packed like the real product, one fill value."""
     out = io.BytesIO()
@@ -161,15 +164,15 @@ async def test_storm_without_satellite_flashes_is_labelled(
         assert (e.label, e.label_reason, e.label_auto) == ("false_positive", "other", True)
         assert e.label_detail == lightning_li.DETAIL
         assert e.label_pending
-        assert dict(event_rows(e))["Blitzsatellit"] == "keine Blitze im Umkreis von 400 km"
+        assert dict(event_rows(e))[ROW] == "keine Blitze im Umkreis von 400 km"
     b = rows["storm-B01"]
     assert b.label is None
     assert b.li_km is not None
     assert 200 < b.li_km < 260
-    assert dict(event_rows(b))["Blitzsatellit"].endswith("Richtung NW")
+    assert dict(event_rows(b))[ROW].endswith("Richtung NW")
     c = rows["storm-C05"]  # imported: never checked
     assert (c.label, c.li_checked_at) == (None, None)
-    assert dict(event_rows(c))["Blitzsatellit"] == "ungeprüft"
+    assert dict(event_rows(c))[ROW] == "ungeprüft"
 
 
 async def test_gaps_and_running_storms_stay_unchecked(

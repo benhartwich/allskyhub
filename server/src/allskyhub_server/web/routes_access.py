@@ -1,4 +1,5 @@
-"""Asking for access (/zugang), the parts list (/hardware) and the first steps (/start).
+"""Asking for access (/zugang), the parts list (/hardware), the first steps (/start) and
+the guide for cameras that already run Allsky (/allsky).
 
 There is no open sign-up (auth/invitations.py): a request reaches the admins, who invite or
 decline on the admin page. ``/start`` walks a new account from buying parts to the paired
@@ -111,6 +112,12 @@ async def access_request(
 @router.get("/hardware")
 async def hardware_page(request: Request, session: OptionalSession) -> Response:
     return render(request, "hardware.html", _hardware_context(), session=session)
+
+
+@router.get("/allsky")
+async def allsky_guide(request: Request, session: OptionalSession, lang: str = "de") -> Response:
+    """allskyhub next to an existing Allsky (docs/install.md 2.6, 2.7), German or English."""
+    return render(request, "allsky_guide.html", {"en": lang == "en"}, session=session)
 
 
 @router.get("/start")

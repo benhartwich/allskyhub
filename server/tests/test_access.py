@@ -187,3 +187,16 @@ async def test_hardware_and_first_steps(app: FastAPI, client: httpx.AsyncClient)
         assert r.status_code == 200
         assert 'aria-current="step"' in r.text
     assert (await client.get("/start", params={"schritt": "x"})).status_code == 404
+
+
+async def test_guide_for_existing_allsky_cameras(client: httpx.AsyncClient) -> None:
+    de = await client.get("/allsky")
+    assert de.status_code == 200
+    assert '<html lang="de">' in de.text
+    assert "allskyhub neben Allsky" in de.text
+    assert "import-allsky" in de.text
+    en = await client.get("/allsky", params={"lang": "en"})
+    assert '<html lang="en">' in en.text
+    assert "allskyhub next to Allsky" in en.text
+    assert "Conflicts=allsky.service" in en.text
+    assert 'href="/allsky"' in (await client.get("/hardware")).text

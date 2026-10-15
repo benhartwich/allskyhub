@@ -230,18 +230,25 @@ table.stats.target-hours th:nth-child(2) { text-align: left; }
 .chart-temp polyline { stroke: #ff9bd2; } .chart-temp circle { fill: #ff9bd2; }
 .chart-cpu polyline { stroke: #ff7a93; } .chart-cpu circle { fill: #ff7a93; }
 .chart-disk polyline { stroke: #8fe3ff; } .chart-disk circle { fill: #8fe3ff; }
+.chart-air polyline { stroke: #ffb86b; } .chart-air circle { fill: #ffb86b; }
+.chart-dew polyline { stroke: #7dcfff; } .chart-dew circle { fill: #7dcfff; }
+.chart-humidity polyline { stroke: #4fe3b0; } .chart-humidity circle { fill: #4fe3b0; }
+.chart-pressure polyline { stroke: #a7b0cc; } .chart-pressure circle { fill: #a7b0cc; }
+.chart-heater polyline { stroke: #ff9e64; } .chart-heater circle { fill: #ff9e64; }
 
 /* Measurement viewer (charts.js, uPlot). Colours as tokens: 6-digit hex, charts.js appends
    alpha for fills. The red theme turns everything into reds of different brightness. */
 :root {
   --chart-sqm: #7aa2f7; --chart-clouds: #a7b0cc; --chart-stars: #9ece6a; --chart-exposure: #f2c06b;
   --chart-gain: #b48cff; --chart-temp: #ff9bd2; --chart-cpu: #ff7a93; --chart-disk: #8fe3ff;
+  --chart-air: #ffb86b; --chart-dew: #7dcfff; --chart-humidity: #4fe3b0; --chart-heater: #ff9e64;
   --chart-sun: #ffd166; --chart-moon: #e6e9f5; --chart-grid: #ffffff14; --chart-axis: #a9b1d6;
   --chart-day: #4a6cd426; --chart-civil: #3a56b01c; --chart-nautical: #2a3f8a14; --chart-astro: #1c2c6a0d;
 }
 [data-theme="red"] {
   --chart-sqm: #ff4040; --chart-clouds: #b03030; --chart-stars: #ff7070; --chart-exposure: #ff5050;
   --chart-gain: #c03838; --chart-temp: #ff6060; --chart-cpu: #d04040; --chart-disk: #a02828;
+  --chart-air: #ff7050; --chart-dew: #b83030; --chart-humidity: #e05050; --chart-heater: #ff8a60;
   --chart-sun: #ff8080; --chart-moon: #ffa0a0; --chart-grid: #ff20201a; --chart-axis: #d04040;
   --chart-day: #ff20201f; --chart-civil: #ff202016; --chart-nautical: #ff20200f; --chart-astro: #ff202008;
 }

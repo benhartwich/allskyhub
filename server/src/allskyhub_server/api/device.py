@@ -496,9 +496,24 @@ async def _store_status(
                 sensor_temp_c=status.sensor_temp_c,
                 cpu_temp_c=status.cpu_temp_c,
                 disk_free_pct=status.disk_free_pct,
+                # SPEC §7.11: only a reading without an error counts.
+                **_env_values(status),
+                heater_on=status.heater.on if status.heater is not None else None,
             )
         )
         await db.commit()
+
+
+def _env_values(status: Status) -> dict[str, float | None]:
+    env = status.env
+    if env is None or env.error is not None:
+        return {}
+    return {
+        "air_temp_c": env.temperature_c,
+        "humidity_pct": env.humidity_pct,
+        "dewpoint_c": env.dewpoint_c,
+        "pressure_hpa": env.pressure_hpa,
+    }
 
 
 async def _safe(maker: async_sessionmaker[AsyncSession], device_id: str) -> bool | None:

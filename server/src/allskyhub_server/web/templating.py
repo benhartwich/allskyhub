@@ -117,7 +117,24 @@ def air_overlay(device: Any) -> Any:
     return overlay.build_aircraft(device.last_status, at, aircraft.current.tracks)
 
 
+# SPEC §7.11 status.heater reasons.
+HEATER_REASONS = {
+    "off": "aus", "on": "an (dauernd)", "dew": "an: Taugefahr", "humidity": "an: hohe Luftfeuchte",
+    "night": "an: Nacht (ohne Sensor)", "too_warm": "aus: zu warm",
+}  # fmt: skip
+
+
+def heater_text(heater: object) -> str:
+    if not isinstance(heater, dict):
+        return ""
+    h = cast(dict[str, Any], heater)
+    reason = h.get("reason")
+    text = HEATER_REASONS.get(reason) if isinstance(reason, str) else None
+    return text or ("an" if h.get("on") else "aus")
+
+
 cast(dict[str, Any], templates.env.globals)["asset"] = asset
+cast(dict[str, Any], templates.env.globals)["heater_text"] = heater_text
 cast(dict[str, Any], templates.env.globals)["air_overlay"] = air_overlay
 cast(dict[str, Any], templates.env.globals)["sky_overlay"] = sky_overlay
 _filters = cast(dict[str, Any], templates.env.filters)

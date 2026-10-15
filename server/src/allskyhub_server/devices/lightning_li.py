@@ -346,11 +346,20 @@ async def check(db: AsyncSession, now: dt.datetime) -> set[str]:
             continue  # the storm may go on
         if any(e.li_checked_at is None or e.li_km is not None for e in flashes):
             continue
+        # SPEC §7.12: the camera's own sensor decided (it labelled the storm, or it heard a
+        # strike close by); the satellite then labels nothing more.
+        if any(e.label is not None or _sensor_heard(e) for e in flashes):
+            continue
         for event in flashes:
             if await labels.set_auto(db, event, "other", DETAIL, now):
                 changed.add(device_id)
     await db.commit()
     return changed
+
+
+def _sensor_heard(event: EventRecord) -> bool:
+    km = (event.data or {}).get("sensor_km")
+    return isinstance(km, int | float)
 
 
 async def run_forever(

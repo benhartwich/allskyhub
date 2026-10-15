@@ -43,12 +43,22 @@ def _exposure(s: StatusSample) -> float | None:
     return None if s.exposure_us is None else s.exposure_us / 1e6
 
 
+def _heater(s: StatusSample) -> float | None:
+    return None if s.heater_on is None else 100.0 * s.heater_on
+
+
 STATUS_SERIES = (
     Series("Belichtung", "s", _exposure, 0, 0, "chart-exposure", "{:.3g}"),
     Series("Gain", "", lambda s: s.gain, 0, 0, "chart-gain"),
     Series("Sensor", "°C", lambda s: s.sensor_temp_c, 0, 40, "chart-temp", "{:.1f}"),
     Series("Prozessor", "°C", lambda s: s.cpu_temp_c, 20, 80, "chart-cpu", "{:.0f}"),
     Series("Speicher frei", "%", lambda s: s.disk_free_pct, 0, 100, "chart-disk"),
+    # SPEC §7.11: the weather sensor, only for cameras that have one.
+    Series("Lufttemperatur", "°C", lambda s: s.air_temp_c, -10, 30, "chart-air", "{:.1f}"),
+    Series("Taupunkt", "°C", lambda s: s.dewpoint_c, -10, 30, "chart-dew", "{:.1f}"),
+    Series("Luftfeuchte", "%", lambda s: s.humidity_pct, 0, 100, "chart-humidity"),
+    Series("Luftdruck", "hPa", lambda s: s.pressure_hpa, 0, 0, "chart-pressure"),
+    Series("Kuppelheizung", "%", _heater, 0, 100, "chart-heater"),
 )
 
 

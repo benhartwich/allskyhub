@@ -20,6 +20,7 @@ from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
 from allskyhub_server import maintenance
 from allskyhub_server.admin.deploy import GitHub
+from allskyhub_server.admin.stores import Stores
 from allskyhub_server.api import app as app_api
 from allskyhub_server.api import app_manage, app_overview, sky_view
 from allskyhub_server.api import device as device_api
@@ -59,6 +60,7 @@ from allskyhub_server.web import (
     routes_plus,
     routes_public,
     routes_showers,
+    routes_stores,
 )
 from allskyhub_server.web.deps import LoginRequiredError
 from allskyhub_server.web.image_download import LatestImage
@@ -300,6 +302,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.state.paddle = Paddle(settings)
     app.state.github = GitHub(settings.deploy_repo, checks=settings.deploy_check_names)
     app.state.latest_image = LatestImage(settings.deploy_repo)
+    app.state.stores = Stores(settings.data_dir / "store", settings.deploy_repo)
     app.add_middleware(CustomDomainMiddleware, hosts=app.state.hosts)
     app.add_middleware(AccessLogMiddleware)
     _install_error_handlers(app)
@@ -316,6 +319,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(routes_showers.router)
     app.include_router(routes_local.router)
     app.include_router(routes_admin.router)
+    app.include_router(routes_stores.router)
     app.include_router(routes_app_builds.router)
     app.include_router(routes_fireballs.router)
     app.include_router(routes_plus.router)

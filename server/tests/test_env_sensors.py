@@ -115,16 +115,23 @@ async def test_the_satellite_check_leaves_storms_the_sensor_decided(
         by_camera = flash(dev.device_id, t0 + dt.timedelta(minutes=5), "storm-A", sensor_km=None)
         heard = flash(dev.device_id, t0 + dt.timedelta(minutes=20), "storm-B", sensor_km=9.0)
         nothing = flash(dev.device_id, t0 + dt.timedelta(minutes=40), "storm-C")
-        db.add_all([by_camera, heard, nothing])
+        owned = flash(dev.device_id, t0 + dt.timedelta(minutes=41), "storm-C")
+        owned.label, owned.label_auto, owned.labelled_at = "confirmed", False, t0
+        db.add_all([by_camera, heard, nothing, owned])
         await db.commit()
         # The camera's own label from its sensor (SPEC §7.12), sent as event_label.
-        await labels.set_auto(db, by_camera, "other", "kein Blitz am Sensor", t0)
+        await labels.set_auto(db, by_camera, "other", lightning_li.SENSOR_DETAIL, t0)
         await db.commit()
     async with maker() as db:
         await lightning_li.ingest(db, store, READ)
         await lightning_li.check(db, NOW)
     async with maker() as db:
-        rows = {e.data["storm"]: e for e in await db.scalars(select(EventRecord))}
-    assert rows["storm-A"].label_detail == "kein Blitz am Sensor"  # left as the camera said
+        rows = {
+            e.data["storm"] + ("-owned" if e.label == "confirmed" else ""): e
+            for e in await db.scalars(select(EventRecord))
+        }
+    assert rows["storm-A"].label_detail == lightning_li.SENSOR_DETAIL  # left as the camera said
     assert rows["storm-B"].label is None  # the sensor heard it close by
-    assert rows["storm-C"].label_detail == lightning_li.DETAIL  # no sensor: the satellite
+    # No sensor: the satellite labels the storm, but never over the owner's own label.
+    assert rows["storm-C"].label_detail == lightning_li.DETAIL
+    assert (rows["storm-C-owned"].label, rows["storm-C-owned"].label_auto) == ("confirmed", False)

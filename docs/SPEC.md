@@ -1171,9 +1171,14 @@ saw from space.
 The hub loads LI's flash product (LI-2-LFL) every 10 minutes for Europe and keeps 48 hours
 of flashes (time, latitude, longitude). A lightning event is near a storm when LI saw a
 flash within 400 km of the camera in `start − 60 s .. end + 60 s`; farther, its light is
-below the horizon. The hub shows that next to the event ("Blitzsatellit: Blitze in 230 km
-Richtung NW"). When LI saw no flash within 400 km during a whole storm (every event with
-the same `data.storm`, §6.4), each of its events gets the automatic label
+below the horizon. When the event has an `azimuth_deg` (§6.4), the flash must also lie in
+its direction: its compass bearing from the camera within 60° of `azimuth_deg`; light from
+the north is no flash of a storm in the south (Benjamin, 2026-10-15: a lamp's glow from the
+NNW was "confirmed" by storms elsewhere within 400 km). Without `azimuth_deg` any direction
+counts. The hub keeps, per event, the nearest flash that counts and shows it next to the
+event ("Blitzsatellit: Blitze in 230 km Richtung NW"). When LI saw no flash that counts
+during a whole storm (every event with the same `data.storm`, §6.4), each of its events gets
+the automatic label
 `false_positive`/`other` with detail `kein Gewitter (Blitzsatellit)`, which goes to the
 camera with `label_event`. Not checked, and shown as unchecked: imported events, events
 older than the kept flashes and events whose window LI data does not cover (an outage on

@@ -237,6 +237,18 @@ async def test_old_flashes_and_products_are_dropped(app: FastAPI) -> None:
         assert not await lightning_li.covered(db, t0, t0 + dt.timedelta(minutes=1))
 
 
+async def test_backfill_reads_further_back(app: FastAPI) -> None:
+    maker: async_sessionmaker[AsyncSession] = app.state.sessionmaker
+    store = FakeStore()
+    store.add(NOW - dt.timedelta(hours=20), [(NOW - dt.timedelta(hours=20), LAT, LON)])
+    store.add(NOW - dt.timedelta(hours=60), [(NOW - dt.timedelta(hours=60), LAT, LON)])
+    async with maker() as db:
+        assert await lightning_li.ingest(db, store, NOW) == 0  # the usual 3 h
+        assert await lightning_li.ingest(db, store, NOW, dt.timedelta(hours=24)) == 1
+        # Never beyond the 48 h the hub keeps.
+        assert await lightning_li.ingest(db, store, NOW, dt.timedelta(hours=100)) == 0
+
+
 async def test_data_store_requests() -> None:
     seen: list[httpx.Request] = []
 

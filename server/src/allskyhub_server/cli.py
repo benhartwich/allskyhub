@@ -144,6 +144,29 @@ def _cmd_invite(args: argparse.Namespace) -> int:
     return _run_db(work)
 
 
+def _cmd_li_backfill(args: argparse.Namespace) -> int:
+    """Roadmap H8: read the Lightning Imager's products of the last hours (up to the 48 h
+    the hub keeps) and check the lightning events they cover. The cameras get the labels
+    after their next reconnect."""
+    from allskyhub_server.devices import lightning_li
+
+    async def work(db: AsyncSession, settings: Settings) -> int:
+        if not settings.lightning_li:
+            print("EUMETSAT-Zugang fehlt (ALLSKYHUB_SERVER_EUMETSAT_KEY/_SECRET).", file=sys.stderr)
+            return 1
+        store = lightning_li.DataStore(settings.eumetsat_key, settings.eumetsat_secret)
+        try:
+            now = dt.datetime.now(dt.UTC)
+            added = await lightning_li.ingest(db, store, now, dt.timedelta(hours=args.hours))
+            changed = await lightning_li.check(db, now)
+        finally:
+            await store.client.aclose()
+        print(f"{added} Blitze neu eingelesen, Labels für {len(changed)} Kamera(s) gesetzt.")
+        return 0
+
+    return _run_db(work)
+
+
 def _cmd_users(args: argparse.Namespace) -> int:
     from sqlalchemy import func, select
 
@@ -254,6 +277,10 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("email")
     p.add_argument("--yes", action="store_true", help="really delete")
     p.set_defaults(func=_cmd_delete_user)
+
+    p = sub.add_parser("li-backfill", help="read older Lightning Imager data and check lightning")
+    p.add_argument("--hours", type=int, default=24, choices=range(1, 48), metavar="1..47")
+    p.set_defaults(func=_cmd_li_backfill)
 
     p = sub.add_parser("migrate", help="apply database migrations")
     p.add_argument("revision", nargs="?", default="head")

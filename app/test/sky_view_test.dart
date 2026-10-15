@@ -65,6 +65,15 @@ void main() {
                 'end': [12, 20],
               },
             ],
+            'overflights': [
+              {
+                'at': '2026-10-14T21:30:00Z',
+                'start': [20, 300],
+                'end': [40, 20],
+                'kind': 'satellite',
+                'name': 'ISS',
+              },
+            ],
           }),
           200,
         ),
@@ -76,11 +85,26 @@ void main() {
           client: client,
           camera: camera,
           poseSource: _FixedPose(),
+          useCamera: false,
         ),
       ),
     );
     await tester.pumpAndSettle();
     expect(find.byKey(const Key('sky-view')), findsOneWidget);
     expect(find.textContaining('Blick nach N (0°), 0° hoch'), findsOneWidget);
+    // Without a camera (tests, no permission): the drawing alone, no camera switch.
+    expect(find.byKey(const Key('sky-camera')), findsNothing);
+    expect(find.byKey(const Key('sky-toggle-camera')), findsNothing);
+    final painter =
+        tester.widget<CustomPaint>(find.byKey(const Key('sky-view'))).painter!
+            as SkyPainter;
+    expect(painter.data.overflights.single.name, 'ISS');
+    expect(painter.overflights, isTrue);
+    await tester.tap(find.byKey(const Key('sky-toggle-overflights')));
+    await tester.pump();
+    final off =
+        tester.widget<CustomPaint>(find.byKey(const Key('sky-view'))).painter!
+            as SkyPainter;
+    expect(off.overflights, isFalse);
   });
 }

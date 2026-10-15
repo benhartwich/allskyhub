@@ -1111,9 +1111,24 @@ class SkyViewData {
             start: _dir(m['start'] as List<dynamic>),
             end: _dir(m['end'] as List<dynamic>),
           ),
+      ],
+      // SPEC §6.4 Overflights; missing from hubs before roadmap L29.
+      overflights = [
+        for (final o in (json['overflights'] as List<dynamic>?) ?? const [])
+          (
+            at: DateTime.parse((o as Map<String, dynamic>)['at'] as String),
+            start: _dir(o['start'] as List<dynamic>),
+            end: _dir(o['end'] as List<dynamic>),
+            kind: o['kind'] as String,
+            name: o['name'] as String?,
+          ),
       ];
 
   final List<List<SkyDir>> lines;
   final List<({String label, String kind, SkyDir dir})> objects;
   final List<({DateTime at, SkyDir start, SkyDir end})> meteors;
+  final List<
+    ({DateTime at, SkyDir start, SkyDir end, String kind, String? name})
+  >
+  overflights;
 }

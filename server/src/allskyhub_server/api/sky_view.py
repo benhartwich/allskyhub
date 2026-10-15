@@ -2,8 +2,9 @@
 
 Directions only (altitude, azimuth in degrees); the app turns them into the phone's view
 from its own orientation. Constellations from ``allskyhub_sky``, moon and planets, and the
-meteors of the last hours with both track ends (SPEC §6.4), so the phone can point to where
-a meteor flew. The camera's place stands for the phone's: they are usually near.
+meteors and overflights (satellites, aircraft) of the last hours with both track ends
+(SPEC §6.4), so the phone can point to where they flew. The camera's place stands for the
+phone's: they are usually near.
 """
 
 from __future__ import annotations
@@ -27,6 +28,7 @@ router = APIRouter(prefix="/api/v1")
 
 METEOR_HOURS = 12
 METEOR_MAX = 50
+OVERFLIGHT_MAX = 150
 # Planets this far below the horizon are of no use to point at.
 MIN_ALT = -5.0
 
@@ -44,11 +46,23 @@ class MeteorItem(BaseModel):
     end: tuple[float, float]
 
 
+class OverflightItem(BaseModel):
+    """SPEC §6.4 Overflights: a satellite, an aircraft or an unknown moving object."""
+
+    at: dt.datetime
+    start: tuple[float, float]  # altitude, azimuth
+    end: tuple[float, float]
+    kind: str  # satellite, aircraft, unknown
+    name: str | None
+
+
 class SkyView(BaseModel):
     at: dt.datetime
     lines: list[list[tuple[float, float]]]
     objects: list[SkyObjectItem]
     meteors: list[MeteorItem]
+    # Newer than the first app version, which ignores it.
+    overflights: list[OverflightItem] = []
 
 
 @router.get("/cameras/{device_id}/sky-view")
@@ -79,17 +93,26 @@ async def sky_view(db: DbSession, user: AppUser, device_id: str) -> SkyView:
             EventRecord.device_id == device.id,
             EventRecord.kind == "meteor",
             EventRecord.start >= now - dt.timedelta(hours=METEOR_HOURS),
-            events.counted(),
         )
         .order_by(EventRecord.start.desc())
-        .limit(METEOR_MAX)
     )
     meteors: list[MeteorItem] = []
+    overflights: list[OverflightItem] = []
     for event in rows:
         data: dict[str, Any] = event.data or {}
         ends = [data.get(k) for k in ("start_altitude_deg", "start_azimuth_deg",
                                       "end_altitude_deg", "end_azimuth_deg")]  # fmt: skip
-        if all(isinstance(v, int | float) for v in ends):
-            a1, z1, a2, z2 = (float(v) for v in ends)  # pyright: ignore[reportArgumentType]
+        if not all(isinstance(v, int | float) for v in ends):
+            continue
+        a1, z1, a2, z2 = (float(v) for v in ends)  # pyright: ignore[reportArgumentType]
+        if (kind := events.overflight(event)) is not None:
+            if len(overflights) < OVERFLIGHT_MAX:
+                overflights.append(OverflightItem(
+                    at=event.start, start=(a1, z1), end=(a2, z2), kind=kind,
+                    name=events.overflight_name(event),
+                ))  # fmt: skip
+        elif not events.dismissed(event) and len(meteors) < METEOR_MAX:
             meteors.append(MeteorItem(at=event.start, start=(a1, z1), end=(a2, z2)))
-    return SkyView(at=now, lines=sky.lines, objects=objects, meteors=meteors)
+    return SkyView(
+        at=now, lines=sky.lines, objects=objects, meteors=meteors, overflights=overflights
+    )

@@ -59,6 +59,12 @@ from allskyhub_agent.importer.common import ImportReport
 from allskyhub_agent.importer.indi_allsky import DEFAULT_DB as INDI_DB
 from allskyhub_agent.importer.indi_allsky import IndiAllskyImporter, IndiAllskySettings
 from allskyhub_agent.importer.indi_allsky import cameras as indi_cameras
+from allskyhub_agent.lightning_sensor import (
+    LightningSensor,
+    LightningSensorConfig,
+    StormCheck,
+    Strike,
+)
 from allskyhub_agent.live import LiveState
 from allskyhub_agent.mqtt import MqttConfig, MqttPublisher
 from allskyhub_agent.process.hotpixels import HotPixels
@@ -579,9 +585,15 @@ def overlay_values(
     return out
 
 
-def weather_state(weather: WeatherStation) -> dict[str, Any]:
-    """The weather sensor's and the heater's values for MQTT (SPEC §7.7, §7.11)."""
+def weather_state(
+    weather: WeatherStation, lightning: LightningSensor | None = None
+) -> dict[str, Any]:
+    """The weather sensor's, the heater's and the lightning sensor's values for MQTT (SPEC
+    §7.7, §7.11, §7.12)."""
     out: dict[str, Any] = {}
+    ls = lightning.status if lightning is not None else None
+    if ls is not None:
+        out |= {"strikes_30min": ls.strikes_30min, "nearest_km": ls.nearest_km}
     env = weather.env_status
     if env is not None:
         out |= {
@@ -662,6 +674,8 @@ def main(argv: list[str] | None = None) -> int:
     observatory: list[Callable[[], Observatory | None]] = [lambda: None]  # N.I.N.A., §6.3
     adsb_status: list[Callable[[], AdsbStatus | None]] = [lambda: None]  # receiver, §7.8
     weather_box: list[WeatherStation | None] = [None]  # sensor and heater, §7.11
+    lightning_box: list[LightningSensor | None] = [None]  # AS3935, §7.12
+    strike_hooks: list[Callable[[Strike], None]] = []  # safety monitor, once it exists
     reboot_required: list[Callable[[], bool]] = [lambda: False]  # system updates, §8
     # Learned at night, edited in the local UI (roadmap L8) before the camera is open.
     calibration_dir = Path(args.data) / "calibration"
@@ -784,6 +798,7 @@ def main(argv: list[str] | None = None) -> int:
                 reboot_required=reboot_required[0](),
                 env=weather_box[0].env_status if weather_box[0] is not None else None,
                 heater=weather_box[0].heater_status if weather_box[0] is not None else None,
+                lightning_sensor=lightning_box[0].status if lightning_box[0] is not None else None,
             )
 
         def device_settings() -> DeviceSettings:
@@ -856,6 +871,25 @@ def main(argv: list[str] | None = None) -> int:
     )
     weather.start()
     weather_box[0] = weather
+
+    # SPEC §7.12: the lightning sensor (roadmap L31); never on the heater's pin.
+    irq = wcfg.lightning_sensor_irq_gpio
+
+    def strike_heard(strike: Strike) -> None:
+        for hook in strike_hooks:
+            hook(strike)
+
+    lightning_sensor = LightningSensor(
+        LightningSensorConfig(
+            sensor=wcfg.lightning_sensor,
+            address=wcfg.lightning_sensor_address,
+            irq_gpio=None if irq is not None and irq == wcfg.heater_gpio else irq,
+            indoor=wcfg.lightning_sensor_indoor,
+        ),
+        on_strike=strike_heard,
+    )
+    lightning_sensor.start()
+    lightning_box[0] = lightning_sensor
 
     def observatory_facts() -> dict[str, Any]:
         """SPEC §7.5 for the system page: Alpaca on/off, port or error, N.I.N.A."""
@@ -969,6 +1003,7 @@ def main(argv: list[str] | None = None) -> int:
                 else None,
                 env=lambda: weather.env_status,
                 heater=lambda: (wcfg.heater, wcfg.heater_gpio, weather.heater_status),
+                lightning=lambda: lightning_sensor.status,
             ),
         )
         web.start()
@@ -984,6 +1019,7 @@ def main(argv: list[str] | None = None) -> int:
     def shutdown() -> None:
         stop_bg.set()
         weather.stop()  # the heater off and its pin released
+        lightning_sensor.stop()
         if web is not None:
             web.stop()
         if hub is not None:
@@ -1087,6 +1123,8 @@ def main(argv: list[str] | None = None) -> int:
     safety = SafetyMonitor(
         SafetyConfig(tuned.safe_cloud_max / 100.0, timedelta(minutes=tuned.safe_hold_min))
     )
+    # SPEC §7.12: a strike the sensor hears makes it unsafe for 30 minutes, as a flash does.
+    strike_hooks.append(lambda s: safety.lightning(s.at))
 
     # SPEC §7.7: MQTT for home automation (roadmap L23), only publishing.
     mqtt: MqttPublisher | None = None
@@ -1101,6 +1139,7 @@ def main(argv: list[str] | None = None) -> int:
             __version__,
             weather=weather.sensor_on,
             heater=weather.heater_on,
+            lightning=lightning_sensor.on,
         )  # fmt: skip
         mqtt.start()
 
@@ -1122,7 +1161,7 @@ def main(argv: list[str] | None = None) -> int:
                 "sqm_mag": sky.sqm_mag if sky is not None else None,
                 "stars": sky.stars if sky is not None else None,
                 "safe": safety.is_safe(datetime.now(UTC)) if tuned.alpaca_enabled else None,
-                **weather_state(weather),
+                **weather_state(weather, lightning_sensor),
             }
         )
 
@@ -1157,9 +1196,36 @@ def main(argv: list[str] | None = None) -> int:
         adsb.start()
         adsb_status[0] = lambda: reader.status
 
+    # SPEC §7.12: the sensor confirms the camera's flashes; a storm it never heard is labelled.
+    def flash_checked(event: Event, data: dict[str, Any]) -> Event:
+        amended = event_store.amend(event, data)
+        if hub is not None:
+            hub.notify_event(amended)
+        return amended
+
+    def flash_false_alarm(event: Event) -> None:
+        label = EventLabel(
+            night_id=event.night_id,
+            event_id=event.id,
+            label="false_positive",
+            reason="other",
+            auto=True,
+            detail="kein Blitz am Sensor",
+            at=datetime.now(UTC),
+        )
+        if labels.set(label) and hub is not None:
+            hub.notify_message(label)
+
+    storm_check: StormCheck | None = None
+    if lightning_sensor.on:
+        storm_check = StormCheck(lightning_sensor.heard, flash_checked, flash_false_alarm)
+        storm_check.start()
+
     def event_out(event: Event) -> None:
         if event.kind is EventKind.LIGHTNING:
             safety.lightning(event.start)
+            if storm_check is not None:
+                storm_check.add(event)
         # SPEC §6.4 Trail verdicts: a streak that is no meteor is kept with an automatic label.
         label = trail_label(event)
         if label is not None and event.id in labels.night(event.night_id):

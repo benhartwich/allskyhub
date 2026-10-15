@@ -81,6 +81,10 @@ def test_values_report_every_key_and_fit_device_settings() -> None:
         "heater_gpio": None,
         "heater_active_low": False,
         "heater_dew_margin_c": 3.0,
+        "lightning_sensor": "off",
+        "lightning_sensor_address": "0x03",
+        "lightning_sensor_irq_gpio": None,
+        "lightning_sensor_indoor": False,
         "mqtt_host": "",
         "mqtt_port": 1883,
         "mqtt_tls": False,
@@ -108,6 +112,23 @@ def test_heater_settings_round_trip(tmp_path: Path) -> None:
     assert (loaded.env_sensor, loaded.heater, loaded.heater_gpio) == ("bme280", "auto", 17)
     assert (loaded.heater_active_low, loaded.heater_dew_margin_c) == (True, 2.5)
     assert loaded.with_values({"heater_gpio": None}).heater_gpio is None
+
+
+def test_lightning_sensor_settings(tmp_path: Path) -> None:
+    """SPEC §7.12: sensor, address, interrupt pin; never the heater's pin."""
+    schema = build_schema(get_profile("zwo-asi678mc"))
+    changes = {"lightning_sensor": "as3935", "lightning_sensor_address": "0x02",
+               "lightning_sensor_irq_gpio": 4, "lightning_sensor_indoor": True}  # fmt: skip
+    assert check(schema, changes) == []
+    assert check(schema, {"heater_gpio": 4, "lightning_sensor_irq_gpio": 4}) == [
+        "heater_gpio",
+        "lightning_sensor_irq_gpio",
+    ]
+    path = tmp_path / "settings.json"
+    AgentSettings().with_values(changes).save(path)
+    loaded = AgentSettings.load(path)
+    assert (loaded.lightning_sensor, loaded.lightning_sensor_address) == ("as3935", "0x02")
+    assert (loaded.lightning_sensor_irq_gpio, loaded.lightning_sensor_indoor) == (4, True)
 
 
 def test_check_uses_the_schema_and_the_fixed_rules() -> None:

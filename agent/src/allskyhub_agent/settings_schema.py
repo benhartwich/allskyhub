@@ -454,6 +454,66 @@ def _weather_entries() -> list[dict[str, Any]]:
     ]
 
 
+def _lightning_sensor_entries() -> list[dict[str, Any]]:
+    """Lightning sensor AS3935 (SPEC §7.12, roadmap L31)."""
+    group = {"de": "Wetter und Heizung", "en": "Weather and heater"}
+    return [
+        {
+            "key": "lightning_sensor",
+            "type": "choice",
+            "label": {"de": "Blitzsensor", "en": "Lightning sensor"},
+            "group": group,
+            "choices": [
+                {"value": "off", "label": {"de": "Keiner", "en": "None"}},
+                {"value": "as3935", "label": "AS3935 (I²C)"},
+            ],
+            "help": {
+                "de": "Hört Blitze bis etwa 40 km, auch am Tag. Bestätigt die Blitze der Kamera; "
+                "ein „Gewitter“ ohne einen gehörten Blitz wird als Fehlalarm markiert.",
+                "en": "Hears strikes up to about 40 km, also by day. Confirms the camera's "
+                'flashes; a "storm" without one strike heard is marked a false alarm.',
+            },
+        },
+        {
+            "key": "lightning_sensor_address",
+            "type": "choice",
+            "label": {"de": "Adresse des Blitzsensors", "en": "Lightning sensor address"},
+            "group": group,
+            "choices": [{"value": a, "label": a} for a in ("0x01", "0x02", "0x03")],
+            "help": {
+                "de": "Meist 0x03 (beide Adress-Lötbrücken offen).",
+                "en": "Usually 0x03 (both address jumpers open).",
+            },
+        },
+        {
+            "key": "lightning_sensor_irq_gpio",
+            "type": "int",
+            "nullable": True,
+            "label": {"de": "GPIO des Interrupts", "en": "Interrupt GPIO"},
+            "group": group,
+            "min": 2,
+            "max": 27,
+            "step": 1,
+            "help": {
+                "de": "BCM-Nummer des Pins, an dem IRQ des Sensors hängt (z. B. 4 für Pin 7). "
+                "Ohne ihn arbeitet der Sensor nicht.",
+                "en": "BCM number of the pin the sensor's IRQ is wired to (e.g. 4 for pin 7). "
+                "The sensor does not work without it.",
+            },
+        },
+        {
+            "key": "lightning_sensor_indoor",
+            "type": "bool",
+            "label": {"de": "Blitzsensor im Gehäuse", "en": "Lightning sensor in a housing"},
+            "group": group,
+            "help": {
+                "de": "Höhere Empfindlichkeit, wenn das Gehäuse die Signale dämpft.",
+                "en": "Higher sensitivity when the housing dampens the signals.",
+            },
+        },
+    ]
+
+
 def _mqtt_entries() -> list[dict[str, Any]]:
     """MQTT for home automation (SPEC §7.7, roadmap L23)."""
     group = {"de": "Hausautomation (MQTT)", "en": "Home automation (MQTT)"}
@@ -704,6 +764,7 @@ def build_schema(profile: Profile) -> list[SettingSpec]:
     entries.extend(_product_entries())
     entries.extend(_observatory_entries())
     entries.extend(_weather_entries())
+    entries.extend(_lightning_sensor_entries())
     entries.extend(_mqtt_entries())
     entries.extend(_display_entries())
     entries.append(
@@ -771,6 +832,10 @@ def check(schema: list[SettingSpec], changes: Mapping[str, Any]) -> list[str]:
         v: object = changes.get(k)
         if isinstance(v, str) and not valid_mqtt(k, v):
             bad.add(k)
+    # SPEC §7.11, §7.12: the heater and the sensor's interrupt cannot share a pin.
+    pins = [changes.get(k) for k in ("heater_gpio", "lightning_sensor_irq_gpio")]
+    if pins[0] is not None and pins[0] == pins[1]:
+        bad.update({"heater_gpio", "lightning_sensor_irq_gpio"})
     names: object = changes.get("local_hostnames")
     if isinstance(names, str) and not valid_hostnames(names):
         bad.add("local_hostnames")

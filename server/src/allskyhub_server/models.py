@@ -263,6 +263,24 @@ class Invitation(Base):
     used_at: Mapped[dt.datetime | None] = mapped_column(_tz())
 
 
+class AccessRequest(Base):
+    """Someone asks for an account on the public page (/zugang); an admin invites or declines."""
+
+    __tablename__ = "access_request"
+
+    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid7)
+    email: Mapped[str] = mapped_column(String(254), index=True)
+    name: Mapped[str] = mapped_column(String(100))
+    place: Mapped[str] = mapped_column(String(100), default="", server_default="")
+    # How far along: access_requests.STAGES.
+    stage: Mapped[str] = mapped_column(String(16))
+    message: Mapped[str] = mapped_column(String(1000), default="", server_default="")
+    created_at: Mapped[dt.datetime] = mapped_column(_tz(), server_default=func.now())
+    # "invited" or "declined"; null while open.
+    decision: Mapped[str | None] = mapped_column(String(16))
+    decided_at: Mapped[dt.datetime | None] = mapped_column(_tz())
+
+
 class Frame(Base):
     """A frame the hub asked the device for (SPEC §4.4 metadata) and what it holds of it."""
 

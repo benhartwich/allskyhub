@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import asyncio
 import shutil
+import uuid
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, Form, HTTPException, Request
@@ -15,7 +16,8 @@ from fastapi.responses import Response
 from sqlalchemy import func, select
 
 from allskyhub_server.admin import deploy
-from allskyhub_server.auth import ratelimit
+from allskyhub_server.auth import access_requests, ratelimit
+from allskyhub_server.auth.accounts import AccountError
 from allskyhub_server.auth.passwords import verify_secret_async
 from allskyhub_server.auth.sessions import SessionInfo
 from allskyhub_server.mail.send import Mail, Mailer
@@ -65,6 +67,8 @@ async def _page(
                 select(func.count()).select_from(Device).where(Device.owner_id.is_not(None))
             ),
             "repo": settings.deploy_repo,
+            "access_requests": await access_requests.open_requests(db),
+            "stages": access_requests.STAGES,
             "plus": (
                 await db.execute(
                     select(Device, User.email)
@@ -175,3 +179,46 @@ async def mail_test(
             request, db, session, 502, error="Der Mailserver hat die Mail nicht angenommen."
         )
     return await _page(request, db, session, notice=f"Testmail an {session.user.email} ist raus.")
+
+
+@router.post("/admin/access/{request_id}/invite")
+async def invite_request(
+    request: Request,
+    db: DbSession,
+    session: CurrentSession,
+    settings: SettingsDep,
+    request_id: uuid.UUID,
+) -> Response:
+    """Invite whoever asked on /zugang: the invitation link goes out by mail."""
+    _admin(session, settings)
+    try:
+        asked, link, mail = await access_requests.invite(db, request_id, settings.base_url)
+    except AccountError as exc:
+        await db.rollback()
+        return await _page(request, db, session, 400, error=exc.message)
+    await db.commit()
+    mailer: Mailer = request.app.state.mailer
+    if mailer.enabled and await mailer.send(mail):
+        return await _page(request, db, session, notice=f"Einladung an {asked.email} ist raus.")
+    # No mail: the admin passes the link on by hand.
+    return await _page(
+        request, db, session,
+        notice=f"Die Mail an {asked.email} ging nicht raus. Schick den Link selbst: {link}",
+    )  # fmt: skip
+
+
+@router.post("/admin/access/{request_id}/decline")
+async def decline_request(
+    request: Request,
+    db: DbSession,
+    session: CurrentSession,
+    settings: SettingsDep,
+    request_id: uuid.UUID,
+) -> Response:
+    _admin(session, settings)
+    try:
+        asked = await access_requests.decline(db, request_id)
+    except AccountError as exc:
+        return await _page(request, db, session, 400, error=exc.message)
+    await db.commit()
+    return await _page(request, db, session, notice=f"Anfrage von {asked.email} abgelehnt.")

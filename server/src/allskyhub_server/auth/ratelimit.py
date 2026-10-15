@@ -62,6 +62,9 @@ INVITE_PER_IP = (Limit(20, 3600),)
 # Roadmap #15: "Passwort vergessen" mails, per address and per IP.
 RESET_PER_EMAIL = (Limit(3, 3600),)
 RESET_PER_IP = (Limit(10, 3600),)
+# Access requests on /zugang: per IP, and a cap across all, so a bot cannot flood the admins.
+ACCESS_PER_IP = (Limit(3, 3600), Limit(10, 86400))
+ACCESS_ALL = (Limit(50, 86400),)
 # Device API (SPEC §6.6): a registering device calls challenge + register every ~5 s.
 DEVICE_CHALLENGE_PER_IP = (Limit(120, 60), Limit(2000, 3600))
 DEVICE_REGISTER_PER_IP = (Limit(60, 60),)

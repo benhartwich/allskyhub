@@ -1,0 +1,15 @@
+{% for group in groups %}
+<section class="card stack" id="{{ group.key }}">
+  <h2>{{ group.title }}</h2>
+  <p class="muted">{{ group.intro }}</p>
+  <ul class="parts">
+    {% for part in group.parts %}
+    <li>
+      <div class="part-head"><strong>{{ part.name }}</strong>{% if part.price %}<span class="part-price">{{ part.price }}</span>{% endif %}</div>
+      <span class="muted small">{{ part.note }}</span>
+      {% if part.links %}<span class="part-links">{% for link in part.links %}<a href="{{ link.url }}" rel="noopener" target="_blank">{{ link.label }} ↗</a>{% endfor %}</span>{% endif %}
+    </li>
+    {% endfor %}
+  </ul>
+</section>
+{% endfor %}

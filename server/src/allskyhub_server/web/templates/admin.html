@@ -52,6 +52,33 @@
   </form>
   {% endif %}
 </section>
+<section class="card stack" id="zugang">
+  <h2>Zugangsanfragen</h2>
+  {% if access_requests %}
+  <ul class="parts">
+    {% for r in access_requests %}
+    <li>
+      <div class="part-head"><strong>{{ r.name }} · {{ r.email }}</strong><span class="part-price">{{ r.created_at | localtime }}</span></div>
+      <span class="muted small">{{ stages[r.stage] }}{% if r.place %} · {{ r.place }}{% endif %}</span>
+      {% if r.message %}<span>{{ r.message }}</span>{% endif %}
+      <span class="part-links">
+        <form method="post" action="/admin/access/{{ r.id }}/invite" class="inline">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+          <button type="submit" class="small">Einladen</button>
+        </form>
+        <form method="post" action="/admin/access/{{ r.id }}/decline" class="inline">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+          <button type="submit" class="secondary small">Ablehnen</button>
+        </form>
+      </span>
+    </li>
+    {% endfor %}
+  </ul>
+  {% else %}
+  <p class="muted">Keine offenen Anfragen.</p>
+  {% endif %}
+  <p class="muted small">„Einladen“ schickt den Einladungslink (14 Tage gültig) und den Link zu den ersten Schritten per E-Mail. „Ablehnen“ schickt nichts.</p>
+</section>
 <section class="card stack">
   <h2>Plus</h2>
   {% if plus %}

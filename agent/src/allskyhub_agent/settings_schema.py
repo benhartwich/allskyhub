@@ -354,6 +354,106 @@ def _observatory_entries() -> list[dict[str, Any]]:
     ]
 
 
+def _weather_entries() -> list[dict[str, Any]]:
+    """Weather sensor and dew heater (SPEC §7.11, roadmap L30)."""
+    group = {"de": "Wetter und Heizung", "en": "Weather and heater"}
+    return [
+        {
+            "key": "env_sensor",
+            "type": "choice",
+            "label": {"de": "Wettersensor", "en": "Weather sensor"},
+            "group": group,
+            "choices": [
+                {"value": "off", "label": {"de": "Keiner", "en": "None"}},
+                {"value": "bme280", "label": "BME280 (I²C)"},
+            ],
+            "help": {
+                "de": "Temperatur, Feuchte, Luftdruck und Taupunkt für Diagramme, Overlay, "
+                "MQTT und Alpaca. Angeschlossen an SDA (Pin 3) und SCL (Pin 5).",
+                "en": "Temperature, humidity, pressure and dew point for charts, overlay, MQTT "
+                "and Alpaca. Connected to SDA (pin 3) and SCL (pin 5).",
+            },
+        },
+        {
+            "key": "env_sensor_address",
+            "type": "choice",
+            "label": {"de": "Adresse des Sensors", "en": "Sensor address"},
+            "group": group,
+            "choices": [
+                {"value": "0x76", "label": "0x76"},
+                {"value": "0x77", "label": "0x77"},
+            ],
+            "help": {
+                "de": "Die meisten Platinen nutzen 0x76, manche (z. B. Adafruit) 0x77.",
+                "en": "Most boards use 0x76, some (e.g. Adafruit) 0x77.",
+            },
+        },
+        {
+            "key": "heater",
+            "type": "choice",
+            "label": {"de": "Kuppelheizung", "en": "Dome heater"},
+            "group": group,
+            "choices": [
+                {"value": "off", "label": {"de": "Aus", "en": "Off"}},
+                {
+                    "value": "auto",
+                    "label": {"de": "Automatisch (Taupunkt)", "en": "Automatic (dew point)"},
+                },
+                {"value": "on", "label": {"de": "Immer an", "en": "Always on"}},
+            ],
+            "help": {
+                "de": "Automatisch heizt, wenn die Luft nahe am Taupunkt oder sehr feucht ist; "
+                "ohne Sensor nachts. Über 45 °C immer aus.",
+                "en": "Automatic heats when the air is close to its dew point or very humid; "
+                "without a sensor at night. Always off above 45 °C.",
+            },
+        },
+        {
+            "key": "heater_gpio",
+            "type": "int",
+            "nullable": True,
+            "label": {"de": "GPIO der Heizung", "en": "Heater GPIO"},
+            "group": group,
+            "min": 2,
+            "max": 27,
+            "step": 1,
+            "help": {
+                "de": "BCM-Nummer des Pins, der die Heizung schaltet (z. B. 17 für Pin 11). "
+                "Leer: es wird nichts geschaltet.",
+                "en": "BCM number of the pin that switches the heater (e.g. 17 for pin 11). "
+                "Empty: nothing is switched.",
+            },
+        },
+        {
+            "key": "heater_active_low",
+            "type": "bool",
+            "label": {"de": "Heizung schaltet bei LOW", "en": "Heater switches on LOW"},
+            "group": group,
+            "help": {
+                "de": "Für Schaltstufen, die mit 0 V einschalten. Die Stufe muss bei offenem "
+                "Pin aus sein.",
+                "en": "For stages that switch on at 0 V. The stage must be off while the pin "
+                "is open.",
+            },
+        },
+        {
+            "key": "heater_dew_margin_c",
+            "type": "number",
+            "label": {"de": "Abstand zum Taupunkt", "en": "Margin to the dew point"},
+            "group": group,
+            "unit": "°C",
+            "min": 0.5,
+            "max": 10,
+            "step": 0.5,
+            "help": {
+                "de": "Liegt die Temperatur so nah am Taupunkt, heizt die Kamera. Standard 3 °C.",
+                "en": "With the temperature this close to the dew point the camera heats. "
+                "Default 3 °C.",
+            },
+        },
+    ]
+
+
 def _mqtt_entries() -> list[dict[str, Any]]:
     """MQTT for home automation (SPEC §7.7, roadmap L23)."""
     group = {"de": "Hausautomation (MQTT)", "en": "Home automation (MQTT)"}
@@ -603,6 +703,7 @@ def build_schema(profile: Profile) -> list[SettingSpec]:
     entries.extend(_detector_entries())
     entries.extend(_product_entries())
     entries.extend(_observatory_entries())
+    entries.extend(_weather_entries())
     entries.extend(_mqtt_entries())
     entries.extend(_display_entries())
     entries.append(

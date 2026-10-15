@@ -75,6 +75,12 @@ def test_values_report_every_key_and_fit_device_settings() -> None:
         "safe_hold_min": 10,
         "nina_url": "",
         "adsb_url": "",
+        "env_sensor": "off",
+        "env_sensor_address": "0x76",
+        "heater": "off",
+        "heater_gpio": None,
+        "heater_active_low": False,
+        "heater_dew_margin_c": 3.0,
         "mqtt_host": "",
         "mqtt_port": 1883,
         "mqtt_tls": False,
@@ -86,6 +92,22 @@ def test_values_report_every_key_and_fit_device_settings() -> None:
         "language": "de",
         "temperature_unit": "c",
     }
+
+
+def test_heater_settings_round_trip(tmp_path: Path) -> None:
+    """SPEC §7.11: the heater's pin, polarity and margin are kept; null takes the pin away."""
+    schema = build_schema(get_profile("zwo-asi678mc"))
+    changes = {"env_sensor": "bme280", "heater": "auto", "heater_gpio": 17,
+               "heater_active_low": True, "heater_dew_margin_c": 2.5}  # fmt: skip
+    assert check(schema, changes) == []
+    assert check(schema, {"heater_gpio": 40, "heater": "warm"}) == ["heater", "heater_gpio"]
+    s = AgentSettings().with_values(changes)
+    path = tmp_path / "settings.json"
+    s.save(path)
+    loaded = AgentSettings.load(path)
+    assert (loaded.env_sensor, loaded.heater, loaded.heater_gpio) == ("bme280", "auto", 17)
+    assert (loaded.heater_active_low, loaded.heater_dew_margin_c) == (True, 2.5)
+    assert loaded.with_values({"heater_gpio": None}).heater_gpio is None
 
 
 def test_check_uses_the_schema_and_the_fixed_rules() -> None:

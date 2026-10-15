@@ -27,12 +27,21 @@ FLIP_CHOICES = ("none", "horizontal", "vertical")
 ROTATE_CHOICES = ("0", "90", "180", "270")
 LANGUAGE_CHOICES = ("de", "en")
 TEMPERATURE_CHOICES = ("c", "f")
+# Weather sensor and dew heater (SPEC §7.11, roadmap L30).
+ENV_SENSOR_CHOICES = ("off", "bme280")
+ENV_ADDRESS_CHOICES = ("0x76", "0x77")
+HEATER_CHOICES = ("off", "auto", "on")
+HEATER_GPIO_RANGE = (2, 27)  # BCM numbers of the 40-pin header
+DEW_MARGIN_RANGE = (0.5, 10.0)
 _CHOICES = {
     "day_capture": DAY_CAPTURE_CHOICES,
     "image_flip": FLIP_CHOICES,
     "image_rotate": ROTATE_CHOICES,
     "language": LANGUAGE_CHOICES,
     "temperature_unit": TEMPERATURE_CHOICES,
+    "env_sensor": ENV_SENSOR_CHOICES,
+    "env_sensor_address": ENV_ADDRESS_CHOICES,
+    "heater": HEATER_CHOICES,
 }
 _PRODUCT_SWITCHES = (
     "product_keogram",
@@ -46,6 +55,7 @@ _PRODUCT_SWITCHES = (
     "moon_mode",
     "mqtt_tls",
     "https",
+    "heater_active_low",
 )
 # MQTT (SPEC §7.7, roadmap L23): free text, checked by `valid_mqtt`.
 _MQTT_STRINGS = ("mqtt_host", "mqtt_user", "mqtt_prefix")
@@ -102,6 +112,20 @@ def valid_mqtt(key: str, value: str) -> bool:
             and not v.endswith("/")
         )
     return len(v) <= 100
+
+
+def _heater_numbers(d: Mapping[str, object]) -> dict[str, Any]:
+    """`heater_gpio` (a header pin) and `heater_dew_margin_c` when valid (SPEC §7.11)."""
+    out: dict[str, Any] = {}
+    pin = d.get("heater_gpio")
+    lo, hi = HEATER_GPIO_RANGE
+    if isinstance(pin, int) and not isinstance(pin, bool) and lo <= pin <= hi:
+        out["heater_gpio"] = pin
+    margin = d.get("heater_dew_margin_c")
+    lo_m, hi_m = DEW_MARGIN_RANGE
+    if isinstance(margin, int | float) and not isinstance(margin, bool) and lo_m <= margin <= hi_m:
+        out["heater_dew_margin_c"] = float(margin)
+    return out
 
 
 def valid_timezone(name: str) -> bool:
@@ -178,6 +202,13 @@ class AgentSettings:
     https: bool = False
     # SPEC §7.4 Addresses: own host names the local UI also answers under.
     local_hostnames: str = ""
+    # Weather sensor and dew heater (SPEC §7.11, roadmap L30). No pin: nothing is switched.
+    env_sensor: str = "off"
+    env_sensor_address: str = "0x76"
+    heater: str = "off"
+    heater_gpio: int | None = None
+    heater_active_low: bool = False
+    heater_dew_margin_c: float = 3.0
 
     @property
     def has_location(self) -> bool:
@@ -254,6 +285,7 @@ class AgentSettings:
         names = d.get("local_hostnames")
         if isinstance(names, str) and valid_hostnames(names):
             later["local_hostnames"] = names
+        later.update(_heater_numbers(d))
         for k in _MQTT_STRINGS:
             v = d.get(k)
             if isinstance(v, str) and valid_mqtt(k, v):
@@ -332,6 +364,9 @@ class AgentSettings:
         v = values.get("local_hostnames")
         if isinstance(v, str) and valid_hostnames(v):
             extra["local_hostnames"] = " ".join(host_names(v))
+        extra.update(_heater_numbers(values))
+        if "heater_gpio" in values and values["heater_gpio"] is None:
+            extra["heater_gpio"] = None  # SPEC §6.5: null takes the pin away
         return replace(s, **extra)
 
     def save(self, path: Path) -> None:

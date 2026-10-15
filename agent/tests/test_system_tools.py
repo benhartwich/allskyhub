@@ -13,9 +13,9 @@ from allskyhub_agent.live import LiveState
 from allskyhub_agent.store.images import ImageStore
 from allskyhub_agent.watchdog import Heartbeat, WatchState, decide
 from allskyhub_agent.web.archive import LocalArchive
-from allskyhub_agent.web.check import CheckFacts, run_checks
+from allskyhub_agent.web.check import CheckFacts, run_checks, weather_checks
 from allskyhub_agent.web.support import RecentLog
-from allskyhub_protocol import FrameInfo, Mode, NightDeleted
+from allskyhub_protocol import EnvStatus, FrameInfo, HeaterStatus, Mode, NightDeleted
 
 TZ = ZoneInfo("Europe/Vienna")
 NOW = datetime(2026, 10, 13, 20, 0, tzinfo=UTC)
@@ -106,6 +106,28 @@ def test_camera_check() -> None:
                    "orientation": "warn", "hub": "ok"}  # fmt: skip
     stalled = run_checks(facts, NOW + timedelta(minutes=20))
     assert next(c for c in stalled if c["id"] == "frames")["state"] == "fail"
+
+
+def test_weather_and_heater_check() -> None:
+    """SPEC §7.11: the sensor's values or why it fails; a heater without a pin warns."""
+
+    def facts(
+        env: EnvStatus | None, heater: tuple[str, int | None, HeaterStatus | None]
+    ) -> CheckFacts:
+        return CheckFacts(power=lambda: [], time_trusted=lambda: True,
+                          disk_free_pct=lambda: 50.0, last_frame=lambda: None,
+                          paused=lambda: False, env=lambda: env, heater=lambda: heater)  # fmt: skip
+
+    good = EnvStatus(at=NOW, temperature_c=8.4, humidity_pct=91.0, pressure_hpa=1012.3,
+                     dewpoint_c=7.1)  # fmt: skip
+    on = HeaterStatus(on=True, reason="dew")
+    got = weather_checks(facts(good, ("auto", 17, on)))
+    assert [(c["id"], c["state"]) for c in got] == [("weather", "ok"), ("heater", "ok")]
+    assert "Taupunkt 7,1 °C" in got[0]["detail"]
+    assert "nahe am Taupunkt" in got[1]["detail"]
+    got = weather_checks(facts(EnvStatus(error="not_found"), ("auto", None, None)))
+    assert [(c["id"], c["state"]) for c in got] == [("weather", "fail"), ("heater", "warn")]
+    assert weather_checks(facts(None, ("off", None, None))) == []
 
 
 def test_follow_the_log() -> None:

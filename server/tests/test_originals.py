@@ -204,10 +204,14 @@ async def test_overflight_page_and_summary(
     assert "2 Überflüge" in summary.line()
     # On the map: the oriented one as a track, the other only in the list.
     assert page.text.count('class="ovf-track') == 1
-    assert "1 ohne Himmelsrichtung" in page.text
+    # The possible meteor is there too, as its own kind, for comparison.
+    assert "1 Meteor zum Vergleich" in page.text
+    assert 'data-ovf-group="meteor"' in page.text
+    assert "2 ohne Himmelsrichtung" in page.text
     assert 'data-ovf-group="satellite"' in page.text
     # The event says what it is and leads back to the overflights.
-    link = re.search(r'href="(/cameras/[^"]+\?von=ueberfluege)"', page.text)
+    moving = event_id(EventKind.METEOR, START + dt.timedelta(minutes=5))
+    link = re.search(rf'href="(/cameras/[^"]+/{moving}\?von=ueberfluege)"', page.text)
     assert link is not None
     event_page = await client.get(link.group(1).replace("&amp;", "&"))
     assert "<h1>Unbekanntes Objekt</h1>" in event_page.text

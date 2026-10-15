@@ -9,7 +9,7 @@ from zoneinfo import ZoneInfo
 
 from fastapi import APIRouter, Depends, Form, HTTPException, Path, Query, Request
 from fastapi.responses import FileResponse, JSONResponse, RedirectResponse, Response
-from sqlalchemy import or_, select
+from sqlalchemy import select
 
 from allskyhub_protocol import EVENT_ID_PATTERN, EventVariant, FrameVariant
 from allskyhub_server.auth.sessions import SessionInfo
@@ -251,10 +251,6 @@ async def overflights(
             .where(
                 EventRecord.device_id == device.id,
                 EventRecord.kind == "meteor",
-                or_(
-                    EventRecord.data["trail"].astext.in_(events.OVERFLIGHT_TRAILS),
-                    EventRecord.label_reason.in_(("aircraft", "satellite")),
-                ),
             )
             .group_by(EventRecord.night_id)
             .order_by(EventRecord.night_id.desc())
@@ -292,9 +288,10 @@ async def overflights(
             "tracks": tracks,
             "mapped": [t for t in tracks if t.path],
             "skies": skies,
-            "group_titles": events.OVERFLIGHT_GROUPS,
+            "group_titles": MAP_GROUPS,
             "one": OVERFLIGHT_TITLES,
             "count": events.overflight_count([t.event for t in tracks]),
+            "meteor_count": sum(t.group == "meteor" for t in tracks),
             "zone": str(series.zone(device)),
             "map": overflight_map,
         },
@@ -302,7 +299,11 @@ async def overflights(
     )
 
 
-OVERFLIGHT_TITLES = {"satellite": "Satellit", "aircraft": "Flugzeug", "unknown": "Unbekannt"}
+OVERFLIGHT_TITLES = {
+    "satellite": "Satellit", "aircraft": "Flugzeug", "unknown": "Unbekannt", "meteor": "Meteor",
+}  # fmt: skip
+# The map's kinds: the overflights and, for comparison, the possible meteors.
+MAP_GROUPS = {**events.OVERFLIGHT_GROUPS, "meteor": "Meteore"}
 OVERFLIGHT_HEADINGS = {**OVERFLIGHT_TITLES, "unknown": "Unbekanntes Objekt"}
 
 

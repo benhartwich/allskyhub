@@ -146,8 +146,8 @@ def _cmd_invite(args: argparse.Namespace) -> int:
 
 def _cmd_li_backfill(args: argparse.Namespace) -> int:
     """Roadmap H8: read the Lightning Imager's products of the last hours (up to the 48 h
-    the hub keeps) and check the lightning events they cover. The cameras get the labels
-    after their next reconnect."""
+    the hub keeps) and check the lightning events they cover. The running hub sends the
+    labels to the cameras in its next round (at most 10 minutes)."""
     from allskyhub_server.devices import lightning_li
 
     async def work(db: AsyncSession, settings: Settings) -> int:
@@ -161,7 +161,10 @@ def _cmd_li_backfill(args: argparse.Namespace) -> int:
             changed = await lightning_li.check(db, now)
         finally:
             await store.client.aclose()
-        print(f"{added} Blitze neu eingelesen, Labels für {len(changed)} Kamera(s) gesetzt.")
+        print(
+            f"{added} Blitze neu eingelesen, Labels für {len(changed)} Kamera(s) gesetzt; "
+            "der Hub schickt sie in spätestens 10 Minuten an die Kameras."
+        )
         return 0
 
     return _run_db(work)

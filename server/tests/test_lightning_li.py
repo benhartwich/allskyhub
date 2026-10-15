@@ -280,3 +280,40 @@ async def test_data_store_requests() -> None:
         .endswith("/collections/EO%3AEUM%3ADAT%3A0691/products/P%201/entry")
     )
     assert download.url.params["name"] == "a_BODY_0001.nc"
+
+
+async def test_a_revoked_token_is_renewed_once() -> None:
+    tokens = iter(["old", "new"])
+    seen: list[str] = []
+
+    def answer(request: httpx.Request) -> httpx.Response:
+        if request.url.path == "/token":
+            return httpx.Response(200, json={"access_token": next(tokens), "expires_in": 3600})
+        seen.append(request.headers["authorization"])
+        if request.headers["authorization"] == "Bearer old":
+            return httpx.Response(401)
+        return httpx.Response(200, content=b"nc")
+
+    client = httpx.AsyncClient(transport=httpx.MockTransport(answer))
+    store = lightning_li.DataStore("key", "secret", client)
+    g = lightning_li.Granule("P 1", NOW, NOW, "a_BODY_0001.nc")
+    assert await store.body(g) == b"nc"
+    assert seen == ["Bearer old", "Bearer new"]
+    await client.aclose()
+
+
+async def test_pending_labels_are_found_for_delivery(
+    app: FastAPI, client: httpx.AsyncClient
+) -> None:
+    """li-backfill sets labels outside the running hub; its next round sends them."""
+    dev, _, _ = await _camera(app, client)
+    maker: async_sessionmaker[AsyncSession] = app.state.sessionmaker
+    t0 = dt.datetime(2026, 10, 14, 22, 0, tzinfo=dt.UTC)
+    async with maker() as db:
+        assert await lightning_li.pending(db) == set()
+        event = _flash(dev.device_id, t0, "storm-A")
+        db.add(event)
+        await db.commit()
+        await labels.set_auto(db, event, "other", lightning_li.DETAIL, t0)
+        await db.commit()
+        assert await lightning_li.pending(db) == {dev.device_id}

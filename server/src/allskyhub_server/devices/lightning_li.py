@@ -143,15 +143,13 @@ class DataStore:
         out: list[Granule] = []
         index = 0
         while True:
-            r = await self.client.get(
+            r = await self._get(
                 f"{API}/data/search-products/1.0.0/os",
-                params={
+                {
                     "format": "json", "pi": COLLECTION, "dtstart": _iso(start),
                     "dtend": _iso(end), "si": index, "c": PAGE,
                 },
-                headers=await self._bearer(),
             )  # fmt: skip
-            r.raise_for_status()
             page = r.json()
             out += granules(page)
             index += PAGE
@@ -163,9 +161,17 @@ class DataStore:
             f"{API}/data/download/1.0.0/collections/{quote(COLLECTION, safe='')}"
             f"/products/{quote(granule.id, safe='')}/entry"
         )
-        r = await self.client.get(url, params={"name": granule.entry}, headers=await self._bearer())
+        return (await self._get(url, {"name": granule.entry})).content
+
+    async def _get(self, url: str, params: dict[str, str | int]) -> httpx.Response:
+        """GET with the token; a 401 (the token ended early, e.g. another client asked for
+        one with the same key) fetches a new token and tries once more."""
+        r = await self.client.get(url, params=params, headers=await self._bearer())
+        if r.status_code == 401:
+            self._token_until = dt.datetime.min.replace(tzinfo=dt.UTC)
+            r = await self.client.get(url, params=params, headers=await self._bearer())
         r.raise_for_status()
-        return r.content
+        return r
 
 
 def _values(dataset: Any) -> np.ndarray[Any, np.dtype[np.float64]]:
@@ -370,6 +376,22 @@ def _sensor_heard(event: EventRecord) -> bool:
     return isinstance(km, int | float)
 
 
+async def pending(db: AsyncSession) -> set[str]:
+    """Cameras with lightning labels the hub set and the camera has not acknowledged."""
+    return set(
+        await db.scalars(
+            select(EventRecord.device_id)
+            .where(
+                EventRecord.kind == "lightning",
+                EventRecord.label_pending.is_(True),
+                EventRecord.label_auto.is_(True),
+                EventRecord.label_detail == DETAIL,
+            )
+            .distinct()
+        )
+    )
+
+
 async def run_forever(
     maker: async_sessionmaker[AsyncSession], fetcher: Fetcher, registry: ConnectionRegistry
 ) -> None:
@@ -381,8 +403,12 @@ async def run_forever(
             async with maker() as db:
                 await ingest(db, fetcher, now)
                 changed = await check(db, now)
+                # Also labels set while no round could deliver them (li-backfill on the
+                # command line): they would otherwise wait for the camera's next hello.
+                changed |= await pending(db)
             for device_id in changed:
-                labels.deliver_later(maker, registry, device_id)
+                if registry.is_online(device_id):
+                    labels.deliver_later(maker, registry, device_id)
         except Exception:  # never let one bad round end the loop
             log.exception("lightning imager round failed")
         await asyncio.sleep(EVERY.total_seconds())

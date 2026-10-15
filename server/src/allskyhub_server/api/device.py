@@ -19,7 +19,7 @@ from pydantic import ValidationError
 from sqlalchemy import func, select, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
-from starlette.websockets import WebSocketDisconnect, WebSocketState
+from starlette.websockets import WebSocketDisconnect, WebSocketDisconnected, WebSocketState
 
 from allskyhub_protocol import (
     EVENT_ID_PATTERN,
@@ -437,7 +437,9 @@ async def device_ws(websocket: WebSocket) -> None:
                 continue
             await bucket.take()  # a flooding device is slowed down, nothing is lost
             await _handle(raw, conn, maker, settings, registry, notifier, store, kp)
-    except WebSocketDisconnect:
+    except (WebSocketDisconnect, WebSocketDisconnected):
+        # The second: this side closed it (replaced by a new connection, token expired)
+        # while the loop waited for the next message.
         pass
     finally:
         watchdog.cancel()

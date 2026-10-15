@@ -1177,12 +1177,15 @@ the north is no flash of a storm in the south (Benjamin, 2026-10-15: a lamp's gl
 NNW was "confirmed" by storms elsewhere within 400 km). Without `azimuth_deg` any direction
 counts. The hub keeps, per event, the nearest flash that counts and shows it next to the
 event ("Blitzsatellit: Blitze in 230 km Richtung NW"). When LI saw no flash that counts
-during a whole storm (every event with the same `data.storm`, §6.4), each of its events gets
-the automatic label
-`false_positive`/`other` with detail `kein Gewitter (Blitzsatellit)`, which goes to the
-camera with `label_event`. Not checked, and shown as unchecked: imported events, events
-older than the kept flashes and events whose window LI data does not cover (an outage on
-either side). Labels set by the owner win as always (§6.4 Labels).
+for any checked event of a storm (every event with the same `data.storm`, §6.4), each of its
+checked events gets the automatic label `false_positive`/`other` with detail
+`kein Gewitter (Blitzsatellit)`, which goes to the camera with `label_event`; one confirmed
+event keeps the whole storm unlabelled. Not checked, shown as unchecked and never labelled:
+imported events, events older than the kept flashes and events whose window LI data does not
+cover (an outage on either side). Gaps in LI data no longer hold back the label of a storm's
+other events (Benjamin, 2026-10-15: 85 of 90 flashes of a lamp's "storm" had no flash in
+their direction, 5 fell into gaps, and the storm stayed unlabelled). Labels set by the
+owner win as always (§6.4 Labels).
 
 ### 7.11 Weather sensor and dew heater
 

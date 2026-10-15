@@ -213,13 +213,15 @@ def parse(data: bytes) -> list[tuple[dt.datetime, float, float]]:
     ]
 
 
-async def ingest(db: AsyncSession, fetcher: Fetcher, now: dt.datetime) -> int:
-    """Read the products of the last ``LOOKBACK`` not read yet; drop what is older than
+async def ingest(
+    db: AsyncSession, fetcher: Fetcher, now: dt.datetime, lookback: dt.timedelta = LOOKBACK
+) -> int:
+    """Read the products of the last ``lookback`` not read yet; drop what is older than
     ``KEEP``. Returns the number of new flashes. Commits after every product."""
     await db.execute(delete(LiFlash).where(LiFlash.at < now - KEEP))
     await db.execute(delete(LiGranule).where(LiGranule.end < now - KEEP))
     await db.commit()
-    found = await fetcher.search(now - LOOKBACK, now)
+    found = await fetcher.search(now - min(lookback, KEEP), now)
     known = set(
         await db.scalars(select(LiGranule.id).where(LiGranule.id.in_([g.id for g in found])))
     )

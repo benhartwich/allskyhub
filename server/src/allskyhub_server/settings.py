@@ -72,6 +72,10 @@ class Settings(BaseSettings):
     adsb: bool = True
     # Roadmap H6 (SPEC §7.9): CelesTrak's orbital elements, to name satellites among meteors.
     satellites: bool = True
+    # Roadmap H8 (SPEC §7.10): flashes from Meteosat's Lightning Imager, from the EUMETSAT
+    # Data Store (a free account; key and secret of its API). Off while either is empty.
+    eumetsat_key: str = ""
+    eumetsat_secret: str = ""
 
     log_level: str = "INFO"
     log_format: Literal["json", "console"] = "json"
@@ -82,6 +86,10 @@ class Settings(BaseSettings):
         if not v.startswith(("postgresql://", "postgres://")):
             raise ValueError("database_url must start with postgresql://")
         return v
+
+    @property
+    def lightning_li(self) -> bool:
+        return bool(self.eumetsat_key and self.eumetsat_secret)
 
     @property
     def billing(self) -> bool:

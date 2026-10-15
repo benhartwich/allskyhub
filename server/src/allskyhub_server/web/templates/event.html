@@ -8,7 +8,7 @@
 <form method="post" action="/cameras/{{ device.id }}/events/{{ event.night_id }}/{{ event.event_id }}/label" class="card label-form">
   <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
   {% if event.label == "false_positive" and event.label_auto %}
-  <p><strong>Automatisch als „kein {{ event_titles[event.kind] or event.kind }}“ markiert: {{ label_reasons[event.label_reason] or "" }}{% if event.label_detail %} {{ event.label_detail }}{% endif %}.</strong> Die Spur passt zu seiner Bahn; zählt nirgends mit.</p>
+  <p><strong>Automatisch als „kein {{ event_titles[event.kind] or event.kind }}“ markiert: {{ label_reasons[event.label_reason] or "" }}{% if event.label_detail %} {{ event.label_detail }}{% endif %}.</strong> {% if event.kind == "lightning" %}Der Blitzsatellit sah während des ganzen Gewitters keine Blitze im Umkreis von 400 km: wohl Licht in der Nähe der Kamera.{% else %}Die Spur passt zu seiner Bahn;{% endif %} Zählt nirgends mit.</p>
   <button type="submit" name="label" value="" class="secondary">Doch kein {{ label_reasons[event.label_reason] or "Fehlalarm" }}: Markierung entfernen</button>
   {% elif event.label == "false_positive" %}
   <p><strong>Als „kein {{ event_titles[event.kind] or event.kind }}“ markiert{% if event.label_reason %} ({{ label_reasons[event.label_reason] }}){% endif %}.</strong> Zählt nirgends mit.</p>

@@ -358,8 +358,37 @@ class EventRecord(Base):
     label_detail: Mapped[str | None] = mapped_column(String(100))
     # Roadmap H5: already posted to the owner's Discord channel.
     discord_posted: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
+    # SPEC §7.10 (lightning): when the hub compared it with the Lightning Imager's flashes
+    # (null: unchecked), and the nearest flash within reach then (null: none).
+    li_checked_at: Mapped[dt.datetime | None] = mapped_column(_tz())
+    li_km: Mapped[float | None] = mapped_column(Float)
+    li_bearing_deg: Mapped[float | None] = mapped_column(Float)
     # Retention counts from the first report (privacy policy).
     created_at: Mapped[dt.datetime] = mapped_column(_tz(), server_default=func.now(), index=True)
+
+
+class LiFlash(Base):
+    """A flash Meteosat's Lightning Imager saw over Europe (SPEC §7.10), kept 48 hours."""
+
+    __tablename__ = "li_flash"
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    at: Mapped[dt.datetime] = mapped_column(_tz(), index=True)
+    lat: Mapped[float] = mapped_column(Float)
+    lon: Mapped[float] = mapped_column(Float)
+
+
+class LiGranule(Base):
+    """A Lightning Imager product the hub has read: its time span counts as covered, also
+    when it held no flash over Europe (SPEC §7.10)."""
+
+    __tablename__ = "li_granule"
+
+    id: Mapped[str] = mapped_column(String(160), primary_key=True)
+    start: Mapped[dt.datetime] = mapped_column(_tz(), index=True)
+    end: Mapped[dt.datetime] = mapped_column(_tz())
+    flashes: Mapped[int] = mapped_column(Integer)
+    read_at: Mapped[dt.datetime] = mapped_column(_tz(), server_default=func.now())
 
 
 class PushToken(Base):

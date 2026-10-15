@@ -27,6 +27,9 @@ dependencies = [
   # SGP4 for the whole catalogue at once (SatrecArray), satellites among meteors (H6);
   # already in the workspace through the agent.
   "numpy>=2",
+  # Lightning flashes from Meteosat (roadmap H8, SPEC §7.10) come as NetCDF-4, which is
+  # HDF5; h5py (BSD-3) ships libhdf5 in its wheels. Hub only, never on the camera.
+  "h5py>=3.12",
 ]
 
 [tool.uv.sources]

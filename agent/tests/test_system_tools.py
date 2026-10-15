@@ -15,7 +15,14 @@ from allskyhub_agent.watchdog import Heartbeat, WatchState, decide
 from allskyhub_agent.web.archive import LocalArchive
 from allskyhub_agent.web.check import CheckFacts, run_checks, weather_checks
 from allskyhub_agent.web.support import RecentLog
-from allskyhub_protocol import EnvStatus, FrameInfo, HeaterStatus, Mode, NightDeleted
+from allskyhub_protocol import (
+    EnvStatus,
+    FrameInfo,
+    HeaterStatus,
+    LightningSensorStatus,
+    Mode,
+    NightDeleted,
+)
 
 TZ = ZoneInfo("Europe/Vienna")
 NOW = datetime(2026, 10, 13, 20, 0, tzinfo=UTC)
@@ -128,6 +135,25 @@ def test_weather_and_heater_check() -> None:
     got = weather_checks(facts(EnvStatus(error="not_found"), ("auto", None, None)))
     assert [(c["id"], c["state"]) for c in got] == [("weather", "fail"), ("heater", "warn")]
     assert weather_checks(facts(None, ("off", None, None))) == []
+
+
+def test_lightning_sensor_check() -> None:
+    """SPEC §7.12: strikes and the nearest one, or why the sensor does not work."""
+
+    def item(ls: LightningSensorStatus) -> dict[str, str]:
+        f = CheckFacts(power=lambda: [], time_trusted=lambda: True, disk_free_pct=lambda: 50.0,
+                       last_frame=lambda: None, paused=lambda: False,
+                       lightning=lambda: ls)  # fmt: skip
+        (got,) = weather_checks(f)
+        return got
+
+    busy = item(LightningSensorStatus(at=NOW, strikes_30min=3, nearest_km=12.0))
+    assert (busy["state"], busy["detail"]) == (
+        "ok",
+        "3 Blitze in 30 min, der nächste 12 km entfernt.",
+    )
+    assert item(LightningSensorStatus(error="no_pin"))["state"] == "fail"
+    assert item(LightningSensorStatus(at=NOW))["state"] == "ok"
 
 
 def test_follow_the_log() -> None:

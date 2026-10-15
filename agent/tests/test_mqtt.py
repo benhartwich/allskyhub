@@ -82,6 +82,10 @@ def test_discovery_with_weather_sensor_and_heater() -> None:
     assert "homeassistant/sensor/cam1/pressure_hpa/config" in configs
     heater = json.loads(configs["homeassistant/binary_sensor/cam1/heater/config"])
     assert heater["device_class"] == "heat"
+    assert "homeassistant/sensor/cam1/strikes_30min/config" not in configs
+    strikes = dict(discovery("sky", "cam1", "n", "m", "v", lightning=True))
+    near = json.loads(strikes["homeassistant/sensor/cam1/nearest_km/config"])
+    assert near["unit_of_measurement"] == "km"  # SPEC §7.12
 
 
 def test_session_against_a_fake_broker() -> None:

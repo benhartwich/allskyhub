@@ -8,7 +8,7 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta
 from typing import Any
 
-from allskyhub_protocol import EnvStatus, FrameInfo, HeaterStatus
+from allskyhub_protocol import EnvStatus, FrameInfo, HeaterStatus, LightningSensorStatus
 
 
 @dataclass(frozen=True)
@@ -25,6 +25,8 @@ class CheckFacts:
     # SPEC §7.11: the weather sensor (None while off) and the heater (mode, pin, state).
     env: Callable[[], EnvStatus | None] | None = None
     heater: Callable[[], tuple[str, int | None, HeaterStatus | None]] | None = None
+    # SPEC §7.12: the lightning sensor, None while off.
+    lightning: Callable[[], LightningSensorStatus | None] | None = None
 
 
 _HEATER_REASONS = {
@@ -75,7 +77,29 @@ def weather_checks(f: CheckFacts) -> list[dict[str, str]]:
         else:
             why = " (zu warm)" if state is not None and state.reason == "too_warm" else ""
             out.append(_item("heater", "ok", f"Heizung aus{why}, GPIO {pin}."))
+    ls = f.lightning() if f.lightning is not None else None
+    if ls is not None:
+        out.append(_lightning_item(ls))
     return out
+
+
+_LIGHTNING_ERRORS = {
+    "no_pin": "Kein Interrupt-Pin eingestellt (oder derselbe wie die Heizung).",
+    "not_found": "Blitzsensor antwortet nicht: Verkabelung, Adresse und I²C prüfen.",
+    "no_interrupt": "Der Interrupt-Pin bleibt still: Verkabelung von IRQ und GPIO prüfen.",
+}
+
+
+def _lightning_item(ls: LightningSensorStatus) -> dict[str, str]:
+    if ls.error is not None:
+        why = _LIGHTNING_ERRORS.get(ls.error, f"Blitzsensor gestört ({ls.error}).")
+        return _item("lightning_sensor", "fail", why)
+    if ls.at is None:
+        return _item("lightning_sensor", "warn", "Blitzsensor startet.")
+    if not ls.strikes_30min:
+        return _item("lightning_sensor", "ok", "Bereit, keine Blitze in den letzten 30 min.")
+    near = f", der nächste {ls.nearest_km:.0f} km entfernt" if ls.nearest_km is not None else ""
+    return _item("lightning_sensor", "ok", f"{ls.strikes_30min} Blitze in 30 min{near}.")
 
 
 def _item(cid: str, state: str, detail: str) -> dict[str, str]:

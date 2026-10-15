@@ -18,6 +18,9 @@ def test_parse() -> None:
     assert ok["corners"] == {"tl": ["text1", "time"], "tr": [], "bl": [], "br": []}
     assert ok["texts"] == ["Sternwarte", ""]
     assert ok["compass"] is True
+    # SPEC §7.11: the weather sensor's and the heater's fields.
+    weather = parse({"corners": {"br": ["env_temp", "humidity", "dewpoint", "heater"]}})
+    assert weather is not None
     bads: list[object] = [
         {"corners": {"tl": ["time", "time"]}},  # a field twice
         {"corners": {"tl": ["weather"]}},  # unknown

@@ -94,10 +94,28 @@ _SENSORS: list[tuple[str, str, dict[str, str]]] = [
     ("gain", "Gain", {"state_class": "measurement"}),
     ("mode", "Modus", {}),
 ]  # fmt: skip
+# SPEC §7.11: only with the weather sensor on.
+_WEATHER_SENSORS: list[tuple[str, str, dict[str, str]]] = [
+    ("env_temp_c", "Lufttemperatur",
+     {"unit_of_measurement": "°C", "device_class": "temperature", "state_class": "measurement"}),
+    ("humidity_pct", "Luftfeuchte",
+     {"unit_of_measurement": "%", "device_class": "humidity", "state_class": "measurement"}),
+    ("dewpoint_c", "Taupunkt",
+     {"unit_of_measurement": "°C", "device_class": "temperature", "state_class": "measurement"}),
+    ("pressure_hpa", "Luftdruck",
+     {"unit_of_measurement": "hPa", "device_class": "atmospheric_pressure",
+      "state_class": "measurement"}),
+]  # fmt: skip
 
 
 def discovery(
-    prefix: str, device_id: str, name: str, model: str, version: str
+    prefix: str,
+    device_id: str,
+    name: str,
+    model: str,
+    version: str,
+    weather: bool = False,
+    heater: bool = False,
 ) -> list[tuple[str, bytes]]:
     """Home Assistant discovery configs (retained), one per value (SPEC §7.7)."""
     base = f"{prefix}/{device_id}"
@@ -114,7 +132,7 @@ def discovery(
         "device": device,
     }
     out: list[tuple[str, bytes]] = []
-    for key, label, extra in _SENSORS:
+    for key, label, extra in _SENSORS + (_WEATHER_SENSORS if weather else []):
         cfg = {
             "name": label,
             "unique_id": f"allskyhub_{device_id}_{key}",
@@ -131,6 +149,16 @@ def discovery(
         **common,
     }
     out.append((f"homeassistant/binary_sensor/{device_id}/safe/config", json.dumps(safe).encode()))
+    if heater:  # SPEC §7.11
+        cfg = {
+            "name": "Kuppelheizung",
+            "unique_id": f"allskyhub_{device_id}_heater",
+            "device_class": "heat",
+            "value_template": "{{ 'ON' if value_json.heater_on else 'OFF' }}",
+            **common,
+        }
+        out.append((f"homeassistant/binary_sensor/{device_id}/heater/config",
+                    json.dumps(cfg).encode()))  # fmt: skip
     return out
 
 
@@ -156,11 +184,13 @@ class MqttPublisher:
         version: str,
         connect: Callable[[MqttConfig], socket.socket] | None = None,
         monotonic: Callable[[], float] = time.monotonic,
+        weather: bool = False,
+        heater: bool = False,
     ) -> None:
         self._cfg = cfg
         self._id = device_id
         self._base = f"{cfg.prefix}/{device_id}"
-        self._discovery = discovery(cfg.prefix, device_id, name, model, version)
+        self._discovery = discovery(cfg.prefix, device_id, name, model, version, weather, heater)
         self._connect = connect or _open
         self._monotonic = monotonic
         self._q: queue.Queue[tuple[str, bytes, bool] | None] = queue.Queue(maxsize=200)

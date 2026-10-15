@@ -97,6 +97,7 @@ from allskyhub_agent.watchdog import (
     usb_camera_devices,
     usb_reset,
 )
+from allskyhub_agent.weather import WeatherConfig, WeatherStation
 from allskyhub_agent.web.archive import LocalArchive
 from allskyhub_agent.web.auth import LocalAuth
 from allskyhub_agent.web.calibration import LocalCalibration
@@ -558,17 +559,40 @@ def open_camera(
     return None, get_profile("zwo-asi678mc" if hint == "auto" else hint)
 
 
-def overlay_values(sky_meter: SkyMeter | None, loc: Location | None) -> dict[str, Any]:
-    """What the overlay shows besides the frame (SPEC §7 Overlay): the newest sky values and
-    the moon now."""
+def overlay_values(
+    sky_meter: SkyMeter | None, loc: Location | None, weather: WeatherStation | None = None
+) -> dict[str, Any]:
+    """What the overlay shows besides the frame (SPEC §7 Overlay): the newest sky values,
+    the moon now and the weather sensor and heater (SPEC §7.11)."""
     sky = sky_meter.latest if sky_meter is not None else None
     out: dict[str, Any] = {"sky": sky.model_dump(mode="json") if sky is not None else None}
+    if weather is not None:
+        env, heater = weather.env_status, weather.heater_status
+        out["env"] = env.model_dump(mode="json") if env is not None else None
+        out["heater"] = heater.model_dump(mode="json") if heater is not None else None
     if loc is not None:
         now = datetime.now(UTC)
         out["moon"] = {
             "altitude_deg": round(moon_altitude(now, loc.lat, loc.lon), 1),
             "illumination": round(moon_illumination(now), 2),
         }
+    return out
+
+
+def weather_state(weather: WeatherStation) -> dict[str, Any]:
+    """The weather sensor's and the heater's values for MQTT (SPEC §7.7, §7.11)."""
+    out: dict[str, Any] = {}
+    env = weather.env_status
+    if env is not None:
+        out |= {
+            "env_temp_c": env.temperature_c,
+            "humidity_pct": env.humidity_pct,
+            "dewpoint_c": env.dewpoint_c,
+            "pressure_hpa": env.pressure_hpa,
+        }
+    heater = weather.heater_status
+    if heater is not None:
+        out["heater_on"] = heater.on
     return out
 
 
@@ -637,6 +661,7 @@ def main(argv: list[str] | None = None) -> int:
     alpaca_error: list[str | None] = [None]  # SPEC §7.5, for status and the local UI
     observatory: list[Callable[[], Observatory | None]] = [lambda: None]  # N.I.N.A., §6.3
     adsb_status: list[Callable[[], AdsbStatus | None]] = [lambda: None]  # receiver, §7.8
+    weather_box: list[WeatherStation | None] = [None]  # sensor and heater, §7.11
     reboot_required: list[Callable[[], bool]] = [lambda: False]  # system updates, §8
     # Learned at night, edited in the local UI (roadmap L8) before the camera is open.
     calibration_dir = Path(args.data) / "calibration"
@@ -757,6 +782,8 @@ def main(argv: list[str] | None = None) -> int:
                 observatory=observatory[0](),
                 adsb=adsb_status[0](),
                 reboot_required=reboot_required[0](),
+                env=weather_box[0].env_status if weather_box[0] is not None else None,
+                heater=weather_box[0].heater_status if weather_box[0] is not None else None,
             )
 
         def device_settings() -> DeviceSettings:
@@ -813,6 +840,22 @@ def main(argv: list[str] | None = None) -> int:
         return (args.lat, args.lon) if args.lat is not None and args.lon is not None else None
 
     calibration = LocalCalibration(sky_mask, calibration_dir / "orientation.json", where)
+
+    # SPEC §7.11: weather sensor and dew heater (roadmap L30); off and pinless by default.
+    wcfg = load_settings()
+    weather = WeatherStation(
+        WeatherConfig(
+            sensor=wcfg.env_sensor,
+            address=wcfg.env_sensor_address,
+            heater=wcfg.heater,
+            heater_gpio=wcfg.heater_gpio,
+            heater_active_low=wcfg.heater_active_low,
+            dew_margin_c=wcfg.heater_dew_margin_c,
+        ),
+        night=lambda: (lf := live.last_frame()) is not None and lf.mode is Mode.NIGHT,
+    )
+    weather.start()
+    weather_box[0] = weather
 
     def observatory_facts() -> dict[str, Any]:
         """SPEC §7.5 for the system page: Alpaca on/off, port or error, N.I.N.A."""
@@ -913,7 +956,7 @@ def main(argv: list[str] | None = None) -> int:
             ),
             tls_context=tls_context,
             overlay=OverlayLayout(Path(args.data) / "overlay.json"),
-            status_extra=lambda: overlay_values(sky_meter, loc),
+            status_extra=lambda: overlay_values(sky_meter, loc, weather),
             check=CheckFacts(
                 power=system.power_flags,
                 time_trusted=system.time_trusted,
@@ -924,6 +967,8 @@ def main(argv: list[str] | None = None) -> int:
                 hub=(lambda: (pairing.info().paired, pairing.info().connected))
                 if pairing is not None
                 else None,
+                env=lambda: weather.env_status,
+                heater=lambda: (wcfg.heater, wcfg.heater_gpio, weather.heater_status),
             ),
         )
         web.start()
@@ -938,6 +983,7 @@ def main(argv: list[str] | None = None) -> int:
 
     def shutdown() -> None:
         stop_bg.set()
+        weather.stop()  # the heater off and its pin released
         if web is not None:
             web.stop()
         if hub is not None:
@@ -1053,6 +1099,8 @@ def main(argv: list[str] | None = None) -> int:
             f"allskyhub {mqtt_id[:8]}",
             profile.id,
             __version__,
+            weather=weather.sensor_on,
+            heater=weather.heater_on,
         )  # fmt: skip
         mqtt.start()
 
@@ -1074,6 +1122,7 @@ def main(argv: list[str] | None = None) -> int:
                 "sqm_mag": sky.sqm_mag if sky is not None else None,
                 "stars": sky.stars if sky is not None else None,
                 "safe": safety.is_safe(datetime.now(UTC)) if tuned.alpaca_enabled else None,
+                **weather_state(weather),
             }
         )
 
@@ -1130,7 +1179,12 @@ def main(argv: list[str] | None = None) -> int:
         alpaca_id = identity.device_id if identity is not None else "local"
         try:
             alpaca_server = AlpacaServer(
-                Alpaca(alpaca_id, __version__, safety),
+                Alpaca(
+                    alpaca_id,
+                    __version__,
+                    safety,
+                    weather=(lambda: weather.env_status) if weather.sensor_on else None,
+                ),
                 tuned.alpaca_port,
                 blocked=lambda: setup is not None and setup.active,
             )

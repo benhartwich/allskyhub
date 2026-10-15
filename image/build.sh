@@ -107,9 +107,15 @@ apt-get install -y --no-install-recommends \
     unattended-upgrades
 ldconfig
 
-# Service user: cameras (video), its state in /var/lib/allskyhub-agent.
+# Service user: cameras (video), weather sensor and dew heater (i2c, gpio, SPEC §7.11),
+# its state in /var/lib/allskyhub-agent. Raspberry Pi OS brings both groups and the udev rules
+# that give them /dev/i2c-* and /dev/gpiochip*; created here only if an image lacks them.
+for g in i2c gpio; do getent group "$g" >/dev/null || groupadd --system "$g"; done
 useradd --system --home-dir /var/lib/allskyhub-agent --no-create-home \
-    --shell /usr/sbin/nologin --groups video allskyhub
+    --shell /usr/sbin/nologin --groups video,i2c,gpio allskyhub
+# I²C on the header (SDA pin 3, SCL pin 5) for a BME280 or AS3935 (SPEC §7.11, §7.12).
+grep -q '^dtparam=i2c_arm=on' /boot/firmware/config.txt ||
+    echo 'dtparam=i2c_arm=on' >> /boot/firmware/config.txt
 install -d -o allskyhub -g allskyhub -m 0750 /var/lib/allskyhub-agent /var/lib/allskyhub-agent/data
 
 # Agent venv from the pinned lock, not editable: the release directory is self-contained, so

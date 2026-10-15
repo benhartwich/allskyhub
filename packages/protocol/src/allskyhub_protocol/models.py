@@ -297,6 +297,29 @@ class AdsbStatus(BaseModel):
     error: str | None = Field(default=None, max_length=40)  # unreachable, bad_data
 
 
+class EnvStatus(BaseModel):
+    """The weather sensor (SPEC §6.3, §7.11): the newest reading, null values until one."""
+
+    model_config = ConfigDict(extra="ignore", frozen=True)
+
+    at: AwareDatetime | None = None  # when it was last read
+    temperature_c: float | None = None
+    humidity_pct: float | None = Field(default=None, ge=0, le=100)
+    pressure_hpa: float | None = None
+    dewpoint_c: float | None = None
+    error: str | None = Field(default=None, max_length=40)  # not_found, bad_data
+
+
+class HeaterStatus(BaseModel):
+    """The dome heater (SPEC §6.3, §7.11)."""
+
+    model_config = ConfigDict(extra="ignore", frozen=True)
+
+    on: bool = False
+    # off, on, dew, humidity, night, too_warm; a newer agent may add more.
+    reason: str = Field(default="off", max_length=20)
+
+
 class UpdateState(StrEnum):
     """The updater's last state (SPEC §8)."""
 
@@ -348,6 +371,9 @@ class Status(_Body):
     reboot_required: bool = False
     # SPEC §7.8: the owner's ADS-B receiver, null unless `adsb_url` is set.
     adsb: AdsbStatus | None = None
+    # SPEC §7.11: weather sensor and dew heater, null unless switched on.
+    env: EnvStatus | None = None
+    heater: HeaterStatus | None = None
 
 
 class FrameInfo(_Body):

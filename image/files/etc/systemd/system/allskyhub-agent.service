@@ -20,8 +20,9 @@ ProtectSystem=strict
 ProtectHome=yes
 PrivateTmp=yes
 # Cameras: ZWO over USB (udev rule makes it 0666), Raspberry Pi cameras through /dev/video*,
-# /dev/media* and /dev/dma_heap (group video).
-SupplementaryGroups=video
+# /dev/media* and /dev/dma_heap (group video); weather sensor and heater through /dev/i2c-1
+# and /dev/gpiochip* (groups i2c and gpio, SPEC §7.11).
+SupplementaryGroups=video i2c gpio
 DevicePolicy=auto
 
 [Install]

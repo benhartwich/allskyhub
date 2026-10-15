@@ -90,6 +90,14 @@ const T = {
     "ovf.mode": "Tag/Nacht",
     "ovf.text1": "Eigener Text 1",
     "ovf.text2": "Eigener Text 2",
+    "ovf.env_temp": "Lufttemperatur",
+    "ovf.humidity": "Luftfeuchte",
+    "ovf.dewpoint": "Taupunkt",
+    "ovf.heater": "Heizung",
+    "ovv.humidity": "Feuchte {v} %",
+    "ovv.dewpoint": "Taupunkt {v}",
+    "ovv.heaterOn": "Heizung an",
+    "ovv.heaterOff": "Heizung aus",
     "ovv.gain": "Gain {v}",
     "ovv.sun": "Sonne {v}°",
     "ovv.moon": "Mond {p} % · {a}°",
@@ -333,6 +341,8 @@ const T = {
     "check.mask": "Himmelsmaske",
     "check.orientation": "Ausrichtung",
     "check.hub": "Hub",
+    "check.weather": "Wettersensor",
+    "check.heater": "Kuppelheizung",
     "state.ok": "in Ordnung",
     "state.warn": "Hinweis",
     "state.fail": "Problem",
@@ -519,6 +529,14 @@ const T = {
     "ovf.mode": "Day/night",
     "ovf.text1": "Own text 1",
     "ovf.text2": "Own text 2",
+    "ovf.env_temp": "Air temperature",
+    "ovf.humidity": "Humidity",
+    "ovf.dewpoint": "Dew point",
+    "ovf.heater": "Heater",
+    "ovv.humidity": "Humidity {v} %",
+    "ovv.dewpoint": "Dew point {v}",
+    "ovv.heaterOn": "Heater on",
+    "ovv.heaterOff": "Heater off",
     "ovv.gain": "Gain {v}",
     "ovv.sun": "Sun {v}°",
     "ovv.moon": "Moon {p} % · {a}°",
@@ -762,6 +780,8 @@ const T = {
     "check.mask": "Sky mask",
     "check.orientation": "Orientation",
     "check.hub": "Hub",
+    "check.weather": "Weather sensor",
+    "check.heater": "Dome heater",
     "state.ok": "OK",
     "state.warn": "Note",
     "state.fail": "Problem",
@@ -1023,13 +1043,15 @@ const savePref = (k, on) => { try { localStorage.setItem("ash-ov-" + k, on ? "1"
 // constellations. `extra` is /api/status's sky and moon.
 // The fields in their default order; their names are "ovf.<key>" in the dictionary.
 const OV_FIELDS = ["time", "date", "exposure", "gain", "sensor_temp", "sun", "moon", "cloud_cover",
-  "sqm", "stars", "mode", "text1", "text2"];
+  "sqm", "stars", "mode", "text1", "text2", "env_temp", "humidity", "dewpoint", "heater"];
 const OV_SIZE = { small: 0.8, normal: 1, large: 1.35 };
 const DEFAULT_LAYOUT = { enabled: true, corners: { tl: ["date", "time"], tr: ["exposure", "gain", "sensor_temp"],
   bl: ["sun", "moon"], br: ["cloud_cover", "sqm"] }, texts: ["", ""], size: "normal", compass: true, stars: true };
 function ovValue(key, f, extra, layout) {
   const sky = extra && extra.sky;
   const moon = extra && extra.moon;
+  const env = extra && extra.env;
+  const heater = extra && extra.heater;
   const at = f ? new Date(f.captured_at) : null;
   switch (key) {
     case "time": return at && at.toLocaleTimeString(LOCALE(), { hour: "2-digit", minute: "2-digit", second: "2-digit", ...tzOpt() });
@@ -1045,6 +1067,11 @@ function ovValue(key, f, extra, layout) {
     case "mode": return f && (f.mode === "night" ? t("night") : t("day"));
     case "text1": return layout.texts[0] || null;
     case "text2": return layout.texts[1] || null;
+    // SPEC §7.11: the weather sensor and the dome heater.
+    case "env_temp": return env && env.temperature_c != null ? fmtTemp(env.temperature_c) : null;
+    case "humidity": return env && env.humidity_pct != null ? t("ovv.humidity", { v: Math.round(env.humidity_pct) }) : null;
+    case "dewpoint": return env && env.dewpoint_c != null ? t("ovv.dewpoint", { v: fmtTemp(env.dewpoint_c) }) : null;
+    case "heater": return heater ? t(heater.on ? "ovv.heaterOn" : "ovv.heaterOff") : null;
     default: return null;
   }
 }

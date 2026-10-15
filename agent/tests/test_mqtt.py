@@ -71,6 +71,17 @@ def test_discovery_names_one_device() -> None:
     assert cloud["device"]["identifiers"] == ["allskyhub_cam1"]
     safe = json.loads(configs["homeassistant/binary_sensor/cam1/safe/config"])
     assert safe["device_class"] == "safety"
+    assert "homeassistant/sensor/cam1/humidity_pct/config" not in configs
+
+
+def test_discovery_with_weather_sensor_and_heater() -> None:
+    """SPEC §7.11: the weather values and the heater only when they are switched on."""
+    configs = dict(discovery("sky", "cam1", "n", "m", "v", weather=True, heater=True))
+    dew = json.loads(configs["homeassistant/sensor/cam1/dewpoint_c/config"])
+    assert dew["value_template"] == "{{ value_json.dewpoint_c }}"
+    assert "homeassistant/sensor/cam1/pressure_hpa/config" in configs
+    heater = json.loads(configs["homeassistant/binary_sensor/cam1/heater/config"])
+    assert heater["device_class"] == "heat"
 
 
 def test_session_against_a_fake_broker() -> None:

@@ -145,7 +145,7 @@ orphans=$(find / -xdev \( -nouser -o -nogroup \) -print)
 
 # Self-test without hardware or network: the simulated camera through the whole pipeline.
 runuser -u allskyhub -- /opt/allskyhub-agent/current/.venv/bin/allskyhub-agent \
-    --sim --lat 48.14 --lon 14.39 run --frames 3 --data /tmp/selftest \
+    --sim --lat 50.04 --lon 10.39 run --frames 3 --data /tmp/selftest \
     --start 2026-10-06T22:00:00+02:00
 rm -rf /tmp/selftest
 CHROOT

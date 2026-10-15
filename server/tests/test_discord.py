@@ -120,7 +120,7 @@ async def test_morning_summary_once(app: FastAPI, client: httpx.AsyncClient) -> 
     await _set(app, device_id, discord={"webhook": HOOK}, public_slug="garten-abc")
     await poster_app.check_morning(dt.datetime(2026, 10, 13, 4, tzinfo=dt.UTC))
     assert poster.posts == []  # before sunrise
-    morning = dt.datetime(2026, 10, 13, 6, tzinfo=dt.UTC)
+    morning = dt.datetime(2026, 10, 13, 6, 30, tzinfo=dt.UTC)
     await poster_app.check_morning(morning)
     await poster_app.check_morning(morning + dt.timedelta(minutes=5))
     [(_, text, picture)] = poster.posts

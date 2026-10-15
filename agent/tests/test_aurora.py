@@ -164,11 +164,11 @@ def test_with_an_orientation_only_the_polar_sector_counts() -> None:
                    tilt_north=0.0, stars=30, rms_px=1.0, rms_deg=0.1,
                    width=W, height=H)  # fmt: skip
     east = [(frame(i), sky(i, GREEN)) for i in range(3)]  # the rays are right of the centre
-    north_up = AuroraDetector(CFG, orientation=lambda: sol, latitude=lambda: 48.1)
+    north_up = AuroraDetector(CFG, orientation=lambda: sol, latitude=lambda: 50.0)
     assert [u for f, img in east for u in north_up.feed(f, img, Path(f"/{f.name}"))] == []
     # The same rays with north to the right of the image: now they are toward the pole.
     sol_e = dataclasses.replace(sol, rot=90.0)
-    north_right = AuroraDetector(CFG, orientation=lambda: sol_e, latitude=lambda: 48.1)
+    north_right = AuroraDetector(CFG, orientation=lambda: sol_e, latitude=lambda: 50.0)
     assert [u for f, img in east for u in north_right.feed(f, img, Path(f"/{f.name}"))]
     # Southern hemisphere: the pole is south, opposite.
     south = AuroraDetector(CFG, orientation=lambda: sol_e, latitude=lambda: -45.0)

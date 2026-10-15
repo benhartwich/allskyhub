@@ -18,7 +18,7 @@ from allskyhub_protocol import FrameInfo, Mode, SkyMetrics
 
 H, W = 1080, 1920
 AT = datetime(2026, 10, 7, 21, 1, tzinfo=UTC)
-LAT, LON = 48.136, 14.389
+LAT, LON = 50.036, 10.389
 TRUE = [985.0, 532.0, 1005.0, -130.0, 18.2, 0.0, 0.0]  # like Benjamin's lens at half size
 FLIP = -1.0
 

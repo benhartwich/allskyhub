@@ -205,13 +205,13 @@ async def test_public_page_from_the_camera(
 
     on = (await new_client.put(url, json={"enabled": True}, headers=auth)).json()
     assert on["url"].startswith("http://testserver/sky/")
-    profile = {"title": "Lanzenberg", "sections": {"loop": False}}
+    profile = {"title": "Sternwarte", "sections": {"loop": False}}
     r = await new_client.put(url, json={"profile": profile}, headers=auth)
     assert r.json()["url"] == on["url"]  # only the profile changed
-    assert r.json()["profile"]["title"] == "Lanzenberg"
+    assert r.json()["profile"]["title"] == "Sternwarte"
     assert r.json()["profile"]["sections"]["loop"] is False
     page = (await new_client.get(on["url"].removeprefix("http://testserver"))).text
-    assert "Lanzenberg" in page
+    assert "Sternwarte" in page
     assert "Die letzte Stunde" not in page
 
     too_long = await new_client.put(url, json={"profile": {"title": "x" * 101}}, headers=auth)
@@ -222,7 +222,7 @@ async def test_public_page_from_the_camera(
     assert unknown.json()["detail"] == "colour gibt es nicht."
     off = (await new_client.put(url, json={"enabled": False}, headers=auth)).json()
     assert off["url"] is None
-    assert off["profile"]["title"] == "Lanzenberg"
+    assert off["profile"]["title"] == "Sternwarte"
 
 
 async def test_unpairing_drops_local_access(app: FastAPI, client: httpx.AsyncClient) -> None:

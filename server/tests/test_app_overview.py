@@ -26,7 +26,7 @@ async def _camera(app: FastAPI, client: httpx.AsyncClient) -> tuple[str, dict[st
         device = await db.get(Device, dev.device_id)
         assert device
         device.last_status = {
-            "settings": {"latitude": 48.14, "longitude": 14.39, "timezone": "Europe/Vienna"}
+            "settings": {"latitude": 50.04, "longitude": 10.39, "timezone": "Europe/Vienna"}
         }
         for i in range(10):
             at = now - dt.timedelta(minutes=i)

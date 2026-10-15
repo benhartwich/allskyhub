@@ -254,13 +254,13 @@ def test_setup_endpoints_refuse_other_networks(tmp_path: Path) -> None:
 
 def test_settings_location_timezone_camera(tmp_path: Path) -> None:
     p = tmp_path / "settings.json"
-    s = AgentSettings().with_updates(latitude=48.1, longitude=14.4, timezone="Europe/Vienna")
+    s = AgentSettings().with_updates(latitude=50.0, longitude=10.4, timezone="Europe/Vienna")
     assert s.has_location
     s.save(p)
     back = AgentSettings.load(p)
     assert (back.latitude, back.longitude, back.timezone, back.camera) == (
-        48.1,
-        14.4,
+        50.0,
+        10.4,
         "Europe/Vienna",
         "auto",
     )
@@ -273,10 +273,10 @@ def test_settings_location_timezone_camera(tmp_path: Path) -> None:
 
 def test_setup_file_location_timezone_camera(tmp_path: Path) -> None:
     f = parse(
-        b'{"allskyhub_setup": 1, "location": {"latitude": 48.14, "longitude": 14.39},'
+        b'{"allskyhub_setup": 1, "location": {"latitude": 50.04, "longitude": 10.39},'
         b' "timezone": "Europe/Vienna", "camera": "sim"}'
     )
-    assert (f.latitude, f.longitude, f.timezone, f.camera) == (48.14, 14.39, "Europe/Vienna", "sim")
+    assert (f.latitude, f.longitude, f.timezone, f.camera) == (50.04, 10.39, "Europe/Vienna", "sim")
     for bad in (
         b'{"allskyhub_setup": 1, "location": {"latitude": 99, "longitude": 0}}',
         b'{"allskyhub_setup": 1, "timezone": "Nowhere/Town"}',
@@ -310,7 +310,7 @@ def test_setup_network_with_location(tmp_path: Path) -> None:
         assert info["location_set"] is False
         assert info["timezone"] == "UTC"
 
-        body = b'{"ssid": "Home", "password": "secretpw", "country": "AT", "latitude": 48.1}'
+        body = b'{"ssid": "Home", "password": "secretpw", "country": "AT", "latitude": 50.0}'
         status, err = _call(base + "/api/setup/network", body)
         assert status == 400
         assert isinstance(err, dict)
@@ -318,7 +318,7 @@ def test_setup_network_with_location(tmp_path: Path) -> None:
 
         body = (
             b'{"ssid": "Home", "password": "secretpw", "country": "AT",'
-            b' "latitude": 48.1, "longitude": 14.4, "timezone": "Not/AZone"}'
+            b' "latitude": 50.0, "longitude": 10.4, "timezone": "Not/AZone"}'
         )
         status, err = _call(base + "/api/setup/network", body)
         assert status == 400
@@ -327,13 +327,13 @@ def test_setup_network_with_location(tmp_path: Path) -> None:
 
         body = (
             b'{"ssid": "Home", "password": "secretpw", "country": "AT",'
-            b' "latitude": 48.1, "longitude": 14.4, "timezone": "Europe/Vienna"}'
+            b' "latitude": 50.0, "longitude": 10.4, "timezone": "Europe/Vienna"}'
         )
         assert _call(base + "/api/setup/network", body)[0] == 202
         ctl.tick(1.0)
         assert len(joined) == 1
         req = joined[0]
-        assert (req.latitude, req.longitude, req.timezone) == (48.1, 14.4, "Europe/Vienna")
+        assert (req.latitude, req.longitude, req.timezone) == (50.0, 10.4, "Europe/Vienna")
         AgentSettings().with_updates(
             latitude=req.latitude, longitude=req.longitude, timezone=req.timezone
         ).save(settings_file)

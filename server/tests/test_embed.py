@@ -35,7 +35,7 @@ async def test_atom_feed(
     app: FastAPI, client: httpx.AsyncClient, new_client: httpx.AsyncClient
 ) -> None:
     device_id, slug = await _public(app, client, new_client)
-    await _save(client, device_id, title="Lanzenberg <&>", section_events="on")
+    await _save(client, device_id, title="Sternwarte <&>", section_events="on")
     now = dt.datetime.now(dt.UTC)
     maker: async_sessionmaker[AsyncSession] = app.state.sessionmaker
     async with maker() as db:
@@ -48,7 +48,7 @@ async def test_atom_feed(
     feed = ET.fromstring(r.content)  # noqa: S314 - our own output
     title = feed.find(f"{ATOM}title")
     assert title is not None
-    assert title.text == "Lanzenberg <&>: Ereignisse am Himmel"
+    assert title.text == "Sternwarte <&>: Ereignisse am Himmel"
     entries = feed.findall(f"{ATOM}entry")
     assert len(entries) == 1
     assert "/events/20261012/meteor-1.jpg" in r.text

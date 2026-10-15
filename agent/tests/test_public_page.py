@@ -72,11 +72,11 @@ def hub(tmp_path: Path) -> tuple[FakeHub, PublicPage]:
 def test_get_put_and_token_reuse(hub: tuple[FakeHub, PublicPage]) -> None:
     fake, page = hub
     assert page.get().enabled is False
-    st = page.put({"enabled": True, "profile": {"title": "Hofkirchen"}})
+    st = page.put({"enabled": True, "profile": {"title": "Musterdorf"}})
     assert (st.enabled, st.url, st.profile.title) == (
         True,
         "https://hub.test/sky/abc",
-        "Hofkirchen",
+        "Musterdorf",
     )
     assert fake.tokens == 1  # kept between calls
     fake.expire_next = True

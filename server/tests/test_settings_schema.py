@@ -27,7 +27,7 @@ SCHEMA: list[dict[str, Any]] = [
     {"key": "title", "type": "string", "label": "Bildtitel", "group": "Bild",
      "max_length": 20, "nullable": True},
 ]  # fmt: skip
-CURRENT = {"latitude": 48.1, "longitude": 14.4, "max_gain": 300, "flip": "none",
+CURRENT = {"latitude": 50.0, "longitude": 10.4, "max_gain": 300, "flip": "none",
            "overlay": True, "title": "Garten"}  # fmt: skip
 
 
@@ -86,7 +86,7 @@ async def test_form_from_schema(app: FastAPI, client: httpx.AsyncClient, live_ap
 
     async with device_ws(live_app, token) as ws:
         await online(app, dev.device_id)
-        form = {"latitude": "48,1", "longitude": "14,4", "max_gain": "450", "flip": "h",
+        form = {"latitude": "50,0", "longitude": "10,4", "max_gain": "450", "flip": "h",
                 "overlay__present": "1", "title": "", "csrf_token": csrf_from(page)}  # fmt: skip
         post = asyncio.create_task(client.post(url, data=form))
         env = parse_envelope(await asyncio.wait_for(ws.recv(), 5))

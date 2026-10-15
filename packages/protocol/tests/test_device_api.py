@@ -146,7 +146,7 @@ def test_public_profile_limits() -> None:
     p = PublicProfile()
     assert p.sections.live
     assert not p.show_coordinates
-    assert PublicProfile(title="  Lanzenberg ").title == "Lanzenberg"
+    assert PublicProfile(title="  Sternwarte ").title == "Sternwarte"
     with pytest.raises(ValidationError):
         PublicProfile(title="x" * 101)
     with pytest.raises(ValidationError):

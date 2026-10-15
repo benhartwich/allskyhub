@@ -14,7 +14,7 @@ from allskyhub_agent.detect.nlc import NlcConfig, NlcDetector, band_mask, score
 from allskyhub_protocol import FrameInfo, Mode
 
 H, W = 1080, 1920
-LAT, LON = 48.136, 14.389
+LAT, LON = 50.036, 10.389
 T0 = datetime(2026, 6, 21, 20, 45, tzinfo=UTC)  # deep twilight, sun low in the north-west
 SOL = Solution(cx=960.0, cy=540.0, a1=1000.0, a3=-130.0, rot=18.2, flip=-1.0, tilt_east=0.0,
                tilt_north=0.0, stars=30, rms_px=1.0, rms_deg=0.1, width=W, height=H)  # fmt: skip

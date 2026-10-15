@@ -1170,6 +1170,63 @@ camera with `label_event`. Not checked, and shown as unchecked: imported events,
 older than the kept flashes and events whose window LI data does not cover (an outage on
 either side). Labels set by the owner win as always (§6.4 Labels).
 
+### 7.11 Weather sensor and dew heater
+
+Roadmap L30 (Benjamin, 2026-10-15): housings such as Daniel Nimmervoll's bring a dome
+heater (resistors switched by a MOSFET on a GPIO pin) and room for a BME280. The agent
+reads the sensor and keeps the dome free of dew.
+
+**Sensor.** Setting `env_sensor`: `off` (default) or `bme280` (I²C bus 1, `env_sensor_address`
+`0x76` default or `0x77`). The agent reads temperature, humidity and pressure every 30 s
+and computes the dew point (Magnus formula). `status.env` is `{at, temperature_c,
+humidity_pct, pressure_hpa, dewpoint_c, error}` (`error` null, `not_found` or `bad_data`),
+null while `env_sensor` is off. A sensor that fails is retried every minute and never slows
+capture. The values go to the hub with `status` and from there to the charts
+(temperature, humidity and dew point over the night), to MQTT (§7.7) and to Alpaca
+ObservingConditions (§7.5: `temperature`, `humidity`, `dewpoint`, `pressure` then answer
+instead of `0x400`). Overlay fields (§7 Overlay) `env_temp`, `humidity`, `dewpoint` and
+`heater`.
+
+**Heater.** Settings `heater`: `off` (default), `auto` or `on`; `heater_gpio` (BCM pin
+number, no default: the owner names the pin, nothing is switched before); `heater_active_low`
+(default false; true for a stage that switches on with a low level). In `auto` the heater is
+on when the temperature is within `heater_dew_margin_c` (default 3 °C) of the dew point or
+the humidity is at least 90 %, and off again once it is more than 1.5 °C above that margin
+and below 85 % (hysteresis). Without a working sensor `auto` heats whenever the camera is in
+night mode. The heater is always off above 45 °C measured temperature, switches at most
+once a minute, is off while the agent stops (the pin is set to off and released), and
+`status.heater` is `{on, reason}` with `reason` one of `off`, `on`, `dew`, `humidity`,
+`night`, `too_warm`. The owner wires the stage so that a released (floating) pin means off.
+
+The image enables I²C (`dtparam=i2c_arm=on`) and puts the agent's user in the groups `i2c`
+and `gpio`; the agent uses `smbus2` and `gpiod` (libgpiod), which work on the Pi 4 and
+the Pi 5.
+
+### 7.12 Lightning sensor
+
+Roadmap L31 (Benjamin, 2026-10-15): an AS3935 lightning sensor hears strikes by their
+radio crackle up to about 40 km, by day and night, and confirms the camera's flashes on the
+spot, also without the hub (§7.10).
+
+Settings `lightning_sensor`: `off` (default) or `as3935` (I²C bus 1, `lightning_sensor_address`
+default `0x03`, interrupt on `lightning_sensor_irq_gpio`, BCM pin, no default), and
+`lightning_sensor_indoor` (default false: the sensor's outdoor gain; true inside a
+housing that dampens). The agent calibrates the sensor's antenna once at start, reads a
+strike on its interrupt (estimated distance 1..40 km or "out of range", energy) and counts
+disturbers and noise; it never slows capture. `status.lightning_sensor` is `{at, strikes_30min,
+nearest_km, last_strike_at, error}`, null while off.
+
+- **Confirmation.** While the sensor is on, every `lightning` event (§6.4) gets
+  `data.sensor_km`: the nearest strike the sensor heard in `start − 60 s .. end + 60 s`,
+  or null if it heard none. A storm (all events with the same `data.storm`) in which the
+  sensor heard no strike at all gets the automatic label `false_positive`/`other` with
+  detail `kein Blitz am Sensor` (§6.4 Labels), sent as `event_label`; the hub's
+  satellite check (§7.10) then labels nothing more, labels set by the owner win as always.
+- **Without a flash.** Strikes the sensor hears by day or behind clouds are no events;
+  they are counted in `status.lightning_sensor` and make Alpaca's SafetyMonitor (§7.5)
+  unsafe for 30 minutes after the last one, as a `lightning` event does.
+- MQTT (§7.7) publishes `strikes_30min` and `nearest_km`.
+
 ## 8. Updates
 
 Signed update packages (agent and profiles), installed by the device itself into an

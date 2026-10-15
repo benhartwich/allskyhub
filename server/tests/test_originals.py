@@ -60,14 +60,17 @@ async def _put(host: str, token: str, ev: Event, variant: EventVariant, body: by
         return r.status_code
 
 
-async def _requests(ws: ClientConnection) -> list[tuple[str, EventVariant]]:
-    """Every upload_event the hub sends until it is quiet."""
+async def _requests(ws: ClientConnection, first: float = 3.0) -> list[tuple[str, EventVariant]]:
+    """Every upload_event the hub sends until it is quiet: up to ``first`` seconds for the
+    first command (slow CI runners), then 0.5 s of silence ends it."""
     out: list[tuple[str, EventVariant]] = []
+    wait = first
     while True:
         try:
-            cmd = await asyncio.wait_for(next_command(ws), 0.3)
+            cmd = await asyncio.wait_for(next_command(ws), wait)
         except TimeoutError:
             return out
+        wait = 0.5
         if cmd.name is CommandName.UPLOAD_EVENT:
             out.append((cmd.args["event_id"], EventVariant(cmd.args["variant"])))
 

@@ -11,7 +11,7 @@ from fastapi import APIRouter, Depends, Form, HTTPException, Path, Query, Reques
 from fastapi.responses import FileResponse, JSONResponse, RedirectResponse, Response
 from sqlalchemy import select
 
-from allskyhub_protocol import EVENT_ID_PATTERN, FrameVariant
+from allskyhub_protocol import EVENT_ID_PATTERN, EventVariant, FrameVariant
 from allskyhub_server.auth.sessions import SessionInfo
 from allskyhub_server.devices import (
     archive,
@@ -233,6 +233,61 @@ async def event_list(
     )
 
 
+@router.get("/cameras/{device_id}/ueberfluege")
+async def overflights(
+    request: Request,
+    db: DbSession,
+    session: CurrentSession,
+    device_id: str,
+    nacht: Annotated[str | None, Query(pattern=r"^\d{8}$")] = None,
+) -> Response:
+    """SPEC §6.4 Overflights (roadmap L29): satellites, aircraft and unknown objects of a
+    night, apart from the meteors and the other dismissed streaks."""
+    device = await _own(db, session, device_id)
+    nights = list(
+        await db.scalars(
+            select(EventRecord.night_id)
+            .where(EventRecord.device_id == device.id, EventRecord.kind == "meteor")
+            .group_by(EventRecord.night_id)
+            .order_by(EventRecord.night_id.desc())
+            .limit(60)
+        )
+    )
+    night_id = nacht or (nights[0] if nights else None)
+    groups: dict[str, list[EventRecord]] = {key: [] for key in events.OVERFLIGHT_GROUPS}
+    count = None
+    if night_id is not None:
+        rows = await db.scalars(
+            select(EventRecord)
+            .where(
+                EventRecord.device_id == device.id,
+                EventRecord.night_id == night_id,
+                EventRecord.kind == "meteor",
+            )
+            .order_by(EventRecord.start)
+        )
+        found = [e for e in rows if events.overflight(e) is not None]
+        for e in found:
+            groups[events.overflight(e) or "unknown"].append(e)
+        count = events.overflight_count(found)
+    return render(
+        request,
+        "overflights.html",
+        {
+            "device": device,
+            "night_id": night_id,
+            "nights": nights,
+            "groups": groups,
+            "group_titles": events.OVERFLIGHT_GROUPS,
+            "count": count,
+            "name_of": events.overflight_name,
+            "path_of": events.overflight_path,
+            "event_titles": EVENT_TITLES,
+        },
+        session=session,
+    )
+
+
 async def _event(db: DbSession, device: Device, night_id: str, event_id: str) -> EventRecord:
     for event in await events.events(db, device.id, night_id=night_id, limit=1000):
         if event.event_id == event_id:
@@ -248,8 +303,8 @@ async def _event_state(request: Request, device: Device, event: EventRecord) -> 
         return "ready"
     registry = _registry(request)
     if registry.is_pending(
-        device.id, event.night_id, event.event_id, FrameVariant.FULL, "event"
-    ) or await registry.request_event(device.id, event.night_id, event.event_id, FrameVariant.FULL):
+        device.id, event.night_id, event.event_id, EventVariant.FULL, "event"
+    ) or await registry.request_event(device.id, event.night_id, event.event_id, EventVariant.FULL):
         return "fetching"
     return "offline"
 
@@ -285,6 +340,9 @@ async def event_page(
             "event": event,
             "state": await _event_state(request, device, event),
             "rows": event_rows(event),
+            "has_frame": events.has_frame(event),
+            "original_state": "ready" if event.has_original else "none",
+            "crop": events.crop(event),
             "seen_too": seen_too,
             "fireball": science.fireball_facts(event),
             "fireball_form": science.FIREBALL_FORM,
@@ -314,6 +372,57 @@ async def event_state(
     )
 
 
+# Polls of "wird geholt" for the original before the page gives up (every 3 s).
+ORIGINAL_POLLS = 20
+
+
+@router.get("/cameras/{device_id}/events/{night_id}/{event_id}/original")
+async def event_original(
+    request: Request,
+    db: DbSession,
+    session: CurrentSession,
+    device_id: str,
+    night_id: NightId,
+    event_id: EventId,
+    n: Annotated[int, Query(ge=0, le=ORIGINAL_POLLS)] = 0,
+) -> Response:
+    """SPEC §6.5 (roadmap L28): the whole frame with the event's window outlined; fetched
+    from the camera when someone asks (false positives) or not there yet."""
+    device = await _own(db, session, device_id)
+    event = await _event(db, device, night_id, event_id)
+    state = "none"
+    if events.has_frame(event):
+        state = "ready" if event.has_original else "offline"
+        registry = _registry(request)
+        if (
+            not event.has_original
+            and n < ORIGINAL_POLLS
+            and (
+                registry.is_pending(
+                    device.id, event.night_id, event.event_id, EventVariant.ORIGINAL, "event"
+                )
+                or await registry.request_event(
+                    device.id, event.night_id, event.event_id, EventVariant.ORIGINAL
+                )
+            )
+        ):
+            state = "fetching"
+        elif not event.has_original and n >= ORIGINAL_POLLS:
+            state = "gone"
+    return render(
+        request,
+        "_event_original.html",
+        {
+            "device": device,
+            "event": event,
+            "original_state": state,
+            "crop": events.crop(event),
+            "n": n + 1,
+        },
+        session=session,
+    )
+
+
 @router.get("/cameras/{device_id}/events/{night_id}/{event_id}/image", response_model=None)
 async def event_image(
     request: Request,
@@ -322,7 +431,7 @@ async def event_image(
     device_id: str,
     night_id: NightId,
     event_id: EventId,
-    variant: FrameVariant = FrameVariant.FULL,
+    variant: EventVariant = EventVariant.FULL,
 ) -> Response:
     device = await _own(db, session, device_id)
     return await events.event_file(

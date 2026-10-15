@@ -10,7 +10,7 @@ from fastapi import FastAPI
 from sqlalchemy import update
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
-from allskyhub_protocol import FrameVariant
+from allskyhub_protocol import EventVariant, FrameVariant
 from allskyhub_server.devices import space_weather
 from allskyhub_server.devices.images import ImageStore
 from allskyhub_server.models import Device, EventRecord, Frame
@@ -53,7 +53,7 @@ async def _add_archive(app: FastAPI, device_id: str) -> None:
             ("meteor-2", "meteor", "false_positive"),
             ("sky-1", "sky_quality", None),
         ]:
-            path = store.event_path(device_id, "20261012", event_id, FrameVariant.THUMB)
+            path = store.event_path(device_id, "20261012", event_id, EventVariant.THUMB)
             path.parent.mkdir(parents=True, exist_ok=True)
             path.write_bytes(JPEG)
             db.add(EventRecord(device_id=device_id, event_id=event_id, night_id="20261012",

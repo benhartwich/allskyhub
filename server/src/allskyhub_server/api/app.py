@@ -19,6 +19,7 @@ from sqlalchemy.dialects.postgresql import insert as pg_insert
 from allskyhub_protocol import (
     EVENT_ID_PATTERN,
     CloseCode,
+    EventVariant,
     FrameVariant,
     SetSettingsArgs,
     invalid_settings,
@@ -593,7 +594,7 @@ async def event_image(
     device_id: str,
     night_id: Annotated[str, Path(pattern=archive.NIGHT_ID)],
     event_id: Annotated[str, Path(pattern=EVENT_ID_PATTERN)],
-    variant: FrameVariant = FrameVariant.FULL,
+    variant: EventVariant = EventVariant.FULL,
 ) -> Response:
     """The event's picture, or 202 while the hub fetches the full one from the camera."""
     device = await _own(db, user, device_id)

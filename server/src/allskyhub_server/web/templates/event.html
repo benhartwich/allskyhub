@@ -5,6 +5,12 @@
 <h1>{{ event_titles[event.kind] or event.kind }}</h1>
 <p class="muted">{{ event.start | localtime }}{% if (event.data or {}).get("ongoing") %} · <strong>läuft noch</strong>{% endif %}</p>
 <div id="event">{% include "_event_view.html" %}</div>
+{% if has_frame %}
+<div id="original" class="stack">
+  {% if event.has_original %}{% include "_event_original.html" %}
+  {% else %}<button type="button" class="secondary small" hx-get="/cameras/{{ device.id }}/events/{{ event.night_id }}/{{ event.event_id }}/original" hx-target="#original" hx-swap="innerHTML">Ganzes Bild zeigen</button>{% endif %}
+</div>
+{% endif %}
 <form method="post" action="/cameras/{{ device.id }}/events/{{ event.night_id }}/{{ event.event_id }}/label" class="card label-form">
   <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
   {% if event.label == "false_positive" and event.label_auto %}

@@ -5,14 +5,14 @@ from __future__ import annotations
 import datetime as dt
 import re
 from dataclasses import dataclass, field
-from typing import Any
+from typing import Any, cast
 
 from fastapi import HTTPException
 from fastapi.responses import FileResponse, JSONResponse, Response
 from sqlalchemy import ColumnElement, and_, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from allskyhub_protocol import FrameVariant
+from allskyhub_protocol import EventVariant
 from allskyhub_server.devices.connections import ConnectionRegistry
 from allskyhub_server.devices.images import ImageStore
 from allskyhub_server.models import EventRecord
@@ -22,6 +22,31 @@ def trail(event: EventRecord) -> str:
     """SPEC §6.4 Trail verdicts: the camera's verdict; missing means ``meteor``."""
     value = (event.data or {}).get("trail")
     return value if isinstance(value, str) and value else "meteor"
+
+
+def has_frame(event: EventRecord) -> bool:
+    """SPEC §6.4 Original frame: the event names the frame it was found in."""
+    frame = (event.data or {}).get("frame")
+    return event.has_image and isinstance(frame, str) and bool(frame)
+
+
+def crop(event: EventRecord) -> tuple[int, int, int, int] | None:
+    """The picture's window in the original frame (``crop_x/y/w/h``), None for the whole
+    frame or when the values make no sense for the frame's size."""
+    data = event.data or {}
+    values = [data.get(k) for k in ("crop_x", "crop_y", "crop_w", "crop_h")]
+    if not all(isinstance(v, int) and not isinstance(v, bool) and v >= 0 for v in values):
+        return None
+    x, y, w, h = cast(list[int], values)
+    if w == 0 or h == 0:
+        return None
+    if (
+        event.original_w
+        and event.original_h
+        and (x + w > event.original_w or y + h > event.original_h)
+    ):
+        return None
+    return x, y, w, h
 
 
 def dismissed(event: EventRecord) -> bool:
@@ -154,10 +179,11 @@ async def event_file(
     device_id: str,
     night_id: str,
     event_id: str,
-    variant: FrameVariant,
+    variant: EventVariant,
 ) -> Response:
     """An event's picture: 202 ``{"status": "requested"}`` while the hub fetches it from the
-    camera, 404 when there is none or the camera is offline."""
+    camera, 404 when there is none or the camera is offline. With ``original`` the whole
+    frame (SPEC §6.5), for events that name one."""
     event = await db.scalar(
         select(EventRecord).where(
             EventRecord.device_id == device_id,
@@ -166,6 +192,8 @@ async def event_file(
         )
     )
     if event is None or not event.has_image:
+        raise HTTPException(404, "Not found")
+    if variant is EventVariant.ORIGINAL and not has_frame(event):
         raise HTTPException(404, "Not found")
     path = store.event_path(device_id, night_id, event_id, variant)
     if path.is_file():
@@ -191,3 +219,62 @@ def export_row(event: EventRecord) -> dict[str, object]:
         "reason": event.label_reason,
         "labelled_at": event.labelled_at.isoformat() if event.labelled_at else None,
     }
+
+
+# SPEC §6.4 Overflights (roadmap L29): streaks the camera saw move, or that a label names
+# as an aircraft or a satellite.
+OVERFLIGHT_TRAILS = frozenset({"moving", "circle", "dashed"})
+OVERFLIGHT_GROUPS = {"satellite": "Satelliten", "aircraft": "Flugzeuge", "unknown": "Unbekannt"}
+# The camera's own verdicts (SPEC §6.4 Trail verdicts) are reasons, not names.
+_VERDICT_DETAILS = frozenset({"bewegtes Objekt", "blinkt"})
+_POINTS = ("N", "NO", "O", "SO", "S", "SW", "W", "NW")
+
+
+def overflight(event: EventRecord) -> str | None:
+    """``satellite``, ``aircraft`` or ``unknown`` for an overflight, else None. A meteor the
+    owner confirmed is none."""
+    if event.kind != "meteor" or event.label == "confirmed":
+        return None
+    named = event.label == "false_positive" and event.label_reason in ("satellite", "aircraft")
+    if not named and trail(event) not in OVERFLIGHT_TRAILS:
+        return None
+    return event.label_reason if named and event.label_reason else "unknown"
+
+
+def overflight_name(event: EventRecord) -> str | None:
+    """A satellite's name and NORAD number or an aircraft's call sign, from the label."""
+    detail = event.label_detail
+    if event.label != "false_positive" or not detail or detail in _VERDICT_DETAILS:
+        return None
+    return detail
+
+
+def _point(data: dict[str, Any], end: str) -> str | None:
+    az, alt = data.get(f"{end}_azimuth_deg"), data.get(f"{end}_altitude_deg")
+    if not isinstance(az, int | float) or not isinstance(alt, int | float):
+        return None
+    return f"{_POINTS[round(az / 45) % 8]} {round(alt)}°"
+
+
+def overflight_path(event: EventRecord) -> str | None:
+    """ "NW 15° → SO 32°" from the track's ends; None without an orientation."""
+    data = event.data or {}
+    start, end = _point(data, "start"), _point(data, "end")
+    return f"{start} → {end}" if start and end else None
+
+
+def overflight_count(rows: list[EventRecord]) -> str | None:
+    """ "23 Überflüge: 6 Satelliten, 3 Flugzeuge, 14 unbekannt" (SPEC §6.4)."""
+    groups = [g for g in (overflight(e) for e in rows) if g is not None]
+    if not groups:
+        return None
+    sats, planes = groups.count("satellite"), groups.count("aircraft")
+    unknown = groups.count("unknown")
+    parts = [
+        f"{sats} {'Satellit' if sats == 1 else 'Satelliten'}" if sats else "",
+        f"{planes} {'Flugzeug' if planes == 1 else 'Flugzeuge'}" if planes else "",
+        f"{unknown} unbekannt" if unknown else "",
+    ]
+    total = len(groups)
+    head = f"{total} {'Überflug' if total == 1 else 'Überflüge'}"
+    return f"{head}: " + ", ".join(p for p in parts if p)

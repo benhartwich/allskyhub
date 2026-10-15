@@ -1,0 +1,40 @@
+{% extends "base.html" %}
+{% block title %}Überflüge · {{ device.name }} · allskyhub{% endblock %}
+{% block content %}
+<a class="back" href="/cameras/{{ device.id }}">← {{ device.name }}</a>
+<div class="page-head">
+  <h1>Überflüge</h1>
+  <a href="/cameras/{{ device.id }}/events" class="muted">Alle Ereignisse</a>
+</div>
+<p class="muted">Satelliten, Flugzeuge und andere bewegte Objekte, die der Meteordetektor gefunden hat. Sie zählen nirgends als Meteore. Namen kommen vom Hub, wenn eine Bahn oder ein Flugzeug passt.</p>
+{% if nights %}
+<form method="get" class="inline">
+  <label>Nacht
+    <select name="nacht">
+      {% for n in nights %}<option value="{{ n }}"{% if n == night_id %} selected{% endif %}>{{ n | night_title }}</option>{% endfor %}
+    </select>
+  </label>
+  <button type="submit" class="secondary small">Zeigen</button>
+</form>
+{% endif %}
+{% if count %}
+<p><strong>{{ count }}</strong></p>
+{% for key, rows in groups.items() if rows %}
+<section class="card stack">
+  <h2>{{ group_titles[key] }} ({{ rows | length }})</h2>
+  <ul class="list">
+    {% for e in rows %}
+    {%- set name = name_of(e) -%}{%- set path = path_of(e) -%}
+    <li class="event-row">
+      {% include "_item_thumb.html" %}
+      <span>{{ e.start | clock }}–{{ e.end | clock }}{% if name %} · <strong>{{ name }}</strong>{% endif %}</span>
+      {% if path %}<span class="muted small">{{ path }}</span>{% endif %}
+    </li>
+    {% endfor %}
+  </ul>
+</section>
+{% endfor %}
+{% else %}
+<div class="card empty"><p class="muted">Keine Überflüge in dieser Nacht.</p></div>
+{% endif %}
+{% endblock %}

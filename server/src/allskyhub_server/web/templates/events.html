@@ -4,7 +4,7 @@
 <a class="back" href="/cameras/{{ device.id }}">← {{ device.name }}</a>
 <div class="page-head">
   <h1>Ereignisse</h1>
-  <a href="/cameras/{{ device.id }}/events.json" class="muted">Export (JSON)</a>
+  <span class="row-links"><a href="/cameras/{{ device.id }}/ueberfluege">Überflüge</a> <a href="/cameras/{{ device.id }}/events.json" class="muted">Export (JSON)</a></span>
 </div>
 <p class="muted">{% if show_all %}Alle Ereignisse, auch aussortierte. <a href="?">Aussortierte ausblenden</a>{% else %}Als „kein Meteor“ markierte sind ausgeblendet. <a href="?all=true">Alle zeigen</a>{% endif %}</p>
 {% if events %}

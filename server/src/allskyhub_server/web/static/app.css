@@ -425,3 +425,7 @@ label.check { display: flex; gap: 8px; align-items: baseline; }
 .wizard-steps .current .wizard-num { background: var(--accent); color: var(--accent-ink); }
 .howto { padding-left: 22px; margin: 0; display: grid; gap: 10px; }
 .wizard-nav { display: flex; gap: 10px; justify-content: space-between; }
+
+/* SPEC §6.5 original frame: the event's window outlined (roadmap L28) */
+.original-frame { display: block; width: 100%; height: auto; }
+.original-frame .crop { fill: none; stroke: var(--accent-2); }

@@ -32,6 +32,7 @@ from allskyhub_protocol import (
     ErrorReply,
     Event,
     EventLabel,
+    EventVariant,
     FrameInfo,
     FrameVariant,
     Hello,
@@ -63,8 +64,8 @@ from allskyhub_server.devices import (
 )
 from allskyhub_server.devices.connections import Connection, ConnectionRegistry
 from allskyhub_server.devices.discord import Discord
-from allskyhub_server.devices.events import image_rev
-from allskyhub_server.devices.images import JPEG_MAGIC, ImageStore
+from allskyhub_server.devices.events import dismissed, has_frame, image_rev
+from allskyhub_server.devices.images import JPEG_MAGIC, ImageStore, jpeg_size
 from allskyhub_server.devices.space_weather import KpCache
 from allskyhub_server.models import (
     Device,
@@ -269,9 +270,10 @@ async def upload_event(
     settings: SettingsDep,
     night_id: Annotated[str, Path(pattern=NIGHT_ID)],
     event_id: Annotated[str, Path(pattern=EVENT_ID_PATTERN)],
-    variant: Annotated[FrameVariant, Query()] = FrameVariant.FULL,
+    variant: Annotated[EventVariant, Query()] = EventVariant.FULL,
 ) -> Response:
-    """SPEC §6.5, §6.6: the picture of a requested event, like a frame."""
+    """SPEC §6.5, §6.6: the picture of a requested event, like a frame; with ``original``
+    the whole frame it was found in (roadmap L28)."""
     info = await _device_from_bearer(request, db)
     registry: ConnectionRegistry = request.app.state.connections
     if not registry.is_requested(info.device_id, night_id, event_id, variant, "event"):
@@ -281,14 +283,24 @@ async def upload_event(
         raise HTTPException(404, "Upload was not requested")
     store: ImageStore = request.app.state.images
     await asyncio.to_thread(store.save_event, info.device_id, night_id, event_id, variant, data)
+    values: dict[str, Any]
+    if variant is EventVariant.ORIGINAL:
+        size = jpeg_size(data)
+        values = {
+            "has_original": True,
+            "original_w": size[0] if size else None,
+            "original_h": size[1] if size else None,
+        }
+    else:
+        values = {"has_full": True} if variant is EventVariant.FULL else {"has_thumb": True}
     await db.execute(
         update(EventRecord)
         .where(EventRecord.device_id == info.device_id, EventRecord.event_id == event_id)
-        .values({"has_full": True} if variant is FrameVariant.FULL else {"has_thumb": True})
+        .values(values)
     )
     await db.commit()
     discord: Discord | None = request.app.state.notifier.discord
-    if discord is not None and variant is FrameVariant.THUMB:
+    if discord is not None and variant is EventVariant.THUMB:
         # Roadmap H5: detections with a picture go to Discord once it is here.
         _background(discord.event(info.device_id, event_id, picture_arrived=True))
     return Response(status_code=204)
@@ -754,23 +766,26 @@ async def _on_event(
         replaced = not is_new and image_rev(body.data) > image_rev(previous or {})
         update_values: dict[str, Any] = dict(values)
         if replaced:
-            update_values |= {"has_thumb": False, "has_full": False}
+            update_values |= {
+                "has_thumb": False, "has_full": False, "has_original": False,
+                "original_w": None, "original_h": None,
+            }  # fmt: skip
         await db.execute(
             pg_insert(EventRecord)
             .values(device_id=conn.device_id, event_id=body.id, **values)
             .on_conflict_do_update(index_elements=["device_id", "event_id"], set_=update_values)
         )
-        stored = (
-            await db.execute(
-                select(EventRecord.has_thumb, EventRecord.has_full).where(
-                    EventRecord.device_id == conn.device_id, EventRecord.event_id == body.id
-                )
-            )
-        ).one()
+        stored = await db.scalar(
+            select(EventRecord)
+            .where(EventRecord.device_id == conn.device_id, EventRecord.event_id == body.id)
+            .execution_options(populate_existing=True)
+        )
         await db.commit()
+    if stored is None:
+        return
     if replaced:
         # Never serve (or let browsers cache) the old picture under the new revision.
-        for variant in FrameVariant:
+        for variant in EventVariant:
             await asyncio.to_thread(
                 store.delete_event, conn.device_id, body.night_id, body.id, variant
             )
@@ -791,11 +806,15 @@ async def _on_event(
     if not body.has_image:
         return
     if not stored.has_thumb:
-        await registry.request_event(conn.device_id, body.night_id, body.id, FrameVariant.THUMB)
+        await registry.request_event(conn.device_id, body.night_id, body.id, EventVariant.THUMB)
     # Owners who keep events longer keep them in full: fetch the picture while it exists
     # (again when it was replaced, so the kept picture is the final one).
     if (keep_days or DEFAULT_EVENT_KEEP_DAYS) > DEFAULT_EVENT_KEEP_DAYS and not stored.has_full:
-        await registry.request_event(conn.device_id, body.night_id, body.id, FrameVariant.FULL)
+        await registry.request_event(conn.device_id, body.night_id, body.id, EventVariant.FULL)
+    # SPEC §6.5 (roadmap L28): the whole frame right away, unless a false positive (those
+    # only when someone opens them).
+    if has_frame(stored) and not stored.has_original and not dismissed(stored):
+        await registry.request_event(conn.device_id, body.night_id, body.id, EventVariant.ORIGINAL)
 
 
 _tasks: set[asyncio.Task[Any]] = set()

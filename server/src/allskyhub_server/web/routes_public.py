@@ -9,7 +9,7 @@ from typing import Annotated
 from fastapi import APIRouter, HTTPException, Path, Query, Request
 from fastapi.responses import FileResponse, JSONResponse, Response
 
-from allskyhub_protocol import FrameVariant
+from allskyhub_protocol import EventVariant, FrameVariant
 from allskyhub_server.auth import ratelimit
 from allskyhub_server.devices import (
     aircraft,
@@ -269,7 +269,7 @@ async def sky_event_image(
         raise HTTPException(404)
     store: ImageStore = request.app.state.images
     # Replaced pictures get a new image_rev in the URL, so a short cache is enough.
-    return _jpeg(store.event_path(device.id, night_id, event_id, FrameVariant.THUMB), PUBLIC_CACHE)
+    return _jpeg(store.event_path(device.id, night_id, event_id, EventVariant.THUMB), PUBLIC_CACHE)
 
 
 # Roadmap C9: embedding on other websites. Only these answers may be framed by anyone.

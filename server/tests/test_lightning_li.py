@@ -191,20 +191,28 @@ async def test_gaps_and_running_storms_stay_unchecked(
         ])  # fmt: skip
         await db.commit()
         await lightning_li.ingest(db, store, READ)
-        assert await lightning_li.check(db, NOW) == set()
+        assert await lightning_li.check(db, NOW) == {dev.device_id}
     async with maker() as db:
         events = {e.start.minute: e for e in await db.scalars(select(EventRecord))}
     assert events[2].li_checked_at is not None
     assert events[12].li_checked_at is None  # in the gap
-    assert events[2].label is None  # the storm is not fully checked
+    # SPEC §7.10: the gap holds back nothing; the checked event is labelled, the other
+    # stays unchecked and unlabelled.
+    assert events[2].label_detail == lightning_li.DETAIL
+    assert events[12].label is None
+    assert dict(event_rows(events[12]))[ROW] == "ungeprüft"
 
-    # The gap filled later; a storm still going on (last flash < 30 min ago) waits.
+    # The gap filled later: that event is checked and labelled too; a storm still going on
+    # (last flash < 30 min ago) waits.
     store.add(t0 + dt.timedelta(minutes=10), [])
     async with maker() as db:
         await lightning_li.ingest(db, store, READ)
         soon = t0 + dt.timedelta(minutes=30)
         assert await lightning_li.check(db, soon) == set()
         assert await lightning_li.check(db, NOW) == {dev.device_id}
+    async with maker() as db:
+        events = {e.start.minute: e for e in await db.scalars(select(EventRecord))}
+    assert events[12].label_detail == lightning_li.DETAIL
 
 
 async def test_the_owner_wins(app: FastAPI, client: httpx.AsyncClient) -> None:

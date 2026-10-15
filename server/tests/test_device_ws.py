@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 
 import httpx
 import pytest
@@ -100,6 +101,21 @@ async def test_new_connection_replaces_old(client: httpx.AsyncClient, live_app: 
         await send(first, Hello(device_id=dev.device_id, profile=dev.profile, agent_version="1"))
         async with device_ws(live_app, token):
             assert await closed_with(first) == CloseCode.REPLACED
+
+
+async def test_replacing_logs_no_error(
+    client: httpx.AsyncClient, live_app: str, caplog: pytest.LogCaptureFixture
+) -> None:
+    """2026-10-15: the old connection's loop, waiting for a message when the hub closed it,
+    raised "WebSocket is not connected" and uvicorn logged it as an error on every
+    reconnect of a camera."""
+    dev = FakeDevice()
+    token = await paired_token(client, dev)
+    with caplog.at_level(logging.ERROR):
+        async with device_ws(live_app, token) as first, device_ws(live_app, token):
+            assert await closed_with(first) == CloseCode.REPLACED
+            await asyncio.sleep(0.2)
+    assert not [r for r in caplog.records if r.levelno >= logging.ERROR]
 
 
 async def test_a_dead_old_connection_does_not_break_the_new_one(

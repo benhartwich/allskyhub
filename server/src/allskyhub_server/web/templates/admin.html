@@ -79,6 +79,83 @@
   {% endif %}
   <p class="muted small">„Einladen“ schickt den Einladungslink (14 Tage gültig) und den Link zu den ersten Schritten per E-Mail. „Ablehnen“ schickt nichts.</p>
 </section>
+<section class="card stack" id="stores">
+  <h2>App-Stores</h2>
+  {% if store_report %}
+  <ul class="parts">
+    {% for step in store_report.steps %}
+    <li><strong class="{{ '' if step.state == 'ok' else 'warn' }}">{{ {'ok': '✓', 'warn': '!', 'fail': '✕'}[step.state] }} {{ step.title }}</strong><span>{{ step.text }}</span></li>
+    {% endfor %}
+  </ul>
+  {% endif %}
+  <dl class="facts">
+    {% for e in stores %}
+    <dt>{{ e.title }}</dt>
+    <dd>{% if e.meta %}hinterlegt {{ e.meta.at[:10] }}
+      {%- if e.meta.client_email %}<br><code class="small">{{ e.meta.client_email }}</code>{% endif %}
+      {%- if e.meta.key_id %}<br><span class="small">Key-ID <code>{{ e.meta.key_id }}</code></span>{% endif %}
+      {%- if e.meta.sha256 %}<br><span class="small">SHA-256 <code>{{ e.meta.sha256 }}</code></span>{% endif %}
+      {%- if e.meta.app_id %}<br><span class="small">Codemagic-App <code>{{ e.meta.app_id }}</code></span>{% endif %}
+    {%- else %}<span class="muted">{{ 'fehlt' if e.kind in ('play', 'asc', 'codemagic') else 'wird beim Einrichten erzeugt' }}</span>{% endif %}</dd>
+    {% endfor %}
+  </dl>
+  <form method="post" action="/admin/stores-setup" class="inline">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <button type="submit">Prüfen und einrichten</button>
+  </form>
+  <p class="muted small">Prüft jeden Zugang, erzeugt die Signierschlüssel, legt die Bundle-ID {{ package }} bei Apple an, fügt das Repository in Codemagic hinzu und legt dort alle Schlüssel in die geschützte Variablengruppe <code>allskyhub_store</code>. Die Schlüssel stehen nur auf dem Server und werden nie wieder angezeigt.</p>
+
+  {% if store_builds %}
+  <h3>Letzte Builds</h3>
+  <ul class="commit-list">
+    {% for b in store_builds %}
+    <li><a href="{{ build_url(b) }}">{{ 'Android' if b.platform == 'android' else 'iOS' }}</a> · {{ b.status or 'gestartet' }} <span class="muted small">· {{ b.at[:16] | replace('T', ' ') }} UTC</span></li>
+    {% endfor %}
+  </ul>
+  {% endif %}
+  {% if codemagic_app %}
+  <div class="row-links">
+    {% for platform, name in (('android', 'Android-Release bauen'), ('ios', 'iOS-Release bauen')) %}
+    <form method="post" action="/admin/stores-build" class="inline">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+      <input type="hidden" name="platform" value="{{ platform }}">
+      <button type="submit" class="secondary">{{ name }}</button>
+    </form>
+    {% endfor %}
+  </div>
+  <p class="muted small">Baut <code>main</code> bei Codemagic: Android als App Bundle in den internen Test (als Entwurf), iOS nach TestFlight.</p>
+  {% endif %}
+
+  <details>
+    <summary>Zugänge hochladen</summary>
+    <form method="post" action="/admin/stores/play" enctype="multipart/form-data" class="stack">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+      <h3>{{ store_titles.play }}</h3>
+      <label>JSON-Schlüssel des Dienstkontos<input type="file" name="file" accept=".json,application/json" required></label>
+      <p class="muted small">Google Cloud → IAM → Dienstkonten → Schlüssel → JSON. In der Play Console das Dienstkonto unter Nutzer und Berechtigungen einladen und für {{ package }} Releases erlauben. Im Cloud-Projekt muss die „Google Play Android Developer API“ aktiv sein.</p>
+      <label>Dein Passwort<input type="password" name="password" autocomplete="current-password" required></label>
+      <button type="submit" class="secondary">Hochladen</button>
+    </form>
+    <form method="post" action="/admin/stores/asc" enctype="multipart/form-data" class="stack">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+      <h3>{{ store_titles.asc }}</h3>
+      <label>Schlüsseldatei (.p8)<input type="file" name="file" accept=".p8" required></label>
+      <label>Key-ID<input name="key_id" required maxlength="10" autocomplete="off"></label>
+      <label>Issuer-ID<input name="issuer_id" required maxlength="36" autocomplete="off"></label>
+      <p class="muted small">App Store Connect → Benutzer und Zugriff → Integrationen → App Store Connect API → Teamschlüssel, Rolle „App Manager“. Die .p8-Datei lässt sich nur einmal laden.</p>
+      <label>Dein Passwort<input type="password" name="password" autocomplete="current-password" required></label>
+      <button type="submit" class="secondary">Hochladen</button>
+    </form>
+    <form method="post" action="/admin/stores/codemagic" class="stack">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+      <h3>{{ store_titles.codemagic }}</h3>
+      <label>API-Token<input type="password" name="token" required maxlength="512" autocomplete="off"></label>
+      <p class="muted small">Codemagic → Teams → Persönliches Konto oder Team → Integrationen → Codemagic API → Show.</p>
+      <label>Dein Passwort<input type="password" name="password" autocomplete="current-password" required></label>
+      <button type="submit" class="secondary">Speichern</button>
+    </form>
+  </details>
+</section>
 <section class="card stack">
   <h2>Plus</h2>
   {% if plus %}

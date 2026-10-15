@@ -1,5 +1,6 @@
 # allskyhub image for the Raspberry Pi 4 and 5 (SPEC §8, M5).
-# Native build on an arm64 runner; the image is a workflow artifact for 14 days.
+# Native build on an arm64 runner; the image is a workflow artifact for 14 days, and a tag
+# agent-vX.Y.Z also attaches it as allskyhub-X.Y.Z.img.xz to that release (docs/install.md).
 name: image
 
 on:
@@ -36,6 +37,8 @@ jobs:
       - name: image
         run: |
           VERSION="$(date -u +%Y.%m.%d)-${GITHUB_SHA::7}"
+          # A released image carries the agent's version, so its file name says what is in it.
+          case "$GITHUB_REF" in refs/tags/agent-v*) VERSION="${GITHUB_REF_NAME#agent-v}" ;; esac
           sudo env UV_BIN="$(command -v uv)" ALLSKYHUB_IMAGE_VERSION="$VERSION" image/build.sh
           sudo chown -R "$(id -u):$(id -g)" build
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02  # v4
@@ -82,6 +85,10 @@ jobs:
         with:
           name: allskyhub-agent-bundle
           path: dist
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093  # v4
+        with:
+          name: allskyhub-image
+          path: image-dist
       - name: version
         run: |
           VERSION="${GITHUB_REF_NAME#agent-v}"
@@ -109,9 +116,14 @@ jobs:
           [ "$ok" = 1 ] || { echo "::error::signature does not match a key in the image"; exit 1; }
       - name: publish
         run: |
-          gh release create "agent-v$VERSION" "dist/allskyhub-agent-$VERSION-arm64.tar.xz" \
-            --title "agent $VERSION" --notes "Agent update $VERSION (docs/updates.md)." \
-            || gh release upload "agent-v$VERSION" "dist/allskyhub-agent-$VERSION-arm64.tar.xz" --clobber
+          # The SD image for new cameras (docs/install.md) goes with the agent it contains.
+          IMAGE="image-dist/allskyhub-$VERSION.img.xz"
+          [ -f "$IMAGE" ] && [ -f "$IMAGE.sha256" ] || { echo "::error::$IMAGE missing"; exit 1; }
+          ASSETS=("dist/allskyhub-agent-$VERSION-arm64.tar.xz" "$IMAGE" "$IMAGE.sha256")
+          gh release create "agent-v$VERSION" "${ASSETS[@]}" \
+            --title "agent $VERSION" \
+            --notes "Agent update $VERSION (docs/updates.md). New cameras: write allskyhub-$VERSION.img.xz to a microSD card (docs/install.md)." \
+            || gh release upload "agent-v$VERSION" "${ASSETS[@]}" --clobber
           gh release view channel-stable >/dev/null 2>&1 || gh release create channel-stable \
             --title "update channel: stable" --notes "Manifest the cameras read (docs/updates.md)." --latest=false
           gh release upload channel-stable dist/manifest.json dist/manifest.json.sig --clobber

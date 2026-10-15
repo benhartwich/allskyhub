@@ -51,7 +51,7 @@ sudo ln -sfn libASICamera2.so.1.39 /opt/allskyhub-agent/lib/libASICamera2.so</co
 
 <section class="card stack">
   <h2>3. {{ 'Install' if en else 'Installieren' }}</h2>
-  <p class="muted">{{ 'Builds allskyhub into its own folder; this takes a few minutes on a Pi 4.' if en else 'Baut allskyhub in einen eigenen Ordner; das dauert auf einem Pi 4 ein paar Minuten.' }}</p>
+  <p class="muted">{{ 'Builds allskyhub into its own folder; this takes a few minutes on a Pi 4 (the build cache stays in /root/.cache/uv).' if en else 'Baut allskyhub in einen eigenen Ordner; das dauert auf einem Pi 4 ein paar Minuten (der Zwischenspeicher bleibt unter /root/.cache/uv).' }}</p>
 <pre><code>V=$(git -C ~/allskyhub rev-parse --short=7 HEAD)
 R=/opt/allskyhub-agent/releases/$V
 sudo install -d $R
@@ -62,9 +62,9 @@ sudo ln -sfn releases/$V /opt/allskyhub-agent/current</code></pre>
 
 <section class="card stack">
   <h2>4. {{ 'Settings' if en else 'Einstellungen' }}</h2>
-  <p class="muted">{{ 'Your location (decimal degrees), time zone and camera. You can change all of it later on the hub.' if en else 'Dein Standort (Dezimalgrad), Zeitzone und Kamera. Ändern kannst du alles später auf dem Hub.' }}</p>
-<pre><code>echo '{"latitude": 48.14, "longitude": 14.39, "timezone": "Europe/Vienna", "camera": "zwo-asi678mc"}' \
-  | sudo -u allskyhub tee /var/lib/allskyhub-agent/settings.json</code></pre>
+  <p class="muted">{{ 'Your location (decimal degrees; replace the example values), time zone and camera. You can change all of it later on the hub. The file stays readable for allskyhub only.' if en else 'Dein Standort (Dezimalgrad; die Beispielwerte ersetzen), Zeitzone und Kamera. Ändern kannst du alles später auf dem Hub. Die Datei bleibt nur für allskyhub lesbar.' }}</p>
+<pre><code>echo '{"latitude": 50.00, "longitude": 10.00, "timezone": "Europe/Berlin", "camera": "zwo-asi678mc"}' \
+  | sudo -u allskyhub sh -c 'umask 077; cat > /var/lib/allskyhub-agent/settings.json'</code></pre>
   <p class="muted small">{{ 'With the Raspberry Pi HQ camera write "camera": "rpi-hq".' if en else 'Mit der Raspberry-Pi-HQ-Kamera "camera": "rpi-hq" eintragen.' }}</p>
 <pre><code>echo 'ALLSKYHUB_AGENT_ARGS="--asi-sdk /opt/allskyhub-agent/lib/libASICamera2.so run --data /var/lib/allskyhub-agent/data --settings /var/lib/allskyhub-agent/settings.json --hub https://allskyhub.org --http 0.0.0.0:8080"' \
   | sudo tee /etc/allskyhub-agent/allskyhub-agent.env</code></pre>

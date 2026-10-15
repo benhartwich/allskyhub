@@ -53,6 +53,8 @@ EVERY = dt.timedelta(minutes=10)
 LOOKBACK = dt.timedelta(hours=3)
 KEEP = dt.timedelta(hours=48)
 REACH_KM = 400.0
+# SPEC §7.10: flashes count only this close to the direction the camera saw the light in.
+SECTOR_DEG = 60.0
 MARGIN = dt.timedelta(seconds=60)
 STORM_GAP = dt.timedelta(minutes=30)
 STORM_LOOKBACK = dt.timedelta(hours=24)
@@ -271,9 +273,15 @@ def direction(bearing: float) -> str:
 
 
 async def nearest(
-    db: AsyncSession, lat: float, lon: float, start: dt.datetime, end: dt.datetime
+    db: AsyncSession,
+    lat: float,
+    lon: float,
+    start: dt.datetime,
+    end: dt.datetime,
+    toward: float | None = None,
 ) -> tuple[float, float] | None:
-    """(km, bearing) of the nearest flash within ``REACH_KM`` in ``start .. end``."""
+    """(km, bearing) of the nearest flash within ``REACH_KM`` in ``start .. end``; with
+    ``toward`` (a compass bearing) only flashes within ``SECTOR_DEG`` of it (SPEC §7.10)."""
     dlat = REACH_KM / 111.0
     dlon = REACH_KM / (111.0 * max(0.1, math.cos(math.radians(lat))))
     rows = (
@@ -288,8 +296,12 @@ async def nearest(
     best: tuple[float, float] | None = None
     for a, o in rows:
         km = fireball.distance_km(lat, lon, a, o)
-        if km <= REACH_KM and (best is None or km < best[0]):
-            best = (km, fireball.bearing_deg(lat, lon, a, o))
+        if km > REACH_KM or (best is not None and km >= best[0]):
+            continue
+        bearing = fireball.bearing_deg(lat, lon, a, o)
+        if toward is not None and abs((bearing - toward + 180.0) % 360.0 - 180.0) > SECTOR_DEG:
+            continue
+        best = (km, bearing)
     return best
 
 
@@ -301,6 +313,12 @@ def _place(status: dict[str, Any] | None) -> tuple[float, float] | None:
     return float(lat), float(lon)
 
 
+def _toward(event: EventRecord) -> float | None:
+    """SPEC §7.10: where the camera saw the light, as a compass bearing."""
+    az = (event.data or {}).get("azimuth_deg")
+    return float(az) if isinstance(az, int | float) and not isinstance(az, bool) else None
+
+
 def summary(event: EventRecord) -> str | None:
     """The line for the event's details; None for other kinds."""
     if event.kind != "lightning":
@@ -308,7 +326,9 @@ def summary(event: EventRecord) -> str | None:
     if event.li_checked_at is None:
         return "ungeprüft"
     if event.li_km is None or event.li_bearing_deg is None:
-        return f"keine Blitze im Umkreis von {REACH_KM:.0f} km"
+        toward = _toward(event)
+        where = f" Richtung {direction(toward)}" if toward is not None else ""
+        return f"keine Blitze im Umkreis von {REACH_KM:.0f} km{where}"
     return f"Blitze in {event.li_km:.0f} km Richtung {direction(event.li_bearing_deg)}"
 
 
@@ -343,7 +363,7 @@ async def check(db: AsyncSession, now: dt.datetime) -> set[str]:
         start, end = event.start - MARGIN, event.end + MARGIN
         if place is None or end > now or not await covered(db, start, end):
             continue
-        found = await nearest(db, *place, start, end)
+        found = await nearest(db, *place, start, end, _toward(event))
         event.li_checked_at = now
         event.li_km, event.li_bearing_deg = found if found is not None else (None, None)
     changed: set[str] = set()

@@ -317,3 +317,36 @@ async def test_pending_labels_are_found_for_delivery(
         await labels.set_auto(db, event, "other", lightning_li.DETAIL, t0)
         await db.commit()
         assert await lightning_li.pending(db) == {dev.device_id}
+
+
+async def test_only_flashes_towards_the_light_count(
+    app: FastAPI, client: httpx.AsyncClient
+) -> None:
+    """SPEC §7.10 (Benjamin, 2026-10-15): a glow from the NNW is not confirmed by a storm
+    in the south; without an orientation every direction counts."""
+    dev, _, _ = await _camera(app, client)
+    maker: async_sessionmaker[AsyncSession] = app.state.sessionmaker
+    t0 = dt.datetime(2026, 10, 14, 22, 0, tzinfo=dt.UTC)
+    store = FakeStore()
+    south = (LAT - 2.0, LON)  # about 220 km south
+    for i in range(6):
+        at = t0 + dt.timedelta(minutes=10 * i)
+        store.add(at, [(at + dt.timedelta(minutes=5), *south)])
+    async with maker() as db:
+        db.add_all([
+            _flash(dev.device_id, t0 + dt.timedelta(minutes=5), "storm-N", azimuth_deg=340.0),
+            _flash(dev.device_id, t0 + dt.timedelta(minutes=15), "storm-S", azimuth_deg=170.0),
+            _flash(dev.device_id, t0 + dt.timedelta(minutes=45), "storm-X"),
+        ])  # fmt: skip
+        await db.commit()
+        await lightning_li.ingest(db, store, READ)
+        await lightning_li.check(db, NOW)
+    async with maker() as db:
+        rows = {e.data["storm"]: e for e in await db.scalars(select(EventRecord))}
+    north = rows["storm-N"]
+    assert north.li_km is None
+    assert north.label_detail == lightning_li.DETAIL
+    assert dict(event_rows(north))[ROW] == "keine Blitze im Umkreis von 400 km Richtung N"
+    assert rows["storm-S"].label is None
+    assert dict(event_rows(rows["storm-S"]))[ROW].endswith("Richtung S")
+    assert rows["storm-X"].label is None  # no azimuth: the southern storm counts

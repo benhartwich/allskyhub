@@ -101,7 +101,7 @@ const schemaCurrent = {
 SettingsInput _unchanged() => SettingsInput()
   ..text.addAll({
     'latitude': '48.31',
-    'longitude': '14,39',
+    'longitude': '14,29',
     'timezone': 'Europe/Vienna',
     'night_max_exposure_s': '60',
     'timelapse_fps': '25',

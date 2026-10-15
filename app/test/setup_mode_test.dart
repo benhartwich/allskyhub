@@ -144,7 +144,7 @@ void main() {
         'country': 'DE',
         'hub_url': hubUrl,
         'latitude': 48.31,
-        'longitude': 14.4,
+        'longitude': 14.29,
         'timezone': 'Europe/Vienna',
       });
       expect(f.binding.calls, ['bind', 'unbind']);

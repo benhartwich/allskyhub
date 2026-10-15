@@ -63,7 +63,7 @@ async def _add_archive(app: FastAPI, device_id: str) -> None:
         await db.execute(
             update(Device)
             .where(Device.id == device_id)
-            .values(last_status={"settings": {"latitude": 48.13601, "longitude": 14.38951}})
+            .values(last_status={"settings": {"latitude": 50.03601, "longitude": 10.38951}})
         )
         await db.commit()
 
@@ -75,22 +75,22 @@ async def test_profile_texts_and_coordinates(
     await _add_archive(app, device_id)
     assert "Seite gestalten" in (await client.get(f"/cameras/{device_id}")).text
     r = await _save(
-        client, device_id, title="Allsky Lanzenberg", location_label="Hofkirchen",
+        client, device_id, title="Allsky Sternwarte", location_label="Musterdorf",
         camera="ZWO ASI678MC", lens="2,5 mm", computer="Pi 4", owner="Ben",
         notes="<script>x</script>", section_live="on", section_aurora="on",
     )  # fmt: skip
     assert r.status_code == 303
     page = (await new_client.get(f"/sky/{slug}")).text
-    for text in ("Allsky Lanzenberg", "Hofkirchen", "ZWO ASI678MC", "2,5 mm", "Pi 4", "Ben"):
+    for text in ("Allsky Sternwarte", "Musterdorf", "ZWO ASI678MC", "2,5 mm", "Pi 4", "Ben"):
         assert text in page
     assert "<script>x</script>" not in page  # escaped
-    assert "48.1°" not in page  # coordinates only on request
+    assert "50.0°" not in page  # coordinates only on request
     assert 'property="og:image"' in page
 
     await _save(client, device_id, show_coordinates="on")
     page = (await new_client.get(f"/sky/{slug}")).text
-    assert "48.1° N, 14.4° O" in page
-    assert "48.136" not in page
+    assert "50.0° N, 10.4° O" in page
+    assert "50.036" not in page
 
     too_long = await _save(client, device_id, title="x" * 101)
     assert too_long.status_code == 400
@@ -106,7 +106,7 @@ async def test_sections_and_public_files(
     assert f"/sky/{slug}/frames/20261012/image-0.jpg" in page
     assert "Polarlicht-Aussichten" in page
     assert "kp-high" in page  # 5.3 tomorrow
-    assert "ab etwa Kp 8" in page  # 48° N
+    assert "ab etwa Kp 7" in page  # 50° N
     assert f"/sky/{slug}/events/20261012/meteor-1.jpg" in page
     assert "meteor-2" not in page  # marked as false positive
     assert "sky-1" not in page  # measurements are not shown as events

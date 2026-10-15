@@ -35,7 +35,7 @@ app, for example:
 ```json
 {"allskyhub_setup": 1,
  "wifi": {"ssid": "Home", "password": "secret-password"}, "wifi_country": "AT",
- "location": {"latitude": 48.14, "longitude": 14.39}, "timezone": "Europe/Vienna",
+ "location": {"latitude": 50.04, "longitude": 10.39}, "timezone": "Europe/Vienna",
  "camera": "auto"}
 ```
 

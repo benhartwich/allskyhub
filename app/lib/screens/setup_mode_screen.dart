@@ -358,7 +358,7 @@ class _SetupModeScreenState extends State<SetupModeScreen> {
               onChanged: manual,
               decoration: const InputDecoration(
                 labelText: 'Breite',
-                hintText: '48.14',
+                hintText: '50.04',
               ),
             ),
           ),
@@ -374,7 +374,7 @@ class _SetupModeScreenState extends State<SetupModeScreen> {
               onChanged: manual,
               decoration: const InputDecoration(
                 labelText: 'Länge',
-                hintText: '14.39',
+                hintText: '10.39',
               ),
             ),
           ),

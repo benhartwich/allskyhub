@@ -192,10 +192,10 @@ def test_event_ids_and_upload_event_args() -> None:
 def test_set_settings_args() -> None:
     from allskyhub_protocol import SetSettingsArgs
 
-    a = SetSettingsArgs.model_validate({"latitude": 48.1, "longitude": 14.4, "night_delay_s": 5})
-    assert (a.latitude, a.night_delay_s, a.camera) == (48.1, 5, None)
+    a = SetSettingsArgs.model_validate({"latitude": 50.0, "longitude": 10.4, "night_delay_s": 5})
+    assert (a.latitude, a.night_delay_s, a.camera) == (50.0, 5, None)
     for bad in (
-        {"latitude": 48.1},
+        {"latitude": 50.0},
         {"timezone": "Nowhere/Town"},
         {"camera": "nikon"},
         {"day_delay_s": -1},
@@ -266,8 +266,8 @@ def test_settings_schema_in_hello_and_checks() -> None:
     schema = hello.settings_schema
     assert [s.key for s in schema][:2] == ["location", "timezone"]
     good = {
-        "latitude": 48.1,
-        "longitude": 14.4,
+        "latitude": 50.0,
+        "longitude": 10.4,
         "max_gain": 300,
         "flip": "h",
         "overlay": True,
@@ -281,7 +281,7 @@ def test_settings_schema_in_hello_and_checks() -> None:
         "title": None,
     }
     bad = {
-        "latitude": 48.1,
+        "latitude": 50.0,
         "max_gain": 2.5,
         "flip": "v",
         "overlay": 1,
@@ -429,7 +429,7 @@ def test_aircraft_message() -> None:
     env = Envelope.model_validate({
         "v": 1, "type": "aircraft", "id": "a1", "ts": "2026-10-13T21:00:00Z",
         "body": {"at": "2026-10-13T21:00:00Z", "aircraft": [
-            {"hex": "3c6444", "flight": "DLH4AB", "lat": 48.1, "lon": 11.5,
+            {"hex": "3c6444", "flight": "DLH4AB", "lat": 50.0, "lon": 11.5,
              "alt_m": 10668, "track_deg": 271.5, "speed_kn": 450, "seen_s": 0.4},
             {"hex": "4b1805", "lat": 48.3, "lon": 11.2, "seen_s": 12},
         ]},

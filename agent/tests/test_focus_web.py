@@ -53,7 +53,7 @@ def make_runner(tmp_path: Path, live: LiveState) -> Runner:
         auto_exposure=AutoExposure(profile.exposure),
         store=ImageStore(tmp_path, ZoneInfo("Europe/Vienna")),
         clock=clock,
-        location=Location(48.14, 14.39),
+        location=Location(50.04, 10.39),
         profile=profile.id,
         live=live,
         local_tz=ZoneInfo("Europe/Vienna"),

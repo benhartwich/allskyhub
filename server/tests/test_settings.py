@@ -62,7 +62,7 @@ async def test_app_api_settings(app: FastAPI, client: httpx.AsyncClient, live_ap
 
     offline = await client.put(url, json={"night_delay_s": 5}, headers=auth)
     assert offline.status_code == 409
-    invalid = await client.put(url, json={"latitude": 48.1}, headers=auth)
+    invalid = await client.put(url, json={"latitude": 50.0}, headers=auth)
     assert invalid.status_code == 400  # latitude without longitude, checked by the hub
 
     async with device_ws(live_app, token) as ws:
@@ -100,7 +100,7 @@ async def test_web_settings_form(app: FastAPI, client: httpx.AsyncClient, live_a
             .where(Device.id == dev.device_id)
             .values(
                 last_status={
-                    "settings": {"latitude": 48.14, "longitude": 14.39, "timezone": "Europe/Vienna",
+                    "settings": {"latitude": 50.04, "longitude": 10.39, "timezone": "Europe/Vienna",
                                  "camera": "zwo-asi678mc", "day_delay_s": 30.0,
                                  "night_delay_s": 0.0},
                 }
@@ -108,13 +108,13 @@ async def test_web_settings_form(app: FastAPI, client: httpx.AsyncClient, live_a
         )  # fmt: skip
         await db.commit()
     page = (await client.get(f"/cameras/{dev.device_id}")).text
-    assert 'value="48.14"' in page
+    assert 'value="50.04"' in page
     assert 'value="zwo-asi678mc" selected' in page
     assert "disabled" in page  # offline: cannot apply
     url = f"/cameras/{dev.device_id}/settings"
 
     bad = await client.post(
-        url, data={"latitude": "48,1", "longitude": "", "csrf_token": csrf_from(page)}
+        url, data={"latitude": "50,0", "longitude": "", "csrf_token": csrf_from(page)}
     )
     assert bad.status_code == 400
     assert "beide oder keine" in bad.text

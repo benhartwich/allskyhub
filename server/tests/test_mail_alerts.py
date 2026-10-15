@@ -48,7 +48,7 @@ async def _setup(
         device = await db.get(Device, dev.device_id)
         assert device
         device.last_status = {
-            "settings": {"latitude": 48.14, "longitude": 14.39, "timezone": "Europe/Vienna"}
+            "settings": {"latitude": 50.04, "longitude": 10.39, "timezone": "Europe/Vienna"}
         }
         await db.execute(update(User).where(User.id == device.owner_id).values(**user))
         await db.commit()
@@ -62,7 +62,7 @@ async def test_morning_summary_by_mail_without_push(
         app, client, notify_summary=True, notify_by_mail=True
     )
     await _night(app, device_id)
-    await notifier.check_morning(dt.datetime(2026, 10, 13, 6, tzinfo=dt.UTC))
+    await notifier.check_morning(dt.datetime(2026, 10, 13, 6, 30, tzinfo=dt.UTC))
     assert [m.subject for m in mailer.sent] == ["allskyhub: Die Nacht über Garten"]
     body = mailer.sent[0].body
     assert body.splitlines()[2].startswith("2 Meteore")
@@ -73,7 +73,7 @@ async def test_morning_summary_by_mail_without_push(
 async def test_no_mail_unless_wanted(app: FastAPI, client: httpx.AsyncClient) -> None:
     device_id, mailer, notifier = await _setup(app, client, notify_summary=True)
     await _night(app, device_id)
-    await notifier.check_morning(dt.datetime(2026, 10, 13, 6, tzinfo=dt.UTC))
+    await notifier.check_morning(dt.datetime(2026, 10, 13, 6, 30, tzinfo=dt.UTC))
     assert mailer.sent == []
 
 

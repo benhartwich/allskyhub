@@ -34,8 +34,8 @@ def make_allsky(root: Path) -> Path:
     home = root / "allsky"
     (home / "config" / "myFiles").mkdir(parents=True)
     (home / "config" / "settings.json").write_text(json.dumps({
-        "latitude": "48.136010N", "longitude": "14.389510E", "angle": -6,
-        "location": "Hofkirchen", "owner": "Ben", "camera": "ZWO ASI678MC",
+        "latitude": "50.036010N", "longitude": "10.389510E", "angle": -6,
+        "location": "Musterdorf", "owner": "Ben", "camera": "ZWO ASI678MC",
         "cameratype": "ZWO", "cameramodel": "ASI678MC", "lens": "2.5 mm",
     }))  # fmt: skip
     day = home / "images" / "20261011"
@@ -87,10 +87,10 @@ def make_importer(
 def test_settings_and_coordinates(tmp_path: Path) -> None:
     s = AllskySettings.load(make_allsky(tmp_path))
     assert (s.latitude, s.longitude, s.camera, s.location) == (
-        48.13601,
-        14.38951,
+        50.03601,
+        10.38951,
         "zwo-asi678mc",
-        "Hofkirchen",
+        "Musterdorf",
     )
     assert coordinate("33.9S") == -33.9
     assert coordinate("70.5W") == -70.5
@@ -185,7 +185,7 @@ def test_import_keeps_what_it_took_over(tmp_path: Path) -> None:
     assert run_import(args) == 0
     s = AgentSettings.load(path)
     assert s.keep_days >= 60  # Allsky's 60, or more if the oldest night is older
-    assert s.latitude == 48.13601
+    assert s.latitude == 50.03601
 
 
 def test_lightning_and_episodes(tmp_path: Path) -> None:

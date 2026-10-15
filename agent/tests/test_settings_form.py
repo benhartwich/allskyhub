@@ -39,8 +39,8 @@ def test_schema_is_usable_and_follows_the_profile() -> None:
 
 def test_values_report_every_key_and_fit_device_settings() -> None:
     schema = build_schema(get_profile("zwo-asi678mc"))
-    v = values(AgentSettings(latitude=48.1, longitude=14.4, wb_r=52), schema)
-    assert (v["latitude"], v["wb_r"], v["wb_b"], v["jpeg_quality"]) == (48.1, 52, None, 90)
+    v = values(AgentSettings(latitude=50.0, longitude=10.4, wb_r=52), schema)
+    assert (v["latitude"], v["wb_r"], v["wb_b"], v["jpeg_quality"]) == (50.0, 52, None, 90)
     assert DeviceSettings.model_validate(v).model_extra == {
         "night_max_exposure_s": None,
         "night_max_gain": None,
@@ -179,7 +179,7 @@ def _call(url: str, body: dict[str, Any] | None = None) -> tuple[int, Any]:
 
 def test_local_settings_api() -> None:
     schema = build_schema(get_profile("zwo-asi678mc"))
-    current = AgentSettings(latitude=48.1, longitude=14.4)
+    current = AgentSettings(latitude=50.0, longitude=10.4)
     stored: list[Mapping[str, Any]] = []
 
     def change(c: Mapping[str, Any], source: str) -> list[str]:
@@ -196,7 +196,7 @@ def test_local_settings_api() -> None:
         status, data = _call(base)
         assert status == 200
         assert data["schema"][0]["key"] == "location"
-        assert data["values"]["latitude"] == 48.1
+        assert data["values"]["latitude"] == 50.0
         assert _call(base, {"wb_b": 120}) == (400, {"detail": "invalid", "fields": ["wb_b"]})
         assert stored == []
         assert _call(base, {"wb_b": 60, "night_max_gain": None})[0] == 202

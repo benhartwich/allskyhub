@@ -39,12 +39,12 @@ def test_meteor_list_and_hourly_counts() -> None:
         _meteor(3, 50, {"shower": "Perseids", "shower_match": "date"}),
         _meteor(4, 55, {"shower": "Perseids", "shower_match": "radiant"}, "false_positive"),
     ]  # fmt: skip
-    rows = _rows(science.meteors_csv(meteors, 48.136, 14.39))
+    rows = _rows(science.meteors_csv(meteors, 50.036, 10.39))
     assert rows[0]["time_utc"] == "2026-08-12T22:15:03.250+00:00"
     assert rows[0]["azimuth_deg"] == "45.5"
     assert rows[0]["altitude_deg"] == "60.25"
     assert rows[0]["shower"] == "Perseids"
-    assert rows[0]["camera_latitude"] == "48.136"
+    assert rows[0]["camera_latitude"] == "50.036"
     assert len(rows) == 3  # SPEC §6.4 Labels: a false positive counts nowhere, not here either
     hourly = _rows(science.hourly_counts_csv(meteors))
     assert hourly == [
@@ -75,7 +75,7 @@ async def test_downloads(
         await db.execute(
             update(Device)
             .where(Device.id == dev.device_id)
-            .values(last_status={"settings": {"latitude": 48.136, "longitude": 14.39}})
+            .values(last_status={"settings": {"latitude": 50.036, "longitude": 10.39}})
         )
         for i, sqm in enumerate((20.1, 21.2, 20.7)):
             db.add(SkySample(device_id=dev.device_id, night_id="20260812",
@@ -94,7 +94,7 @@ async def test_downloads(
     assert _rows(sqm.text) == [
         {"night": "20260812", "time_utc": "2026-08-12T23:15:03+00:00",
          "sqm_mag_arcsec2": "21.2", "cloud_cover": "0.1", "stars": "500",
-         "latitude": "48.136", "longitude": "14.39"}
+         "latitude": "50.036", "longitude": "10.39"}
     ]  # fmt: skip
     assert len(_rows((await client.get(f"{base}/meteors.csv")).text)) == 1
     assert (await client.get(f"{base}/nope.csv")).status_code == 404

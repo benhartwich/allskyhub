@@ -12,8 +12,8 @@ import 'package:http/testing.dart';
 import 'hub_client_test.dart' show cameraJson;
 
 const current = {
-  'latitude': 48.14,
-  'longitude': 14.39,
+  'latitude': 50.04,
+  'longitude': 10.39,
   'timezone': 'Europe/Vienna',
   'camera': 'zwo-asi678mc',
   'day_delay_s': 30.0,
@@ -88,8 +88,8 @@ final schema = parseSchema([
 ]);
 
 const schemaCurrent = {
-  'latitude': 48.14,
-  'longitude': 14.39,
+  'latitude': 50.04,
+  'longitude': 10.39,
   'timezone': 'Europe/Vienna',
   'night_max_exposure_s': 60.0,
   'timelapse_fps': 25,
@@ -100,8 +100,8 @@ const schemaCurrent = {
 
 SettingsInput _unchanged() => SettingsInput()
   ..text.addAll({
-    'latitude': '48.14',
-    'longitude': '14,39',
+    'latitude': '50.04',
+    'longitude': '10,39',
     'timezone': 'Europe/Vienna',
     'night_max_exposure_s': '60',
     'timelapse_fps': '25',
@@ -227,7 +227,7 @@ void main() {
         ),
       ),
     );
-    expect(find.text('48.14'), findsOneWidget); // the first section is open
+    expect(find.text('50.04'), findsOneWidget); // the first section is open
     expect(find.text('Keogramm'), findsNothing); // the others are closed
     await tester.tap(find.text('Nachtprodukte'));
     await tester.pumpAndSettle();
@@ -277,7 +277,7 @@ void main() {
           ),
         ),
       );
-      expect(find.text('48.14'), findsOneWidget);
+      expect(find.text('50.04'), findsOneWidget);
 
       await tester.tap(find.byKey(const Key('use-phone')));
       await tester.pumpAndSettle();

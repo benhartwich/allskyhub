@@ -35,7 +35,7 @@ def _pair_from(radiant: tuple[float, float], at: dt.datetime) -> MeteorPair:
     xs, ys, z = math.cos(dec) * math.cos(ra), math.cos(dec) * math.sin(ra), math.sin(dec)
     x = xs * math.cos(gmst) + ys * math.sin(gmst)
     y = -xs * math.sin(gmst) + ys * math.cos(gmst)
-    low = t.ecef(48.3, 14.3, 80.0)
+    low = t.ecef(48.3, 10.3, 80.0)
     high = t.geodetic((low[0] + 40 * x, low[1] + 40 * y, low[2] + 40 * z))
     lat, lon, km = t.geodetic(low)
     return MeteorPair(at=at, high_lat=high[0], high_lon=high[1], high_km=high[2],

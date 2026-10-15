@@ -15,7 +15,7 @@ class CameraLocation {
 
   static double _round(double v) => (v * 100).roundToDouble() / 100;
 
-  /// Parses manual input ("48,14" or "48.14"); null when not a valid coordinate pair.
+  /// Parses manual input ("50,04" or "50.04"); null when not a valid coordinate pair.
   static CameraLocation? tryParse(String latitude, String longitude) {
     double? parse(String s) => double.tryParse(s.trim().replaceAll(',', '.'));
     final lat = parse(latitude);

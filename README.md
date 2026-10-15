@@ -28,7 +28,7 @@ Licensing follows [REUSE](https://reuse.software); see `REUSE.toml` and `LICENSE
 
 ```bash
 uv sync
-uv run allskyhub-agent --sim --lat 48.14 --lon 14.39 \
+uv run allskyhub-agent --sim --lat 50.04 --lon 10.39 \
   run --frames 20 --data /tmp/allskyhub --start 2026-10-06T18:00:00+02:00
 ```
 

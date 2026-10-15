@@ -21,7 +21,7 @@ EVENING = dt.datetime(2026, 10, 12, 19, tzinfo=dt.UTC)
 
 
 async def _setup(
-    app: FastAPI, client: httpx.AsyncClient, *, lat: float = 48.14, **user: bool
+    app: FastAPI, client: httpx.AsyncClient, *, lat: float = 50.04, **user: bool
 ) -> tuple[str, FakeSender, Notifier]:
     dev = FakeDevice()
     await paired_token(client, dev)
@@ -32,7 +32,7 @@ async def _setup(
         device = await db.get(Device, dev.device_id)
         assert device
         device.last_status = {
-            "settings": {"latitude": lat, "longitude": 14.39, "timezone": "Europe/Vienna"},
+            "settings": {"latitude": lat, "longitude": 10.39, "timezone": "Europe/Vienna"},
             "sky": {"at": dt.datetime.now(dt.UTC).isoformat(), "night_id": NIGHT,
                     "cloud_cover": 0.1, "sqm_mag": 21.0, "stars": 400},
         }  # fmt: skip
@@ -139,7 +139,7 @@ async def test_morning_summary_once_after_sunrise(app: FastAPI, client: httpx.As
     before = dt.datetime(2026, 10, 13, 4, tzinfo=dt.UTC)  # 06:00 local, before sunrise
     await notifier.check_morning(before)
     assert sender.sent == []
-    morning = dt.datetime(2026, 10, 13, 6, tzinfo=dt.UTC)  # 08:00 local
+    morning = dt.datetime(2026, 10, 13, 6, 30, tzinfo=dt.UTC)  # 08:30 local
     await notifier.check_morning(morning)
     await notifier.check_morning(morning + dt.timedelta(minutes=5))
     assert [m.title for _, m in sender.sent] == ["Die Nacht über Garten"]
@@ -177,7 +177,7 @@ async def test_aurora_network_alerts_clear_cameras_around(
         "settings": {"latitude": 50.0, "longitude": 40.0},
         "sky": {"at": dt.datetime.now(dt.UTC).isoformat(), "cloud_cover": 0.0}})  # fmt: skip
     await _set(app, cloudy, last_status={
-        "settings": {"latitude": 53.0, "longitude": 14.39},
+        "settings": {"latitude": 53.0, "longitude": 10.39},
         "sky": {"at": dt.datetime.now(dt.UTC).isoformat(), "cloud_cover": 0.9}})  # fmt: skip
     now = dt.datetime.now(dt.UTC)
     maker: async_sessionmaker[AsyncSession] = app.state.sessionmaker

@@ -13,8 +13,8 @@
     {% set s = f.spec %}
     {% if s.type == 'location' %}
     <div class="grid-2">
-      <label>Breite<input name="latitude" inputmode="decimal" value="{{ f.lat }}" placeholder="48.14"></label>
-      <label>Länge<input name="longitude" inputmode="decimal" value="{{ f.lon }}" placeholder="14.39"></label>
+      <label>Breite<input name="latitude" inputmode="decimal" value="{{ f.lat }}" placeholder="50.04"></label>
+      <label>Länge<input name="longitude" inputmode="decimal" value="{{ f.lon }}" placeholder="10.39"></label>
     </div>
     {% elif s.type == 'bool' %}
     <input type="hidden" name="{{ s.key }}__present" value="1">

@@ -18,7 +18,7 @@ from allskyhub_agent.runner import Location, LoopConfig, Runner
 from allskyhub_agent.store.images import ImageStore
 from allskyhub_protocol import FrameInfo, Mode
 
-LOC = Location(48.14, 14.39)
+LOC = Location(50.04, 10.39)
 
 
 def make_runner(

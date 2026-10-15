@@ -60,8 +60,8 @@ def test_not_the_same_meteor() -> None:
 
 
 def test_geodetic_round_trip() -> None:
-    lat, lon, h = t.geodetic(t.ecef(48.136, 14.39, 85.0))
-    assert (lat, lon, h) == pytest.approx((48.136, 14.39, 85.0), abs=1e-6)
+    lat, lon, h = t.geodetic(t.ecef(50.036, 10.39, 85.0))
+    assert (lat, lon, h) == pytest.approx((50.036, 10.39, 85.0), abs=1e-6)
 
 
 async def test_pairing_two_cameras(

@@ -28,7 +28,7 @@ from allskyhub_server.auth.hub_keys import HubKeys
 from allskyhub_server.billing import task as billing_task
 from allskyhub_server.billing.paddle import Paddle
 from allskyhub_server.db import create_engine, create_sessionmaker
-from allskyhub_server.devices import aircraft, domains
+from allskyhub_server.devices import aircraft, domains, lightning_li
 from allskyhub_server.devices.connections import ConnectionRegistry
 from allskyhub_server.devices.discord import Discord, Poster
 from allskyhub_server.devices.domains import HostMap
@@ -46,6 +46,7 @@ from allskyhub_server.settings import Settings, get_settings
 from allskyhub_server.stall import StallWatch
 from allskyhub_server.version import short as version
 from allskyhub_server.web import (
+    routes_access,
     routes_account,
     routes_admin,
     routes_app_builds,
@@ -237,6 +238,19 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             asyncio.create_task(app.state.aircraft.run_forever()),
             asyncio.create_task(StallWatch().run_forever()),
         ]
+        li_store = (
+            lightning_li.DataStore(settings.eumetsat_key, settings.eumetsat_secret)
+            if settings.lightning_li
+            else None
+        )
+        if li_store is not None:
+            tasks.append(
+                asyncio.create_task(
+                    lightning_li.run_forever(
+                        app.state.sessionmaker, li_store, app.state.connections
+                    )
+                )
+            )
         if settings.billing:
             tasks.append(
                 asyncio.create_task(
@@ -255,6 +269,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 with contextlib.suppress(asyncio.CancelledError):
                     await task
             await adsb_client.aclose()
+            if li_store is not None:
+                await li_store.client.aclose()
             await app.state.paddle.client.aclose()
             await engine.dispose()
 
@@ -289,6 +305,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.mount("/static/design", CachedStaticFiles(directory=DESIGN_DIR), name="design")
     app.mount("/static", CachedStaticFiles(directory=STATIC_DIR), name="static")
     app.include_router(routes_auth.router)
+    app.include_router(routes_access.router)
     app.include_router(routes_account.router)
     app.include_router(routes_cameras.router)
     app.include_router(routes_gallery.router)

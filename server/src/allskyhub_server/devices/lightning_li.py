@@ -1,0 +1,369 @@
+"""Lightning against Meteosat's Lightning Imager (roadmap H8, SPEC §7.10).
+
+The camera sees a flash only as sky that lights up for one frame; a lamp or a car near it
+does the same. The Lightning Imager on Meteosat Third Generation (MTG-I) sees the flashes
+from space. Its flash product LI-2-LFL (EUMETSAT Data Store collection ``EO:EUM:DAT:0691``)
+comes as products of a few minutes each, a zip with a NetCDF-4 file ``…BODY….nc`` holding
+one record per flash: ``flash_time`` (seconds since 2000-01-01 UTC), ``latitude`` and
+``longitude``, possibly packed with ``scale_factor``/``add_offset``.
+
+Every ``EVERY`` the hub reads the products of the last ``LOOKBACK`` it has not read yet and
+keeps the flashes over Europe for ``KEEP``. A product it has read covers its time span,
+with or without flashes; an outage leaves a gap, and what falls into a gap stays unchecked.
+
+A lightning event is checked once ``end + MARGIN`` is covered: the nearest flash within
+``REACH_KM`` in ``start - MARGIN .. end + MARGIN`` is kept with it. A storm (``data.storm``)
+is over once ``STORM_GAP`` passed after its last flash; when all its flashes are checked
+and none had a satellite flash within reach, each gets the automatic label
+``false_positive``/``other`` (``DETAIL``). Labels set by the owner win (devices/labels.py).
+"""
+
+from __future__ import annotations
+
+import asyncio
+import datetime as dt
+import io
+import logging
+import math
+import re
+import zipfile
+from collections import defaultdict
+from dataclasses import dataclass
+from typing import Any, Protocol, cast
+from urllib.parse import quote
+
+import h5py  # pyright: ignore[reportMissingTypeStubs]
+import httpx
+import numpy as np
+from sqlalchemy import delete, insert, select
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
+
+from allskyhub_server.devices import fireball
+from allskyhub_server.devices.connections import ConnectionRegistry
+from allskyhub_server.models import Device, EventRecord, LiFlash, LiGranule
+
+log = logging.getLogger(__name__)
+
+API = "https://api.eumetsat.int"
+COLLECTION = "EO:EUM:DAT:0691"
+EPOCH = dt.datetime(2000, 1, 1, tzinfo=dt.UTC)
+# Europe and its edges: lat_min, lon_min, lat_max, lon_max.
+EUROPE = (30.0, -30.0, 75.0, 45.0)
+EVERY = dt.timedelta(minutes=10)
+LOOKBACK = dt.timedelta(hours=3)
+KEEP = dt.timedelta(hours=48)
+REACH_KM = 400.0
+MARGIN = dt.timedelta(seconds=60)
+STORM_GAP = dt.timedelta(minutes=30)
+STORM_LOOKBACK = dt.timedelta(hours=24)
+# Products follow each other; this much between them still counts as covered.
+SEAM = dt.timedelta(seconds=2)
+DETAIL = "kein Gewitter (Blitzsatellit)"
+TIMEOUT_S = 60.0
+PAGE = 100
+# Pointing in German: N, NO, O, …
+DIRECTIONS = ("N", "NO", "O", "SO", "S", "SW", "W", "NW")
+
+
+@dataclass(frozen=True)
+class Granule:
+    id: str
+    start: dt.datetime
+    end: dt.datetime
+    entry: str  # the BODY NetCDF inside the product
+
+
+class Fetcher(Protocol):
+    async def search(self, start: dt.datetime, end: dt.datetime) -> list[Granule]: ...
+
+    async def body(self, granule: Granule) -> bytes: ...
+
+
+def _iso(t: dt.datetime) -> str:
+    return t.astimezone(dt.UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
+_SPAN = re.compile(r"^(?P<start>[^/]+)/(?P<end>[^/]+)$")
+
+
+def _time(text: str) -> dt.datetime:
+    t = dt.datetime.fromisoformat(text.replace("Z", "+00:00"))
+    return t if t.tzinfo else t.replace(tzinfo=dt.UTC)
+
+
+def _dict(value: object) -> dict[str, Any]:
+    return cast(dict[str, Any], value) if isinstance(value, dict) else {}
+
+
+def _list(value: object) -> list[object]:
+    return cast(list[object], value) if isinstance(value, list) else []
+
+
+def granules(page: dict[str, Any]) -> list[Granule]:
+    """The products of one page of the Data Store's search (OpenSearch, ``format=json``)."""
+    out: list[Granule] = []
+    for item in _list(page.get("features")):
+        feature = _dict(item)
+        props = _dict(feature.get("properties"))
+        span = _SPAN.match(str(props.get("date", "")))
+        titles = [
+            str(_dict(e).get("title", ""))
+            for e in _list(_dict(props.get("links")).get("sip-entries"))
+        ]
+        body = [t for t in titles if "BODY" in t and t.endswith(".nc")]
+        if span is None or not body or not feature.get("id"):
+            continue
+        out.append(Granule(str(feature["id"]), _time(span["start"]), _time(span["end"]), body[0]))
+    return out
+
+
+class DataStore:
+    """The EUMETSAT Data Store: a token from key and secret, search, one file of a product."""
+
+    def __init__(self, key: str, secret: str, client: httpx.AsyncClient | None = None) -> None:
+        self._auth = (key, secret)
+        self.client = client or httpx.AsyncClient(timeout=TIMEOUT_S)
+        self._token = ""
+        self._token_until = dt.datetime.min.replace(tzinfo=dt.UTC)
+
+    async def _bearer(self) -> dict[str, str]:
+        now = dt.datetime.now(dt.UTC)
+        if now >= self._token_until:
+            r = await self.client.post(
+                f"{API}/token", auth=self._auth, data={"grant_type": "client_credentials"}
+            )
+            r.raise_for_status()
+            answer = r.json()
+            self._token = str(answer["access_token"])
+            expires = float(answer.get("expires_in", 3600))
+            self._token_until = now + dt.timedelta(seconds=max(60.0, expires - 60))
+        return {"Authorization": f"Bearer {self._token}"}
+
+    async def search(self, start: dt.datetime, end: dt.datetime) -> list[Granule]:
+        out: list[Granule] = []
+        index = 0
+        while True:
+            r = await self.client.get(
+                f"{API}/data/search-products/1.0.0/os",
+                params={
+                    "format": "json", "pi": COLLECTION, "dtstart": _iso(start),
+                    "dtend": _iso(end), "si": index, "c": PAGE,
+                },
+                headers=await self._bearer(),
+            )  # fmt: skip
+            r.raise_for_status()
+            page = r.json()
+            out += granules(page)
+            index += PAGE
+            if index >= min(int(page.get("totalResults", 0)), 2000):
+                return out
+
+    async def body(self, granule: Granule) -> bytes:
+        url = (
+            f"{API}/data/download/1.0.0/collections/{quote(COLLECTION, safe='')}"
+            f"/products/{quote(granule.id, safe='')}/entry"
+        )
+        r = await self.client.get(url, params={"name": granule.entry}, headers=await self._bearer())
+        r.raise_for_status()
+        return r.content
+
+
+def _values(dataset: Any) -> np.ndarray[Any, np.dtype[np.float64]]:
+    """A variable as floats, packing undone, fill values as NaN."""
+    raw = np.asarray(dataset[()])
+    out = raw.astype(np.float64)
+    attrs = dataset.attrs
+    fill = attrs.get("_FillValue")
+    if fill is not None:
+        out[raw == np.asarray(fill).reshape(-1)[0]] = np.nan
+    scale = attrs.get("scale_factor")
+    if scale is not None:
+        out *= float(np.asarray(scale).reshape(-1)[0])
+    offset = attrs.get("add_offset")
+    if offset is not None:
+        out += float(np.asarray(offset).reshape(-1)[0])
+    return out
+
+
+def parse(data: bytes) -> list[tuple[dt.datetime, float, float]]:
+    """Flashes over Europe from an LFL BODY file (NetCDF-4), or from a zip holding one."""
+    if data[:2] == b"PK":
+        with zipfile.ZipFile(io.BytesIO(data)) as archive:
+            names = [n for n in archive.namelist() if "BODY" in n and n.endswith(".nc")]
+            if not names:
+                return []
+            data = archive.read(names[0])
+    with h5py.File(io.BytesIO(data), "r") as f:
+        ds = cast(Any, f)
+        if "latitude" not in ds or "flash_time" not in ds:
+            return []
+        lat, lon, seconds = (
+            _values(ds["latitude"]),
+            _values(ds["longitude"]),
+            _values(ds["flash_time"]),
+        )
+    lat_min, lon_min, lat_max, lon_max = EUROPE
+    keep = (
+        np.isfinite(lat) & np.isfinite(lon) & np.isfinite(seconds)
+        & (lat >= lat_min) & (lat <= lat_max) & (lon >= lon_min) & (lon <= lon_max)
+    )  # fmt: skip
+    return [
+        (EPOCH + dt.timedelta(seconds=float(s)), float(a), float(o))
+        for s, a, o in zip(seconds[keep], lat[keep], lon[keep], strict=True)
+    ]
+
+
+async def ingest(db: AsyncSession, fetcher: Fetcher, now: dt.datetime) -> int:
+    """Read the products of the last ``LOOKBACK`` not read yet; drop what is older than
+    ``KEEP``. Returns the number of new flashes. Commits after every product."""
+    await db.execute(delete(LiFlash).where(LiFlash.at < now - KEEP))
+    await db.execute(delete(LiGranule).where(LiGranule.end < now - KEEP))
+    await db.commit()
+    found = await fetcher.search(now - LOOKBACK, now)
+    known = set(
+        await db.scalars(select(LiGranule.id).where(LiGranule.id.in_([g.id for g in found])))
+    )
+    added = 0
+    for granule in found:
+        if granule.id in known:
+            continue
+        flashes = await asyncio.to_thread(parse, await fetcher.body(granule))
+        if flashes:
+            await db.execute(
+                insert(LiFlash), [{"at": t, "lat": a, "lon": o} for t, a, o in flashes]
+            )
+        db.add(LiGranule(id=granule.id, start=granule.start, end=granule.end, flashes=len(flashes)))
+        await db.commit()
+        known.add(granule.id)
+        added += len(flashes)
+    return added
+
+
+async def covered(db: AsyncSession, start: dt.datetime, end: dt.datetime) -> bool:
+    """Whether the products read cover ``start .. end`` without a gap."""
+    spans = (
+        await db.execute(
+            select(LiGranule.start, LiGranule.end)
+            .where(LiGranule.end >= start - SEAM, LiGranule.start <= end + SEAM)
+            .order_by(LiGranule.start)
+        )
+    ).all()
+    reached = start
+    for a, b in spans:
+        if a > reached + SEAM:
+            return False
+        reached = max(reached, b)
+        if reached >= end:
+            return True
+    return reached >= end
+
+
+def direction(bearing: float) -> str:
+    return DIRECTIONS[round(bearing / 45) % 8]
+
+
+async def nearest(
+    db: AsyncSession, lat: float, lon: float, start: dt.datetime, end: dt.datetime
+) -> tuple[float, float] | None:
+    """(km, bearing) of the nearest flash within ``REACH_KM`` in ``start .. end``."""
+    dlat = REACH_KM / 111.0
+    dlon = REACH_KM / (111.0 * max(0.1, math.cos(math.radians(lat))))
+    rows = (
+        await db.execute(
+            select(LiFlash.lat, LiFlash.lon).where(
+                LiFlash.at >= start, LiFlash.at <= end,
+                LiFlash.lat.between(lat - dlat, lat + dlat),
+                LiFlash.lon.between(lon - dlon, lon + dlon),
+            )
+        )
+    ).all()  # fmt: skip
+    best: tuple[float, float] | None = None
+    for a, o in rows:
+        km = fireball.distance_km(lat, lon, a, o)
+        if km <= REACH_KM and (best is None or km < best[0]):
+            best = (km, fireball.bearing_deg(lat, lon, a, o))
+    return best
+
+
+def _place(status: dict[str, Any] | None) -> tuple[float, float] | None:
+    settings: dict[str, Any] = (status or {}).get("settings") or {}
+    lat, lon = settings.get("latitude"), settings.get("longitude")
+    if not isinstance(lat, int | float) or not isinstance(lon, int | float):
+        return None
+    return float(lat), float(lon)
+
+
+def summary(event: EventRecord) -> str | None:
+    """The line for the event's details; None for other kinds."""
+    if event.kind != "lightning":
+        return None
+    if event.li_checked_at is None:
+        return "ungeprüft"
+    if event.li_km is None or event.li_bearing_deg is None:
+        return f"keine Blitze im Umkreis von {REACH_KM:.0f} km"
+    return f"Blitze in {event.li_km:.0f} km Richtung {direction(event.li_bearing_deg)}"
+
+
+async def check(db: AsyncSession, now: dt.datetime) -> set[str]:
+    """Check lightning events whose window is covered, then label storms without any
+    satellite flash. Returns the cameras whose labels changed. Commits."""
+    from allskyhub_server.devices import labels
+
+    rows = (
+        await db.execute(
+            select(EventRecord, Device.last_status)
+            .join(Device, Device.id == EventRecord.device_id)
+            .where(
+                EventRecord.kind == "lightning",
+                # Older flashes of a storm too: they stay unchecked and keep it unlabelled.
+                EventRecord.start >= now - KEEP - STORM_LOOKBACK,
+            )
+            .order_by(EventRecord.start)
+        )
+    ).all()
+    storms: dict[tuple[str, str], list[EventRecord]] = defaultdict(list)
+    for event, status in rows:
+        data: dict[str, Any] = event.data or {}
+        storm = data.get("storm")
+        if isinstance(storm, str):
+            storms[(event.device_id, storm)].append(event)
+        if event.li_checked_at is not None or data.get("imported"):
+            continue
+        if event.start < now - KEEP + MARGIN:
+            continue  # older than the kept flashes
+        place = _place(status)
+        start, end = event.start - MARGIN, event.end + MARGIN
+        if place is None or end > now or not await covered(db, start, end):
+            continue
+        found = await nearest(db, *place, start, end)
+        event.li_checked_at = now
+        event.li_km, event.li_bearing_deg = found if found is not None else (None, None)
+    changed: set[str] = set()
+    for (device_id, _), flashes in storms.items():
+        if max(e.end for e in flashes) + STORM_GAP > now:
+            continue  # the storm may go on
+        if any(e.li_checked_at is None or e.li_km is not None for e in flashes):
+            continue
+        for event in flashes:
+            if await labels.set_auto(db, event, "other", DETAIL, now):
+                changed.add(device_id)
+    await db.commit()
+    return changed
+
+
+async def run_forever(
+    maker: async_sessionmaker[AsyncSession], fetcher: Fetcher, registry: ConnectionRegistry
+) -> None:
+    from allskyhub_server.devices import labels
+
+    while True:
+        now = dt.datetime.now(dt.UTC)
+        try:
+            async with maker() as db:
+                await ingest(db, fetcher, now)
+                changed = await check(db, now)
+            for device_id in changed:
+                labels.deliver_later(maker, registry, device_id)
+        except Exception:  # never let one bad round end the loop
+            log.exception("lightning imager round failed")
+        await asyncio.sleep(EVERY.total_seconds())

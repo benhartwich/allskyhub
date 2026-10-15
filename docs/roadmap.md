@@ -124,7 +124,7 @@ hub side. Push needs the Firebase project; until then the same messages show on 
 | H4 | "Ziel frei?": is a chosen object (or a sky area) clear now and in the next hours, from the camera's cloud map and the forecast; light-pollution map next to it | hub | Benjamin, 2026-10-13; from the roadmap brainstorm 2026-09-26. Done: planets and Messier, height, darkness, moon and forecast per hour, the camera's overall cloud cover now (web and app); light-pollution view on the camera map from the cameras' own SQM (Benjamin, 2026-10-13). Also done: the cell of the camera's cloud map (SPEC §6.3 `cloud_map`) in the object's direction |
 | H5 | Upload the night's timelapse to YouTube and post detections to Discord | hub | Benjamin, 2026-10-13 (indi-allsky/Allsky); the owner connects the accounts on the hub, never on the camera. Done: Discord (webhook per camera, web and app). Open: YouTube (needs a Google Cloud project with YouTube API access from Benjamin) |
 | H6 | ✅ Satellites among the meteors: name them from CelesTrak (SGP4, sunlit), ISS and Tiangong by name, automatic label | hub | Benjamin, 2026-10-13: on the hub, not on the camera; SPEC §7.9 |
-| H8 | Lightning cross-check with Meteosat's Lightning Imager: a "storm" without satellite flashes within 400 km is labelled a false alarm | hub | Benjamin, 2026-10-15 (storms on calm October nights from light near the camera); SPEC §7.10; needs a free EUMETSAT account |
+| H8 | Lightning cross-check with Meteosat's Lightning Imager: a "storm" without satellite flashes within 400 km is labelled a false alarm | hub | Benjamin, 2026-10-15 (storms on calm October nights from light near the camera); SPEC §7.10; needs a free EUMETSAT account. Built: LI-2-LFL (EO:EUM:DAT:0691) every 10 min, 48 h of flashes over Europe, coverage per product, storm labels; off until key and secret are set |
 | H9 | Aircraft by day: which planes crossed the sky, from ADS-B, without image detection | hub | Benjamin, 2026-10-15; idea, not specified yet |
 
 ## Network features (hub)
@@ -140,6 +140,7 @@ Benjamin, 2026-10-14: "Mach alles", Firebase last. What a single camera cannot d
 | N5 | Light-pollution trend over the years from the cameras' SQM | hub | done (#236): monthly median of clear moonless nights, Theil–Sen trend per year, statistics page and app |
 | N6 | App: home-screen widget, AR sky view | hub | done for Android: widget with a read-only key (#237), sky view "Himmel" from the phone's sensors (#238). Open: the iOS widget (WidgetKit extension, needs Xcode or Codemagic) |
 | N7 | Paid tier "Plus": 90 days of full images, a year of thumbnails and night products; Paddle, 4.99 €/month or 49 €/year, first month free | hub | in progress: Plus retention, admin gift, trial month, Paddle checkout and webhooks, terms (AGB) done; S3 archive next |
+| N8 | Go-live: "Zugang beantragen" instead of open sign-up, parts list with Daniel Nimmervoll's housing, first steps for new accounts | hub | Benjamin, 2026-10-15: requests like on portal.eu, admins invite or decline; `/zugang`, `/hardware`, `/start` |
 
 ## Security (review 2026-10-13)
 

@@ -221,8 +221,11 @@ cameras have images, `--camera <id>` picks one; the dry run lists them.
 
 ## 3. An account on allskyhub.org
 
-Accounts are by invitation for now. Ask the project for an invitation; you get a link to set
-your password. Afterwards you can change the password and delete the account yourself
+Accounts are by invitation for now. Ask for one at
+[allskyhub.org/zugang](https://allskyhub.org/zugang); once an admin accepts, you get a link by
+mail to set your password, and [/start](https://allskyhub.org/start) walks you through parts,
+assembly, the SD card and pairing. The parts list is at
+[allskyhub.org/hardware](https://allskyhub.org/hardware). Afterwards you can change the password and delete the account yourself
 under **Konto**.
 
 ## 4. Run your own hub

@@ -10,7 +10,7 @@ from sqlalchemy import ColumnElement, and_, delete, func, or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from sqlalchemy.orm import InstrumentedAttribute
 
-from allskyhub_protocol import FrameVariant
+from allskyhub_protocol import EventVariant, FrameVariant
 from allskyhub_server.auth import access_requests, password_reset
 from allskyhub_server.auth.accounts import DEFAULT_EVENT_KEEP_DAYS
 from allskyhub_server.auth.sessions import IDLE_TIMEOUT
@@ -193,24 +193,24 @@ async def _purge_events(
     old_full = (
         await db.execute(
             owned.where(
-                EventRecord.has_full.is_(True),
+                EventRecord.has_full.is_(True) | EventRecord.has_original.is_(True),
                 EventRecord.created_at < full_cutoff,
                 User.event_keep_days <= DEFAULT_EVENT_KEEP_DAYS,
             )
         )
     ).all()
     for device_id, night_id, event_id in old_full:
-        await asyncio.to_thread(
-            store.delete_event, device_id, night_id, event_id, FrameVariant.FULL
-        )
+        # The original frame is kept with the full picture (SPEC §6.5).
+        for variant in (EventVariant.FULL, EventVariant.ORIGINAL):
+            await asyncio.to_thread(store.delete_event, device_id, night_id, event_id, variant)
         await db.execute(
             update(EventRecord)
             .where(EventRecord.device_id == device_id, EventRecord.event_id == event_id)
-            .values(has_full=False)
+            .values(has_full=False, has_original=False)
         )
     expired = (await db.execute(owned.where(EventRecord.created_at < now - keep))).all()
     for device_id, night_id, event_id in expired:
-        for variant in FrameVariant:
+        for variant in EventVariant:
             await asyncio.to_thread(store.delete_event, device_id, night_id, event_id, variant)
         await db.execute(
             delete(EventRecord).where(

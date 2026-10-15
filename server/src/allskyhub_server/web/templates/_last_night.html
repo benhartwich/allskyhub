@@ -9,4 +9,5 @@
   </a>
   {% endif %}
   <p>{{ last_night.line() }}</p>
+  {% if last_night.overflights %}<p class="small"><a href="/cameras/{{ device.id }}/ueberfluege?nacht={{ last_night.night_id }}">Überflüge ansehen</a></p>{% endif %}
 </div>

@@ -9,7 +9,7 @@ import httpx
 import pytest
 from fastapi import FastAPI
 
-from allskyhub_protocol import Event, EventKind, FrameVariant, event_id
+from allskyhub_protocol import Event, EventKind, EventVariant, FrameVariant, event_id
 from allskyhub_server.devices.event_text import event_rows
 from allskyhub_server.devices.images import ImageStore
 from allskyhub_server.models import EventRecord
@@ -62,7 +62,7 @@ async def test_replaced_picture_is_fetched_again(
     dev = FakeDevice()
     token = await paired_token(client, dev)
     store: ImageStore = app.state.images
-    thumb = store.event_path(dev.device_id, NIGHT, AURORA, FrameVariant.THUMB)
+    thumb = store.event_path(dev.device_id, NIGHT, AURORA, EventVariant.THUMB)
     async with device_ws(live_app, token) as ws:
         await send(ws, aurora(1, 0))
         assert (await expect_request(ws)).variant == FrameVariant.THUMB

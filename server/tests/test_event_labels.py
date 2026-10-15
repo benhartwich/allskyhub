@@ -16,7 +16,7 @@ from allskyhub_protocol import (
     CommandName,
     ErrorReply,
     EventLabel,
-    FrameVariant,
+    EventVariant,
     Hello,
     NightDeleted,
     parse_envelope,
@@ -208,7 +208,7 @@ async def test_night_deleted(app: FastAPI, client: httpx.AsyncClient, live_app: 
     """SPEC §6.3 night_deleted: frames, products and events of that night go."""
     dev, token, _ = await _setup(app, client)
     store: ImageStore = app.state.images
-    picture = store.event_path(dev.device_id, NIGHT, EVENT, FrameVariant.THUMB)
+    picture = store.event_path(dev.device_id, NIGHT, EVENT, EventVariant.THUMB)
     picture.parent.mkdir(parents=True, exist_ok=True)
     picture.write_bytes(b"x")
     async with device_ws(live_app, token) as ws:

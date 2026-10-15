@@ -32,13 +32,17 @@ class NightSummary:
     aurora: int = 0
     storms: int = 0
     others: list[str] = field(default_factory=list[str])  # "1 Polarlicht", "1 Gewitter"
+    # SPEC §6.4 Overflights: "23 Überflüge: 6 Satelliten, 3 Flugzeuge, 14 unbekannt".
+    overflights: str | None = None
     clear_hours: float | None = None
     best_sqm: float | None = None
     best: EventRecord | None = None
 
     @property
     def empty(self) -> bool:
-        return not (self.meteors or self.others or self.clear_hours or self.best_sqm)
+        return not (
+            self.meteors or self.others or self.overflights or self.clear_hours or self.best_sqm
+        )
 
     def line(self) -> str:
         """For the push: the most important facts, comma-separated."""
@@ -46,6 +50,8 @@ class NightSummary:
         if self.meteors:
             parts.append(self.meteors)
         parts += self.others
+        if self.overflights:
+            parts.append(self.overflights)
         if self.clear_hours is not None:
             parts.append(
                 "keine klare Stunde"
@@ -83,6 +89,15 @@ async def summarize(db: AsyncSession, device_id: str, night_id: str) -> NightSum
         )
     )
     summary.meteors = meteor_summary(events)
+    # Overflights count nowhere as meteors (SPEC §6.4), so they are counted apart.
+    streaks = await db.scalars(
+        select(EventRecord).where(
+            EventRecord.device_id == device_id,
+            EventRecord.night_id == night_id,
+            EventRecord.kind == "meteor",
+        )
+    )
+    summary.overflights = events_mod.overflight_count(list(streaks))
     for e in events:
         if e.kind != "meteor":
             continue

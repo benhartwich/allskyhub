@@ -22,7 +22,7 @@ from pydantic import BaseModel, Field, ValidationError, field_validator
 from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
-from allskyhub_protocol import FrameVariant
+from allskyhub_protocol import EventVariant, FrameVariant
 from allskyhub_server.devices import astro, events, night_summary, tonight
 from allskyhub_server.devices.event_text import EVENT_TITLES
 from allskyhub_server.devices.events import storm_key
@@ -211,7 +211,7 @@ class Discord:
                 if event.has_image:
                     picture = _read(
                         self._images.event_path(
-                            device_id, event.night_id, event.event_id, FrameVariant.THUMB
+                            device_id, event.night_id, event.event_id, EventVariant.THUMB
                         )
                     )
                 title = "Gewitter" if storm else EVENT_TITLES.get(event.kind, event.kind)

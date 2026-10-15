@@ -344,6 +344,11 @@ class EventRecord(Base):
     data: Mapped[dict[str, Any]] = mapped_column(JSONB)
     has_full: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
     has_thumb: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
+    # SPEC §6.4 Original frame (roadmap L28): the whole frame the event was found in, and its
+    # size in pixels (the picture's window, ``data.crop_*``, is outlined in it).
+    has_original: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
+    original_w: Mapped[int | None] = mapped_column(Integer)
+    original_h: Mapped[int | None] = mapped_column(Integer)
     # The owner's verdict: "confirmed" or "false_positive" (e.g. "kein Meteor", an aircraft);
     # exported for tuning the detector.
     label: Mapped[str | None] = mapped_column(String(16))

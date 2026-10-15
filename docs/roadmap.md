@@ -77,6 +77,7 @@ them most:
 | L25 | ✅ Trail verdicts: keep every streak, say from the trail why it is not a meteor (moving, great circle, blinking, fragments, star, star trail, glare, edge glow, repeat) and label it automatically | agent | Benjamin, 2026-10-13: like his Allsky modules Meteor Detection and Sky Traffic; mark, never delete; all checks label (no shadow mode); SPEC §6.4 Trail verdicts. Done: #207 (agent), #208 (hub) |
 | L28 | Original frame for every event: the whole frame next to the zoomed picture, its window outlined; on the camera and kept on the hub | agent + hub | Benjamin, 2026-10-15; SPEC §6.4 Original frame, §6.5 `upload_event` `original` |
 | L29 | "Überflüge": satellites and aircraft of the night in their own list, named where the hub knows them, counted in the night summary | agent + hub | Benjamin, 2026-10-15; SPEC §6.4 Overflights |
+| L32 | ✅ Startrails without light flashes: frames lit up for one exposure by a lamp near the camera stay out of the startrails | agent | Benjamin, 2026-10-15 (idea from VIGILIS AllSky's clean startrail); SPEC §5.2 |
 
 Not ported on purpose: the free-form module manager and file editor (fixed detectors
 instead), the website upload/remote server (the hub and its public page do that).

@@ -204,7 +204,9 @@ deleted for this: detections run on it as on every other frame (a lightning flas
 a frame bright), and retention (§4.5) removes it with its night. Bad frames are left out
 of the night products (§5.2), the loop on the live page and the image grids of the local
 UI and the hub; the local archive shows them on request. `bad_frames` (default on)
-switches the marking off. Blur and dew are not judged per frame here: dew and dirt are
+switches the marking off. A light that lights up one frame without making it bright is
+not a bad frame; the startrails leave such flash frames out by themselves (§5.2, roadmap
+L32). Blur and dew are not judged per frame here: dew and dirt are
 recognised over many frames on the hub (roadmap C12).
 
 ## 5. Products (M4)
@@ -232,6 +234,13 @@ Each can be switched off (`product_keogram`, `product_startrails`, `product_time
 - **Startrails** `startrails.jpg`: the per-pixel maximum of all frames whose mean
   brightness is at most `startrails_max_mean` (default 0.35), so twilight and moonlit
   or cloud-lit frames do not wash out the trails. Built only with at least 10 such frames.
+  A **flash frame** is left out too (roadmap L32, Benjamin, 2026-10-15): a frame lit up
+  for one exposure by a light near the camera (a lamp with a motion sensor, a car). It is
+  a night frame whose mean, divided by exposure time and linear gain (10^(gain/200), gain
+  in 0.1 dB), is at least 15 % above both its neighbours' and whose stored mean is at
+  least 6/255 above both; a ramp at dusk or an exposure step is never brighter than both
+  neighbours, and the first and last frame are kept. The frame itself stays as it is and
+  is not marked bad (§4.9): it is only known one frame later.
 - **Timelapse** `timelapse.mp4`: H.264, 25 fps, width at most 1920 px, `yuv420p`, built
   with `ffmpeg` from the night frames in capture order.
 

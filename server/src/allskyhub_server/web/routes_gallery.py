@@ -18,6 +18,7 @@ from allskyhub_server.devices import (
     events,
     fireball,
     labels,
+    lightning_li,
     meteor_pairs,
     overflight_map,
     public,
@@ -520,6 +521,8 @@ async def storm_page(
             "device": device,
             "storm": events.Storm(storm, flashes),
             "event_titles": EVENT_TITLES,
+            "li": lightning_li.storm_check(flashes),
+            "direction": lightning_li.direction,
         },
         session=session,
     )

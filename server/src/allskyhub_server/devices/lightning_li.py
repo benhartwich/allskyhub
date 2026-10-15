@@ -332,6 +332,38 @@ def summary(event: EventRecord) -> str | None:
     return f"Blitze in {event.li_km:.0f} km Richtung {direction(event.li_bearing_deg)}"
 
 
+@dataclass(frozen=True)
+class StormCheck:
+    """SPEC §7.10 for one storm, for its page: why it is labelled or not."""
+
+    unchecked: int
+    clear: int  # checked, no counting flash
+    confirmed: list[EventRecord]  # a counting flash, nearest first
+
+    @property
+    def text(self) -> str:
+        total = self.unchecked + self.clear + len(self.confirmed)
+        if self.unchecked == total:
+            return "Noch nicht geprüft."
+        parts: list[str] = []
+        if self.confirmed:
+            parts.append(f"{len(self.confirmed)} von {total} bestätigt")
+        if self.clear:
+            parts.append(f"{self.clear} ohne Blitz in ihrer Richtung")
+        if self.unchecked:
+            parts.append(f"{self.unchecked} ungeprüft (Satellitendaten fehlen)")
+        return ", ".join(parts) + "."
+
+
+def storm_check(flashes: list[EventRecord]) -> StormCheck:
+    confirmed = sorted(
+        (e for e in flashes if e.li_checked_at is not None and e.li_km is not None),
+        key=lambda e: e.li_km or 0.0,
+    )
+    unchecked = sum(e.li_checked_at is None for e in flashes)
+    return StormCheck(unchecked, len(flashes) - unchecked - len(confirmed), confirmed)
+
+
 async def check(db: AsyncSession, now: dt.datetime) -> set[str]:
     """Check lightning events whose window is covered, then label storms without any
     satellite flash. Returns the cameras whose labels changed. Commits."""

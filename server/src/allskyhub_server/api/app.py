@@ -30,6 +30,7 @@ from allskyhub_server.devices import (
     archive,
     events,
     labels,
+    lightning_li,
     pairing,
     public,
     queries,
@@ -177,6 +178,9 @@ class EventItem(BaseModel):
     label_detail: str | None = None
     # SPEC §6.4: revision of the picture; put it into image URLs (``v``) so caches renew.
     image_rev: int = 1
+    # SPEC §7.10, lightning only: what Meteosat's Lightning Imager saw, as a line of text
+    # ("Blitze in 230 km Richtung NW", "keine Blitze im Umkreis von 400 km", "ungeprüft").
+    lightning_check: str | None = None
 
 
 class LabelRequest(_In):
@@ -202,6 +206,7 @@ def _event(e: EventRecord) -> EventItem:
         label_auto=e.label_auto,
         label_detail=e.label_detail,
         image_rev=events.image_rev(e.data),
+        lightning_check=lightning_li.summary(e),
     )
 
 

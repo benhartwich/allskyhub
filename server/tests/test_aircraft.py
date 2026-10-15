@@ -72,7 +72,9 @@ def test_coverage_and_pruning() -> None:
     assert not tracks.covers("other", T0, T0 + dt.timedelta(seconds=10))
     tracks.covered("gap", T0)
     tracks.covered("gap", T0 + dt.timedelta(seconds=60))
-    assert not tracks.covers("gap", T0, T0 + dt.timedelta(seconds=60))  # 60 s without data
+    assert tracks.covers("gap", T0, T0 + dt.timedelta(seconds=60))  # a few failed fetches
+    tracks.covered("gap", T0 + dt.timedelta(seconds=150))
+    assert not tracks.covers("gap", T0, T0 + dt.timedelta(seconds=150))  # 90 s without data
     tracks.add("adsb.lol", "abc123", _fix(T0, LAT, LON))
     tracks.prune(T0 + aircraft.KEEP + dt.timedelta(seconds=1))
     assert tracks.at(T0) == {}

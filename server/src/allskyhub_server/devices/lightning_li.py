@@ -346,11 +346,28 @@ async def check(db: AsyncSession, now: dt.datetime) -> set[str]:
             continue  # the storm may go on
         if any(e.li_checked_at is None or e.li_km is not None for e in flashes):
             continue
+        # SPEC §7.12: the camera's own sensor decided (it labelled the storm, or it heard a
+        # strike close by); the satellite then labels nothing more. Labels set by the owner
+        # keep only their own event (set_auto never replaces them).
+        if any(_sensor_heard(e) or _sensor_label(e) for e in flashes):
+            continue
         for event in flashes:
             if await labels.set_auto(db, event, "other", DETAIL, now):
                 changed.add(device_id)
     await db.commit()
     return changed
+
+
+SENSOR_DETAIL = "kein Blitz am Sensor"
+
+
+def _sensor_label(event: EventRecord) -> bool:
+    return event.label_auto and event.label_detail == SENSOR_DETAIL
+
+
+def _sensor_heard(event: EventRecord) -> bool:
+    km = (event.data or {}).get("sensor_km")
+    return isinstance(km, int | float)
 
 
 async def run_forever(

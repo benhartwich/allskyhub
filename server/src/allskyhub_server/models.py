@@ -529,6 +529,12 @@ class StatusSample(Base):
     sensor_temp_c: Mapped[float | None] = mapped_column(Float)
     cpu_temp_c: Mapped[float | None] = mapped_column(Float)
     disk_free_pct: Mapped[float | None] = mapped_column(Float)
+    # SPEC §7.11 weather sensor and dew heater (roadmap L30), null without them.
+    air_temp_c: Mapped[float | None] = mapped_column(Float)
+    humidity_pct: Mapped[float | None] = mapped_column(Float)
+    dewpoint_c: Mapped[float | None] = mapped_column(Float)
+    pressure_hpa: Mapped[float | None] = mapped_column(Float)
+    heater_on: Mapped[bool | None] = mapped_column(Boolean)
 
     __table_args__ = (Index("ix_status_sample_device_id_at", "device_id", "at"),)
 

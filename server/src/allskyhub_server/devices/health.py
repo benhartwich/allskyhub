@@ -61,6 +61,14 @@ def paused(device: Device) -> bool:
     return (device.last_status or {}).get("capture_paused") is True
 
 
+# SPEC §7.11, §7.12: why a sensor gives no values.
+SENSOR_ERRORS = {
+    "not_found": "nicht gefunden, Anschluss und Adresse prüfen",
+    "no_interrupt": "die Interrupt-Leitung bleibt stumm, den GPIO-Pin prüfen",
+    "bad_data": "liefert unbrauchbare Werte",
+}
+
+
 def check(device: Device, online: bool, now: dt.datetime) -> list[Problem]:
     problems: list[Problem] = []
     if not online:
@@ -98,6 +106,13 @@ def check(device: Device, online: bool, now: dt.datetime) -> list[Problem]:
     update = cast(dict[str, Any], status.get("update") or {})
     if update.get("state") in ("failed", "rolled_back"):
         problems.append(Problem("update", "warn", "Das letzte Software-Update ist fehlgeschlagen."))
+    for key, name in (("env", "Klimasensor"), ("lightning_sensor", "Blitzsensor")):
+        part = status.get(key)  # SPEC §7.11, §7.12
+        error = cast(dict[str, Any], part).get("error") if isinstance(part, dict) else None
+        if isinstance(error, str) and error:
+            problems.append(
+                Problem(key, "warn", f"{name}: {SENSOR_ERRORS.get(error, error[:40])}.")
+            )
     alpaca = status.get("alpaca_error")  # SPEC §6.3, §7.5
     if isinstance(alpaca, str) and alpaca:
         problems.append(Problem("alpaca", "warn", _alpaca_text(alpaca, settings)))

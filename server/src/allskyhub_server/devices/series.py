@@ -47,6 +47,12 @@ STATUS_FIELDS = (
     Field("sensor", lambda s: s.sensor_temp_c),
     Field("cpu", lambda s: s.cpu_temp_c),
     Field("disk", lambda s: s.disk_free_pct),
+    # SPEC §7.11 (roadmap L30): null without a weather sensor or dew heater.
+    Field("air_temp", lambda s: s.air_temp_c),
+    Field("humidity", lambda s: s.humidity_pct),
+    Field("dewpoint", lambda s: s.dewpoint_c),
+    Field("pressure", lambda s: s.pressure_hpa),
+    Field("heater", lambda s: None if s.heater_on is None else float(s.heater_on)),
 )
 
 

@@ -48,6 +48,17 @@
       ],
       axes: [{ scale: "c", label: "°C" }, { scale: "pct", label: "Speicher frei %", side: 1 }],
     },
+    {
+      // SPEC §7.11 (roadmap L30): only for cameras with a weather sensor or dew heater.
+      id: "weather", title: "Wetter am Gehäuse", source: "status", height: 200, status: true,
+      series: [
+        { key: "air_temp", label: "Lufttemperatur", unit: "°C", color: "--chart-air", scale: "c", digits: 1 },
+        { key: "dewpoint", label: "Taupunkt", unit: "°C", color: "--chart-dew", scale: "c", digits: 1 },
+        { key: "humidity", label: "Luftfeuchte", unit: "%", color: "--chart-humidity", scale: "pct", digits: 0 },
+        { key: "heater", label: "Kuppelheizung", unit: "", color: "--chart-heater", scale: "onoff", digits: 0, step: true, fill: true },
+      ],
+      axes: [{ scale: "c", label: "°C" }, { scale: "pct", label: "Luftfeuchte %", side: 1 }],
+    },
   ];
   const SCALES = {
     sqm: { auto: true, range: (u, min, max) => padRange(min, max, 0.25, 0.5) },
@@ -57,6 +68,7 @@
     gain: { auto: true, range: (u, min, max) => padRange(min, max, 0.08, 1) },
     c: { auto: true, range: (u, min, max) => padRange(min, max, 0.1, 2) },
     deg: { auto: false, range: [-30, 90] },
+    onoff: { auto: false, range: [0, 4] },
   };
   const BANDS = [
     [0, "--chart-day"],

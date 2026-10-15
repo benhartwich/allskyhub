@@ -437,15 +437,38 @@ class EventStore:
         tmp.replace(d / "thumbnails" / f"{eid}.jpg")
 
 
-# SPEC §6.4: pieces of one moving object at most this far apart are one event.
-PASS_GAP = timedelta(minutes=5)
+# SPEC §6.4: the next piece of a moving object comes within this time (one frame may be
+# missing), and one event spans at most PASS_MAX: separate objects along one airway or
+# orbit must not grow into one event that no catalogue object fits (Benjamin, 2026-10-15).
+PASS_GAP = timedelta(seconds=150)
+PASS_MAX = timedelta(minutes=10)
+PASS_AXIS_DEG = 25.0  # a continuing piece moved along its own trail ...
 
 
 @dataclass
-class _Pass:
+class OpenPass:
     event: Event
     streak: Streak
     last: datetime
+    step: tuple[float, float] | None = None  # ... and onward, not back (px of the last move)
+
+
+def onward(p: OpenPass, s: Streak, cfg: MeteorConfig) -> tuple[float, float] | None:
+    """The move from the pass's last piece to `s` if `s` continues it (SPEC §6.4): the same
+    place (a drifting contrail), or along the trail and in the direction it has been
+    moving; None otherwise."""
+    if similar(p.streak, s, cfg):
+        return (0.0, 0.0)
+    if not progressing(p.streak, s, cfg):
+        return None
+    dx, dy = s.cx - p.streak.cx, s.cy - p.streak.cy
+    along = math.degrees(math.atan2(dy, dx)) % 180.0
+    d = abs(along - p.streak.angle_deg) % 180.0
+    if min(d, 180.0 - d) > PASS_AXIS_DEG:
+        return None
+    if p.step is not None and p.step != (0.0, 0.0) and dx * p.step[0] + dy * p.step[1] <= 0:
+        return None
+    return (dx, dy)
 
 
 @dataclass(frozen=True)
@@ -503,7 +526,7 @@ class DetectionWorker:
         self._nlc = nlc
         self._mask_version = -1
         self._rejects: dict[str, int] = {}  # streaks per night that are not meteors
-        self._passes: list[_Pass] = []  # moving objects still crossing the sky
+        self._passes: list[OpenPass] = []  # moving objects still crossing the sky
         self._q: queue.Queue[_Job | None] = queue.Queue(maxsize=4)
         self._dropped = 0
         self._thread = threading.Thread(target=self._run, name="detect", daemon=True)
@@ -527,19 +550,20 @@ class DetectionWorker:
             return None
         cfg = self._meteor.config
         at = hit.frame.captured_at
-        self._passes = [p for p in self._passes if at - p.last <= PASS_GAP]
-        near = [
-            p
-            for p in self._passes
-            if p.event.night_id == hit.frame.night_id
-            and (progressing(p.streak, hit.streak, cfg) or similar(p.streak, hit.streak, cfg))
+        self._passes = [
+            p for p in self._passes if at - p.last <= PASS_GAP and at - p.event.start < PASS_MAX
         ]
+        near: list[tuple[OpenPass, tuple[float, float]]] = []
+        for p in self._passes:
+            step = onward(p, hit.streak, cfg) if p.event.night_id == hit.frame.night_id else None
+            if step is not None:
+                near.append((p, step))
         if not near:
             return None
-        p = min(near, key=lambda q: math.hypot(q.streak.cx - hit.streak.cx,
-                                               q.streak.cy - hit.streak.cy))  # fmt: skip
+        p, step = min(near, key=lambda q: math.hypot(q[0].streak.cx - hit.streak.cx,
+                                                     q[0].streak.cy - hit.streak.cy))  # fmt: skip
         p.event = self.events.extend_pass(p.event, hit)
-        p.streak, p.last = hit.streak, at
+        p.streak, p.last, p.step = hit.streak, at, step
         return p.event
 
     def _emit(self, hits: list[MeteorHit]) -> None:
@@ -562,7 +586,7 @@ class DetectionWorker:
                 hit.streak.peak,
             )
             if hit.trail in ("moving", "circle"):
-                self._passes.append(_Pass(event, hit.streak, hit.frame.captured_at))
+                self._passes.append(OpenPass(event, hit.streak, hit.frame.captured_at))
             if self._on_event is not None:
                 self._on_event(event)
 

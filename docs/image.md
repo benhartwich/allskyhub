@@ -2,12 +2,16 @@
 
 The image is Raspberry Pi OS Lite (arm64, Trixie) with the camera agent, the ZWO camera SDK
 and everything setup mode needs (SPEC §7.1–7.3). It is built by GitHub Actions
-(`.github/workflows/image.yml`) and kept as a workflow artifact for 14 days.
+(`.github/workflows/image.yml`) and kept as a workflow artifact for 14 days; a tag
+`agent-vX.Y.Z` also attaches it as `allskyhub-X.Y.Z.img.xz` with its `.sha256` to that
+release, which is the download for new cameras.
 
 ## Flash and start
 
-1. Download `allskyhub-image` from the newest successful **image** workflow run and unpack
-   the zip.
+1. Download `allskyhub-<version>.img.xz` from the
+   [newest release](https://github.com/benhartwich/allskyhub/releases/latest), or, for an
+   unreleased commit, the artifact `allskyhub-image` of its **image** workflow run (unpack
+   the zip).
 2. Write `allskyhub-<version>.img.xz` to a microSD card with Raspberry Pi Imager
    ("Use custom"), without OS customisation. The camera does not need a login user.
 3. Optional: put a setup file on the card's boot partition (see below).

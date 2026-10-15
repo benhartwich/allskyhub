@@ -4,8 +4,8 @@ allskyhub has three parts: the **camera** (a Raspberry Pi with the allskyhub ima
 **hub** (the server the camera talks to, [allskyhub.org](https://allskyhub.org) or your own)
 and the **app**. This guide goes through all of them.
 
-> **Status:** allskyhub is in testing. Accounts on allskyhub.org are by invitation, the app
-> is not in the stores yet, and images are built by CI rather than published as releases.
+> **Status:** allskyhub is in testing. Accounts on allskyhub.org are by invitation and the
+> app is not in the stores yet.
 
 ## 1. What you need
 
@@ -23,8 +23,12 @@ and the **app**. This guide goes through all of them.
 
 ### 2.1 Write the image
 
-1. Download the image: on GitHub open **Actions → image**, take the newest successful run
-   and download the artifact `allskyhub-image`. Unpack the zip.
+1. Download the image from the newest release:
+   [github.com/benhartwich/allskyhub/releases/latest](https://github.com/benhartwich/allskyhub/releases/latest),
+   the file `allskyhub-<version>.img.xz` (and, to check it, `allskyhub-<version>.img.xz.sha256`:
+   `sha256sum -c allskyhub-<version>.img.xz.sha256`). Every agent release `agent-vX.Y.Z`
+   carries the image with that agent. Images of other commits are only workflow artifacts
+   (**Actions → image**, artifact `allskyhub-image`, kept 14 days).
 2. Write `allskyhub-<version>.img.xz` to the microSD card with
    [Raspberry Pi Imager](https://www.raspberrypi.com/software/): *Choose OS → Use custom*.
    Skip the OS customisation; the camera needs no login user.

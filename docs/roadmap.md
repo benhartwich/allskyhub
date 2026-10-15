@@ -79,6 +79,7 @@ them most:
 | L29 | "Überflüge": satellites and aircraft of the night in their own list, named where the hub knows them, counted in the night summary | agent + hub | Benjamin, 2026-10-15; SPEC §6.4 Overflights |
 | L30 | Weather sensor and dew heater: BME280 (temperature, humidity, pressure, dew point) and the housing's dome heater on a GPIO pin, automatic by dew point | agent | Benjamin, 2026-10-15 (Daniel Nimmervoll's housing; idea from VIGILIS AllSky); SPEC §7.11 |
 | L31 | Lightning sensor AS3935: hears strikes up to 40 km, confirms the camera's flashes on the spot, makes Alpaca unsafe | agent | Benjamin, 2026-10-15 (idea from VIGILIS AllSky; flashes from a neighbour's lamp); SPEC §7.12 |
+| L32 | ✅ Startrails without light flashes: frames lit up for one exposure by a lamp near the camera stay out of the startrails | agent | Benjamin, 2026-10-15 (idea from VIGILIS AllSky's clean startrail); SPEC §5.2 |
 
 Not ported on purpose: the free-form module manager and file editor (fixed detectors
 instead), the website upload/remote server (the hub and its public page do that).

@@ -52,6 +52,14 @@ INDEX = "events.jsonl"
 MAX_REJECTS = 300  # SPEC §6.4 Trail verdicts: streaks a night that are not meteors
 CROP_MIN_PX = 480  # the picture shows the meteor with some sky around it
 FULL_MAX_PX = 1920  # a lightning picture is the whole frame, at most this wide
+Window = tuple[int, int, int, int]  # left, top, width, height in the frame's pixels
+
+
+def original(frame: str, window: Window | None) -> dict[str, str | int | None]:
+    """`frame` and `crop_*` (SPEC §6.4 Original frame): where the event's picture lies in
+    the stored frame; the window is null when the picture is the whole frame."""
+    x, y, w, h = window if window is not None else (None, None, None, None)
+    return {"frame": frame, "crop_x": x, "crop_y": y, "crop_w": w, "crop_h": h}
 
 
 class EventStore:
@@ -167,6 +175,18 @@ class EventStore:
         p = (d / "thumbnails" / f"{eid}.jpg") if thumbnail else (d / f"{eid}.jpg")
         return p if p.is_file() else None
 
+    def original_path(self, night: str, eid: str) -> Path | None:
+        """The stored frame an event was found in (SPEC §6.4 Original frame), None when the
+        event names none or retention removed it."""
+        if not (len(night) == 8 and night.isdigit()):
+            return None
+        event = next((e for e in self.night_events(night) if e.id == eid), None)
+        name = event.data.get("frame") if event is not None else None
+        if not isinstance(name, str) or "/" in name or name.startswith("."):
+            return None
+        p = self._store.night_dir(night) / name
+        return p if p.is_file() else None
+
     def _new_id(self, kind: EventKind, f: FrameInfo) -> str:
         known = {e.id for e in self.night_events(f.night_id)}
         seq = 1
@@ -194,7 +214,8 @@ class EventStore:
         f, s = hit.frame, hit.streak
         with self._lock:
             eid = self._new_id(EventKind.METEOR, f)
-            has_image = self._save_crop(hit, f.night_id, eid)
+            window = self._save_crop(hit, f.night_id, eid)
+            has_image = window is not None
             event = Event(
                 id=eid,
                 night_id=f.night_id,
@@ -212,6 +233,7 @@ class EventStore:
                     **self._shower(f, s),
                     **self._position(f, s.cx, s.cy),
                     **self._track_ends(f, s),
+                    **(original(f.name, window) if window is not None else {}),
                 },
             )
             self._append(event)
@@ -263,6 +285,7 @@ class EventStore:
                     "storm_flashes": hit.storm_flashes,
                     "storm": "storm-" + hit.storm_start.astimezone(UTC).strftime("%Y%m%dT%H%M%SZ"),
                     **self._position(f, hit.flash.x, hit.flash.y),
+                    **(original(f.name, None) if has_image else {}),
                 },
             )
             self._append(event)
@@ -306,6 +329,7 @@ class EventStore:
             fresh = update.picture_changed or ep.image_rev == 0
             if fresh and self._save_full(ep.best_path, f.night_id, eid):
                 ep.image_rev += 1
+                ep.picture_frame = ep.best_frame.name
             index = float(ep.best.index)
             event = Event(
                 id=eid,
@@ -323,6 +347,7 @@ class EventStore:
                     "ongoing": ep.ongoing,
                     "image_rev": ep.image_rev,
                     **self._position(ep.best_frame, x, y),
+                    **(original(ep.picture_frame, None) if ep.picture_frame else {}),
                 },
             )
             self._append(event)
@@ -379,7 +404,8 @@ class EventStore:
         self._write_pictures(rgb, night, eid)
         return True
 
-    def _save_crop(self, hit: MeteorHit, night: str, eid: str) -> bool:
+    def _save_crop(self, hit: MeteorHit, night: str, eid: str) -> Window | None:
+        """The picture around the streak; its window in the frame, None if unreadable."""
         try:
             with PILImage.open(hit.image_path) as im:
                 rgb = im.convert("RGB")
@@ -387,7 +413,7 @@ class EventStore:
             log.warning(
                 "meteor %s: frame %s unreadable, event without picture", eid, hit.image_path
             )
-            return False
+            return None
         s = hit.streak
         x0, x1 = sorted((s.p1[0], s.p2[0]))
         y0, y1 = sorted((s.p1[1], s.p2[1]))
@@ -395,9 +421,9 @@ class EventStore:
         cx, cy = (x0 + x1) / 2, (y0 + y1) / 2
         left = int(min(max(0, cx - side / 2), max(0, rgb.width - side)))
         top = int(min(max(0, cy - side / 2), max(0, rgb.height - side)))
-        crop = rgb.crop((left, top, min(rgb.width, left + side), min(rgb.height, top + side)))
-        self._write_pictures(crop, night, eid)
-        return True
+        right, bottom = min(rgb.width, left + side), min(rgb.height, top + side)
+        self._write_pictures(rgb.crop((left, top, right, bottom)), night, eid)
+        return left, top, right - left, bottom - top
 
     def _write_pictures(self, pic: PILImage.Image, night: str, eid: str) -> None:
         d = self._dir(night)

@@ -121,7 +121,9 @@ def test_lightning_event(tmp_path: Path) -> None:
     assert ev.id == "lightning-20260715T210100Z"
     assert ev.has_image
     assert set(ev.data) == {"area_frac", "peak", "storm_flashes", "storm", "azimuth_deg",
-                            "altitude_deg"}  # fmt: skip
+                            "altitude_deg", "frame", "crop_x", "crop_y", "crop_w",
+                            "crop_h"}  # fmt: skip
+    assert ev.data["crop_w"] is None  # SPEC §6.4: the picture is the whole frame
     assert ev.data["storm"] == "storm-20260715T210100Z"
     events = EventStore(store)
     assert events.night_events(ev.night_id) == [ev]

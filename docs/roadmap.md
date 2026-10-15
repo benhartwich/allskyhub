@@ -75,6 +75,8 @@ them most:
 | L23 | ✅ MQTT: publish status, sky values and detections to a local broker (Home Assistant discovery) | agent | Benjamin, 2026-10-13 (indi-allsky, Allsky module); off by default, settings for broker, user, password (`write_only`), topic prefix; SPEC §7.7. Done: own MQTT 3.1.1 publisher, no new dependency; the first `write_only` setting (`mqtt_password`) |
 | L24 | ✅ HTTPS for the local portal: a self-signed certificate made on first boot, optionally the user's own | agent | Benjamin, 2026-10-13 (indi-allsky); off by default (Benjamin, 2026-10-13); SPEC §7.6. Done: setting `https`, port 8443, own certificate upload on the system page |
 | L25 | ✅ Trail verdicts: keep every streak, say from the trail why it is not a meteor (moving, great circle, blinking, fragments, star, star trail, glare, edge glow, repeat) and label it automatically | agent | Benjamin, 2026-10-13: like his Allsky modules Meteor Detection and Sky Traffic; mark, never delete; all checks label (no shadow mode); SPEC §6.4 Trail verdicts. Done: #207 (agent), #208 (hub) |
+| L28 | Original frame for every event: the whole frame next to the zoomed picture, its window outlined; on the camera and kept on the hub | agent + hub | Benjamin, 2026-10-15; SPEC §6.4 Original frame, §6.5 `upload_event` `original` |
+| L29 | "Überflüge": satellites and aircraft of the night in their own list, named where the hub knows them, counted in the night summary | agent + hub | Benjamin, 2026-10-15; SPEC §6.4 Overflights |
 
 Not ported on purpose: the free-form module manager and file editor (fixed detectors
 instead), the website upload/remote server (the hub and its public page do that).
@@ -118,10 +120,12 @@ hub side. Push needs the Firebase project; until then the same messages show on 
 |---|---|---|---|
 | H1 | ~~Constellation lines, names and N/E/S/W over the live image on the public page~~ done | hub (+ agent: lens model in status) | lens in `status.orientation` (SPEC §4.8, §6.3), #135; shared drawing in `packages/sky` (#142) |
 | H2 | ~~Flutter app catches up with the web: charts, lightbox, sharing, statistics, "Heute Nacht", exports, e-mail notification switches~~ done | hub | done 2026-10 (in parallel with the local work) |
-| H3 | Aircraft from ADS-B: label planes in the live image and drop their trails from meteor detections | hub + agent | Benjamin, 2026-10-13 (indi-allsky ADS-B): adsb.lol on the hub plus, optionally, the owner's own receiver on the camera (`adsb_url`); a match is an automatic label false_positive/aircraft, never a deletion; SPEC §7.8 |
+| H3 | ✅ Aircraft from ADS-B: label planes in the live image and drop their trails from meteor detections | hub + agent | Benjamin, 2026-10-13 (indi-allsky ADS-B): adsb.lol on the hub plus, optionally, the owner's own receiver on the camera (`adsb_url`); a match is an automatic label false_positive/aircraft, never a deletion; SPEC §7.8 |
 | H4 | "Ziel frei?": is a chosen object (or a sky area) clear now and in the next hours, from the camera's cloud map and the forecast; light-pollution map next to it | hub | Benjamin, 2026-10-13; from the roadmap brainstorm 2026-09-26. Done: planets and Messier, height, darkness, moon and forecast per hour, the camera's overall cloud cover now (web and app); light-pollution view on the camera map from the cameras' own SQM (Benjamin, 2026-10-13). Also done: the cell of the camera's cloud map (SPEC §6.3 `cloud_map`) in the object's direction |
 | H5 | Upload the night's timelapse to YouTube and post detections to Discord | hub | Benjamin, 2026-10-13 (indi-allsky/Allsky); the owner connects the accounts on the hub, never on the camera. Done: Discord (webhook per camera, web and app). Open: YouTube (needs a Google Cloud project with YouTube API access from Benjamin) |
-| H6 | Satellites among the meteors: name them from CelesTrak (SGP4, sunlit), ISS and Tiangong by name, automatic label | hub | Benjamin, 2026-10-13: on the hub, not on the camera; SPEC §7.9 |
+| H6 | ✅ Satellites among the meteors: name them from CelesTrak (SGP4, sunlit), ISS and Tiangong by name, automatic label | hub | Benjamin, 2026-10-13: on the hub, not on the camera; SPEC §7.9 |
+| H8 | Lightning cross-check with Meteosat's Lightning Imager: a "storm" without satellite flashes within 400 km is labelled a false alarm | hub | Benjamin, 2026-10-15 (storms on calm October nights from light near the camera); SPEC §7.10; needs a free EUMETSAT account |
+| H9 | Aircraft by day: which planes crossed the sky, from ADS-B, without image detection | hub | Benjamin, 2026-10-15; idea, not specified yet |
 
 ## Network features (hub)
 

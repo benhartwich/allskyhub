@@ -350,3 +350,21 @@ async def test_only_flashes_towards_the_light_count(
     assert rows["storm-S"].label is None
     assert dict(event_rows(rows["storm-S"]))[ROW].endswith("Richtung S")
     assert rows["storm-X"].label is None  # no azimuth: the southern storm counts
+
+
+async def test_the_storm_page_says_why(app: FastAPI, client: httpx.AsyncClient) -> None:
+    dev, _, _ = await _camera(app, client)
+    maker: async_sessionmaker[AsyncSession] = app.state.sessionmaker
+    t0 = dt.datetime(2026, 10, 14, 22, 0, tzinfo=dt.UTC)
+    async with maker() as db:
+        seen = _flash(dev.device_id, t0, "storm-20261014T220000Z", azimuth_deg=350.0)
+        seen.li_checked_at, seen.li_km, seen.li_bearing_deg = NOW, 180.0, 10.0
+        clear = _flash(dev.device_id, t0 + dt.timedelta(minutes=2), "storm-20261014T220000Z")
+        clear.li_checked_at = NOW
+        open_ = _flash(dev.device_id, t0 + dt.timedelta(minutes=4), "storm-20261014T220000Z")
+        db.add_all([seen, clear, open_])
+        await db.commit()
+    page = (await client.get(f"/cameras/{dev.device_id}/storms/storm-20261014T220000Z")).text
+    assert "1 von 3 bestätigt, 1 ohne Blitz in ihrer Richtung, 1 ungeprüft" in page
+    assert "180 km N (10°)" in page
+    assert "N (350°)" in page

@@ -554,9 +554,12 @@ is there in the frames before and after too (a drifting star) and every streak o
 cloudy or twinkling frame are dropped without an event, as before. The camera sets the
 automatic label when it saves the event and sends it as `event_label` (§6.3).
 
-The pieces of one moving object (`moving` or `circle`) in frames at most 5 minutes apart,
-each continuing the previous piece or at the same place (a drifting contrail), are one
-event (Benjamin, 2026-10-13): it is sent again with the same id as it grows, `end` and
+The pieces of one moving object (`moving` or `circle`) in frames at most 150 s apart
+(one frame may be missing), each at the same place (a drifting contrail) or continuing the
+previous piece along its trail (the move within 25° of the trail's axis) and onward (not
+back against the last move), are one event (Benjamin, 2026-10-13); one event spans at most
+10 minutes, a later piece starts a new one (Benjamin, 2026-10-15: separate objects along one
+airway were chained into passes of up to 38 minutes that no aircraft or satellite fits): it is sent again with the same id as it grows, `end` and
 `data.frames` grow, `end_*` is the end of the newest piece farther from `start_*`, and the
 picture stays the first piece's. At most 300 non-`meteor`
 events are kept per night (a growing one counts once); beyond that they are only counted in the log. Nothing is deleted:

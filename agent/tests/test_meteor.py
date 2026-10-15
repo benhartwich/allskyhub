@@ -13,7 +13,7 @@ import pytest
 
 from allskyhub_agent.calib.solve import Solution, alt_az, sidereal_deg
 from allskyhub_agent.detect import trail
-from allskyhub_agent.detect.events import DetectionWorker, EventStore
+from allskyhub_agent.detect.events import DetectionWorker, EventStore, OpenPass, onward
 from allskyhub_agent.detect.meteor import (
     MeteorConfig,
     MeteorDetector,
@@ -495,3 +495,37 @@ def test_a_moving_object_is_one_event(tmp_path: Path) -> None:
     assert last.end > got[0].end
     (kept,) = worker.events.night_events(last.night_id)
     assert kept == last
+
+
+def _piece(x: int, y: int, angle: float) -> Streak:
+    img = with_streak(np.zeros((H, W), np.uint8), x, y, 100, angle)
+    return find_streaks(img, MeteorConfig())[0]
+
+
+def test_pieces_of_other_objects_are_not_one_pass(tmp_path: Path) -> None:
+    """SPEC §6.4 (Benjamin, 2026-10-15): a piece continues a pass only along its trail and
+    onward; objects beside it or coming back are new events."""
+    cfg = MeteorConfig()
+    ev = EventStore(ImageStore(tmp_path, ZoneInfo("UTC"))).save_meteor(
+        MeteorHit(frame(1), tmp_path / "missing.jpg", _piece(200, 150, 0))
+    )
+    p = OpenPass(ev, _piece(200, 150, 0), frame(1).captured_at)
+    step = onward(p, _piece(310, 150, 0), cfg)
+    assert step is not None
+    assert step[0] > 0  # along the trail, to the right
+    assert onward(p, _piece(200, 260, 0), cfg) is None  # parallel but beside it
+    p.step = step
+    assert onward(p, _piece(90, 150, 0), cfg) is None  # back where it came from
+
+
+def test_a_pass_stops_growing_after_ten_minutes(tmp_path: Path) -> None:
+    """SPEC §6.4: one overflight event spans at most 10 minutes."""
+    store = ImageStore(tmp_path, ZoneInfo("UTC"))
+    worker = DetectionWorker(store)
+    # One piece a minute, each continuing the last along its trail.
+    for k in range(14):
+        hit = MeteorHit(frame(k), tmp_path / "missing.jpg", _piece(60 + 35 * k, 150, 0), "moving")
+        worker._emit([hit])  # pyright: ignore[reportPrivateUsage]
+    kept = worker.events.night_events("20261008")
+    assert len(kept) == 2
+    assert all(e.end - e.start <= timedelta(minutes=11) for e in kept)

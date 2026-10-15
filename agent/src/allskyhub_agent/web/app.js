@@ -164,6 +164,16 @@ const T = {
     "ev.whole": "Ganzes Bild",
     "ev.wholeCaption": "ganzes Bild",
     "ev.crop": "Ausschnitt",
+    "pass.title": "Überflüge",
+    "pass.help": "Satelliten und Flugzeuge, die die Kamera als Spur gesehen hat. Namen kommen vom Hub.",
+    "pass.summary": "{n} Überflüge: {s} Satelliten, {a} Flugzeuge, {u} unbekannt",
+    "pass.none": "Keine Überflüge in dieser Nacht.",
+    "pass.satellite": "Satelliten",
+    "pass.aircraft": "Flugzeuge",
+    "pass.unknown": "Unbekannt",
+    "pass.unnamed": "ohne Namen",
+    "pass.frames": "{n} Bilder",
+    "dir.points": "N,NO,O,SO,S,SW,W,NW",
     // sky charts
     "sky.none": "Noch keine Messwerte.",
     "sky.noneNight": "Keine Messwerte in dieser Nacht.",
@@ -583,6 +593,16 @@ const T = {
     "ev.whole": "Whole image",
     "ev.wholeCaption": "whole image",
     "ev.crop": "Detail",
+    "pass.title": "Overflights",
+    "pass.help": "Satellites and aircraft the camera saw as a trail. Names come from the hub.",
+    "pass.summary": "{n} overflights: {s} satellites, {a} aircraft, {u} unknown",
+    "pass.none": "No overflights this night.",
+    "pass.satellite": "Satellites",
+    "pass.aircraft": "Aircraft",
+    "pass.unknown": "Unknown",
+    "pass.unnamed": "no name",
+    "pass.frames": "{n} frames",
+    "dir.points": "N,NE,E,SE,S,SW,W,NW",
     // sky charts
     "sky.none": "No readings yet.",
     "sky.noneNight": "No readings this night.",
@@ -1440,14 +1460,82 @@ function labelButtons(e) {
   </div>`;
 }
 
+// SPEC §6.4 Overflights: trails of satellites and aircraft, listed apart from the meteors.
+const PASS_TRAILS = ["moving", "circle", "dashed"];
+const VERDICT_DETAILS = ["bewegtes Objekt", "blinkt"];  // the camera's own words, no names
+const isPass = (e) => e.kind === "meteor" && (PASS_TRAILS.includes((e.data || {}).trail)
+  || (e.label === "false_positive" && (e.reason === "aircraft" || e.reason === "satellite")));
+const passGroup = (e) => (e.reason === "satellite" || e.reason === "aircraft" ? e.reason : "unknown");
+const passName = (e) => (e.label_detail && !VERDICT_DETAILS.includes(e.label_detail) ? e.label_detail : null);
+const compassPoint = (az) => t("dir.points").split(",")[Math.round(az / 45) % 8];
+function passPath(d) {
+  const end = (k) => (d[k + "_azimuth_deg"] != null && d[k + "_altitude_deg"] != null
+    ? `${compassPoint(d[k + "_azimuth_deg"])} ${Math.round(d[k + "_altitude_deg"])}°` : null);
+  const a = end("start"), b = end("end");
+  return a && b ? `${a} → ${b}` : "";
+}
+// The picture's window in the whole frame (SPEC §6.4 Original frame), drawn by the lightbox.
+function cropOutline(d) {
+  if (d.crop_x == null || d.crop_w == null) return null;
+  return (w, h) => {
+    const k = 1000 / w;
+    return `<rect x="${(d.crop_x * k).toFixed(1)}" y="${(d.crop_y * k).toFixed(1)}" width="${(d.crop_w * k).toFixed(1)}"
+      height="${(d.crop_h * k).toFixed(1)}" fill="none" stroke="#ffd34d" stroke-width="3" vector-effect="non-scaling-stroke"/>`;
+  };
+}
+// Lightbox items of events: the picture, and with one click the whole frame it was seen on.
+function eventItems(pictures) {
+  return pictures.map((e) => {
+    const crop = `files/${e.night_id}/events/${e.id}.jpg`;
+    const full = e.frame ? fileUrl(e.night_id, e.frame, false) : null;
+    const caption = `${kindName(e.kind)} · ${fmtDateTime(e.start)}${passName(e) ? " · " + passName(e) : ""}`;
+    const outline = cropOutline(e.data || {});
+    return { src: crop, caption, actions: full ? [{ label: t("ev.whole"), run: (it) => {
+      const whole = it.src !== full;
+      it.src = whole ? full : crop;
+      it.overlay = whole ? outline : null;
+      it.caption = whole ? `${caption} · ${t("ev.wholeCaption")}` : caption;
+      it.actions[0].label = whole ? t("ev.crop") : t("ev.whole");
+      showLightbox();
+    } }] : null };
+  });
+}
+
+function renderPasses(passes) {
+  const box = $("passes");
+  if (!passes.length) { box.innerHTML = `<p class="empty">${t("pass.none")}</p>`; return; }
+  const by = { satellite: [], aircraft: [], unknown: [] };
+  for (const e of passes) by[passGroup(e)].push(e);
+  const pictures = passes.filter((e) => e.has_image);
+  const row = (e) => {
+    const d = e.data || {};
+    const secs = Math.round((Date.parse(e.end) - Date.parse(e.start)) / 1000);
+    const facts = [passPath(d), secs >= 60 ? `${Math.round(secs / 60)} min` : `${secs} s`,
+      d.frames > 1 ? t("pass.frames", { n: d.frames }) : ""].filter(Boolean).join(" · ");
+    return `<li class="event" data-id="${esc(e.id)}">
+      ${e.has_image ? `<img loading="lazy" alt="" data-i="${pictures.indexOf(e)}" src="files/${e.night_id}/events/${e.id}.jpg?thumb=1">` : "<span></span>"}
+      <div><b>${esc(passName(e) || t("pass.unnamed"))}</b> <span class="muted">${fmtTime(e.start)}</span>
+        <p class="muted small">${facts}</p></div></li>`;
+  };
+  box.innerHTML = `<p class="muted small">${t("pass.summary", { n: passes.length, s: by.satellite.length, a: by.aircraft.length, u: by.unknown.length })}</p>`
+    + ["satellite", "aircraft", "unknown"].filter((g) => by[g].length).map((g) =>
+      `<h3>${t("pass." + g)} (${by[g].length})</h3><ul class="events">${by[g].map(row).join("")}</ul>`).join("");
+  const items = eventItems(pictures);
+  for (const img of box.querySelectorAll("img[data-i]")) img.onclick = () => lightbox(items, Number(img.dataset.i));
+}
+
 async function viewEvents(night) {
   const picker = await nightPicker(night, "#ereignisse");
   page.innerHTML = `<h1>${t("nav.events")}</h1><div class="card stack">${picker.html}
     <ul class="events" id="events"><li class="muted">${t("loading")}</li></ul>
-    <div class="actions"><button type="button" class="secondary small" id="showFp" hidden aria-pressed="false"></button></div></div>`;
+    <div class="actions"><button type="button" class="secondary small" id="showFp" hidden aria-pressed="false"></button></div></div>
+    <section class="card stack"><h2>${t("pass.title")}</h2><p class="muted small">${t("pass.help")}</p>
+    <div id="passes"><p class="muted">${t("loading")}</p></div></section>`;
   picker.bind();
-  if (!picker.night) { $("events").innerHTML = `<li class="empty">${t("ev.none")}</li>`; return; }
-  const events = await getJSON(`api/nights/${picker.night}/events`);
+  if (!picker.night) { $("events").innerHTML = `<li class="empty">${t("ev.none")}</li>`; $("passes").innerHTML = ""; return; }
+  const all = await getJSON(`api/nights/${picker.night}/events`);
+  renderPasses(all.filter(isPass));
+  const events = all.filter((e) => !isPass(e));
   if (!events.length) { $("events").innerHTML = `<li class="empty">${t("ev.noneNight")}</li>`; return; }
   let showFp = false;
   const render = () => {
@@ -1465,19 +1553,7 @@ async function viewEvents(night) {
           <p class="muted small">${eventFacts(e)}</p>
           ${labelButtons(e)}</div>
       </li>`).join("");
-    // The detection's picture, and with one click the whole frame it was seen on.
-    const items = pictures.map((e) => {
-      const crop = `files/${e.night_id}/events/${e.id}.jpg`;
-      const full = e.frame ? fileUrl(e.night_id, e.frame, false) : null;
-      const caption = `${kindName(e.kind)} · ${fmtDateTime(e.start)}`;
-      return { src: crop, caption, actions: full ? [{ label: t("ev.whole"), run: (it) => {
-        const whole = it.src !== full;
-        it.src = whole ? full : crop;
-        it.caption = whole ? `${caption} · ${t("ev.wholeCaption")}` : caption;
-        it.actions[0].label = whole ? t("ev.crop") : t("ev.whole");
-        showLightbox();
-      } }] : null };
-    });
+    const items = eventItems(pictures);
     for (const img of $("events").querySelectorAll("img[data-i]")) {
       img.onclick = () => lightbox(items, Number(img.dataset.i));
     }

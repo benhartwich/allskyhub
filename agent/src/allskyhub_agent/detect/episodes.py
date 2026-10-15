@@ -36,6 +36,7 @@ class Episode(Generic[S]):
     last_sent: float = field(default=-math.inf)
     event_id: str | None = None  # set by the event store on the first save
     image_rev: int = 0  # SPEC §6.4: incremented whenever the picture is replaced
+    picture_frame: str | None = None  # the stored frame of the current picture (§6.4)
 
 
 @dataclass(frozen=True)

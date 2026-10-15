@@ -180,11 +180,13 @@ def test_event_store_and_worker(tmp_path: Path) -> None:
     store = ImageStore(tmp_path, ZoneInfo("Europe/Vienna"))
     got: list[Event] = []
     worker = DetectionWorker(store, on_event=got.append)
+    names: list[str] = []
     for i, gray in enumerate([sky(1), with_streak(sky(2), 300, 150, 140, 30), sky(3)]):
         rgb = np.empty((H, W, 3), dtype=np.uint8)
         rgb[:, :, :] = gray[:, :, None]
         stored = store.save(rgb, frame(i).captured_at)
         f = frame(i).model_copy(update={"name": stored.name, "night_id": stored.night_id})
+        names.append(stored.name)
         worker.process_frame(f, rgb)
     assert len(got) == 1
     ev = got[0]
@@ -194,7 +196,8 @@ def test_event_store_and_worker(tmp_path: Path) -> None:
     assert set(ev.data) == {"length_px", "peak", "frames", "direction_deg", "shower",
                             "shower_match", "azimuth_deg", "altitude_deg",
                             "start_azimuth_deg", "start_altitude_deg", "end_azimuth_deg",
-                            "end_altitude_deg", "track_ordered", "trail"}  # fmt: skip
+                            "end_altitude_deg", "track_ordered", "trail", "frame", "crop_x",
+                            "crop_y", "crop_w", "crop_h"}  # fmt: skip
     assert ev.data["trail"] == "meteor"
     assert ev.data["start_azimuth_deg"] is None
     assert ev.data["track_ordered"] is False
@@ -210,6 +213,18 @@ def test_event_store_and_worker(tmp_path: Path) -> None:
     assert full.read_bytes()[:2] == b"\xff\xd8"
     assert thumb is not None
     assert events.image_path(ev.night_id, "../x", thumbnail=False) is None
+    # SPEC §6.4 Original frame: the picture is a window of the stored frame.
+    frame_name = names[1]
+    assert ev.data["frame"] == frame_name
+    from PIL import Image as PILImage
+
+    with PILImage.open(full) as pic:
+        assert (ev.data["crop_w"], ev.data["crop_h"]) == pic.size
+    x, y = int(ev.data["crop_x"] or 0), int(ev.data["crop_y"] or 0)
+    assert 0 <= x <= 300 <= x + pic.size[0]
+    assert 0 <= y <= 150 <= y + pic.size[1]
+    assert events.original_path(ev.night_id, ev.id) == store.night_dir(ev.night_id) / frame_name
+    assert events.original_path(ev.night_id, "meteor-20200101T000000Z") is None
 
 
 def test_event_ids_are_unique_within_a_second(tmp_path: Path) -> None:
@@ -220,6 +235,8 @@ def test_event_ids_are_unique_within_a_second(tmp_path: Path) -> None:
     b = events.save_meteor(MeteorHit(frame(1), tmp_path / "missing.jpg", s))
     assert b.id == a.id + "-2"
     assert not a.has_image  # the frame could not be read
+    assert "frame" not in a.data
+    assert events.original_path(a.night_id, a.id) is None
 
 
 def _vec(az: float, alt: float) -> np.ndarray:

@@ -138,7 +138,9 @@ class LocalArchive:
         out: list[dict[str, Any]] = []
         for e in events:
             d = e.model_dump(mode="json")
-            d["frame"] = _frame_of(frames, e.start)
+            # SPEC §6.4 Original frame: the event names it; older ones are matched by time.
+            named = e.data.get("frame")
+            d["frame"] = named if isinstance(named, str) else _frame_of(frames, e.start)
             lab = labels.get(e.id)
             d["label"] = lab.label if lab is not None else None
             d["reason"] = lab.reason if lab is not None else None

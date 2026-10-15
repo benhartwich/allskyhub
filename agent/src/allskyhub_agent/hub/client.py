@@ -46,6 +46,7 @@ from allskyhub_protocol import (
     ErrorReply,
     Event,
     EventLabel,
+    EventVariant,
     FrameInfo,
     FrameVariant,
     Hello,
@@ -157,6 +158,8 @@ class EventSource(Protocol):
     def current_events(self) -> list[Event]: ...
 
     def image_path(self, night: str, eid: str, thumbnail: bool) -> Path | None: ...
+
+    def original_path(self, night: str, eid: str) -> Path | None: ...
 
 
 class LocalAccess(Protocol):
@@ -555,13 +558,15 @@ class HubSession:
             args = UploadEventArgs.model_validate(cmd.args)
         except ValidationError:
             return ErrorReply(ref=ref, code=ErrorCode.INVALID_ARGS)
-        path = (
-            self._events_src.image_path(
-                args.night_id, args.event_id, thumbnail=args.variant is FrameVariant.THUMB
+        src = self._events_src
+        if src is None:
+            path = None
+        elif args.variant is EventVariant.ORIGINAL:
+            path = src.original_path(args.night_id, args.event_id)  # SPEC §6.5, roadmap L28
+        else:
+            path = src.image_path(
+                args.night_id, args.event_id, thumbnail=args.variant is EventVariant.THUMB
             )
-            if self._events_src is not None
-            else None
-        )
         if path is None:
             return ErrorReply(ref=ref, code=ErrorCode.NOT_FOUND)
         data = await asyncio.to_thread(path.read_bytes)

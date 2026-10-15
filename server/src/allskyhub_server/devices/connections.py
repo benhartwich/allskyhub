@@ -20,6 +20,7 @@ from allskyhub_protocol import (
     CommandName,
     Envelope,
     ErrorReply,
+    EventVariant,
     FrameVariant,
     UploadEventArgs,
     UploadFrameArgs,
@@ -157,7 +158,7 @@ class ConnectionRegistry:
         self, device_id: str, night_id: str, event_id: str, variant: FrameVariant
     ) -> bool:
         """Send ``upload_event``; False when the device is not connected."""
-        args = UploadEventArgs(night_id=night_id, event_id=event_id, variant=variant)
+        args = UploadEventArgs(night_id=night_id, event_id=event_id, variant=EventVariant(variant))
         cmd = Command(name=CommandName.UPLOAD_EVENT, args=args.model_dump(mode="json"))
         key = ("event", night_id, event_id, variant)
         return await self._request(device_id, key, cmd, UPLOAD_WINDOW)

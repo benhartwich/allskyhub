@@ -65,7 +65,7 @@ async def test_replaced_picture_is_fetched_again(
     thumb = store.event_path(dev.device_id, NIGHT, AURORA, FrameVariant.THUMB)
     async with device_ws(live_app, token) as ws:
         await send(ws, aurora(1, 0))
-        assert (await expect_request(ws)).variant is FrameVariant.THUMB
+        assert (await expect_request(ws)).variant == FrameVariant.THUMB
         assert await put_thumb(live_app, token, JPEG) == 204
         assert thumb.read_bytes() == JPEG
 
@@ -74,7 +74,7 @@ async def test_replaced_picture_is_fetched_again(
             await asyncio.wait_for(ws.recv(), 0.3)
 
         await send(ws, aurora(2, 10))  # a better frame replaced the picture
-        assert (await expect_request(ws)).variant is FrameVariant.THUMB
+        assert (await expect_request(ws)).variant == FrameVariant.THUMB
         assert not thumb.exists()  # the old one is never served under the new revision
         newer = JPEG + b"\x01"
         assert await put_thumb(live_app, token, newer) == 204

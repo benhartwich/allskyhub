@@ -429,3 +429,7 @@ label.check { display: flex; gap: 8px; align-items: baseline; }
 /* SPEC §6.5 original frame: the event's window outlined (roadmap L28) */
 .original-frame { display: block; width: 100%; height: auto; }
 .original-frame .crop { fill: none; stroke: var(--accent-2); }
+
+/* Command blocks (/allsky) */
+pre { margin: 0; padding: 12px 14px; overflow-x: auto; border-radius: 12px; background: var(--surface-2); border: 1px solid var(--line); }
+pre code { white-space: pre; }

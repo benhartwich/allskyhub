@@ -1,0 +1,113 @@
+{% extends "base.html" %}
+{% block lang %}{{ 'en' if en else 'de' }}{% endblock %}
+{% block title %}{{ 'allskyhub next to Allsky' if en else 'allskyhub neben Allsky' }} · allskyhub{% endblock %}
+{% block content %}
+<div class="page-head">
+  <h1>{{ 'allskyhub next to Allsky' if en else 'allskyhub neben Allsky' }}</h1>
+  <a href="/allsky{{ '' if en else '?lang=en' }}" hreflang="{{ 'de' if en else 'en' }}" lang="{{ 'de' if en else 'en' }}">{{ 'Deutsch' if en else 'English' }}</a>
+</div>
+{% if en %}
+<p class="lead">Your Raspberry Pi already runs <a href="https://github.com/AllskyTeam/allsky" rel="noopener" target="_blank">Allsky ↗</a>? allskyhub installs next to it, without a new SD card. Allsky stays as it is; you switch between the two with one command, because only one program can use the camera at a time.</p>
+{% else %}
+<p class="lead">Auf deinem Raspberry Pi läuft schon <a href="https://github.com/AllskyTeam/allsky" rel="noopener" target="_blank">Allsky ↗</a>? allskyhub lässt sich daneben installieren, ohne neue Speicherkarte. Allsky bleibt, wie es ist; du wechselst mit einem Befehl zwischen beiden, weil immer nur ein Programm die Kamera benutzen kann.</p>
+{% endif %}
+
+<section class="card stack">
+  <h2>{{ 'What you need' if en else 'Was du brauchst' }}</h2>
+  <ul class="features">
+    {% if en %}
+    <li>A Raspberry Pi 4 or 5 with Allsky and a ZWO camera (tested with the ASI678MC) or a Raspberry Pi HQ camera (supported, not yet tested on real hardware)</li>
+    <li>SSH access to the Pi and about 20 minutes</li>
+    <li>An allskyhub account: <a href="/zugang">ask for access</a></li>
+    {% else %}
+    <li>Einen Raspberry Pi 4 oder 5 mit Allsky und einer ZWO-Kamera (getestet mit der ASI678MC) oder der Raspberry-Pi-HQ-Kamera (unterstützt, noch nicht an echter Hardware getestet)</li>
+    <li>SSH-Zugang zum Pi und etwa 20 Minuten</li>
+    <li>Ein allskyhub-Konto: <a href="/zugang">Zugang beantragen</a></li>
+    {% endif %}
+  </ul>
+</section>
+
+<section class="card stack">
+  <h2>1. {{ 'Get allskyhub' if en else 'allskyhub holen' }}</h2>
+  <p class="muted">{{ 'git and the Python tool uv, then the source code:' if en else 'git und das Python-Werkzeug uv, dann den Quellcode:' }}</p>
+<pre><code>sudo apt install -y git
+curl -LsSf https://astral.sh/uv/install.sh | sh
+source ~/.local/bin/env
+git clone https://github.com/benhartwich/allskyhub ~/allskyhub</code></pre>
+</section>
+
+<section class="card stack">
+  <h2>2. {{ 'User and folders' if en else 'Benutzer und Ordner' }}</h2>
+  <p class="muted">{{ 'allskyhub runs as its own user and keeps its pictures in /var/lib/allskyhub-agent.' if en else 'allskyhub läuft als eigener Benutzer und legt seine Bilder unter /var/lib/allskyhub-agent ab.' }}</p>
+<pre><code>sudo useradd --system --home-dir /var/lib/allskyhub-agent --no-create-home \
+  --shell /usr/sbin/nologin --groups video allskyhub
+sudo install -d -o allskyhub -g allskyhub -m 0750 /var/lib/allskyhub-agent /var/lib/allskyhub-agent/data
+sudo install -d /opt/allskyhub-agent/lib /etc/allskyhub-agent</code></pre>
+  <p class="muted">{{ 'With a ZWO camera, also take Allsky’s copy of the ZWO driver:' if en else 'Mit einer ZWO-Kamera zusätzlich Allskys Kopie des ZWO-Treibers übernehmen:' }}</p>
+<pre><code>sudo install -m 0755 ~/allsky/server/assets/asi_sdk/lib/armv8/libASICamera2.so.1.39 /opt/allskyhub-agent/lib/
+sudo ln -sfn libASICamera2.so.1.39 /opt/allskyhub-agent/lib/libASICamera2.so</code></pre>
+  <p class="muted small">{{ 'If the version number differs on your Pi, use the file that is there (ls ~/allsky/server/assets/asi_sdk/lib/armv8/).' if en else 'Steht auf deinem Pi eine andere Versionsnummer, nimm die Datei, die dort liegt (ls ~/allsky/server/assets/asi_sdk/lib/armv8/).' }}</p>
+</section>
+
+<section class="card stack">
+  <h2>3. {{ 'Install' if en else 'Installieren' }}</h2>
+  <p class="muted">{{ 'Builds allskyhub into its own folder; this takes a few minutes on a Pi 4.' if en else 'Baut allskyhub in einen eigenen Ordner; das dauert auf einem Pi 4 ein paar Minuten.' }}</p>
+<pre><code>V=$(git -C ~/allskyhub rev-parse --short=7 HEAD)
+R=/opt/allskyhub-agent/releases/$V
+sudo install -d $R
+cd ~/allskyhub &amp;&amp; sudo env UV_PYTHON_DOWNLOADS=never UV_PROJECT_ENVIRONMENT=$R/.venv \
+  sh -c "$(command -v uv) venv -q --python /usr/bin/python3 $R/.venv &amp;&amp; $(command -v uv) sync -q --frozen --no-dev --no-editable --package allskyhub-agent"
+sudo ln -sfn releases/$V /opt/allskyhub-agent/current</code></pre>
+</section>
+
+<section class="card stack">
+  <h2>4. {{ 'Settings' if en else 'Einstellungen' }}</h2>
+  <p class="muted">{{ 'Your location (decimal degrees), time zone and camera. You can change all of it later on the hub.' if en else 'Dein Standort (Dezimalgrad), Zeitzone und Kamera. Ändern kannst du alles später auf dem Hub.' }}</p>
+<pre><code>echo '{"latitude": 48.14, "longitude": 14.39, "timezone": "Europe/Vienna", "camera": "zwo-asi678mc"}' \
+  | sudo -u allskyhub tee /var/lib/allskyhub-agent/settings.json</code></pre>
+  <p class="muted small">{{ 'With the Raspberry Pi HQ camera write "camera": "rpi-hq".' if en else 'Mit der Raspberry-Pi-HQ-Kamera "camera": "rpi-hq" eintragen.' }}</p>
+<pre><code>echo 'ALLSKYHUB_AGENT_ARGS="--asi-sdk /opt/allskyhub-agent/lib/libASICamera2.so run --data /var/lib/allskyhub-agent/data --settings /var/lib/allskyhub-agent/settings.json --hub https://allskyhub.org --http 0.0.0.0:8080"' \
+  | sudo tee /etc/allskyhub-agent/allskyhub-agent.env</code></pre>
+  <p class="muted small">{{ 'With the HQ camera leave out "--asi-sdk /opt/allskyhub-agent/lib/libASICamera2.so".' if en else 'Mit der HQ-Kamera "--asi-sdk /opt/allskyhub-agent/lib/libASICamera2.so" weglassen.' }}</p>
+</section>
+
+<section class="card stack">
+  <h2>5. {{ 'Service, switching with Allsky' if en else 'Dienst, im Wechsel mit Allsky' }}</h2>
+  <p class="muted">{{ 'Starting allskyhub stops Allsky and the other way round. After a reboot the Pi starts with Allsky as before.' if en else 'Startet allskyhub, stoppt Allsky, und umgekehrt. Nach einem Neustart startet der Pi wie bisher mit Allsky.' }}</p>
+<pre><code>sudo cp ~/allskyhub/image/files/etc/systemd/system/allskyhub-agent.service /etc/systemd/system/
+sudo install -d /etc/systemd/system/allskyhub-agent.service.d
+printf '[Unit]\nConflicts=allsky.service\nAfter=allsky.service\n' \
+  | sudo tee /etc/systemd/system/allskyhub-agent.service.d/allsky-switch.conf
+sudo systemctl daemon-reload</code></pre>
+</section>
+
+<section class="card stack">
+  <h2>6. {{ 'Start and pair' if en else 'Starten und koppeln' }}</h2>
+<pre><code>sudo systemctl start allskyhub-agent</code></pre>
+  {% if en %}
+  <p>Open <code>http://&lt;address-of-your-pi&gt;:8080</code> in a browser on your network. The page shows a pairing code like <code>ABC-DEF</code>; enter it under <a href="/cameras/pair">Pair a camera</a>. The live picture shows up on the hub a minute later.</p>
+  {% else %}
+  <p>Im Browser in deinem Netz <code>http://&lt;Adresse-deines-Pi&gt;:8080</code> öffnen. Die Seite zeigt einen Kopplungscode wie <code>ABC-DEF</code>; den unter <a href="/cameras/pair">Kamera koppeln</a> eingeben. Eine Minute später ist das Livebild auf dem Hub.</p>
+  {% endif %}
+</section>
+
+<section class="card stack">
+  <h2>7. {{ 'Optional: bring your old pictures' if en else 'Optional: alte Bilder mitnehmen' }}</h2>
+  <p class="muted">{{ 'allskyhub takes over Allsky’s nights: images, keograms, star trails, timelapses and meteors. On the same disk it links the files instead of copying them, so it needs hardly any space. First a dry run, then without --dry-run:' if en else 'allskyhub übernimmt Allskys Nächte: Bilder, Keogramme, Sternspuren, Zeitraffer und Meteore. Auf derselben Platte verlinkt es die Dateien statt sie zu kopieren und braucht kaum Platz. Erst ein Probelauf, dann ohne --dry-run:' }}</p>
+<pre><code>sudo /opt/allskyhub-agent/current/.venv/bin/allskyhub-agent import-allsky \
+  --from ~/allsky --data /var/lib/allskyhub-agent/data \
+  --settings /var/lib/allskyhub-agent/settings.json --dry-run</code></pre>
+  <p class="muted small">{{ 'Allsky in another folder: adjust --from. Coming from indi-allsky: import-indi-allsky instead, see the' if en else 'Liegt Allsky woanders, --from anpassen. Von indi-allsky: import-indi-allsky, siehe die' }} <a href="https://github.com/benhartwich/allskyhub/blob/main/docs/install.md#28-take-over-the-pictures-of-an-existing-indi-allsky" rel="noopener" target="_blank">{{ 'guide' if en else 'Anleitung' }} ↗</a>.</p>
+</section>
+
+<section class="card stack">
+  <h2>{{ 'Switching and updating' if en else 'Wechseln und aktualisieren' }}</h2>
+<pre><code>sudo systemctl start allsky            # {{ 'back to Allsky' if en else 'zurück zu Allsky' }}
+sudo systemctl start allskyhub-agent   # {{ 'back to allskyhub' if en else 'wieder allskyhub' }}</code></pre>
+  {% if en %}
+  <p class="muted">Stay with allskyhub after reboots: <code>sudo systemctl disable allsky &amp;&amp; sudo systemctl enable allskyhub-agent</code>. To update, run <code>git -C ~/allskyhub pull</code> and step 3 again, then <code>sudo systemctl restart allskyhub-agent</code>. Note: Allsky starts itself again when the camera is plugged back in.</p>
+  {% else %}
+  <p class="muted">Auch nach Neustarts bei allskyhub bleiben: <code>sudo systemctl disable allsky &amp;&amp; sudo systemctl enable allskyhub-agent</code>. Zum Aktualisieren <code>git -C ~/allskyhub pull</code> und Schritt 3 wiederholen, dann <code>sudo systemctl restart allskyhub-agent</code>. Hinweis: Allsky startet sich selbst wieder, wenn die Kamera neu eingesteckt wird.</p>
+  {% endif %}
+</section>
+{% endblock %}

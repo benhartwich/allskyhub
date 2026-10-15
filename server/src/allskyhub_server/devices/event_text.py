@@ -186,7 +186,7 @@ def event_rows(event: EventRecord) -> list[tuple[str, str]]:
             rows.append(("Blitze in 30 Min.", str(round(flashes))))
         data.pop("storm", None)  # shown as the storm the flash belongs to
         if (li := lightning_li.summary(event)) is not None:
-            rows.append(("Blitzsatellit", li))
+            rows.append(("Blitzsatellit (Quelle: EUMETSAT)", li))
     if event.kind in ("aurora", "nlc"):
         if isinstance(index := data.pop("peak_index", None), int | float):
             rows.append(("Stärke", f"{round(index)} %"))

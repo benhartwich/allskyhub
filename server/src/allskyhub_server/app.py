@@ -61,6 +61,7 @@ from allskyhub_server.web import (
     routes_showers,
 )
 from allskyhub_server.web.deps import LoginRequiredError
+from allskyhub_server.web.image_download import LatestImage
 from allskyhub_server.web.render import render
 from allskyhub_server.web.templating import DESIGN_DIR, STATIC_DIR
 
@@ -298,6 +299,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.state.tles = TleCache()
     app.state.paddle = Paddle(settings)
     app.state.github = GitHub(settings.deploy_repo, checks=settings.deploy_check_names)
+    app.state.latest_image = LatestImage(settings.deploy_repo)
     app.add_middleware(CustomDomainMiddleware, hosts=app.state.hosts)
     app.add_middleware(AccessLogMiddleware)
     _install_error_handlers(app)

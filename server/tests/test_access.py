@@ -200,3 +200,27 @@ async def test_guide_for_existing_allsky_cameras(client: httpx.AsyncClient) -> N
     assert "allskyhub next to Allsky" in en.text
     assert "Conflicts=allsky.service" in en.text
     assert 'href="/allsky"' in (await client.get("/hardware")).text
+
+
+async def test_voucher_and_image_download(app: FastAPI, client: httpx.AsyncClient) -> None:
+    page = (await client.get("/hardware")).text
+    assert "Daniel Nimmervoll" in page
+    assert "<code>allsky</code>" in page
+    r = await client.get("/download/image", follow_redirects=False)
+    assert r.status_code == 302
+    assert r.headers["location"].endswith("/agent-v0.1.3/allskyhub-0.1.3.img.xz")
+    await make_account(client)
+    step = (await client.get("/start", params={"schritt": "image"})).text
+    assert "Image 0.1.3 herunterladen (884 MB)" in step
+    assert "<code>allsky</code>" in (await client.get("/start")).text
+
+
+async def test_without_github_the_download_goes_to_the_releases() -> None:
+    from allskyhub_server.web.image_download import LatestImage
+
+    down = LatestImage(
+        "benhartwich/allskyhub",
+        httpx.AsyncClient(transport=httpx.MockTransport(lambda _: httpx.Response(503))),
+    )
+    assert await down.get() is None
+    assert down.releases_url == "https://github.com/benhartwich/allskyhub/releases/latest"

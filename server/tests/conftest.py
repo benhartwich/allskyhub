@@ -30,6 +30,7 @@ from allskyhub_server.devices.tonight import ForecastCache
 from allskyhub_server.mail.send import MemoryMailer
 from allskyhub_server.models import Base
 from allskyhub_server.settings import Settings
+from allskyhub_server.web.image_download import LatestImage
 
 ALEMBIC_INI = Path(__file__).resolve().parents[1] / "alembic.ini"
 TEST_DB_URL = os.environ.get("ALLSKYHUB_SERVER_TEST_DATABASE_URL")
@@ -93,6 +94,16 @@ async def _clean_tables(request: pytest.FixtureRequest) -> AsyncIterator[None]:
         await conn.execute(text(f"TRUNCATE {tables} RESTART IDENTITY CASCADE"))
 
 
+def _release_answer(request: httpx.Request) -> httpx.Response:
+    base = "https://github.com/benhartwich/allskyhub/releases/download/agent-v0.1.3"
+    return httpx.Response(200, json={"assets": [
+        {"name": "allskyhub-agent-0.1.3-arm64.tar.xz", "size": 48902712,
+         "browser_download_url": f"{base}/allskyhub-agent-0.1.3-arm64.tar.xz"},
+        {"name": "allskyhub-0.1.3.img.xz", "size": 884296468,
+         "browser_download_url": f"{base}/allskyhub-0.1.3.img.xz"},
+    ]})  # fmt: skip
+
+
 @pytest.fixture
 async def app(settings: Settings, engine: AsyncEngine) -> AsyncIterator[FastAPI]:
     application = create_app(settings)
@@ -108,6 +119,10 @@ async def app(settings: Settings, engine: AsyncEngine) -> AsyncIterator[FastAPI]
     # Nor to Open-Meteo: clear skies everywhere.
     application.state.forecast = ForecastCache(
         httpx.AsyncClient(transport=httpx.MockTransport(_forecast_answer))
+    )
+    # Nor to GitHub: the latest release carries image 0.1.3 (web/image_download.py).
+    application.state.latest_image = LatestImage(
+        settings.deploy_repo, httpx.AsyncClient(transport=httpx.MockTransport(_release_answer))
     )
     async with application.router.lifespan_context(application):
         yield application

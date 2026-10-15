@@ -23,6 +23,7 @@
     <p><a href="/allsky">Anleitung für bestehende Allsky-Kameras</a> (<a href="/allsky?lang=en" hreflang="en" lang="en">English</a>)</p>
   </section>
 </div>
+{% include "_daniel.html" %}
 {% include "_hardware_list.html" %}
 
 {% elif step == 'zusammenbau' %}
@@ -44,7 +45,7 @@
 <p class="lead">Die Kamera bekommt ihr Betriebssystem auf der microSD-Karte: Raspberry Pi OS mit allskyhub, fertig eingerichtet.</p>
 <section class="card stack">
   <ol class="howto">
-    <li>Das allskyhub-Image <code>allskyhub-…img.xz</code> herunterladen: <a href="https://github.com/benhartwich/allskyhub/releases/latest" rel="noopener" target="_blank">neueste Version auf GitHub ↗</a> (unter „Assets“).</li>
+    <li>Das allskyhub-Image herunterladen: <a class="button small" href="/download/image">{% if image %}Image {{ image.version }} herunterladen ({{ image.size_mb }} MB){% else %}Image herunterladen{% endif %}</a></li>
     <li>Den <a href="https://www.raspberrypi.com/software/" rel="noopener" target="_blank">Raspberry Pi Imager ↗</a> installieren und starten. Unter „Betriebssystem“ ganz unten „Eigenes Image“ wählen und die heruntergeladene Datei nehmen.</li>
     <li>Die Speicherkarte wählen und schreiben. Die Frage nach eigenen Einstellungen (Benutzer, WLAN) mit „Nein“ beantworten: allskyhub braucht keine.</li>
     <li>Die Karte in den Pi stecken. Fertig für Schritt 4.</li>

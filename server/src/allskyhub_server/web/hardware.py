@@ -13,6 +13,10 @@ from dataclasses import dataclass
 SHOP = "https://www.liquidart-shop.at/de/allsky-kamera/"
 HOUSING = "https://www.liquidart-shop.at/de/Allsky-Kamera-Body.html"
 VIDEOS = "https://youtube.com/playlist?list=PLnMB8sPGVeKcyAOnHKgyQ65RpCEHa47WS"
+# Daniel's voucher, as his shop states it (Benjamin, 2026-10-15: name him and the code).
+VOUCHER = "allsky"
+VOUCHER_FROM = "240 €"
+VOUCHER_OFF = "10 %"
 
 
 @dataclass(frozen=True)

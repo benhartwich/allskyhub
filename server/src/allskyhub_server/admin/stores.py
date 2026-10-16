@@ -56,8 +56,8 @@ TIMEOUT = 20.0
 UPLOAD_TIMEOUT = 600.0  # an App Bundle is some 50 MB
 TRACK = "internal"
 RELEASE_OUT = Path("/var/lib/allskyhub-android/release")  # deploy/android, root-owned
-# The store listing: texts and graphics in the repository (app/store/play), phone
-# screenshots uploaded on the admin page.
+# The store listing: texts, graphics and screenshots in the repository (app/store/play);
+# screenshots uploaded on the admin page take the place of the repository's.
 LISTING = Path(__file__).resolve().parents[4] / "app" / "store" / "play"
 LANGUAGES = ("de-DE", "en-US")  # the first is the default language
 CONTACT_EMAIL = "support@webinx.eu"  # as in the imprint
@@ -828,9 +828,14 @@ class Stores:
     # Store listing
 
     def screenshots(self) -> list[Path]:
-        if not self.screenshot_dir.is_dir():
-            return []
-        return sorted(p for p in self.screenshot_dir.iterdir() if p.suffix in (".png", ".jpg"))
+        """The uploaded phone screenshots, else the repository's (made from the app with
+        sample data, app/test/store)."""
+        for folder in (self.screenshot_dir, self.listing / "screenshots"):
+            if folder.is_dir():
+                found = sorted(p for p in folder.iterdir() if p.suffix in (".png", ".jpg"))
+                if found:
+                    return found
+        return []
 
     def put_screenshots(self, files: list[bytes]) -> None:
         """Replace the phone screenshots (2 to 8, PNG or JPEG, as Play takes them)."""
@@ -850,7 +855,7 @@ class Stores:
                 )
             named.append((f"{i:02d}{suffix}", data))
         self.screenshot_dir.mkdir(mode=0o700, parents=True, exist_ok=True)
-        for old in self.screenshots():
+        for old in self.screenshot_dir.iterdir():  # never the repository's
             old.unlink()
         for name, data in named:
             (self.screenshot_dir / name).write_bytes(data)

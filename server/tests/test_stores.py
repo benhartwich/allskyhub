@@ -437,6 +437,15 @@ def _png(width: int, height: int) -> bytes:
 
 def test_screenshots_must_fit_play(tmp_path: Path) -> None:
     hub = stores.Stores(tmp_path / "store", "benhartwich/allskyhub")
+    repo = hub.screenshots()  # the repository's, made from the app (app/test/store)
+    assert [p.parent.name for p in repo] == ["screenshots"] * len(repo)
+    assert 2 <= len(repo) <= 8
+    for path in repo:
+        size, _ = stores.image_size(path.read_bytes())
+        assert size is not None
+        short, long = sorted(size)
+        assert short >= 320
+        assert long <= min(3840, 2 * short), path.name
     with pytest.raises(stores.StoreError, match="2 bis 8"):
         hub.put_screenshots([_png(1080, 1920)])
     with pytest.raises(stores.StoreError, match="Bild 2 passt nicht"):
@@ -483,6 +492,19 @@ async def test_push_listing(tmp_path: Path) -> None:
         httpx.AsyncClient(transport=httpx.MockTransport(answer)),
     )
     hub.vault.put("play", *stores.parse_play(_play_json()), by="a")
+    real = hub.listing
+    bare = tmp_path / "listing"  # a listing without screenshots
+    for f in [
+        "icon.png",
+        *(
+            f"{lang}/{n}"
+            for lang in stores.LANGUAGES
+            for n in ("title.txt", "short_description.txt", "full_description.txt", "feature.png")
+        ),
+    ]:
+        (bare / f).parent.mkdir(parents=True, exist_ok=True)
+        (bare / f).write_bytes((real / f).read_bytes())
+    hub.listing = bare
     report = await hub.push_listing()
     assert [(s.title, s.state) for s in report.steps] == [
         ("Store-Eintrag de-DE", "ok"),
@@ -491,12 +513,19 @@ async def test_push_listing(tmp_path: Path) -> None:
     ], report.steps
     assert "allskyhub – Allsky-Kamera" in report.steps[0].text
 
-    hub.put_screenshots([_png(1080, 1920)] * 2)
+    hub.listing = real  # with the repository's screenshots
     seen.clear()
     report = await hub.push_listing()
     assert report.ok
     assert len(report.steps) == 2
     uploads = [(p.rsplit("/", 1)[1], t) for m, p, t in seen if m == "POST" and "/listings/" in p]
-    assert uploads.count(("phoneScreenshots", "image/png")) == 4  # two per language
+    shots = len(hub.screenshots())
+    assert uploads.count(("phoneScreenshots", "image/png")) == 2 * shots  # per language
+
+    hub.put_screenshots([_png(1080, 1920)] * 2)  # uploaded ones take their place
+    seen.clear()
+    await hub.push_listing()
+    uploads = [(p.rsplit("/", 1)[1], t) for m, p, t in seen if m == "POST" and "/listings/" in p]
+    assert uploads.count(("phoneScreenshots", "image/png")) == 4
     assert ("featureGraphic", "image/png") in uploads
     assert ("icon", "image/png") in uploads

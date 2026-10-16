@@ -302,7 +302,11 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.state.paddle = Paddle(settings)
     app.state.github = GitHub(settings.deploy_repo, checks=settings.deploy_check_names)
     app.state.latest_image = LatestImage(settings.deploy_repo)
-    app.state.stores = Stores(settings.data_dir / "store", settings.deploy_repo)
+    app.state.stores = Stores(
+        settings.data_dir / "store",
+        settings.deploy_repo,
+        release_out=settings.android_dir / "release",
+    )
     app.add_middleware(CustomDomainMiddleware, hosts=app.state.hosts)
     app.add_middleware(AccessLogMiddleware)
     _install_error_handlers(app)

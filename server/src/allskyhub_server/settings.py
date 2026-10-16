@@ -60,6 +60,8 @@ class Settings(BaseSettings):
     admin_emails: str = ""
     # Where the admin page looks for new versions and their CI (GitHub, public API).
     deploy_repo: str = "benhartwich/allskyhub"
+    # deploy/android: root's Android builds. Root-owned, the hub only reads (android-test/).
+    android_dir: Path = Path("/var/lib/allskyhub-android")
     # Which CI checks must be green before a deploy (name prefixes, comma-separated): the
     # hub's tests, not the Raspberry Pi image build, which takes much longer.
     deploy_checks: str = "check"

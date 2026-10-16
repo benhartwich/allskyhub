@@ -54,6 +54,7 @@ def settings(tmp_path_factory: pytest.TempPathFactory) -> Settings:
         database_url=TEST_DB_URL,
         base_url="http://testserver",
         data_dir=tmp_path_factory.mktemp("data"),
+        android_dir=tmp_path_factory.mktemp("android"),
         session_cookie_secure=False,
         log_format="console",
         adsb=False,

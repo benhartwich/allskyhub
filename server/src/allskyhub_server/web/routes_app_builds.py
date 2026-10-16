@@ -1,6 +1,7 @@
 """The Android test build from the hub's server (deploy/android/README.md).
 
-``deploy/android/allskyhub-android-build.sh`` leaves ``<data_dir>/app-builds/android-test``:
+``deploy/android/allskyhub-android-build.sh`` leaves ``<android_dir>/android-test``, which
+belongs to root (the hub only reads it):
 ``latest.json`` (build number, version, commit, size, SHA-256) and the APK it names. The test
 app asks for ``/app/android/test.json`` and offers an update when the build is newer.
 Public: the app is open source, and Android installs an update only with the same key.
@@ -23,13 +24,13 @@ router = APIRouter()
 APK = re.compile(r"^allskyhub-test-\d{1,9}\.apk$")
 
 
-def _folder(data_dir: Path) -> Path:
-    return data_dir / "app-builds" / "android-test"
+def _folder(android_dir: Path) -> Path:
+    return android_dir / "android-test"
 
 
-def latest(data_dir: Path) -> dict[str, Any] | None:
+def latest(android_dir: Path) -> dict[str, Any] | None:
     try:
-        info = json.loads((_folder(data_dir) / "latest.json").read_text())
+        info = json.loads((_folder(android_dir) / "latest.json").read_text())
     except (OSError, ValueError):
         return None
     if not isinstance(info, dict) or not APK.match(str(info.get("file", ""))):  # pyright: ignore[reportUnknownMemberType, reportUnknownArgumentType]
@@ -39,7 +40,7 @@ def latest(data_dir: Path) -> dict[str, Any] | None:
 
 @router.get("/app/android/test.json")
 async def test_build(settings: SettingsDep) -> Response:
-    info = latest(settings.data_dir)
+    info = latest(settings.android_dir)
     if info is None:
         raise HTTPException(404)
     keys = ("build", "version", "commit", "built_at", "size", "sha256")
@@ -49,7 +50,7 @@ async def test_build(settings: SettingsDep) -> Response:
 
 @router.get("/app/android/allskyhub-test.apk")
 async def test_apk_latest(settings: SettingsDep) -> Response:
-    info = latest(settings.data_dir)
+    info = latest(settings.android_dir)
     if info is None:
         raise HTTPException(404)
     return await test_apk(str(info["file"]), settings)
@@ -57,7 +58,7 @@ async def test_apk_latest(settings: SettingsDep) -> Response:
 
 @router.get("/app/android/{name}")
 async def test_apk(name: str, settings: SettingsDep) -> Response:
-    path = _folder(settings.data_dir) / name
+    path = _folder(settings.android_dir) / name
     if not APK.match(name) or not path.is_file():
         raise HTTPException(404)
     return FileResponse(

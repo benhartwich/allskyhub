@@ -18,8 +18,11 @@ set -euo pipefail
 
 main() {
     local BASE=${ALLSKYHUB_ANDROID_BASE:-/var/lib/allskyhub-android}
-    local KEYS=${ALLSKYHUB_ANDROID_KEYS:-/var/lib/allskyhub-server/android-keys}
-    local OUT=${ALLSKYHUB_ANDROID_OUT:-/var/lib/allskyhub-server/app-builds/android-test}
+    # Everything root writes or trusts lives under BASE, which only root can change. The
+    # hub's data folder is the hub's: whatever root finds there may be a symlink the hub
+    # planted, so root only reads a request and the upload key there, the key as the hub.
+    local KEYS=${ALLSKYHUB_ANDROID_KEYS:-$BASE/keys}
+    local OUT=${ALLSKYHUB_ANDROID_OUT:-$BASE/android-test}
     local HUB_USER=${ALLSKYHUB_HUB_USER:-allskyhub-server}
     local REPO_URL=${ALLSKYHUB_REPO_URL:-https://github.com/benhartwich/allskyhub.git}
     # Pinned by digest (like the SHA-pinned actions): the build sees the test key, so a
@@ -31,17 +34,16 @@ main() {
     local HERE
     HERE=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
     local force=${1:-}
-    # The hub only drops a request into SPOOL (its own folder). Root never writes there:
-    # anything in it may be a symlink the hub planted. Root's answers (state, log,
-    # latest.json, the App Bundles) go to RELEASE, under the root-owned BASE, which the
-    # hub can read but not change.
+    # The hub only drops a request into SPOOL (its own folder). Root's answers (state, log,
+    # latest.json, the App Bundles) go to RELEASE, which the hub can read but not change.
     local SPOOL=${ALLSKYHUB_RELEASE_SPOOL:-/var/lib/allskyhub-server/android-release}
     local RELEASE=${ALLSKYHUB_RELEASE_OUT:-$BASE/release}
     local STORE=${ALLSKYHUB_STORE_DIR:-/var/lib/allskyhub-server/store}
     local REPO=${ALLSKYHUB_DEPLOY_REPO:-/opt/allskyhub-server}
     local ENV_FILE=${ALLSKYHUB_ENV_FILE:-/etc/allskyhub-server/allskyhub-server.env}
 
-    mkdir -p "$BASE" "$BASE/maven-google"
+    install -d -m 755 "$BASE"
+    mkdir -p "$BASE/maven-google"
     exec 9>"$BASE/.lock"
     if [[ $force == --release ]]; then
         # The spool belongs to the hub and is untrusted: only whether a request is there
@@ -67,7 +69,10 @@ main() {
     git -C "$SRC" fetch --quiet origin "$BRANCH"
     local tree
     tree=$(git -C "$SRC" rev-parse FETCH_HEAD:app)
-    if [[ $force == "" && -f $BASE/last-tree && $(cat "$BASE/last-tree") == "$tree" ]]; then
+    # No published build yet (also right after the move into BASE): build even if app/ is
+    # unchanged.
+    if [[ $force == "" && -f $OUT/latest.json && -f $BASE/last-tree &&
+        $(cat "$BASE/last-tree") == "$tree" ]]; then
         exit 0
     fi
     git -C "$SRC" checkout --quiet --force --detach FETCH_HEAD
@@ -86,6 +91,7 @@ main() {
         release_build
         return
     fi
+    move_test_key /var/lib/allskyhub-server/android-keys "$KEYS"
     test_key "$KEYS" "$IMAGE"
 
     docker run --rm --name allskyhub-android-build --cpus 6 --memory 8g \
@@ -106,16 +112,14 @@ main() {
 
     local apk=$SRC/app/build/app/outputs/flutter-apk/app-release.apk
     local name=allskyhub-test-$build.apk
-    mkdir -p "$OUT"
-    install -m 644 -o "$HUB_USER" -g "$HUB_USER" "$apk" "$OUT/$name"
+    install -d -m 755 "$OUT"
+    install -m 644 "$apk" "$OUT/$name"
     local size sha
     size=$(stat -c %s "$apk")
     sha=$(sha256sum "$apk" | cut -d' ' -f1)
     printf '{"build": %d, "version": "%s", "commit": "%s", "built_at": "%s", "size": %d, "sha256": "%s", "file": "%s"}\n' \
         "$build" "$version" "$commit" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$size" "$sha" "$name" \
-        > "$OUT/latest.json.tmp"
-    chown "$HUB_USER:$HUB_USER" "$OUT/latest.json.tmp"
-    mv "$OUT/latest.json.tmp" "$OUT/latest.json"
+        | answer_stdin "$OUT" latest.json
     # The three newest APKs stay, so a download that started before still finishes.
     ls -1t "$OUT"/allskyhub-test-*.apk | tail -n +4 | xargs -r rm -f
     echo "$tree" > "$BASE/last-tree"
@@ -133,7 +137,9 @@ release_build() {
     }
     KEY_TMP=$(mktemp -d)  # global for the EXIT trap
     chmod 700 "$KEY_TMP"
-    python3 - "$STORE/android_upload.secret" "$KEY_TMP" <<'PY'
+    # Read as the hub: the key is the hub's, and a symlink there must not reach root's files.
+    runuser -u "$HUB_USER" -- cat -- "$STORE/android_upload.secret" > "$KEY_TMP/secret.json"
+    python3 - "$KEY_TMP/secret.json" "$KEY_TMP" <<'PY'
 import base64, json, os, sys
 key = json.load(open(sys.argv[1]))
 os.umask(0o077)
@@ -190,8 +196,31 @@ answer_stdin() {  # answer_stdin <root-owned dir> <file>
     mv -f -- "$tmp" "$1/$2"
 }
 
+# Until 2026-10 the test key lay in the hub's data folder. It moves once, and only when that
+# folder and both files are root's own, not symlinks: a replacement the hub put there is
+# left alone and a new key is made.
+move_test_key() {  # move_test_key <old> <new>
+    local old=$1 new=$2 f
+    [[ -e $new/test.keystore ]] && return
+    [[ -d $old && ! -L $old && $(stat -c %u "$old") == 0 ]] || return 0
+    for f in test.keystore keystore.env; do
+        [[ -f $old/$f && ! -L $old/$f && $(stat -c %u "$old/$f") == 0 ]] || return 0
+    done
+    install -d -m 700 "$new"
+    for f in test.keystore keystore.env; do
+        cp -P -- "$old/$f" "$new/$f"
+        if [[ -L $new/$f || ! -f $new/$f ]]; then  # swapped while copying
+            rm -f -- "$new/test.keystore" "$new/keystore.env"
+            return 0
+        fi
+        chmod 600 "$new/$f"
+    done
+    rm -rf -- "$old"
+    echo "Test key moved to $new"
+}
+
 # The test key, made once: test builds update each other only when signed alike. Root
-# only; the hub's backup (rsync of /var/lib/allskyhub-server) keeps it.
+# only, in BASE: back up /var/lib/allskyhub-android/keys with the server.
 test_key() {
     local keys=$1 image=$2
     [[ -f $keys/test.keystore && -f $keys/keystore.env ]] && return

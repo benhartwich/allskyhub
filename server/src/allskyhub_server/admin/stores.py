@@ -12,7 +12,7 @@ repository to Codemagic and puts the build secrets into the app's secure variabl
 group; Codemagic's own signing setup (keystore upload, App Store Connect integration) is
 not needed. Android release builds run on the hub's own server instead
 (deploy/android/allskyhub-android-build.sh --release, started through ``<data>/android-release``
-like a deploy); the root helper hands the App Bundle back to the hub
+like a deploy, answers in ``RELEASE_OUT``); the root helper hands the App Bundle back to the hub
 (``allskyhub-server play-upload``), which sends it to Play's internal test track. Nothing
 here prints or renders a secret: pages and the CLI only see the
 non-secret facts kept next to each one (service account address, key id, fingerprints).
@@ -55,6 +55,7 @@ MAX_UPLOAD = 64 * 1024
 TIMEOUT = 20.0
 UPLOAD_TIMEOUT = 600.0  # an App Bundle is some 50 MB
 TRACK = "internal"
+RELEASE_OUT = Path("/var/lib/allskyhub-android/release")  # deploy/android, root-owned
 # The store listing: texts and graphics in the repository (app/store/play), phone
 # screenshots uploaded on the admin page.
 LISTING = Path(__file__).resolve().parents[4] / "app" / "store" / "play"
@@ -383,11 +384,15 @@ class Stores:
         repo: str,
         client: httpx.AsyncClient | None = None,
         release_dir: Path | None = None,
+        release_out: Path | None = None,
     ) -> None:
         self.vault = Vault(root)
         self.repo = repo
         self._client = client
+        # The hub writes only the request; the root helper answers in a folder of its own
+        # that the hub can read but not change (no symlink tricks on root).
         self.release_dir = release_dir or root.parent / "android-release"
+        self.release_out = release_out or RELEASE_OUT
         self.listing = LISTING
         self.screenshot_dir = root / "screenshots"
 
@@ -730,7 +735,6 @@ class Stores:
         if self.android_job().busy:
             raise StoreError("Es läuft schon ein Android-Build.")
         self.release_dir.mkdir(mode=0o750, parents=True, exist_ok=True)
-        (self.release_dir / "state").write_text("requested\n")
         (self.release_dir / "request").write_text(f"{by}\n")
         self.vault.add_build({"id": "local", "platform": "android", "at": _now(), "by": by})
         log.info("android release requested by %s", by)
@@ -738,7 +742,7 @@ class Stores:
     def android_job(self) -> AndroidJob:
         def read(name: str) -> str:
             try:
-                return (self.release_dir / name).read_text()
+                return (self.release_out / name).read_text()
             except OSError:
                 return ""
 
@@ -758,7 +762,7 @@ class Stores:
         return AndroidJob(state, "\n".join(read("log").splitlines()[-LOG_TAIL:]), latest)
 
     def aab(self, name: str) -> Path | None:
-        path = self.release_dir / name
+        path = self.release_out / name
         ok = re.fullmatch(r"allskyhub-\d+\.aab", name) and path.is_file()
         return path if ok else None
 

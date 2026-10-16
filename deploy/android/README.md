@@ -41,8 +41,11 @@ Admin page → App-Stores → "Android-Release bauen" leaves a request in
   only: then roll it out in the Play Console. The very first bundle of a new app must be
   uploaded by hand there; the admin page links the file.
 
-State (`requested`, `running`, `ok`, `built` = first upload by hand, `failed`) and log
-are in the same folder and on the admin page.
+The hub only drops `request` into its folder; root never writes there (anything in a
+folder the hub owns could be a symlink). The answers, state (`running`, `ok`, `built` =
+first upload by hand, `failed`), log, `latest.json` and the newest three App Bundles,
+go to `/var/lib/allskyhub-android/release/` (root, 0755, files 0644, each replaced by
+`mv`), which the hub reads for the admin page.
 
 ## Why a proxy for Google's Maven repository
 

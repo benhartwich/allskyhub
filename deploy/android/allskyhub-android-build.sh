@@ -31,7 +31,12 @@ main() {
     local HERE
     HERE=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
     local force=${1:-}
+    # The hub only drops a request into SPOOL (its own folder). Root never writes there:
+    # anything in it may be a symlink the hub planted. Root's answers (state, log,
+    # latest.json, the App Bundles) go to RELEASE, under the root-owned BASE, which the
+    # hub can read but not change.
     local SPOOL=${ALLSKYHUB_RELEASE_SPOOL:-/var/lib/allskyhub-server/android-release}
+    local RELEASE=${ALLSKYHUB_RELEASE_OUT:-$BASE/release}
     local STORE=${ALLSKYHUB_STORE_DIR:-/var/lib/allskyhub-server/store}
     local REPO=${ALLSKYHUB_DEPLOY_REPO:-/opt/allskyhub-server}
     local ENV_FILE=${ALLSKYHUB_ENV_FILE:-/etc/allskyhub-server/allskyhub-server.env}
@@ -41,13 +46,15 @@ main() {
     if [[ $force == --release ]]; then
         # The spool belongs to the hub and is untrusted: only whether a request is there
         # counts. A test build may be running; wait for it.
-        [[ -f $SPOOL/request ]] || exit 0
-        rm -f -- "$SPOOL/request"
-        release_log_start "$SPOOL" "$HUB_USER"
-        exec >> "$SPOOL/log" 2>&1
-        answer "$SPOOL" "$HUB_USER" state running
+        [[ -e $SPOOL/request || -L $SPOOL/request ]] || exit 0
+        runuser -u "$HUB_USER" -- rm -f -- "$SPOOL/request"
+        install -d -m 755 "$RELEASE"
+        rm -f -- "$RELEASE/log"
+        exec >> "$RELEASE/log" 2>&1
+        chmod 644 "$RELEASE/log"
+        answer "$RELEASE" state running
         set -E  # the ERR trap also in functions
-        trap 'answer "$SPOOL" "$HUB_USER" state failed; echo "FEHLER beim Bauen."' ERR
+        trap 'answer "$RELEASE" state failed; echo "FEHLER beim Bauen."' ERR
         flock -w 10800 9
     else
         flock -n 9 || exit 0
@@ -121,7 +128,7 @@ main() {
 release_build() {
     [[ -f $STORE/android_upload.secret ]] || {
         echo 'FEHLER: Kein Upload-Schlüssel, erst auf der Admin-Seite „Prüfen und einrichten“.'
-        answer "$SPOOL" "$HUB_USER" state failed
+        answer "$RELEASE" state failed
         return
     }
     KEY_TMP=$(mktemp -d)  # global for the EXIT trap
@@ -152,36 +159,35 @@ PY
 
     local aab=$SRC/app/build/app/outputs/bundle/release/app-release.aab
     local name=allskyhub-$build.aab
-    install -m 640 -o "$HUB_USER" -g "$HUB_USER" "$aab" "$SPOOL/$name"
+    install -m 644 "$aab" "$RELEASE/$name"
     printf '{"build": %d, "version": "%s", "commit": "%s", "built_at": "%s", "size": %d, "file": "%s"}\n' \
         "$build" "$version" "$commit" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$(stat -c %s "$aab")" "$name" \
-        > "$SPOOL/latest.json"
-    chown "$HUB_USER:$HUB_USER" "$SPOOL/latest.json"
-    ls -1t "$SPOOL"/allskyhub-*.aab | tail -n +4 | xargs -r rm -f
+        | answer_stdin "$RELEASE" latest.json
+    ls -1t "$RELEASE"/allskyhub-*.aab | tail -n +4 | xargs -r rm -f
     echo "$name gebaut ($(stat -c %s "$aab") Bytes). Hochladen zu Google Play …"
 
     trap - ERR
     local result=0
     sudo -u "$HUB_USER" bash -c \
         'set -a; . "$1"; exec "$2/.venv/bin/allskyhub-server" play-upload "$3"' \
-        _ "$ENV_FILE" "$REPO" "$SPOOL/$name" || result=$?
+        _ "$ENV_FILE" "$REPO" "$RELEASE/$name" || result=$?
     case $result in
-        0) answer "$SPOOL" "$HUB_USER" state ok ;;
-        3) answer "$SPOOL" "$HUB_USER" state built ;;  # the first upload goes by hand
-        *) answer "$SPOOL" "$HUB_USER" state failed ;;
+        0) answer "$RELEASE" state ok ;;
+        3) answer "$RELEASE" state built ;;  # the first upload goes by hand
+        *) answer "$RELEASE" state failed ;;
     esac
 }
 
-release_log_start() {  # release_log_start <spool> <user>
-    : > "$1/log"
-    chown "$2:$2" "$1/log"
-    chmod 640 "$1/log"
+answer() {  # answer <root-owned dir> <file> <text>: replaced atomically, readable by all
+    printf '%s\n' "$3" | answer_stdin "$1" "$2"
 }
 
-answer() {  # answer <spool> <user> <file> <text>
-    printf '%s\n' "$4" > "$1/$3"
-    chown "$2:$2" "$1/$3"
-    chmod 640 "$1/$3"
+answer_stdin() {  # answer_stdin <root-owned dir> <file>
+    local tmp
+    tmp=$(mktemp "$1/.$2.XXXXXX")
+    cat > "$tmp"
+    chmod 644 "$tmp"
+    mv -f -- "$tmp" "$1/$2"
 }
 
 # The test key, made once: test builds update each other only when signed alike. Root

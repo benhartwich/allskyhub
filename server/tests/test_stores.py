@@ -385,7 +385,8 @@ async def test_android_release_through_the_spool(
 ) -> None:
     email = await make_account(client)
     monkeypatch.setattr(settings, "admin_emails", email)
-    hub = stores.Stores(tmp_path / "store", "benhartwich/allskyhub")
+    out = tmp_path / "out"  # the root helper's own folder
+    hub = stores.Stores(tmp_path / "store", "benhartwich/allskyhub", release_out=out)
     monkeypatch.setattr(app.state, "stores", hub)
     token = csrf_from((await client.get("/admin")).text)
     build = {"csrf_token": token, "platform": "android"}
@@ -402,13 +403,17 @@ async def test_android_release_through_the_spool(
     assert "Android-Release bauen" not in r.text  # one at a time
     assert (await client.post("/admin/stores-build", data=build)).status_code == 400
 
-    # The root helper took the request, built and could not upload yet.
+    assert [p.name for p in spool.iterdir()] == ["request"]  # all the hub writes there
+
+    # The root helper took the request, built and could not upload yet; it answers in
+    # its own folder, never in the hub's.
     (spool / "request").unlink()
-    (spool / "state").write_text("built\n")
-    (spool / "log").write_text("allskyhub-412.aab gebaut.\nGoogle kennt die App noch nicht.\n")
-    (spool / "allskyhub-412.aab").write_bytes(b"bundle")
+    out.mkdir()
+    (out / "state").write_text("built\n")
+    (out / "log").write_text("allskyhub-412.aab gebaut.\nGoogle kennt die App noch nicht.\n")
+    (out / "allskyhub-412.aab").write_bytes(b"bundle")
     latest = {"build": 412, "version": "1.0.0", "commit": "abc1234", "size": 6}
-    (spool / "latest.json").write_text(json.dumps({**latest, "file": "allskyhub-412.aab"}))
+    (out / "latest.json").write_text(json.dumps({**latest, "file": "allskyhub-412.aab"}))
     page = await client.get("/admin")
     assert "gebaut, erstes Hochladen von Hand" in page.text
     assert "Google kennt die App noch nicht." in page.text

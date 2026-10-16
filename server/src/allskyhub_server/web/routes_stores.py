@@ -109,8 +109,13 @@ async def push_listing(
 ) -> Response:
     admin_only(session, settings)
     stores: admin_stores.Stores = request.app.state.stores
-    report = await stores.push_listing()
-    return await page(request, db, session, store_report=report)
+    if not stores.start_listing(session.user.email):
+        return await page(request, db, session, 409, error="Die Übertragung läuft noch.")
+    return await page(
+        request, db, session,
+        notice="Übertragung zu Google Play gestartet; sie dauert gut eine Minute. Danach die "
+        "Seite neu laden, das Ergebnis steht unter „Store-Eintrag bei Google Play“.",
+    )  # fmt: skip
 
 
 @router.post("/admin/stores-setup")

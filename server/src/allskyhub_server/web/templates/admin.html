@@ -147,6 +147,16 @@
     <label>Handy-Screenshots (2 bis 8, PNG oder JPEG)<input type="file" name="files" accept="image/png,image/jpeg" multiple required></label>
     <button type="submit" class="secondary">Screenshots hochladen</button>
   </form>
+  {% if listing %}
+  <p class="small"><strong>Letzte Übertragung</strong> <span class="muted">{{ listing.at[:16] | replace('T', ' ') }} UTC</span>{% if listing.running %} · läuft …{% endif %}</p>
+  {% if listing.steps %}
+  <ul class="parts">
+    {% for step in listing.steps %}
+    <li><strong class="{{ '' if step.state == 'ok' else 'warn' }}">{{ {'ok': '✓', 'warn': '!', 'fail': '✕'}[step.state] }} {{ step.title }}</strong><span>{{ step.text }}</span></li>
+    {% endfor %}
+  </ul>
+  {% endif %}
+  {% endif %}
   <form method="post" action="/admin/stores-listing" class="inline">
     <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
     <button type="submit" class="secondary">Store-Eintrag übertragen</button>

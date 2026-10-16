@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import base64
 import json
 from pathlib import Path
@@ -529,3 +530,52 @@ async def test_push_listing(tmp_path: Path) -> None:
     assert uploads.count(("phoneScreenshots", "image/png")) == 4
     assert ("featureGraphic", "image/png") in uploads
     assert ("icon", "image/png") in uploads
+
+
+async def test_listing_runs_in_the_background(
+    app: FastAPI,
+    client: httpx.AsyncClient,
+    settings: Settings,
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    """A push takes longer than nginx waits (60 s): the page answers at once and shows
+    the result once it is there."""
+    gate = asyncio.Event()
+
+    async def answer(request: httpx.Request) -> httpx.Response:
+        if request.url.host == "oauth2.googleapis.com":
+            await gate.wait()
+            return httpx.Response(200, json={"access_token": "t"})
+        return httpx.Response(404, json={"error": {"message": "Package not found"}})
+
+    email = await make_account(client)
+    monkeypatch.setattr(settings, "admin_emails", email)
+    hub = stores.Stores(
+        tmp_path / "store", "benhartwich/allskyhub",
+        httpx.AsyncClient(transport=httpx.MockTransport(answer)),
+    )  # fmt: skip
+    hub.vault.put("play", *stores.parse_play(_play_json()), by="a")
+    monkeypatch.setattr(app.state, "stores", hub)
+    token = csrf_from((await client.get("/admin")).text)
+
+    r = await client.post("/admin/stores-listing", data={"csrf_token": token})
+    assert r.status_code == 200
+    assert "gestartet" in r.text
+    assert "läuft …" in (await client.get("/admin")).text
+    again = await client.post("/admin/stores-listing", data={"csrf_token": token})
+    assert again.status_code == 409
+
+    gate.set()
+    for _ in range(100):
+        state = hub.listing_state()
+        if state and not state.get("running"):
+            break
+        await asyncio.sleep(0.01)
+    page = (await client.get("/admin")).text
+    assert "läuft …" not in page
+    assert "erst das erste App Bundle von Hand hochladen" in page
+
+    # Running in the file but no task here: the hub restarted during a push.
+    hub.vault.write_json("listing.json", {"at": "2026-10-16T07:39:00+00:00", "running": True})
+    assert "neu gestartet" in (await client.get("/admin")).text

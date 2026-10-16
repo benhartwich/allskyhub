@@ -216,6 +216,11 @@ async def test_overflight_page_and_summary(
     event_page = await client.get(link.group(1).replace("&amp;", "&"))
     assert "<h1>Unbekanntes Objekt</h1>" in event_page.text
     assert f'href="/cameras/{dev.device_id}/ueberfluege?nacht={NIGHT}"' in event_page.text
+    # The night page (where the morning summary leads) and the camera page link them.
+    night = await client.get(f"/cameras/{dev.device_id}/nights/{NIGHT}")
+    assert f'href="/cameras/{dev.device_id}/ueberfluege?nacht={NIGHT}">2 Überflüge' in night.text
+    camera = await client.get(f"/cameras/{dev.device_id}")
+    assert f'href="/cameras/{dev.device_id}/ueberfluege">Überflüge</a>' in camera.text
     empty = await client.get(f"/cameras/{dev.device_id}/ueberfluege", params={"nacht": "20261001"})
     assert "Keine Überflüge" in empty.text
 

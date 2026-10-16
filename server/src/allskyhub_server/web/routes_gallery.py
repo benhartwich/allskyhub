@@ -96,9 +96,9 @@ async def night(
     request: Request, db: DbSession, session: CurrentSession, device_id: str, night_id: NightId
 ) -> Response:
     device = await _own(db, session, device_id)
-    night_events = await events.events(
-        db, device.id, night_id=night_id, limit=2000, hide_false=True
-    )
+    all_events = await events.events(db, device.id, night_id=night_id, limit=2000)
+    # Overflights are dismissed meteors (SPEC §6.4): apart from the night's events, linked.
+    night_events = [e for e in all_events if not events.dismissed(e)]
     return render(
         request,
         "night.html",
@@ -114,6 +114,7 @@ async def night(
             "products": await archive.night_products(db, device.id, night_id),
             "events": events.collapse(night_events),
             "meteors": meteor_summary(night_events),
+            "overflights": events.overflight_count(all_events),
             "titles": PRODUCT_TITLES,
             "event_titles": EVENT_TITLES,
         },

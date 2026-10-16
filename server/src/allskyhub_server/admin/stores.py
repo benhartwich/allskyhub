@@ -888,7 +888,12 @@ class Stores:
         self.vault.write_json("listing.json", {"at": _now(), "by": by, "running": True})
 
         async def run() -> Report:
-            report = await self.push_listing()
+            try:
+                report = await self.push_listing()
+            except Exception:  # a bug, not Google: say so instead of "restarted"
+                log.exception("store listing push failed")
+                report = Report()
+                report.add("Store-Eintrag", "fail", "Interner Fehler, siehe Log des Hubs.")
             steps = [{"title": x.title, "state": x.state, "text": x.text} for x in report.steps]
             self.vault.write_json("listing.json", {"at": _now(), "by": by, "steps": steps})
             log.info(

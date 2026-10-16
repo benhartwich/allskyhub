@@ -15,9 +15,12 @@ Signed release APKs of the app for testing, built on the hub's server instead of
 - The test app has the id `org.allskyhub.app.test` and the name "allskyhub Test", so it
   installs next to the store app.
 - Signed with the server's test key, made on the first run:
-  `/var/lib/allskyhub-server/android-keys/` (root only; the server backup includes it). An
-  update installs only with the same key: if it is lost, testers uninstall once.
-- Published in `/var/lib/allskyhub-server/app-builds/android-test/` and served by the hub:
+  `/var/lib/allskyhub-android/keys/` (root only). **Add this folder to the server's
+  backup**: an update installs only with the same key, and if it is lost, testers uninstall
+  once. Until 2026-10 the key lay in `/var/lib/allskyhub-server/android-keys/`; the script
+  moves it on its first run.
+- Published in `/var/lib/allskyhub-android/android-test/` (root, 0755, files 0644) and
+  served by the hub, which only reads it (setting `ALLSKYHUB_SERVER_ANDROID_DIR`):
   - `https://allskyhub.org/app/android/allskyhub-test.apk`, the newest APK (for the first
     install),
   - `https://allskyhub.org/app/android/test.json`, read by the test app at start; when the
@@ -71,6 +74,13 @@ cp /opt/allskyhub-server/deploy/systemd/allskyhub-android-release.{path,service}
 systemctl daemon-reload
 systemctl enable --now allskyhub-android-release.path
 ```
+
+Root never writes into the hub's data folder `/var/lib/allskyhub-server` and never trusts
+anything there: the hub owns it, so any name in it may be a symlink the hub planted. Root
+only reads the release request and, as the hub's user, the upload key. Everything root
+writes or relies on (source, caches, keys, builds, answers) lives in
+`/var/lib/allskyhub-android`, which the hub can read but not change. The old
+`/var/lib/allskyhub-server/app-builds/` can be deleted after the first build in the new place.
 
 Force a build without an app change: `/opt/allskyhub-server/deploy/android/allskyhub-android-build.sh --force`.
 

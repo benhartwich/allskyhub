@@ -177,7 +177,11 @@ def _cmd_play_upload(args: argparse.Namespace) -> int:
     from allskyhub_server.admin.stores import Stores
 
     settings = get_settings()
-    stores = Stores(settings.data_dir / "store", settings.deploy_repo)
+    stores = Stores(
+        settings.data_dir / "store",
+        settings.deploy_repo,
+        release_out=settings.android_dir / "release",
+    )
     code, text = asyncio.run(stores.play_upload(Path(args.aab)))
     print(text, file=sys.stderr if code == 1 else sys.stdout)
     return code

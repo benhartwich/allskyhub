@@ -579,3 +579,21 @@ async def test_listing_runs_in_the_background(
     # Running in the file but no task here: the hub restarted during a push.
     hub.vault.write_json("listing.json", {"at": "2026-10-16T07:39:00+00:00", "running": True})
     assert "neu gestartet" in (await client.get("/admin")).text
+
+
+async def test_a_failing_listing_push_says_so(tmp_path: Path) -> None:
+    hub = stores.Stores(tmp_path / "store", "benhartwich/allskyhub")
+
+    async def boom() -> stores.Report:
+        raise RuntimeError("bug")
+
+    hub.push_listing = boom  # type: ignore[method-assign]
+    assert hub.start_listing("a")
+    state = hub.listing_state()
+    for _ in range(100):
+        state = hub.listing_state()
+        if state and not state.get("running"):
+            break
+        await asyncio.sleep(0.01)
+    assert state
+    assert state["steps"][0]["text"] == "Interner Fehler, siehe Log des Hubs."

@@ -106,6 +106,7 @@ async def page(
                 "idle": "fertig",
             },
             "android_key": stores.vault.has("android_upload"),
+            "screenshots": len(stores.screenshots()),
             "build_url": admin_stores.build_url,
             "package": admin_stores.PACKAGE,
             **extra,

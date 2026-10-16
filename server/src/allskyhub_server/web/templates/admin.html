@@ -138,6 +138,20 @@
   <p class="muted small">Beide bauen <code>main</code>. Android baut dieser Server als App Bundle und lädt es selbst in den internen Test bei Google Play; iOS baut Codemagic und schickt es nach TestFlight.</p>
   {% endif %}
 
+  {% if stores[0].meta %}
+  <h3>Store-Eintrag bei Google Play</h3>
+  <p class="muted small">Titel, Beschreibungen (Deutsch und Englisch), Icon und Grafik kommen aus dem Repository (<code>app/store/play</code>), die Handy-Screenshots von hier. Kontakt: support@webinx.eu, allskyhub.org. Screenshots: {{ screenshots or 'noch keine' }}.</p>
+  <form method="post" action="/admin/stores-screenshots" enctype="multipart/form-data" class="stack">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <label>Handy-Screenshots (2 bis 8, PNG oder JPEG)<input type="file" name="files" accept="image/png,image/jpeg" multiple required></label>
+    <button type="submit" class="secondary">Screenshots hochladen</button>
+  </form>
+  <form method="post" action="/admin/stores-listing" class="inline">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <button type="submit" class="secondary">Store-Eintrag übertragen</button>
+  </form>
+  {% endif %}
+
   <details>
     <summary>Zugänge hochladen</summary>
     <form method="post" action="/admin/stores/play" enctype="multipart/form-data" class="stack">

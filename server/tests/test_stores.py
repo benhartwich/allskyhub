@@ -418,3 +418,76 @@ async def test_android_release_through_the_spool(
     assert r.content == b"bundle"
     assert (await client.get("/admin/stores-android/latest.json")).status_code == 404
     assert (await client.get("/admin/stores-android/..%2Fstore%2Fplay.secret")).status_code == 404
+
+
+def _png(width: int, height: int) -> bytes:
+    """Enough of a PNG for its size: signature and IHDR."""
+    ihdr = width.to_bytes(4) + height.to_bytes(4) + b"\x08\x06\x00\x00\x00"
+    return b"\x89PNG\r\n\x1a\n" + len(ihdr).to_bytes(4) + b"IHDR" + ihdr + b"\x00" * 4
+
+
+def test_screenshots_must_fit_play(tmp_path: Path) -> None:
+    hub = stores.Stores(tmp_path / "store", "benhartwich/allskyhub")
+    with pytest.raises(stores.StoreError, match="2 bis 8"):
+        hub.put_screenshots([_png(1080, 1920)])
+    with pytest.raises(stores.StoreError, match="Bild 2 passt nicht"):
+        hub.put_screenshots([_png(1080, 1920), _png(1080, 2400)])  # longer than 2:1
+    with pytest.raises(stores.StoreError, match="kein PNG"):
+        hub.put_screenshots([_png(1080, 1920), b"GIF89a"])
+    hub.put_screenshots([_png(1080, 1920)] * 3)
+    assert [p.name for p in hub.screenshots()] == ["01.png", "02.png", "03.png"]
+    hub.put_screenshots([_png(1080, 1920)] * 2)
+    assert len(hub.screenshots()) == 2  # replaced, not added
+
+
+async def test_push_listing(tmp_path: Path) -> None:
+    seen: list[tuple[str, str, str]] = []
+
+    def answer(request: httpx.Request) -> httpx.Response:
+        path = request.url.path
+        seen.append((request.method, path, request.headers.get("content-type", "")))
+        if request.url.host == "oauth2.googleapis.com":
+            return httpx.Response(200, json={"access_token": "t"})
+        if path.endswith("/edits"):
+            return httpx.Response(200, json={"id": "E1"})
+        if path.endswith("/edits/E1/details"):
+            assert json.loads(request.content)["contactEmail"] == stores.CONTACT_EMAIL
+            return httpx.Response(200, json={})
+        if path.endswith(("/listings/de-DE", "/listings/en-US")) and request.method == "PUT":
+            texts = json.loads(request.content)
+            assert len(texts["title"]) <= 30
+            assert len(texts["shortDescription"]) <= 80
+            assert len(texts["fullDescription"]) <= 4000
+            return httpx.Response(200, json=texts)
+        if request.method == "DELETE":
+            return httpx.Response(200, json={"deleted": []})
+        if "/listings/" in path and request.method == "POST":
+            assert path.startswith("/upload/")
+            return httpx.Response(200, json={"image": {"id": "I"}})
+        if path.endswith("/edits/E1:commit"):
+            return httpx.Response(200, json={})
+        return httpx.Response(500, json={"error": {"message": f"unexpected {path}"}})
+
+    hub = stores.Stores(
+        tmp_path / "store",
+        "benhartwich/allskyhub",
+        httpx.AsyncClient(transport=httpx.MockTransport(answer)),
+    )
+    hub.vault.put("play", *stores.parse_play(_play_json()), by="a")
+    report = await hub.push_listing()
+    assert [(s.title, s.state) for s in report.steps] == [
+        ("Store-Eintrag de-DE", "ok"),
+        ("Store-Eintrag en-US", "ok"),
+        ("Screenshots", "warn"),
+    ], report.steps
+    assert "allskyhub – Allsky-Kamera" in report.steps[0].text
+
+    hub.put_screenshots([_png(1080, 1920)] * 2)
+    seen.clear()
+    report = await hub.push_listing()
+    assert report.ok
+    assert len(report.steps) == 2
+    uploads = [(p.rsplit("/", 1)[1], t) for m, p, t in seen if m == "POST" and "/listings/" in p]
+    assert uploads.count(("phoneScreenshots", "image/png")) == 4  # two per language
+    assert ("featureGraphic", "image/png") in uploads
+    assert ("icon", "image/png") in uploads

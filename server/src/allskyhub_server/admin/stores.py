@@ -41,6 +41,8 @@ from cryptography.hazmat.primitives.asymmetric.utils import decode_dss_signature
 from cryptography.hazmat.primitives.serialization import pkcs12
 from cryptography.x509.oid import NameOID
 
+from allskyhub_server.devices.images import jpeg_size
+
 log = logging.getLogger(__name__)
 
 PACKAGE = "org.allskyhub.app"  # Android application id and iOS bundle id
@@ -53,6 +55,14 @@ MAX_UPLOAD = 64 * 1024
 TIMEOUT = 20.0
 UPLOAD_TIMEOUT = 600.0  # an App Bundle is some 50 MB
 TRACK = "internal"
+# The store listing: texts and graphics in the repository (app/store/play), phone
+# screenshots uploaded on the admin page.
+LISTING = Path(__file__).resolve().parents[4] / "app" / "store" / "play"
+LANGUAGES = ("de-DE", "en-US")  # the first is the default language
+CONTACT_EMAIL = "support@webinx.eu"  # as in the imprint
+CONTACT_WEBSITE = "https://allskyhub.org"
+SCREENSHOTS = (2, 8)
+SCREENSHOT_MAX = 8 * 1024 * 1024
 LOG_TAIL = 60
 
 CODEMAGIC = "https://codemagic.io/api/v3"
@@ -378,6 +388,8 @@ class Stores:
         self.repo = repo
         self._client = client
         self.release_dir = release_dir or root.parent / "android-release"
+        self.listing = LISTING
+        self.screenshot_dir = root / "screenshots"
 
     def _http(self) -> httpx.AsyncClient:
         return self._client or httpx.AsyncClient(timeout=TIMEOUT)
@@ -808,6 +820,137 @@ class Stores:
                 "(Interner Test → Release prüfen → Einführen)."
             )
         return 0, f"Version {code} ist im internen Test."
+
+    # Store listing
+
+    def screenshots(self) -> list[Path]:
+        if not self.screenshot_dir.is_dir():
+            return []
+        return sorted(p for p in self.screenshot_dir.iterdir() if p.suffix in (".png", ".jpg"))
+
+    def put_screenshots(self, files: list[bytes]) -> None:
+        """Replace the phone screenshots (2 to 8, PNG or JPEG, as Play takes them)."""
+        low, high = SCREENSHOTS
+        if not low <= len(files) <= high:
+            raise StoreError(f"Google Play nimmt {low} bis {high} Screenshots.")
+        named: list[tuple[str, bytes]] = []
+        for i, data in enumerate(files, 1):
+            size, suffix = image_size(data)
+            if size is None:
+                raise StoreError(f"Bild {i} ist kein PNG oder JPEG.")
+            short, long = sorted(size)
+            if len(data) > SCREENSHOT_MAX or short < 320 or long > 3840 or long > 2 * short:
+                raise StoreError(
+                    f"Bild {i} passt nicht: 320 bis 3840 Pixel, die lange Seite höchstens "
+                    "doppelt so lang wie die kurze, bis 8 MB."
+                )
+            named.append((f"{i:02d}{suffix}", data))
+        self.screenshot_dir.mkdir(mode=0o700, parents=True, exist_ok=True)
+        for old in self.screenshots():
+            old.unlink()
+        for name, data in named:
+            (self.screenshot_dir / name).write_bytes(data)
+
+    def listing_texts(self, language: str) -> dict[str, str]:
+        folder = self.listing / language
+        return {
+            "language": language,
+            "title": (folder / "title.txt").read_text().strip(),
+            "shortDescription": (folder / "short_description.txt").read_text().strip(),
+            "fullDescription": (folder / "full_description.txt").read_text().strip(),
+        }
+
+    async def push_listing(self) -> Report:
+        """Texts, icon, feature graphic and screenshots of every language to Play."""
+        report = Report()
+        if not self.vault.has("play"):
+            report.add("Store-Eintrag", "warn", "Kein Google-Play-Dienstkonto hinterlegt.")
+            return report
+        client = self._client or httpx.AsyncClient(timeout=UPLOAD_TIMEOUT)
+        try:
+            await self._push_listing(client, report)
+        except StoreError as exc:
+            report.add("Store-Eintrag", "fail", str(exc))
+        except httpx.HTTPError as exc:
+            report.add(
+                "Store-Eintrag", "fail", f"Google Play nicht erreichbar ({type(exc).__name__})."
+            )
+        finally:
+            await self._close(client)
+        return report
+
+    async def _push_listing(self, client: httpx.AsyncClient, report: Report) -> None:
+        auth = {"Authorization": f"Bearer {await self._play_token(client)}"}
+        app = f"{PLAY}/applications/{PACKAGE}"
+        r = await client.post(f"{app}/edits", headers=auth)
+        if r.status_code == 404:
+            raise StoreError(
+                "Google kennt die App über die Schnittstelle noch nicht: erst das erste App "
+                "Bundle von Hand hochladen."
+            )
+        if r.status_code != 200:
+            raise StoreError(f"Bearbeitung nicht möglich ({_message(r)}).")
+        edit = f"{app}/edits/{_dict(r.json())['id']}"
+        upload = f"{PLAY_UPLOAD}/applications/{PACKAGE}/edits/{_dict(r.json())['id']}"
+        details = {
+            "defaultLanguage": LANGUAGES[0],
+            "contactEmail": CONTACT_EMAIL,
+            "contactWebsite": CONTACT_WEBSITE,
+        }
+        r = await client.put(f"{edit}/details", json=details, headers=auth)
+        if r.status_code != 200:
+            raise StoreError(f"Kontaktdaten abgelehnt ({_message(r)}).")
+        shots = self.screenshots()
+        for language in LANGUAGES:
+            texts = self.listing_texts(language)
+            r = await client.put(f"{edit}/listings/{language}", json=texts, headers=auth)
+            if r.status_code != 200:
+                raise StoreError(f"Texte {language} abgelehnt ({_message(r)}).")
+            images: list[tuple[str, Path]] = [
+                ("icon", self.listing / "icon.png"),
+                ("featureGraphic", self.listing / language / "feature.png"),
+                *(("phoneScreenshots", p) for p in shots),
+            ]
+            for kind in dict.fromkeys(k for k, _ in images):
+                r = await client.delete(f"{edit}/listings/{language}/{kind}", headers=auth)
+                if r.status_code not in (200, 204, 404):
+                    raise StoreError(f"{kind} {language}: {_message(r)}")
+            for kind, path in images:
+                data = await asyncio.to_thread(path.read_bytes)
+                kind_type = "image/png" if path.suffix == ".png" else "image/jpeg"
+                r = await client.post(
+                    f"{upload}/listings/{language}/{kind}",
+                    params={"uploadType": "media"},
+                    content=data,
+                    headers={**auth, "Content-Type": kind_type},
+                )
+                if r.status_code != 200:
+                    raise StoreError(f"{kind} {language} abgelehnt ({_message(r)}).")
+            report.add(
+                f"Store-Eintrag {language}",
+                "ok",
+                f"„{texts['title']}“: Texte, Icon, Grafik"
+                + (f" und {len(shots)} Screenshots" if shots else ", noch ohne Screenshots"),
+            )
+        r = await client.post(f"{edit}:commit", headers=auth)
+        if r.status_code != 200:
+            raise StoreError(f"Abschließen abgelehnt ({_message(r)}).")
+        if len(shots) < SCREENSHOTS[0]:
+            report.add(
+                "Screenshots",
+                "warn",
+                "Für die Veröffentlichung braucht Google mindestens zwei Handy-Screenshots: "
+                "unten hochladen und den Store-Eintrag noch einmal übertragen.",
+            )
+
+
+def image_size(data: bytes) -> tuple[tuple[int, int] | None, str]:
+    """(width, height) and suffix of a PNG or JPEG, (None, "") for anything else."""
+    if data.startswith(b"\x89PNG\r\n\x1a\n") and data[12:16] == b"IHDR":
+        return (int.from_bytes(data[16:20]), int.from_bytes(data[20:24])), ".png"
+    if data.startswith(b"\xff\xd8"):
+        return jpeg_size(data), ".jpg"
+    return None, ""
 
 
 @dataclass(frozen=True)

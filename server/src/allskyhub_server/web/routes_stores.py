@@ -76,6 +76,43 @@ async def android_bundle(
     return FileResponse(path, media_type="application/octet-stream", filename=name)
 
 
+@router.post("/admin/stores-screenshots")
+async def upload_screenshots(
+    request: Request,
+    db: DbSession,
+    session: CurrentSession,
+    settings: SettingsDep,
+    files: Annotated[list[UploadFile], File()],
+) -> Response:
+    """Phone screenshots for the Play listing; they replace the earlier ones."""
+    admin_only(session, settings)
+    stores: admin_stores.Stores = request.app.state.stores
+    try:
+        if len(files) > admin_stores.SCREENSHOTS[1]:
+            raise admin_stores.StoreError("Google Play nimmt höchstens acht Screenshots.")
+        data: list[bytes] = []
+        for f in files:
+            raw = await f.read(admin_stores.SCREENSHOT_MAX + 1)
+            data.append(raw)
+        stores.put_screenshots(data)
+    except admin_stores.StoreError as exc:
+        return await page(request, db, session, 400, error=str(exc))
+    return await page(
+        request, db, session,
+        notice=f"{len(data)} Screenshots gespeichert. Jetzt „Store-Eintrag übertragen“.",
+    )  # fmt: skip
+
+
+@router.post("/admin/stores-listing")
+async def push_listing(
+    request: Request, db: DbSession, session: CurrentSession, settings: SettingsDep
+) -> Response:
+    admin_only(session, settings)
+    stores: admin_stores.Stores = request.app.state.stores
+    report = await stores.push_listing()
+    return await page(request, db, session, store_report=report)
+
+
 @router.post("/admin/stores-setup")
 async def setup_stores(
     request: Request, db: DbSession, session: CurrentSession, settings: SettingsDep

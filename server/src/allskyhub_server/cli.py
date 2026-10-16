@@ -170,6 +170,19 @@ def _cmd_li_backfill(args: argparse.Namespace) -> int:
     return _run_db(work)
 
 
+def _cmd_play_upload(args: argparse.Namespace) -> int:
+    """The App Bundle the Android release helper built (deploy/android) to Play's internal
+    test track. Exit 3 (2 is argparse's): Google does not know the app yet, the first
+    upload goes by hand."""
+    from allskyhub_server.admin.stores import Stores
+
+    settings = get_settings()
+    stores = Stores(settings.data_dir / "store", settings.deploy_repo)
+    code, text = asyncio.run(stores.play_upload(Path(args.aab)))
+    print(text, file=sys.stderr if code == 1 else sys.stdout)
+    return code
+
+
 def _cmd_users(args: argparse.Namespace) -> int:
     from sqlalchemy import func, select
 
@@ -284,6 +297,10 @@ def build_parser() -> argparse.ArgumentParser:
     p = sub.add_parser("li-backfill", help="read older Lightning Imager data and check lightning")
     p.add_argument("--hours", type=int, default=24, choices=range(1, 48), metavar="1..47")
     p.set_defaults(func=_cmd_li_backfill)
+
+    p = sub.add_parser("play-upload", help="send an App Bundle to Google Play's internal test")
+    p.add_argument("aab")
+    p.set_defaults(func=_cmd_play_upload)
 
     p = sub.add_parser("migrate", help="apply database migrations")
     p.add_argument("revision", nargs="?", default="head")

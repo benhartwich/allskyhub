@@ -7,8 +7,8 @@ from __future__ import annotations
 
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, File, Form, Request, UploadFile
-from fastapi.responses import Response
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile
+from fastapi.responses import FileResponse, Response
 
 from allskyhub_server.admin import stores as admin_stores
 from allskyhub_server.web.deps import CurrentSession, DbSession, SettingsDep, csrf_protect
@@ -63,6 +63,56 @@ async def upload_store_key(
     )  # fmt: skip
 
 
+@router.get("/admin/stores-android/{name}")
+async def android_bundle(
+    request: Request, session: CurrentSession, settings: SettingsDep, name: str
+) -> Response:
+    """The App Bundle built here, for the first upload by hand in the Play Console."""
+    admin_only(session, settings)
+    stores: admin_stores.Stores = request.app.state.stores
+    path = stores.aab(name)
+    if path is None:
+        raise HTTPException(404)
+    return FileResponse(path, media_type="application/octet-stream", filename=name)
+
+
+@router.post("/admin/stores-screenshots")
+async def upload_screenshots(
+    request: Request,
+    db: DbSession,
+    session: CurrentSession,
+    settings: SettingsDep,
+    files: Annotated[list[UploadFile], File()],
+) -> Response:
+    """Phone screenshots for the Play listing; they replace the earlier ones."""
+    admin_only(session, settings)
+    stores: admin_stores.Stores = request.app.state.stores
+    try:
+        if len(files) > admin_stores.SCREENSHOTS[1]:
+            raise admin_stores.StoreError("Google Play nimmt höchstens acht Screenshots.")
+        data: list[bytes] = []
+        for f in files:
+            raw = await f.read(admin_stores.SCREENSHOT_MAX + 1)
+            data.append(raw)
+        stores.put_screenshots(data)
+    except admin_stores.StoreError as exc:
+        return await page(request, db, session, 400, error=str(exc))
+    return await page(
+        request, db, session,
+        notice=f"{len(data)} Screenshots gespeichert. Jetzt „Store-Eintrag übertragen“.",
+    )  # fmt: skip
+
+
+@router.post("/admin/stores-listing")
+async def push_listing(
+    request: Request, db: DbSession, session: CurrentSession, settings: SettingsDep
+) -> Response:
+    admin_only(session, settings)
+    stores: admin_stores.Stores = request.app.state.stores
+    report = await stores.push_listing()
+    return await page(request, db, session, store_report=report)
+
+
 @router.post("/admin/stores-setup")
 async def setup_stores(
     request: Request, db: DbSession, session: CurrentSession, settings: SettingsDep
@@ -82,12 +132,17 @@ async def build_release(
     platform: Annotated[str, Form(max_length=16)],
 ) -> Response:
     admin_only(session, settings)
-    if platform not in admin_stores.WORKFLOWS:
+    if platform not in admin_stores.PLATFORMS:
         return await page(request, db, session, 400, error="Unbekannte Plattform.")
     stores: admin_stores.Stores = request.app.state.stores
     try:
         await stores.build(platform, session.user.email)
     except admin_stores.StoreError as exc:
         return await page(request, db, session, 400, error=str(exc))
-    name = "Android" if platform == "android" else "iOS"
-    return await page(request, db, session, notice=f"{name}-Release bei Codemagic gestartet.")
+    notice = (
+        "Android-Release angefordert: der Server baut es (gut 10 Minuten) und lädt es zu "
+        "Google Play hoch."
+        if platform == "android"
+        else "iOS-Release bei Codemagic gestartet."
+    )
+    return await page(request, db, session, notice=notice)

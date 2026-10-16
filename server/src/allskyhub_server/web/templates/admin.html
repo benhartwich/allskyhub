@@ -109,21 +109,47 @@
   <h3>Letzte Builds</h3>
   <ul class="commit-list">
     {% for b in store_builds %}
-    <li><a href="{{ build_url(b) }}">{{ 'Android' if b.platform == 'android' else 'iOS' }}</a> · {{ b.status or 'gestartet' }} <span class="muted small">· {{ b.at[:16] | replace('T', ' ') }} UTC</span></li>
+    {%- set url = build_url(b) %}
+    <li>{% if url %}<a href="{{ url }}">iOS</a>{% else %}Android{% endif %} · {{ android_states.get(b.status or 'idle', b.status) if not url else (b.status or 'gestartet') }} <span class="muted small">· {{ b.at[:16] | replace('T', ' ') }} UTC</span></li>
     {% endfor %}
   </ul>
   {% endif %}
-  {% if codemagic_app %}
+  {% if android_job.latest %}
+  <p><a href="/admin/stores-android/{{ android_job.latest.file }}">{{ android_job.latest.file }}</a> <span class="muted small">· Version {{ android_job.latest.version }} ({{ android_job.latest.build }}), {{ (android_job.latest.size / 1e6) | round | int }} MB · für das erste Hochladen von Hand</span></p>
+  {% endif %}
+  {% if android_job.log %}
+  <details{% if android_job.state in ('failed', 'built') %} open{% endif %}>
+    <summary>Protokoll des Android-Builds</summary>
+    <pre class="small">{{ android_job.log }}</pre>
+  </details>
+  {% endif %}
+  {% if android_key or codemagic_app %}
   <div class="row-links">
-    {% for platform, name in (('android', 'Android-Release bauen'), ('ios', 'iOS-Release bauen')) %}
+    {% for platform, name, ready in (('android', 'Android-Release bauen', android_key and not android_job.busy), ('ios', 'iOS-Release bauen', codemagic_app)) %}
+    {% if ready %}
     <form method="post" action="/admin/stores-build" class="inline">
       <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
       <input type="hidden" name="platform" value="{{ platform }}">
       <button type="submit" class="secondary">{{ name }}</button>
     </form>
+    {% endif %}
     {% endfor %}
   </div>
-  <p class="muted small">Baut <code>main</code> bei Codemagic: Android als App Bundle in den internen Test (als Entwurf), iOS nach TestFlight.</p>
+  <p class="muted small">Beide bauen <code>main</code>. Android baut dieser Server als App Bundle und lädt es selbst in den internen Test bei Google Play; iOS baut Codemagic und schickt es nach TestFlight.</p>
+  {% endif %}
+
+  {% if stores[0].meta %}
+  <h3>Store-Eintrag bei Google Play</h3>
+  <p class="muted small">Titel, Beschreibungen (Deutsch und Englisch), Icon und Grafik kommen aus dem Repository (<code>app/store/play</code>), die Handy-Screenshots von hier. Kontakt: support@webinx.eu, allskyhub.org. Screenshots: {{ screenshots or 'noch keine' }}.</p>
+  <form method="post" action="/admin/stores-screenshots" enctype="multipart/form-data" class="stack">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <label>Handy-Screenshots (2 bis 8, PNG oder JPEG)<input type="file" name="files" accept="image/png,image/jpeg" multiple required></label>
+    <button type="submit" class="secondary">Screenshots hochladen</button>
+  </form>
+  <form method="post" action="/admin/stores-listing" class="inline">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <button type="submit" class="secondary">Store-Eintrag übertragen</button>
+  </form>
   {% endif %}
 
   <details>

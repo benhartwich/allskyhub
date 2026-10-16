@@ -1,0 +1,27 @@
+allskyhub is the app for the allskyhub all-sky camera: a Raspberry Pi with an all-sky camera that records the whole sky by day and night. The camera connects to allskyhub.org by itself: no port forwarding, no FTP, nothing to install.
+
+YOUR SKY, ALWAYS WITH YOU
+• Live image of the whole sky, day and night
+• Timelapse, keogram and star trails of every night
+• Gallery with full-size images and the pictures of recent nights
+
+WHAT HAPPENS IN THE SKY
+• The camera detects meteors, aurora and lightning by itself
+• Satellites and aircraft are recognised and named instead of counted as meteors
+• Sky view with constellations, meteors and overflights, also as an AR mode over your phone's camera
+
+WEATHER AND CAMERA
+• Clouds now and for the next hour, outlook for tonight
+• The camera's readings such as sky brightness and temperature, statistics over the years
+• The camera's health at a glance, with hints when something is wrong
+
+EASY TO SET UP
+• Pair the camera with a QR code and bring it onto your Wi-Fi
+• Change the camera's settings right in the app
+• Sharing, a public page and the camera network, if you like
+
+You need an allskyhub camera and an account on allskyhub.org. Request access at allskyhub.org/zugang; the parts list and the guide are at allskyhub.org/hardware and allskyhub.org/allsky.
+
+The app is in German for now; English follows.
+
+allskyhub is open source: github.com/benhartwich/allskyhub

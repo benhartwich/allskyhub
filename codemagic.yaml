@@ -1,11 +1,11 @@
 # Codemagic builds of the Flutter app (app/, SPEC §2, M3).
 #
-# The release workflows read every key from the app's secure variable group
-# "allskyhub_store", which the hub fills: admin page → App-Stores → "Prüfen und einrichten"
-# (server/src/allskyhub_server/admin/stores.py). It holds the Play service account, the
-# Android upload keystore (made by the hub), the App Store Connect API key and the private
-# key of the iOS distribution certificate (made by the hub). No keystore upload or App
-# Store Connect integration in the Codemagic UI is needed.
+# The iOS release reads its keys from the app's secure variable group "allskyhub_store",
+# which the hub fills: admin page → App-Stores → "Prüfen und einrichten"
+# (server/src/allskyhub_server/admin/stores.py): the App Store Connect API key and the
+# private key of the iOS distribution certificate (made by the hub). No App Store Connect
+# integration in the Codemagic UI is needed. Android store builds run on the hub's own
+# server (deploy/android/README.md).
 # The check workflow needs none of that.
 
 definitions:
@@ -44,32 +44,6 @@ workflows:
         script: flutter build ios --release --no-codesign
     artifacts:
       - build/app/outputs/flutter-apk/app-debug.apk
-
-  # Manual: signed Android App Bundle to the Play Store internal track.
-  android-release:
-    name: Android release
-    instance_type: linux_x2
-    max_build_duration: 45
-    <<: *app_dir
-    environment:
-      <<: *flutter
-      groups: [allskyhub_store]
-    scripts:
-      - *get
-      - *check
-      - name: Upload key
-        script: |
-          echo "$ALLSKYHUB_UPLOAD_KEYSTORE" | base64 --decode > "$CM_BUILD_DIR/upload.p12"
-          echo "ALLSKYHUB_KEYSTORE=$CM_BUILD_DIR/upload.p12" >> "$CM_ENV"
-      - name: App Bundle
-        script: flutter build appbundle --release --build-number=$BUILD_NUMBER
-    artifacts:
-      - build/app/outputs/bundle/release/*.aab
-    publishing:
-      google_play:
-        credentials: $GCLOUD_SERVICE_ACCOUNT_CREDENTIALS
-        track: internal
-        submit_as_draft: true
 
   # Manual: signed iOS build to TestFlight. The certificate and profile come from Apple
   # with the hub's key (fetch-signing-files --create makes them on the first run).

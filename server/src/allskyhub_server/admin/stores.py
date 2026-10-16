@@ -159,6 +159,16 @@ class Vault:
     def entries(self) -> list[Entry]:
         return [Entry(kind, title, self.meta(kind)) for kind, title in TITLES.items()]
 
+    def write_json(self, name: str, data: dict[str, Any]) -> None:
+        self._write(name, json.dumps(data).encode())
+
+    def read_json(self, name: str) -> dict[str, Any] | None:
+        try:
+            raw = json.loads((self.root / name).read_text())
+        except (OSError, ValueError):
+            return None
+        return cast(dict[str, Any], raw) if isinstance(raw, dict) else None
+
     def builds(self) -> list[dict[str, Any]]:
         try:
             raw = json.loads((self.root / "builds.json").read_text())
@@ -394,6 +404,7 @@ class Stores:
         self.release_dir = release_dir or root.parent / "android-release"
         self.release_out = release_out or RELEASE_OUT
         self.listing = LISTING
+        self._listing_task: asyncio.Task[Report] | None = None
         self.screenshot_dir = root / "screenshots"
 
     def _http(self) -> httpx.AsyncClient:
@@ -868,6 +879,36 @@ class Stores:
             "shortDescription": (folder / "short_description.txt").read_text().strip(),
             "fullDescription": (folder / "full_description.txt").read_text().strip(),
         }
+
+    def start_listing(self, by: str) -> bool:
+        """Push the listing in the background (it takes longer than the proxy waits for a
+        page); False while one is still running. The result lands in ``listing.json``."""
+        if self._listing_task is not None and not self._listing_task.done():
+            return False
+        self.vault.write_json("listing.json", {"at": _now(), "by": by, "running": True})
+
+        async def run() -> Report:
+            report = await self.push_listing()
+            steps = [{"title": x.title, "state": x.state, "text": x.text} for x in report.steps]
+            self.vault.write_json("listing.json", {"at": _now(), "by": by, "steps": steps})
+            log.info(
+                "store listing pushed by %s: %s", by, [(x.title, x.state) for x in report.steps]
+            )
+            return report
+
+        self._listing_task = asyncio.create_task(run())
+        return True
+
+    def listing_state(self) -> dict[str, Any] | None:
+        """The last push: ``running``, or its ``steps`` (title, state, text)."""
+        state = self.vault.read_json("listing.json")
+        alive = self._listing_task is not None and not self._listing_task.done()
+        if state and state.get("running") and not alive:  # the hub restarted meanwhile
+            text = "Abgebrochen (der Hub wurde neu gestartet), bitte noch einmal übertragen."
+            return {**state, "running": False, "steps": [
+                {"title": "Store-Eintrag", "state": "fail", "text": text}
+            ]}  # fmt: skip
+        return state
 
     async def push_listing(self) -> Report:
         """Texts, icon, feature graphic and screenshots of every language to Play."""

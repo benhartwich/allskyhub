@@ -107,6 +107,7 @@ async def page(
             },
             "android_key": stores.vault.has("android_upload"),
             "screenshots": len(stores.screenshots()),
+            "listing": stores.listing_state(),
             "uploaded_screenshots": stores.screenshot_dir.is_dir()
             and any(stores.screenshot_dir.iterdir()),
             "build_url": admin_stores.build_url,

@@ -414,7 +414,11 @@ async def test_android_release_through_the_spool(
     (out / "allskyhub-412.aab").write_bytes(b"bundle")
     latest = {"build": 412, "version": "1.0.0", "commit": "abc1234", "size": 6}
     (out / "latest.json").write_text(json.dumps({**latest, "file": "allskyhub-412.aab"}))
+    # An Android build from Codemagic's time is labelled as Android, not iOS.
+    old = {"id": "CM1", "app_id": "A1", "platform": "android", "at": "2026-10-16T03:33:00+00:00"}
+    hub.vault.add_build({**old, "by": email})
     page = await client.get("/admin")
+    assert 'build/CM1">Android</a> <span class="muted small">(Codemagic)' in page.text
     assert "gebaut, erstes Hochladen von Hand" in page.text
     assert "Google kennt die App noch nicht." in page.text
     assert 'href="/admin/stores-android/allskyhub-412.aab"' in page.text

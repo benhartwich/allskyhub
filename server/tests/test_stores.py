@@ -152,10 +152,17 @@ class FakeServices:
             if path == "/api/v3/apps/APP1/variable-groups":
                 return httpx.Response(201, json={"data": {"id": "G1", "name": "allskyhub_store"}})
             if path == "/api/v3/variable-groups/G1/variables" and request.method == "GET":
-                old = {"id": "V1", "name": "ALLSKYHUB_KEY_ALIAS", "value": None, "secure": True}
-                return httpx.Response(200, json={"data": [old]})
+                old = [
+                    {"id": "V1", "name": "ALLSKYHUB_KEY_ALIAS", "value": None, "secure": True},
+                    {"id": "V2", "name": "CERTIFICATE_PRIVATE_KEY", "value": None, "secure": True},
+                ]
+                return httpx.Response(200, json={"data": old})
             if path == "/api/v3/variable-groups/G1/variables/V1":
-                self.patched.append(body["value"])
+                assert request.method == "DELETE"  # Android keys left Codemagic
+                self.patched.append("deleted")
+                return httpx.Response(204)
+            if path == "/api/v3/variable-groups/G1/variables/V2":
+                self.patched.append(body["value"][:31])
                 return httpx.Response(200, json={"data": {}})
             if path == "/api/v3/variable-groups/G1/variables":
                 self.imported = body
@@ -206,18 +213,13 @@ async def test_setup_registers_everything(tmp_path: Path) -> None:
         stores.PLAY + "/applications/org.allskyhub.app/edits/edit-1",
         None,
     ) in fake.seen
-    assert fake.patched == ["upload"]
+    assert fake.patched == ["deleted", "-----BEGIN RSA PRIVATE KEY-----"]
     assert fake.imported["secure"] is True
     names = {v["name"] for v in fake.imported["variables"]}
     assert names == {
-        "GCLOUD_SERVICE_ACCOUNT_CREDENTIALS",
-        "ALLSKYHUB_UPLOAD_KEYSTORE",
-        "ALLSKYHUB_KEYSTORE_PASSWORD",
-        "ALLSKYHUB_KEY_PASSWORD",
         "APP_STORE_CONNECT_PRIVATE_KEY",
         "APP_STORE_CONNECT_KEY_IDENTIFIER",
         "APP_STORE_CONNECT_ISSUER_ID",
-        "CERTIFICATE_PRIVATE_KEY",
     }
     # The reports name variables, never their values.
     text = " ".join(s.text for s in report.steps)
@@ -310,3 +312,109 @@ async def test_others_cannot_upload(app: FastAPI, client: httpx.AsyncClient) -> 
         data={"csrf_token": csrf_from(page.text), "password": PASSWORD, "token": "x" * 20},
     )
     assert r.status_code == 404
+
+
+def _play_answers(seen: list[tuple[str, str]], track_status: int = 200) -> httpx.MockTransport:
+    def answer(request: httpx.Request) -> httpx.Response:
+        seen.append((request.method, request.url.path))
+        path = request.url.path
+        if request.url.host == "oauth2.googleapis.com":
+            return httpx.Response(200, json={"access_token": "t"})
+        if path.endswith("/applications/org.allskyhub.app/edits"):
+            return httpx.Response(200, json={"id": "E1"})
+        if path.endswith("/edits/E1/bundles"):
+            assert path.startswith("/upload/")
+            assert request.url.params["uploadType"] == "media"
+            assert request.content == b"bundle"
+            return httpx.Response(200, json={"versionCode": 412})
+        if path.endswith("/edits/E1/tracks/internal"):
+            release = json.loads(request.content)["releases"][0]
+            assert release["versionCodes"] == ["412"]
+            if release["status"] == "completed" and track_status == 400:
+                msg = "Only releases with status draft may be created on draft app."
+                return httpx.Response(400, json={"error": {"message": msg}})
+            return httpx.Response(200, json={})
+        if path.endswith("/edits/E1:commit"):
+            return httpx.Response(200, json={"id": "E1"})
+        return httpx.Response(404, json={"error": {"message": "Package not found"}})
+
+    return httpx.MockTransport(answer)
+
+
+async def test_play_upload(tmp_path: Path) -> None:
+    aab = tmp_path / "allskyhub-412.aab"
+    aab.write_bytes(b"bundle")
+    hub = stores.Stores(tmp_path / "store", "benhartwich/allskyhub")
+    assert (await hub.play_upload(aab))[0] == 1  # no service account yet
+    hub.vault.put("play", *stores.parse_play(_play_json()), by="a")
+
+    seen: list[tuple[str, str]] = []
+    hub._client = httpx.AsyncClient(transport=_play_answers(seen))  # pyright: ignore[reportPrivateUsage]
+    code, text = await hub.play_upload(aab)
+    assert code == 0
+    assert text == "Version 412 ist im internen Test."
+    assert seen[-1] == (
+        "POST",
+        "/androidpublisher/v3/applications/org.allskyhub.app/edits/E1:commit",
+    )
+
+    # A draft app (never published) takes draft releases only.
+    hub._client = httpx.AsyncClient(transport=_play_answers(seen, 400))  # pyright: ignore[reportPrivateUsage]
+    code, text = await hub.play_upload(aab)
+    assert code == 0
+    assert "Entwurf" in text
+
+    # Google does not know the app yet: the first bundle goes by hand.
+    def unknown(request: httpx.Request) -> httpx.Response:
+        if request.url.host == "oauth2.googleapis.com":
+            return httpx.Response(200, json={"access_token": "t"})
+        return httpx.Response(404, json={"error": {"message": "Package not found"}})
+
+    hub._client = httpx.AsyncClient(transport=httpx.MockTransport(unknown))  # pyright: ignore[reportPrivateUsage]
+    code, text = await hub.play_upload(aab)
+    assert code == 3
+    assert "von Hand" in text
+
+
+async def test_android_release_through_the_spool(
+    app: FastAPI,
+    client: httpx.AsyncClient,
+    settings: Settings,
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    email = await make_account(client)
+    monkeypatch.setattr(settings, "admin_emails", email)
+    hub = stores.Stores(tmp_path / "store", "benhartwich/allskyhub")
+    monkeypatch.setattr(app.state, "stores", hub)
+    token = csrf_from((await client.get("/admin")).text)
+    build = {"csrf_token": token, "platform": "android"}
+
+    r = await client.post("/admin/stores-build", data=build)
+    assert r.status_code == 400  # no upload key yet
+    hub.ensure_keys(stores.Report(), email)
+    r = await client.post("/admin/stores-build", data=build)
+    assert r.status_code == 200, r.text
+    spool = tmp_path / "android-release"
+    assert (spool / "request").read_text() == f"{email}\n"
+    assert hub.android_job().busy
+    assert "angefordert" in r.text
+    assert "Android-Release bauen" not in r.text  # one at a time
+    assert (await client.post("/admin/stores-build", data=build)).status_code == 400
+
+    # The root helper took the request, built and could not upload yet.
+    (spool / "request").unlink()
+    (spool / "state").write_text("built\n")
+    (spool / "log").write_text("allskyhub-412.aab gebaut.\nGoogle kennt die App noch nicht.\n")
+    (spool / "allskyhub-412.aab").write_bytes(b"bundle")
+    latest = {"build": 412, "version": "1.0.0", "commit": "abc1234", "size": 6}
+    (spool / "latest.json").write_text(json.dumps({**latest, "file": "allskyhub-412.aab"}))
+    page = await client.get("/admin")
+    assert "gebaut, erstes Hochladen von Hand" in page.text
+    assert "Google kennt die App noch nicht." in page.text
+    assert 'href="/admin/stores-android/allskyhub-412.aab"' in page.text
+    r = await client.get("/admin/stores-android/allskyhub-412.aab")
+    assert r.status_code == 200
+    assert r.content == b"bundle"
+    assert (await client.get("/admin/stores-android/latest.json")).status_code == 404
+    assert (await client.get("/admin/stores-android/..%2Fstore%2Fplay.secret")).status_code == 404

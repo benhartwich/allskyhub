@@ -24,6 +24,26 @@ Signed release APKs of the app for testing, built on the hub's server instead of
     hub's build is newer, the camera list shows "Neue Testversion" with a button that
     downloads the APK in the browser.
 
+## Store releases for Google Play
+
+Admin page → App-Stores → "Android-Release bauen" leaves a request in
+`/var/lib/allskyhub-server/android-release/`. `allskyhub-android-release.path` starts
+`allskyhub-android-build.sh --release`:
+
+- builds an App Bundle of `origin/main` (id `org.allskyhub.app`, build number = commit
+  count of `main`) in the same container, after a test build that may be running;
+- signs it with the hub's upload key (`/var/lib/allskyhub-server/store/android_upload.secret`,
+  made by the hub on "Prüfen und einrichten"; Google re-signs with the app key, Play App
+  Signing). The key goes into the container only for the build, from a temporary 0700
+  folder;
+- runs `allskyhub-server play-upload` as the hub's user, which sends it to the internal
+  test track. As long as the app has never been published, Google takes draft releases
+  only: then roll it out in the Play Console. The very first bundle of a new app must be
+  uploaded by hand there; the admin page links the file.
+
+State (`requested`, `running`, `ok`, `built` = first upload by hand, `failed`) and log
+are in the same folder and on the admin page.
+
 ## Why a proxy for Google's Maven repository
 
 From this server dl.google.com answers only HTTP/2 (HTTP/1.1 requests time out) and slowly.
@@ -39,6 +59,14 @@ cp /opt/allskyhub-server/deploy/systemd/allskyhub-android-build.{service,timer} 
 systemctl daemon-reload
 systemctl enable --now allskyhub-android-build.timer
 systemctl start allskyhub-android-build.service   # first build now; journalctl -u … -f
+```
+
+For store releases from the admin page, once:
+
+```bash
+cp /opt/allskyhub-server/deploy/systemd/allskyhub-android-release.{path,service} /etc/systemd/system/
+systemctl daemon-reload
+systemctl enable --now allskyhub-android-release.path
 ```
 
 Force a build without an app change: `/opt/allskyhub-server/deploy/android/allskyhub-android-build.sh --force`.

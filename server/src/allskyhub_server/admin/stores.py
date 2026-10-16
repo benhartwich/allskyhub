@@ -10,12 +10,17 @@ certificate.
 repository to Codemagic and puts the build secrets into the app's secure variable group
 ``allskyhub_store`` there. The release workflows in codemagic.yaml read them from that
 group; Codemagic's own signing setup (keystore upload, App Store Connect integration) is
-not needed. Nothing here prints or renders a secret: pages and the CLI only see the
+not needed. Android release builds run on the hub's own server instead
+(deploy/android/allskyhub-android-build.sh --release, started through ``<data>/android-release``
+like a deploy); the root helper hands the App Bundle back to the hub
+(``allskyhub-server play-upload``), which sends it to Play's internal test track. Nothing
+here prints or renders a secret: pages and the CLI only see the
 non-secret facts kept next to each one (service account address, key id, fingerprints).
 """
 
 from __future__ import annotations
 
+import asyncio
 import base64
 import datetime as dt
 import json
@@ -41,15 +46,20 @@ log = logging.getLogger(__name__)
 PACKAGE = "org.allskyhub.app"  # Android application id and iOS bundle id
 APP_NAME = "allskyhub"
 GROUP = "allskyhub_store"  # Codemagic variable group, read by codemagic.yaml
-WORKFLOWS = {"android": "android-release", "ios": "ios-release"}
+WORKFLOWS = {"ios": "ios-release"}  # Android builds on the hub's server (deploy/android)
+PLATFORMS = ("android", "ios")
 KEY_ALIAS = "upload"
 MAX_UPLOAD = 64 * 1024
 TIMEOUT = 20.0
+UPLOAD_TIMEOUT = 600.0  # an App Bundle is some 50 MB
+TRACK = "internal"
+LOG_TAIL = 60
 
 CODEMAGIC = "https://codemagic.io/api/v3"
 CODEMAGIC_V1 = "https://api.codemagic.io"
 ASC = "https://api.appstoreconnect.apple.com/v1"
 PLAY = "https://androidpublisher.googleapis.com/androidpublisher/v3"
+PLAY_UPLOAD = "https://androidpublisher.googleapis.com/upload/androidpublisher/v3"
 PLAY_SCOPE = "https://www.googleapis.com/auth/androidpublisher"
 
 # What Benjamin uploads, then what the hub makes itself.
@@ -61,6 +71,16 @@ TITLES = {
     "ios_certificate": "Schlüssel des iOS-Zertifikats",
 }
 UPLOADED = ("play", "asc", "codemagic")
+# Variables an earlier version put into the Codemagic group, for the Android builds there.
+OBSOLETE = frozenset(
+    {
+        "GCLOUD_SERVICE_ACCOUNT_CREDENTIALS",
+        "ALLSKYHUB_UPLOAD_KEYSTORE",
+        "ALLSKYHUB_KEYSTORE_PASSWORD",
+        "ALLSKYHUB_KEY_PASSWORD",
+        "ALLSKYHUB_KEY_ALIAS",
+    }
+)
 
 KEY_ID = re.compile(r"^[A-Z0-9]{10}$")
 ISSUER_ID = re.compile(r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$")
@@ -347,10 +367,17 @@ def _list(body: Any) -> list[dict[str, Any]]:
 class Stores:
     """The vault plus the three services, for the admin page and the CLI."""
 
-    def __init__(self, root: Path, repo: str, client: httpx.AsyncClient | None = None) -> None:
+    def __init__(
+        self,
+        root: Path,
+        repo: str,
+        client: httpx.AsyncClient | None = None,
+        release_dir: Path | None = None,
+    ) -> None:
         self.vault = Vault(root)
         self.repo = repo
         self._client = client
+        self.release_dir = release_dir or root.parent / "android-release"
 
     def _http(self) -> httpx.AsyncClient:
         return self._client or httpx.AsyncClient(timeout=TIMEOUT)
@@ -411,7 +438,7 @@ class Stores:
                 "warn",
                 "Angemeldet, aber Google kennt die App über die Schnittstelle noch nicht: das "
                 "erste App Bundle einmal von Hand in der Play Console hochladen (Interner "
-                "Test). Danach lädt Codemagic selbst hoch.",
+                "Test). Danach lädt der Server selbst hoch.",
             )
         elif r.status_code in (401, 403):
             report.add(
@@ -515,15 +542,6 @@ class Stores:
     def _variables(self) -> dict[str, str]:
         """The build secrets for codemagic.yaml, as far as they are there."""
         out: dict[str, str] = {}
-        if self.vault.has("play"):
-            out["GCLOUD_SERVICE_ACCOUNT_CREDENTIALS"] = self.vault.secret(
-                "play", "Codemagic-Gruppe"
-            ).decode()
-        upload = _dict(json.loads(self.vault.secret("android_upload", "Codemagic-Gruppe")))
-        out["ALLSKYHUB_UPLOAD_KEYSTORE"] = str(upload["p12"])
-        out["ALLSKYHUB_KEYSTORE_PASSWORD"] = str(upload["password"])
-        out["ALLSKYHUB_KEY_PASSWORD"] = str(upload["password"])
-        out["ALLSKYHUB_KEY_ALIAS"] = KEY_ALIAS
         meta = self.vault.meta("asc")
         if meta is not None:
             out["APP_STORE_CONNECT_PRIVATE_KEY"] = self.vault.secret(
@@ -566,6 +584,13 @@ class Stores:
             return
         there = {str(v["name"]): str(v["id"]) for v in _list(_dict(r.json()).get("data"))}
         variables = self._variables()
+        for name in sorted(OBSOLETE & there.keys()):  # Android keys stay on the hub now
+            r = await client.delete(
+                f"{CODEMAGIC}/variable-groups/{group}/variables/{there.pop(name)}", headers=auth
+            )
+            if r.status_code >= 300 and r.status_code != 404:
+                report.add(title, "fail", f"{name} entfernen: {_message(r)}")
+                return
         new = [{"name": k, "value": v} for k, v in variables.items() if k not in there]
         for name, value in variables.items():
             if name in there:
@@ -629,7 +654,10 @@ class Stores:
         return report
 
     async def build(self, platform: str, by: str, branch: str = "main") -> str:
-        """Start a release build; the build id."""
+        """Start a release build; the build id (Codemagic's, or "local")."""
+        if platform == "android":
+            self.request_android(by)
+            return "local"
         meta = self.vault.meta("codemagic") or {}
         app_id = meta.get("app_id")
         if not isinstance(app_id, str):
@@ -656,13 +684,19 @@ class Stores:
     async def recent_builds(self, limit: int = 3) -> list[dict[str, Any]]:
         """The last builds started here, with Codemagic's current status."""
         builds = self.vault.builds()[:limit]
-        if not builds or not self.vault.has("codemagic"):
+        local = [i for i, b in enumerate(builds) if b.get("id") == "local"]
+        if local:  # only the newest local build has a state; older ones are done
+            builds[local[0]] = {**builds[local[0]], "status": self.android_job().state}
+        if not self.vault.has("codemagic"):
             return builds
         client = self._http()
         out: list[dict[str, Any]] = []
         try:
             auth = self._cm_auth("Build-Status")
             for b in builds:
+                if b.get("id") == "local":
+                    out.append(b)
+                    continue
                 status = "unbekannt"
                 try:
                     r = await client.get(f"{CODEMAGIC}/builds/{b['id']}", headers=auth)
@@ -675,6 +709,119 @@ class Stores:
             await self._close(client)
         return out
 
+    # Android on the hub's server
 
-def build_url(build: dict[str, Any]) -> str:
+    def request_android(self, by: str) -> None:
+        """Leave a request for the root helper (allskyhub-android-release.path)."""
+        if not self.vault.has("android_upload"):
+            raise StoreError("Erst „Prüfen und einrichten“, dann bauen.")
+        if self.android_job().busy:
+            raise StoreError("Es läuft schon ein Android-Build.")
+        self.release_dir.mkdir(mode=0o750, parents=True, exist_ok=True)
+        (self.release_dir / "state").write_text("requested\n")
+        (self.release_dir / "request").write_text(f"{by}\n")
+        self.vault.add_build({"id": "local", "platform": "android", "at": _now(), "by": by})
+        log.info("android release requested by %s", by)
+
+    def android_job(self) -> AndroidJob:
+        def read(name: str) -> str:
+            try:
+                return (self.release_dir / name).read_text()
+            except OSError:
+                return ""
+
+        state = read("state").strip() or "idle"
+        if (self.release_dir / "request").exists():
+            state = "requested"
+        latest: dict[str, Any] | None = None
+        try:
+            raw = json.loads(read("latest.json"))
+            if isinstance(raw, dict):
+                latest = cast(dict[str, Any], raw)
+        except ValueError:
+            pass
+        name = str(latest.get("file", "")) if latest else ""
+        if latest and not (re.fullmatch(r"allskyhub-\d+\.aab", name) and self.aab(name)):
+            latest = None
+        return AndroidJob(state, "\n".join(read("log").splitlines()[-LOG_TAIL:]), latest)
+
+    def aab(self, name: str) -> Path | None:
+        path = self.release_dir / name
+        ok = re.fullmatch(r"allskyhub-\d+\.aab", name) and path.is_file()
+        return path if ok else None
+
+    async def play_upload(self, aab: Path) -> tuple[int, str]:
+        """Send an App Bundle to the internal test track: (0, text) when it is there,
+        (3, text) when Google does not know the app yet (the first one goes by hand)."""
+        if not self.vault.has("play"):
+            return 1, "Kein Google-Play-Dienstkonto hinterlegt."
+        client = self._client or httpx.AsyncClient(timeout=UPLOAD_TIMEOUT)
+        try:
+            return await self._play_upload(client, aab)
+        except StoreError as exc:
+            return 1, str(exc)
+        except httpx.HTTPError as exc:
+            return 1, f"Google Play nicht erreichbar ({type(exc).__name__})."
+        finally:
+            await self._close(client)
+
+    async def _play_upload(self, client: httpx.AsyncClient, aab: Path) -> tuple[int, str]:
+        auth = {"Authorization": f"Bearer {await self._play_token(client)}"}
+        app = f"{PLAY}/applications/{PACKAGE}"
+        r = await client.post(f"{app}/edits", headers=auth)
+        if r.status_code == 404:
+            return 3, (
+                "Google kennt die App über die Schnittstelle noch nicht. Diese erste Version "
+                "bitte von Hand in der Play Console hochladen (Testen → Interner Test → Neuen "
+                "Release erstellen); die Datei liegt auf der Admin-Seite. Danach geht es "
+                "von selbst."
+            )
+        if r.status_code != 200:
+            raise StoreError(f"Bearbeitung nicht möglich ({_message(r)}).")
+        edit = str(_dict(r.json())["id"])
+        bundle = await asyncio.to_thread(aab.read_bytes)
+        r = await client.post(
+            f"{PLAY_UPLOAD}/applications/{PACKAGE}/edits/{edit}/bundles",
+            params={"uploadType": "media"},
+            content=bundle,
+            headers={**auth, "Content-Type": "application/octet-stream"},
+        )
+        if r.status_code != 200:
+            raise StoreError(f"Upload abgelehnt ({_message(r)}).")
+        code = _dict(r.json()).get("versionCode")
+        release: dict[str, Any] = {"versionCodes": [str(code)], "status": "completed"}
+        track = f"{app}/edits/{edit}/tracks/{TRACK}"
+        r = await client.put(track, json={"track": TRACK, "releases": [release]}, headers=auth)
+        if r.status_code == 400 and "draft" in r.text.lower():
+            # An app nobody can install yet takes draft releases only.
+            release["status"] = "draft"
+            r = await client.put(track, json={"track": TRACK, "releases": [release]}, headers=auth)
+        if r.status_code != 200:
+            raise StoreError(f"Interner Test nicht gesetzt ({_message(r)}).")
+        r = await client.post(f"{app}/edits/{edit}:commit", headers=auth)
+        if r.status_code != 200:
+            raise StoreError(f"Abschließen abgelehnt ({_message(r)}).")
+        if release["status"] == "draft":
+            return 0, (
+                f"Version {code} liegt als Entwurf im internen Test. Solange die App noch nie "
+                "veröffentlicht war, gibt Google sie nur in der Play Console frei "
+                "(Interner Test → Release prüfen → Einführen)."
+            )
+        return 0, f"Version {code} ist im internen Test."
+
+
+@dataclass(frozen=True)
+class AndroidJob:
+    state: str  # idle, requested, running, ok, built, failed
+    log: str
+    latest: dict[str, Any] | None  # the newest App Bundle (latest.json)
+
+    @property
+    def busy(self) -> bool:
+        return self.state in ("requested", "running")
+
+
+def build_url(build: dict[str, Any]) -> str | None:
+    if build.get("id") == "local":
+        return None
     return f"https://codemagic.io/app/{build.get('app_id')}/build/{build.get('id')}"

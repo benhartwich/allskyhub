@@ -141,7 +141,7 @@
 
   {% if stores[0].meta %}
   <h3>Store-Eintrag bei Google Play</h3>
-  <p class="muted small">Titel, Beschreibungen (Deutsch und Englisch), Icon und Grafik kommen aus dem Repository (<code>app/store/play</code>), die Handy-Screenshots von hier. Kontakt: support@webinx.eu, allskyhub.org. Screenshots: {{ screenshots or 'noch keine' }}.</p>
+  <p class="muted small">Titel, Beschreibungen (Deutsch und Englisch), Icon, Grafik und Screenshots kommen aus dem Repository (<code>app/store/play</code>); die Screenshots dort sind aus der App mit Beispieldaten und simuliertem Himmel. Hier hochgeladene Screenshots ersetzen sie. Kontakt: support@webinx.eu, allskyhub.org. Screenshots: {{ screenshots or 'keine' }}{% if screenshots and not uploaded_screenshots %} aus dem Repository{% endif %}.</p>
   <form method="post" action="/admin/stores-screenshots" enctype="multipart/form-data" class="stack">
     <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
     <label>Handy-Screenshots (2 bis 8, PNG oder JPEG)<input type="file" name="files" accept="image/png,image/jpeg" multiple required></label>

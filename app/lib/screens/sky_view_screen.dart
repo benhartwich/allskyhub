@@ -291,6 +291,9 @@ class _SkyViewScreenState extends State<SkyViewScreen>
                   meteors: _showMeteors,
                   overflights: _showOverflights,
                   shadow: ar,
+                  fontFamily: Theme.of(
+                    context,
+                  ).textTheme.bodyMedium?.fontFamily,
                 ),
               ),
             ),
@@ -391,6 +394,7 @@ class SkyPainter extends CustomPainter {
     this.meteors = true,
     this.overflights = true,
     this.shadow = false,
+    this.fontFamily,
   });
 
   final SkyViewData data;
@@ -404,6 +408,9 @@ class SkyPainter extends CustomPainter {
 
   /// Dark edges under lines and text, readable over the camera picture.
   final bool shadow;
+
+  /// The app's text font for the labels (a canvas knows no theme).
+  final String? fontFamily;
 
   static const defaultFov = 60.0;
 
@@ -432,6 +439,7 @@ class SkyPainter extends CustomPainter {
   }
 
   void _text(Canvas canvas, Offset at, String text, TextStyle style) {
+    style = style.copyWith(fontFamily: fontFamily);
     final tp = TextPainter(
       text: TextSpan(
         text: text,
@@ -560,5 +568,6 @@ class SkyPainter extends CustomPainter {
       oldDelegate.lines != lines ||
       oldDelegate.meteors != meteors ||
       oldDelegate.overflights != overflights ||
-      oldDelegate.shadow != shadow;
+      oldDelegate.shadow != shadow ||
+      oldDelegate.fontFamily != fontFamily;
 }

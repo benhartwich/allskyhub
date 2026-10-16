@@ -26,3 +26,6 @@ app/.flutter-plugins*
 .vscode/
 .DS_Store
 .dev/
+
+# Store screenshots come out here; the chosen ones go to store/play/screenshots.
+app/test/store/shots/

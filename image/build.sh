@@ -101,6 +101,21 @@ echo "== chroot"
 chroot "$MNT" /usr/bin/env RELEASE="$RELEASE" AGENT_VERSION="$AGENT_VERSION" \
     /bin/bash -euxo pipefail <<'CHROOT'
 export DEBIAN_FRONTEND=noninteractive LC_ALL=C.UTF-8
+# A camera has no one reading manuals: no docs, man pages or translations, from the base
+# image nor from what follows. The copyright files stay (licences of what we ship).
+cat > /etc/dpkg/dpkg.cfg.d/allskyhub-nodoc <<'DPKG'
+path-exclude=/usr/share/doc/*
+path-include=/usr/share/doc/*/copyright
+path-exclude=/usr/share/man/*
+path-exclude=/usr/share/info/*
+path-exclude=/usr/share/locale/*
+path-include=/usr/share/locale/locale.alias
+path-exclude=/usr/share/lintian/*
+DPKG
+find /usr/share/doc -mindepth 1 -not -name copyright -not -type d -delete
+find /usr/share/doc -mindepth 1 -type d -empty -delete
+rm -rf /usr/share/man/* /usr/share/info/* /usr/share/lintian/*
+find /usr/share/locale -mindepth 1 -maxdepth 1 -not -name locale.alias -exec rm -rf {} +
 apt-get update
 apt-get install -y --no-install-recommends \
     python3 ffmpeg rpicam-apps-lite libusb-1.0-0 dnsmasq-base polkitd iw nftables \
@@ -125,6 +140,8 @@ export UV_PYTHON_DOWNLOADS=never UV_CACHE_DIR=/tmp/uv-cache UV_PROJECT_ENVIRONME
 uv venv --python /usr/bin/python3 "$RELEASE/.venv"
 uv sync --frozen --no-dev --no-editable --package allskyhub-agent
 ln -sfn "releases/$AGENT_VERSION" /opt/allskyhub-agent/current
+# The libraries' own test suites are never run on the camera.
+find "$RELEASE/.venv/lib" -depth -type d -name tests -path '*/site-packages/*' -exec rm -rf {} +
 cd /
 rm -rf /tmp/uv-cache /tmp/allskyhub-src /usr/local/bin/uv
 [ "$(/opt/allskyhub-agent/current/.venv/bin/allskyhub-agent --version)" = "$AGENT_VERSION" ]
@@ -176,6 +193,10 @@ if [ -e "$MNT/etc/resolv.conf.allskyhub-orig" ] || [ -L "$MNT/etc/resolv.conf.al
 fi
 
 echo "== finish"
+# Deleted files (apt lists, the uv cache, the build sources) still fill their blocks and
+# compress badly; discarding the free blocks makes them holes that read as zeros.
+fstrim -v "$MNT/boot/firmware" || true
+fstrim -v "$MNT" || true
 cleanup
 trap - EXIT
 xz -T0 -6 -f "$IMG"

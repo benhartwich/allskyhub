@@ -406,3 +406,27 @@ def test_key_list_cannot_be_rolled_back_or_faked(
     assert cam.current() == "0.1.0"
     assert not verify_signature(b"x", main.sign(b"x"), keys, tmp_path)
     assert verify_signature(b"x", main.sign(b"x"), keys)  # without the kept list
+
+
+def test_system_steps_by_day_only(tmp_path: Path, key: tuple[Ed25519PrivateKey, Path]) -> None:
+    # SPEC §8 System steps: they may restart the agent, so never at night.
+    from allskyhub_agent.update.system import Result
+
+    _, keys = key
+    cam = Camera(tmp_path, mode="night")
+    cam.install("0.1.0")
+    calls: list[int] = []
+
+    def system() -> Result:
+        calls.append(1)
+        return Result(done=["group gpio"], restart=True)
+
+    up = make(cam, Channel(), keys)
+    up.system = system
+    up.run_once()
+    assert calls == []
+    assert cam.commands == []
+    cam.mode = "day"
+    up.run_once()
+    assert calls == [1]
+    assert ["systemctl", "restart", "allskyhub-agent.service"] in cam.commands

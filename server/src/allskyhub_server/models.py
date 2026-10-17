@@ -159,6 +159,8 @@ class Device(Base):
     # whose summary was posted.
     discord: Mapped[dict[str, Any] | None] = mapped_column(JSONB)
     discord_night: Mapped[str | None] = mapped_column(String(8))
+    # Roadmap H9 (SPEC §7.8 By day): list the aircraft crossing the sky by day.
+    day_aircraft: Mapped[bool] = mapped_column(Boolean, default=True, server_default="true")
     # Roadmap H5: the owner's YouTube channel (devices/youtube.py): refresh token, privacy.
     youtube: Mapped[dict[str, Any] | None] = mapped_column(JSONB)
     # Roadmap #17: the public page under the owner's own domain, set up by a root helper
@@ -327,6 +329,35 @@ class Product(Base):
     # Roadmap H5: the video on the owner's YouTube channel, once uploaded.
     youtube_id: Mapped[str | None] = mapped_column(String(32))
     # Retention counts from the first announcement (privacy policy).
+    created_at: Mapped[dt.datetime] = mapped_column(_tz(), server_default=func.now(), index=True)
+
+
+class AircraftPass(Base):
+    """Roadmap H9 (SPEC §7.8 By day): an aircraft at least 20° up seen from a camera by day,
+    from ADS-B positions alone; under the night id of the date it started (like the day
+    products, §5.2)."""
+
+    __tablename__ = "aircraft_pass"
+    __table_args__ = (Index("ix_aircraft_pass_device_night", "device_id", "night_id"),)
+
+    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid7)
+    device_id: Mapped[str] = mapped_column(ForeignKey("device.id", ondelete="CASCADE"))
+    night_id: Mapped[str] = mapped_column(String(8))
+    icao: Mapped[str] = mapped_column(String(8))
+    callsign: Mapped[str | None] = mapped_column(String(10))
+    registration: Mapped[str | None] = mapped_column(String(12))
+    type_code: Mapped[str | None] = mapped_column(String(8))
+    start: Mapped[dt.datetime] = mapped_column(_tz())
+    end: Mapped[dt.datetime] = mapped_column(_tz())
+    top_at: Mapped[dt.datetime] = mapped_column(_tz())
+    top_alt_deg: Mapped[float] = mapped_column(Float)
+    top_az_deg: Mapped[float] = mapped_column(Float)
+    start_alt_deg: Mapped[float] = mapped_column(Float)
+    start_az_deg: Mapped[float] = mapped_column(Float)
+    end_alt_deg: Mapped[float] = mapped_column(Float)
+    end_az_deg: Mapped[float] = mapped_column(Float)
+    alt_m: Mapped[float | None] = mapped_column(Float)
+    min_km: Mapped[float] = mapped_column(Float)
     created_at: Mapped[dt.datetime] = mapped_column(_tz(), server_default=func.now(), index=True)
 
 

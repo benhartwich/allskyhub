@@ -9,6 +9,7 @@
 <a class="back" href="/cameras/{{ device.id }}/gallery">← Galerie</a>
 <h1>{{ night_id | night_title }}</h1>
 {% if overflights %}<p><a href="/cameras/{{ device.id }}/ueberfluege?nacht={{ night_id }}">{{ overflights }}</a> <span class="muted small">· auf der Himmelskarte</span></p>{% endif %}
+{% if day_aircraft %}<p><a href="/cameras/{{ device.id }}/ueberfluege?nacht={{ night_id }}#am-tag">{{ day_aircraft }} {{ "Flugzeug" if day_aircraft == 1 else "Flugzeuge" }} am Tag</a></p>{% endif %}
 {% if products %}
 <div class="public-products">
   {% for p in products %}

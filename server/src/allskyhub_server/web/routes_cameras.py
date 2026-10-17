@@ -480,6 +480,17 @@ async def network_save(
     return RedirectResponse(f"/cameras/{device.id}#netz", status_code=303)
 
 
+@router.post("/cameras/{device_id}/day-aircraft")
+async def day_aircraft_save(
+    request: Request, db: DbSession, session: CurrentSession, device_id: str
+) -> Response:
+    """Roadmap H9 (SPEC §7.8 By day): the owner's switch for the day list."""
+    device = await _own_device(db, session, device_id)
+    device.day_aircraft = (await request.form()).get("day_aircraft") == "on"
+    await db.commit()
+    return RedirectResponse(f"/cameras/{device.id}#flugzeuge", status_code=303)
+
+
 @router.post("/cameras/{device_id}/discord")
 async def discord_save(
     request: Request, db: DbSession, session: CurrentSession, device_id: str

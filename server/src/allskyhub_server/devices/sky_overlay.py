@@ -12,6 +12,7 @@ from pydantic import ValidationError
 
 from allskyhub_protocol import Orientation
 from allskyhub_server.devices.aircraft import CREDIT, TRAIL, Tracks
+from allskyhub_server.models import AircraftPass
 from allskyhub_sky import Overlay, overlay, project, usable
 
 
@@ -108,3 +109,34 @@ def build_aircraft(
         trail = "M" + "L".join(f"{px:.1f} {py:.1f}" for px, py in points) if len(points) > 1 else ""
         result.items.append(Aircraft(x, y, plane.name + _altitude(plane.alt_m), trail))
     return result
+
+
+@dataclass(frozen=True)
+class DayPass:
+    """Roadmap H9 (SPEC §7.8 By day): a pass from its start through its highest point to
+    its end, in the camera image's pixels."""
+
+    width: int
+    height: int
+    path: str
+    top: tuple[float, float]
+
+
+def day_pass(status: dict[str, Any] | None, found: AircraftPass) -> DayPass | None:
+    """None without a usable lens (no orientation yet)."""
+    from allskyhub_server.devices.overflight_map import great_circle
+
+    lens_found = orientation(status)
+    if lens_found is None or lens_found.lens is None:
+        return None
+    lens = lens_found.lens
+
+    def pixel(alt: float, az: float) -> tuple[float, float]:
+        return project(alt, az, lens, lens_found.north_deg, lens_found.mirrored)
+
+    start = (found.start_alt_deg, found.start_az_deg)
+    top = (found.top_alt_deg, found.top_az_deg)
+    end = (found.end_alt_deg, found.end_az_deg)
+    points = [*great_circle(start, top), *great_circle(top, end)[1:]]
+    path = "M" + "L".join(f"{x:.1f} {y:.1f}" for x, y in (pixel(*p) for p in points))
+    return DayPass(lens.width, lens.height, path, pixel(*top))

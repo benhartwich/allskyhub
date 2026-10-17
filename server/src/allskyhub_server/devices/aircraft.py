@@ -28,6 +28,7 @@ import httpx
 from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
+from allskyhub_server.devices import day_aircraft
 from allskyhub_server.devices.connections import ConnectionRegistry
 from allskyhub_server.models import Device, EventRecord
 
@@ -39,6 +40,7 @@ log = logging.getLogger(__name__)
 API = "https://api.adsb.lol/v2/point/{lat:.3f}/{lon:.3f}/{nm}"
 CREDIT = "Aircraft data: adsb.lol (ODbL)"
 FETCH_EVERY = dt.timedelta(seconds=10)
+DAY_EVERY = 3  # rounds: every 30 s by day, for the list only (SPEC §7.8 By day)
 KEEP = dt.timedelta(minutes=15)
 RADIUS_KM = 150.0
 MAX_NM = 250  # adsb.lol's largest radius
@@ -70,6 +72,9 @@ class Fix:
     track_deg: float | None
     speed_kn: float | None
     flight: str | None
+    # Roadmap H9: adsb.lol's ``r`` and ``t``, kept per aircraft in ``Tracks.info``.
+    registration: str | None = None
+    type_code: str | None = None
 
 
 @dataclass(frozen=True)
@@ -197,9 +202,13 @@ class Tracks:
     def __init__(self) -> None:
         self._tracks: dict[Source, dict[str, _Track]] = {"adsb.lol": {}, "receiver": {}}
         self._covered: dict[str, list[dt.datetime]] = {}
+        # Registration and type code per ICAO address (roadmap H9), while it has positions.
+        self.info: dict[str, tuple[str | None, str | None]] = {}
 
     def add(self, source: Source, hex_: str, fix: Fix) -> None:
         self._tracks[source].setdefault(hex_.lower(), _Track()).add(fix)
+        if fix.registration or fix.type_code:
+            self.info[hex_.lower()] = (fix.registration, fix.type_code)
 
     def covered(self, device_id: str, at: dt.datetime) -> None:
         times = self._covered.setdefault(device_id, [])
@@ -215,6 +224,9 @@ class Tracks:
                     tracks[key].fixes = fixes
                 else:
                     del tracks[key]
+        for key in list(self.info):
+            if all(key not in tracks for tracks in self._tracks.values()):
+                del self.info[key]
         for key in list(self._covered):
             times = [t for t in self._covered[key] if t >= oldest]
             if times:
@@ -386,12 +398,15 @@ def parse(body: dict[str, Any], received: dt.datetime) -> Iterable[tuple[str, Fi
             continue  # "ground" or no altitude: never in the sky
         flight = ac.get("flight")
         track, speed = ac.get("track"), ac.get("gs")
+        reg, type_code = ac.get("r"), ac.get("t")
         yield hex_.lower().lstrip("~"), Fix(
             base - dt.timedelta(seconds=float(seen)),
             float(lat), float(lon), float(alt) * FEET,
             float(track) if isinstance(track, int | float) else None,
             float(speed) if isinstance(speed, int | float) else None,
             flight.strip() or None if isinstance(flight, str) else None,
+            reg.strip()[:12] or None if isinstance(reg, str) else None,
+            type_code.strip()[:8] or None if isinstance(type_code, str) else None,
         )  # fmt: skip
 
 
@@ -463,6 +478,19 @@ def wants_aircraft(
     return None
 
 
+def wants_day(
+    status: dict[str, Any] | None, on: bool, now: dt.datetime
+) -> tuple[float, float] | None:
+    """Roadmap H9 (SPEC §7.8 By day): the camera's place while the sun is at -6° or above
+    and the owner has not switched it off, else None."""
+    from allskyhub_sky.astro import sun_altitude
+
+    place = _place(status)
+    if not on or place is None or sun_altitude(now, *place) < NIGHT_SUN:
+        return None
+    return place
+
+
 CHECK_AFTER = dt.timedelta(seconds=60)
 WATCH_HOLD = dt.timedelta(minutes=2)
 GIVE_UP = dt.timedelta(minutes=3)
@@ -486,6 +514,13 @@ def _place(status: dict[str, Any] | None) -> tuple[float, float] | None:
     return float(lat), float(lon)
 
 
+def _zone(status: dict[str, Any] | None) -> dt.tzinfo:
+    from allskyhub_server.devices.tonight import zone_for
+
+    settings: dict[str, Any] = (status or {}).get("settings") or {}
+    return zone_for(settings.get("timezone"))
+
+
 def _now() -> dt.datetime:
     return dt.datetime.now(dt.UTC)
 
@@ -494,7 +529,8 @@ current: Watch | None = None
 
 
 class Watch:
-    """The hub's aircraft: fetched every ``FETCH_EVERY`` for the cameras that need them."""
+    """The hub's aircraft: fetched every ``FETCH_EVERY`` for the cameras that need them, every
+    ``DAY_EVERY`` rounds for those that need them only for the day list (roadmap H9)."""
 
     def __init__(
         self,
@@ -511,6 +547,8 @@ class Watch:
         # reconnect, and a long event costs seconds of SGP4.
         self._checked_new: dict[tuple[str, str], dt.datetime] = {}
         self._watched_until: dict[str, dt.datetime] = {}
+        self._rounds = 0
+        self.passes = day_aircraft.Passes(maker)
         # Roadmap H6 (SPEC §7.9): set by the app; meteors are checked against both.
         self.satellites: SatelliteCatalogue | None = None
         global current  # the templates draw from the app's one Watch
@@ -535,15 +573,28 @@ class Watch:
             return
         async with self._maker() as db:
             rows = (
-                await db.execute(select(Device.id, Device.last_status).where(Device.id.in_(ids)))
+                await db.execute(
+                    select(Device.id, Device.last_status, Device.day_aircraft).where(
+                        Device.id.in_(ids)
+                    )
+                )
             ).all()
+        day_round = self._rounds % DAY_EVERY == 0
+        self._rounds += 1
         wanted: list[tuple[str, float, float]] = []
-        for device_id, status in rows:
+        by_day: list[tuple[str, float, float, dt.tzinfo]] = []
+        for device_id, status, day_on in rows:
             place = wants_aircraft(status, self._is_watched(device_id, now), now)
-            if place is not None:
-                wanted.append((device_id, *place))
+            day = wants_day(status, day_on, now)
+            if day is not None:
+                by_day.append((device_id, *day, _zone(status)))
+            where = place or (day if day_round else None)
+            if where is not None:
+                wanted.append((device_id, *where))
         if wanted:
             await fetch_areas(self.tracks, self._fetch, wanted, now)
+        if day_round:
+            await self.passes.update(self.tracks, by_day, now)
 
     def receive(self, device_id: str, at: dt.datetime, positions: Iterable[Any]) -> None:
         """SPEC §6.3 ``aircraft`` from the camera's own receiver."""

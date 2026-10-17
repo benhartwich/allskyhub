@@ -14,7 +14,7 @@ from allskyhub_server.devices import meteor_pairs
 from allskyhub_server.devices import triangulation as t
 from allskyhub_server.models import Device, EventRecord, MeteorPair
 from tests.fake_device import FakeDevice
-from tests.helpers import claim, make_account
+from tests.helpers import claim, home_csrf, make_account
 
 LINZ = (48.30, 14.29)
 SALZBURG = (47.80, 13.04)
@@ -60,15 +60,15 @@ def test_not_the_same_meteor() -> None:
 
 
 def test_geodetic_round_trip() -> None:
-    lat, lon, h = t.geodetic(t.ecef(48.136, 14.39, 85.0))
-    assert (lat, lon, h) == pytest.approx((48.136, 14.39, 85.0), abs=1e-6)
+    lat, lon, h = t.geodetic(t.ecef(50.036, 10.39, 85.0))
+    assert (lat, lon, h) == pytest.approx((50.036, 10.39, 85.0), abs=1e-6)
 
 
 async def test_pairing_two_cameras(
     app: FastAPI, client: httpx.AsyncClient, new_client: httpx.AsyncClient
 ) -> None:
     """The same meteor from two cameras of one owner: paired, shown on both event pages;
-    a camera of someone else pairs only when both owners show their location publicly."""
+    a camera of someone else pairs only when both owners joined the network (audit L2)."""
     top, bottom = t.ecef(47.95, 13.80, 95.0), t.ecef(47.80, 13.95, 75.0)
     maker: async_sessionmaker[AsyncSession] = app.state.sessionmaker
     start = dt.datetime(2026, 10, 13, 22, 0, tzinfo=dt.UTC)
@@ -109,9 +109,31 @@ async def test_pairing_two_cameras(
     other = (await client.get(f"/cameras/{salzburg}/events/20261013/meteor-20261013T220020Z")).text
     assert "Bahn des Meteors" in other
 
-    # Someone else's camera with an overlapping meteor: only with public locations.
+    # Someone else's camera with an overlapping meteor: only when both owners joined.
     await make_account(new_client)
     stranger = await camera(new_client, (47.6, 14.6), 5)
     async with maker() as db:
         assert len((await db.scalars(select(MeteorPair))).all()) == 1
     assert await meteor_pairs.pair_event(maker, stranger, "meteor-20261013T220005Z") == 0
+
+    async def join(c: httpx.AsyncClient, device_id: str, on: bool) -> None:
+        data = {"csrf_token": await home_csrf(c)} | ({"network": "on"} if on else {})
+        assert (await c.post(f"/cameras/{device_id}/network", data=data)).status_code == 303
+
+    await join(new_client, stranger, True)
+    assert await meteor_pairs.pair_event(maker, stranger, "meteor-20261013T220005Z") == 0
+    for device_id in (linz, salzburg):
+        await join(client, device_id, True)
+    assert await meteor_pairs.pair_event(maker, stranger, "meteor-20261013T220005Z") == 2
+    page = (
+        await new_client.get(f"/cameras/{stranger}/events/20261013/meteor-20261013T220005Z")
+    ).text
+    assert page.count("Bahn des Meteors") == 2
+
+    # Leaving the network takes the pairs off the other owner's pages.
+    for device_id in (linz, salzburg):
+        await join(client, device_id, False)
+    page = (
+        await new_client.get(f"/cameras/{stranger}/events/20261013/meteor-20261013T220005Z")
+    ).text
+    assert "Bahn des Meteors" not in page

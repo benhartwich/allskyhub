@@ -14,6 +14,7 @@ from allskyhub_protocol import (
     CommandName,
     Event,
     EventKind,
+    EventVariant,
     FrameVariant,
     UploadEventArgs,
     event_id,
@@ -104,7 +105,7 @@ async def test_events_flow(
         # The full picture is fetched when someone opens it.
         assert (await client.get(image, headers=auth)).status_code == 202
         full = await expect_request(ws)
-        assert full.variant is FrameVariant.FULL
+        assert full.variant == FrameVariant.FULL
         assert (await client.get(image, headers=auth)).status_code == 202  # no second command
         assert await put(live_app, token, FrameVariant.FULL, JPEG) == 204
         assert (await client.get(image, headers=auth)).content == JPEG
@@ -131,8 +132,8 @@ async def test_events_flow(
     now = dt.datetime.now(dt.UTC)
     async with app.state.sessionmaker() as db:
         await maintenance.purge(db, store, settings, now=now + dt.timedelta(days=8))
-    assert not store.event_path(dev.device_id, NIGHT, METEOR, FrameVariant.FULL).exists()
-    assert store.event_path(dev.device_id, NIGHT, METEOR, FrameVariant.THUMB).exists()
+    assert not store.event_path(dev.device_id, NIGHT, METEOR, EventVariant.FULL).exists()
+    assert store.event_path(dev.device_id, NIGHT, METEOR, EventVariant.THUMB).exists()
     async with app.state.sessionmaker() as db:
         await maintenance.purge(db, store, settings, now=now + dt.timedelta(days=31))
     assert (await client.get(f"{api}/events", headers=auth)).json() == []
@@ -148,7 +149,7 @@ async def test_unpairing_removes_events(
         await expect_request(ws)
         assert await put(live_app, token, FrameVariant.THUMB, JPEG) == 204
     store: ImageStore = app.state.images
-    assert store.event_path(dev.device_id, NIGHT, METEOR, FrameVariant.THUMB).exists()
+    assert store.event_path(dev.device_id, NIGHT, METEOR, EventVariant.THUMB).exists()
     await client.post(
         f"/cameras/{dev.device_id}/remove", data={"csrf_token": await home_csrf(client)}
     )

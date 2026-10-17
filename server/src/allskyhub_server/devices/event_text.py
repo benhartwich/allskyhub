@@ -5,6 +5,7 @@ from __future__ import annotations
 import datetime as dt
 from typing import Any, cast
 
+from allskyhub_server.devices import lightning_li
 from allskyhub_server.models import EventRecord
 
 EVENT_TITLES = {
@@ -184,6 +185,15 @@ def event_rows(event: EventRecord) -> list[tuple[str, str]]:
         if isinstance(flashes := data.pop("storm_flashes", None), int | float):
             rows.append(("Blitze in 30 Min.", str(round(flashes))))
         data.pop("storm", None)  # shown as the storm the flash belongs to
+        # SPEC §7.12: the camera's lightning sensor, when it has one.
+        if "sensor_km" in data:
+            km = data.pop("sensor_km")
+            rows.append((
+                "Blitzsensor",
+                f"Blitz in {round(km)} km" if isinstance(km, int | float) else "kein Blitz gehört",
+            ))  # fmt: skip
+        if (li := lightning_li.summary(event)) is not None:
+            rows.append(("Blitzsatellit (Quelle: EUMETSAT)", li))
     if event.kind in ("aurora", "nlc"):
         if isinstance(index := data.pop("peak_index", None), int | float):
             rows.append(("Stärke", f"{round(index)} %"))

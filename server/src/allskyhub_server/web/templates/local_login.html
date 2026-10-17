@@ -5,9 +5,11 @@
   <h1>An der Kamera anmelden</h1>
   <div class="card stack">
     <p>Die lokale Seite deiner Kamera <strong>{{ device.name }}</strong> möchte dich mit deinem allskyhub-Konto anmelden.</p>
+    <p class="target-host"><code>{{ host }}</code></p>
     <dl class="facts">
       <dt>Adresse</dt><dd><code>{{ origin }}</code></dd>
     </dl>
+    {% if not local %}<p class="warn">Diese Adresse liegt nicht in einem Heimnetz. Die lokale Seite deiner Kamera erreichst du normalerweise unter einer Adresse wie <code>allskyhub.local</code> oder <code>192.168.…</code>. Hat dir jemand diesen Link geschickt, brich ab.</p>{% endif %}
     <p class="muted">Bestätige nur, wenn du gerade selbst auf diese Adresse zugreifst. Danach bist du dort 30 Tage angemeldet.</p>
     <form method="post" action="/cameras/{{ device.id }}/local-login" class="stack">
       <input type="hidden" name="csrf_token" value="{{ csrf_token }}">

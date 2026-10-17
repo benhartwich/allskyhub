@@ -10,7 +10,7 @@ import pytest
 from fastapi import FastAPI
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
-from allskyhub_protocol import FrameVariant
+from allskyhub_protocol import EventVariant, FrameVariant
 from allskyhub_server.devices import discord
 from allskyhub_server.devices.images import ImageStore
 from allskyhub_server.models import Device, EventRecord
@@ -72,7 +72,7 @@ async def test_events_go_out_once_with_their_picture(
     await _add_event(app, device_id, "m1", "meteor", has_image=True)
     await poster_app.event(device_id, "m1", picture_arrived=False)
     assert poster.posts == []  # waits for the picture
-    store.save_event(device_id, "20261012", "m1", FrameVariant.THUMB, JPEG)
+    store.save_event(device_id, "20261012", "m1", EventVariant.THUMB, JPEG)
     await poster_app.event(device_id, "m1", picture_arrived=True)
     await poster_app.event(device_id, "m1", picture_arrived=True)
     [(hook, text, picture)] = poster.posts
@@ -120,7 +120,7 @@ async def test_morning_summary_once(app: FastAPI, client: httpx.AsyncClient) -> 
     await _set(app, device_id, discord={"webhook": HOOK}, public_slug="garten-abc")
     await poster_app.check_morning(dt.datetime(2026, 10, 13, 4, tzinfo=dt.UTC))
     assert poster.posts == []  # before sunrise
-    morning = dt.datetime(2026, 10, 13, 6, tzinfo=dt.UTC)
+    morning = dt.datetime(2026, 10, 13, 6, 30, tzinfo=dt.UTC)
     await poster_app.check_morning(morning)
     await poster_app.check_morning(morning + dt.timedelta(minutes=5))
     [(_, text, picture)] = poster.posts

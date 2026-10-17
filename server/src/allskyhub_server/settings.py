@@ -29,6 +29,17 @@ class Settings(BaseSettings):
     # Archive retention (privacy policy): full images and thumbnails.
     keep_full_days: int = Field(default=7, ge=1)
     keep_thumb_days: int = Field(default=30, ge=1)
+    # The same for cameras with Plus (roadmap N7); the privacy policy names both.
+    keep_plus_full_days: int = Field(default=90, ge=1)
+    keep_plus_thumb_days: int = Field(default=365, ge=1)
+    # Roadmap N7: Paddle Billing for Plus. Off (no checkout, nothing sent to Paddle) until
+    # the API key, client-side token, webhook secret and both price IDs are set.
+    paddle_env: Literal["sandbox", "live"] = "sandbox"
+    paddle_api_key: str = ""
+    paddle_client_token: str = ""
+    paddle_webhook_secret: str = ""
+    paddle_price_month: str = ""
+    paddle_price_year: str = ""
     # Roadmap C8: timelapses and keograms over several nights, made with ffmpeg.
     ffmpeg_path: str = "ffmpeg"
     keep_render_days: int = Field(default=7, ge=1)
@@ -49,6 +60,8 @@ class Settings(BaseSettings):
     admin_emails: str = ""
     # Where the admin page looks for new versions and their CI (GitHub, public API).
     deploy_repo: str = "benhartwich/allskyhub"
+    # deploy/android: root's Android builds. Root-owned, the hub only reads (android-test/).
+    android_dir: Path = Path("/var/lib/allskyhub-android")
     # Which CI checks must be green before a deploy (name prefixes, comma-separated): the
     # hub's tests, not the Raspberry Pi image build, which takes much longer.
     deploy_checks: str = "check"
@@ -61,6 +74,10 @@ class Settings(BaseSettings):
     adsb: bool = True
     # Roadmap H6 (SPEC §7.9): CelesTrak's orbital elements, to name satellites among meteors.
     satellites: bool = True
+    # Roadmap H8 (SPEC §7.10): flashes from Meteosat's Lightning Imager, from the EUMETSAT
+    # Data Store (a free account; key and secret of its API). Off while either is empty.
+    eumetsat_key: str = ""
+    eumetsat_secret: str = ""
 
     log_level: str = "INFO"
     log_format: Literal["json", "console"] = "json"
@@ -71,6 +88,22 @@ class Settings(BaseSettings):
         if not v.startswith(("postgresql://", "postgres://")):
             raise ValueError("database_url must start with postgresql://")
         return v
+
+    @property
+    def lightning_li(self) -> bool:
+        return bool(self.eumetsat_key and self.eumetsat_secret)
+
+    @property
+    def billing(self) -> bool:
+        return all(
+            (
+                self.paddle_api_key,
+                self.paddle_client_token,
+                self.paddle_webhook_secret,
+                self.paddle_price_month,
+                self.paddle_price_year,
+            )
+        )
 
     @property
     def async_database_url(self) -> str:

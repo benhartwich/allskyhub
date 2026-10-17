@@ -81,6 +81,11 @@ def clock(value: dt.datetime | None) -> str:
     return "–" if value is None else value.astimezone(UI_ZONE).strftime("%H:%M")
 
 
+def when(value: dt.datetime) -> str:
+    """ "14.10.2026, 22:14" in the hub's time zone."""
+    return value.astimezone(UI_ZONE).strftime("%d.%m.%Y, %H:%M")
+
+
 def mmss(seconds: float | None) -> str:
     if seconds is None:
         return "–"
@@ -112,13 +117,31 @@ def air_overlay(device: Any) -> Any:
     return overlay.build_aircraft(device.last_status, at, aircraft.current.tracks)
 
 
+# SPEC §7.11 status.heater reasons.
+HEATER_REASONS = {
+    "off": "aus", "on": "an (dauernd)", "dew": "an: Taugefahr", "humidity": "an: hohe Luftfeuchte",
+    "night": "an: Nacht (ohne Sensor)", "too_warm": "aus: zu warm",
+}  # fmt: skip
+
+
+def heater_text(heater: object) -> str:
+    if not isinstance(heater, dict):
+        return ""
+    h = cast(dict[str, Any], heater)
+    reason = h.get("reason")
+    text = HEATER_REASONS.get(reason) if isinstance(reason, str) else None
+    return text or ("an" if h.get("on") else "aus")
+
+
 cast(dict[str, Any], templates.env.globals)["asset"] = asset
+cast(dict[str, Any], templates.env.globals)["heater_text"] = heater_text
 cast(dict[str, Any], templates.env.globals)["air_overlay"] = air_overlay
 cast(dict[str, Any], templates.env.globals)["sky_overlay"] = sky_overlay
 _filters = cast(dict[str, Any], templates.env.filters)
 _filters["age"] = age
 _filters["night_title"] = night_title
 _filters["clock"] = clock
+_filters["when"] = when
 _filters["compass"] = compass
 _filters["mmss"] = mmss
 _filters["filesize"] = filesize

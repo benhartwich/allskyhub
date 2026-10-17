@@ -16,6 +16,7 @@ final camera = Camera(id: 'cam1', name: 'Garten', profile: 'sim', online: true);
 class FakeManageHub {
   var discord = <String, dynamic>{};
   var discordTests = 0;
+  var network = false;
   final members = <Map<String, dynamic>>[];
   var enabled = false;
   var onHome = false;
@@ -94,6 +95,12 @@ class FakeManageHub {
           'total': period('$year', full ? 4 : 0),
           'showers': full ? {'Orioniden': 3} : <String, int>{},
           'years': [2026, 2025],
+          'sqm_months': [
+            ['09/2026', 21.1],
+            ['10/2026', 21.05],
+          ],
+          'sqm_trend': -0.12,
+          'sqm_trend_text': 'Der Himmel wird heller: 0,12 mag/″² pro Jahr.',
         });
       }
       if (path == '/api/v1/cameras/cam1/exports') {
@@ -141,6 +148,12 @@ class FakeManageHub {
             'nlc': 'NLC',
           },
         });
+      }
+      if (path == '/api/v1/cameras/cam1/network') {
+        if (request.method == 'PUT') {
+          network = (jsonDecode(request.body) as Map)['network'] as bool;
+        }
+        return _json({'network': network});
       }
       if (path == '/api/v1/targets') {
         return _json([
@@ -273,6 +286,10 @@ void main() {
     await _pump(tester, StatsScreen(client: hub.client, camera: camera));
     expect(find.text('2 von 4'), findsOneWidget);
     expect(find.text('Orioniden'), findsOneWidget);
+    expect(
+      find.text('Der Himmel wird heller: 0,12 mag/″² pro Jahr.'),
+      findsOneWidget,
+    );
     expect(find.text('M10'), findsNWidgets(2)); // bar label and table row
 
     await tester.tap(find.text('2025'));
@@ -375,5 +392,21 @@ void main() {
     });
     expect(shared.isOwner, isFalse);
     expect(shared.canChange, isFalse);
+  });
+
+  testWidgets('network: the owner joins the camera network', (tester) async {
+    final hub = FakeManageHub();
+    await _pump(tester, NetworkScreen(client: hub.client, camera: camera));
+    expect(
+      tester.widget<SwitchListTile>(find.byType(SwitchListTile)).value,
+      false,
+    );
+    await tester.tap(find.byKey(const Key('network-switch')));
+    await tester.pumpAndSettle();
+    expect(hub.network, isTrue);
+    expect(
+      tester.widget<SwitchListTile>(find.byType(SwitchListTile)).value,
+      true,
+    );
   });
 }

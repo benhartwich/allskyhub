@@ -13,7 +13,7 @@ import shutil
 import tempfile
 from pathlib import Path
 
-from allskyhub_protocol import FrameVariant
+from allskyhub_protocol import EventVariant, FrameVariant
 
 JPEG_MAGIC = b"\xff\xd8\xff"
 
@@ -70,13 +70,13 @@ class ImageStore:
                 break
 
     def event_path(
-        self, device_id: str, night_id: str, event_id: str, variant: FrameVariant
+        self, device_id: str, night_id: str, event_id: str, variant: EventVariant
     ) -> Path:
         """``event_id`` matches EVENT_ID_PATTERN (no path separators)."""
         return self.root / device_id / night_id / "events" / variant.value / f"{event_id}.jpg"
 
     def save_event(
-        self, device_id: str, night_id: str, event_id: str, variant: FrameVariant, data: bytes
+        self, device_id: str, night_id: str, event_id: str, variant: EventVariant, data: bytes
     ) -> None:
         target = self.event_path(device_id, night_id, event_id, variant)
         target.parent.mkdir(parents=True, exist_ok=True)
@@ -90,7 +90,7 @@ class ImageStore:
             raise
 
     def delete_event(
-        self, device_id: str, night_id: str, event_id: str, variant: FrameVariant
+        self, device_id: str, night_id: str, event_id: str, variant: EventVariant
     ) -> None:
         path = self.event_path(device_id, night_id, event_id, variant)
         path.unlink(missing_ok=True)
@@ -117,3 +117,22 @@ class ImageStore:
     def delete_device(self, device_id: str) -> None:
         """Everything of a device: latest images and the whole archive."""
         shutil.rmtree(self.root / device_id, ignore_errors=True)
+
+
+def jpeg_size(data: bytes) -> tuple[int, int] | None:
+    """Width and height from a JPEG's frame header (SOFn), None when there is none."""
+    i = 2
+    while i + 9 < len(data):
+        if data[i] != 0xFF:
+            return None
+        marker = data[i + 1]
+        if marker == 0xFF:  # fill byte
+            i += 1
+            continue
+        length = int.from_bytes(data[i + 2 : i + 4])
+        if 0xC0 <= marker <= 0xCF and marker not in (0xC4, 0xC8, 0xCC):
+            height = int.from_bytes(data[i + 5 : i + 7])
+            width = int.from_bytes(data[i + 7 : i + 9])
+            return (width, height) if width and height else None
+        i += 2 + length
+    return None

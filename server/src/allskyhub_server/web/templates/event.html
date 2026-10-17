@@ -1,14 +1,21 @@
 {% extends "base.html" %}
-{% block title %}{{ event_titles[event.kind] or event.kind }} · {{ device.name }} · allskyhub{% endblock %}
+{% block title %}{{ heading }} · {{ device.name }} · allskyhub{% endblock %}
 {% block content %}
-<a class="back" href="/cameras/{{ device.id }}/nights/{{ event.night_id }}">← {{ event.night_id | night_title }}</a>
-<h1>{{ event_titles[event.kind] or event.kind }}</h1>
+{% if back_overflights %}<a class="back" href="/cameras/{{ device.id }}/ueberfluege?nacht={{ event.night_id }}">← Überflüge {{ event.night_id | night_title }}</a>
+{% else %}<a class="back" href="/cameras/{{ device.id }}/nights/{{ event.night_id }}">← {{ event.night_id | night_title }}</a>{% endif %}
+<h1>{{ heading }}</h1>
 <p class="muted">{{ event.start | localtime }}{% if (event.data or {}).get("ongoing") %} · <strong>läuft noch</strong>{% endif %}</p>
 <div id="event">{% include "_event_view.html" %}</div>
+{% if has_frame %}
+<div id="original" class="stack">
+  {% if event.has_original %}{% include "_event_original.html" %}
+  {% else %}<button type="button" class="secondary small" hx-get="/cameras/{{ device.id }}/events/{{ event.night_id }}/{{ event.event_id }}/original" hx-target="#original" hx-swap="innerHTML">Ganzes Bild zeigen</button>{% endif %}
+</div>
+{% endif %}
 <form method="post" action="/cameras/{{ device.id }}/events/{{ event.night_id }}/{{ event.event_id }}/label" class="card label-form">
   <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
   {% if event.label == "false_positive" and event.label_auto %}
-  <p><strong>Automatisch als „kein {{ event_titles[event.kind] or event.kind }}“ markiert: {{ label_reasons[event.label_reason] or "" }}{% if event.label_detail %} {{ event.label_detail }}{% endif %}.</strong> Die Spur passt zu seiner Bahn; zählt nirgends mit.</p>
+  <p><strong>Automatisch als „kein {{ event_titles[event.kind] or event.kind }}“ markiert: {{ label_reasons[event.label_reason] or "" }}{% if event.label_detail %} {{ event.label_detail }}{% endif %}.</strong> {% if event.kind == "lightning" %}Der Blitzsatellit sah während des ganzen Gewitters keine Blitze im Umkreis von 400 km: wohl Licht in der Nähe der Kamera.{% else %}Die Spur passt zu seiner Bahn;{% endif %} Zählt nirgends mit.</p>
   <button type="submit" name="label" value="" class="secondary">Doch kein {{ label_reasons[event.label_reason] or "Fehlalarm" }}: Markierung entfernen</button>
   {% elif event.label == "false_positive" %}
   <p><strong>Als „kein {{ event_titles[event.kind] or event.kind }}“ markiert{% if event.label_reason %} ({{ label_reasons[event.label_reason] }}){% endif %}.</strong> Zählt nirgends mit.</p>
@@ -38,6 +45,7 @@
     <dt>Über</dt><dd>{{ '%.2f' | format(p.high_lat) | replace('.', ',') }}° N, {{ '%.2f' | format(p.high_lon) | replace('.', ',') }}° O → {{ '%.2f' | format(p.low_lat) | replace('.', ',') }}° N, {{ '%.2f' | format(p.low_lon) | replace('.', ',') }}° O</dd>
     <dt>Schnittwinkel</dt><dd>{{ p.convergence_deg | round | int }}° {% if p.convergence_deg < 20 %}<span class="warn">(flach, ungenauer)</span>{% endif %}</dd>
   </dl>
+  {% if s.fireball %}<p>{% if s.meteorite %}<span class="badge warn">Meteoritenfall möglich</span> {% endif %}<a href="/feuerkugeln/{{ p.id }}">Bahn{{ ' und mögliches Fallgebiet' if s.meteorite }} auf der Karte</a></p>{% endif %}
 </div>
 {% endfor %}
 <div class="card">

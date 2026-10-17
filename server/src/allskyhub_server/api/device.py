@@ -19,7 +19,7 @@ from pydantic import ValidationError
 from sqlalchemy import func, select, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
-from starlette.websockets import WebSocketDisconnect, WebSocketState
+from starlette.websockets import WebSocketDisconnect, WebSocketDisconnected, WebSocketState
 
 from allskyhub_protocol import (
     EVENT_ID_PATTERN,
@@ -32,6 +32,7 @@ from allskyhub_protocol import (
     ErrorReply,
     Event,
     EventLabel,
+    EventVariant,
     FrameInfo,
     FrameVariant,
     Hello,
@@ -56,14 +57,16 @@ from allskyhub_server.devices import (
     labels,
     local_access,
     meteor_pairs,
+    nowcast,
     pairing,
     public,
     settings_form,
+    youtube,
 )
 from allskyhub_server.devices.connections import Connection, ConnectionRegistry
 from allskyhub_server.devices.discord import Discord
-from allskyhub_server.devices.events import image_rev
-from allskyhub_server.devices.images import JPEG_MAGIC, ImageStore
+from allskyhub_server.devices.events import dismissed, has_frame, image_rev
+from allskyhub_server.devices.images import JPEG_MAGIC, ImageStore, jpeg_size
 from allskyhub_server.devices.space_weather import KpCache
 from allskyhub_server.models import (
     Device,
@@ -268,9 +271,10 @@ async def upload_event(
     settings: SettingsDep,
     night_id: Annotated[str, Path(pattern=NIGHT_ID)],
     event_id: Annotated[str, Path(pattern=EVENT_ID_PATTERN)],
-    variant: Annotated[FrameVariant, Query()] = FrameVariant.FULL,
+    variant: Annotated[EventVariant, Query()] = EventVariant.FULL,
 ) -> Response:
-    """SPEC §6.5, §6.6: the picture of a requested event, like a frame."""
+    """SPEC §6.5, §6.6: the picture of a requested event, like a frame; with ``original``
+    the whole frame it was found in (roadmap L28)."""
     info = await _device_from_bearer(request, db)
     registry: ConnectionRegistry = request.app.state.connections
     if not registry.is_requested(info.device_id, night_id, event_id, variant, "event"):
@@ -280,14 +284,24 @@ async def upload_event(
         raise HTTPException(404, "Upload was not requested")
     store: ImageStore = request.app.state.images
     await asyncio.to_thread(store.save_event, info.device_id, night_id, event_id, variant, data)
+    values: dict[str, Any]
+    if variant is EventVariant.ORIGINAL:
+        size = jpeg_size(data)
+        values = {
+            "has_original": True,
+            "original_w": size[0] if size else None,
+            "original_h": size[1] if size else None,
+        }
+    else:
+        values = {"has_full": True} if variant is EventVariant.FULL else {"has_thumb": True}
     await db.execute(
         update(EventRecord)
         .where(EventRecord.device_id == info.device_id, EventRecord.event_id == event_id)
-        .values({"has_full": True} if variant is FrameVariant.FULL else {"has_thumb": True})
+        .values(values)
     )
     await db.commit()
     discord: Discord | None = request.app.state.notifier.discord
-    if discord is not None and variant is FrameVariant.THUMB:
+    if discord is not None and variant is EventVariant.THUMB:
         # Roadmap H5: detections with a picture go to Discord once it is here.
         _background(discord.event(info.device_id, event_id, picture_arrived=True))
     return Response(status_code=204)
@@ -424,7 +438,9 @@ async def device_ws(websocket: WebSocket) -> None:
                 continue
             await bucket.take()  # a flooding device is slowed down, nothing is lost
             await _handle(raw, conn, maker, settings, registry, notifier, store, kp)
-    except WebSocketDisconnect:
+    except (WebSocketDisconnect, WebSocketDisconnected):
+        # The second: this side closed it (replaced by a new connection, token expired)
+        # while the loop waited for the next message.
         pass
     finally:
         watchdog.cancel()
@@ -483,9 +499,24 @@ async def _store_status(
                 sensor_temp_c=status.sensor_temp_c,
                 cpu_temp_c=status.cpu_temp_c,
                 disk_free_pct=status.disk_free_pct,
+                # SPEC §7.11: only a reading without an error counts.
+                **_env_values(status),
+                heater_on=status.heater.on if status.heater is not None else None,
             )
         )
         await db.commit()
+
+
+def _env_values(status: Status) -> dict[str, float | None]:
+    env = status.env
+    if env is None or env.error is not None:
+        return {}
+    return {
+        "air_temp_c": env.temperature_c,
+        "humidity_pct": env.humidity_pct,
+        "dewpoint_c": env.dewpoint_c,
+        "pressure_hpa": env.pressure_hpa,
+    }
 
 
 async def _safe(maker: async_sessionmaker[AsyncSession], device_id: str) -> bool | None:
@@ -548,6 +579,10 @@ async def _handle(
             _background(notifier.unsafe(conn.device_id))
         if body.sky is not None:
             await _store_sky(maker, conn.device_id, body.sky)
+            # Roadmap N4: the last minutes of clouds for the nowcast.
+            nowcast.HISTORY.add(
+                conn.device_id, body.sky.model_dump(mode="json"), dt.datetime.now(dt.UTC)
+            )
             _background(notifier.aurora(conn.device_id, kp))
     elif isinstance(body, FrameInfo):
         await _on_frame(body, conn, maker, settings, registry)
@@ -658,6 +693,7 @@ async def _on_products(
     async with maker() as db:
         device = await db.get(Device, conn.device_id)
         public_video = device is not None and public.shows_videos(device)
+        uploads = youtube.wanted_kinds(device) if device is not None else frozenset[str]()
         for item in body.products:
             row = await db.scalar(
                 select(Product).where(
@@ -692,6 +728,8 @@ async def _on_products(
                 # Roadmap #16: the public page shows last night's timelapse like Allsky's
                 # website; only recent nights, so an import does not upload years of video.
                 wanted.append((item.name, FrameVariant.FULL))
+            elif item.kind.value in uploads and not row.has_full and recent:
+                wanted.append((item.name, FrameVariant.FULL))  # roadmap H5, devices/youtube.py
         await db.commit()
     for name, variant in wanted:
         await registry.request_product(conn.device_id, body.night_id, name, variant)
@@ -749,23 +787,26 @@ async def _on_event(
         replaced = not is_new and image_rev(body.data) > image_rev(previous or {})
         update_values: dict[str, Any] = dict(values)
         if replaced:
-            update_values |= {"has_thumb": False, "has_full": False}
+            update_values |= {
+                "has_thumb": False, "has_full": False, "has_original": False,
+                "original_w": None, "original_h": None,
+            }  # fmt: skip
         await db.execute(
             pg_insert(EventRecord)
             .values(device_id=conn.device_id, event_id=body.id, **values)
             .on_conflict_do_update(index_elements=["device_id", "event_id"], set_=update_values)
         )
-        stored = (
-            await db.execute(
-                select(EventRecord.has_thumb, EventRecord.has_full).where(
-                    EventRecord.device_id == conn.device_id, EventRecord.event_id == body.id
-                )
-            )
-        ).one()
+        stored = await db.scalar(
+            select(EventRecord)
+            .where(EventRecord.device_id == conn.device_id, EventRecord.event_id == body.id)
+            .execution_options(populate_existing=True)
+        )
         await db.commit()
+    if stored is None:
+        return
     if replaced:
         # Never serve (or let browsers cache) the old picture under the new revision.
-        for variant in FrameVariant:
+        for variant in EventVariant:
             await asyncio.to_thread(
                 store.delete_event, conn.device_id, body.night_id, body.id, variant
             )
@@ -774,20 +815,27 @@ async def _on_event(
         _background(notifier.event(conn.device_id, body.id))
         if notifier.discord is not None:
             _background(notifier.discord.event(conn.device_id, body.id, picture_arrived=False))
+    if body.kind == "aurora":
+        # Roadmap N2: a sighting (new or growing) tells clear-sky cameras around it.
+        _background(notifier.aurora_seen(conn.device_id, body.id))
     if body.kind == "meteor":
         # Roadmap C4: the same meteor at another camera (also when the event was updated).
-        _background(meteor_pairs.pair_event(maker, conn.device_id, body.id))
+        _background(meteor_pairs.pair_event(maker, conn.device_id, body.id, notifier.fireball))
         # Roadmap H6 (SPEC §7.9): a satellite, or an aircraft already covered (§7.8)?
         if aircraft.current is not None:
             _background(aircraft.current.check_new(conn.device_id, body.id))
     if not body.has_image:
         return
     if not stored.has_thumb:
-        await registry.request_event(conn.device_id, body.night_id, body.id, FrameVariant.THUMB)
+        await registry.request_event(conn.device_id, body.night_id, body.id, EventVariant.THUMB)
     # Owners who keep events longer keep them in full: fetch the picture while it exists
     # (again when it was replaced, so the kept picture is the final one).
     if (keep_days or DEFAULT_EVENT_KEEP_DAYS) > DEFAULT_EVENT_KEEP_DAYS and not stored.has_full:
-        await registry.request_event(conn.device_id, body.night_id, body.id, FrameVariant.FULL)
+        await registry.request_event(conn.device_id, body.night_id, body.id, EventVariant.FULL)
+    # SPEC §6.5 (roadmap L28): the whole frame right away, unless a false positive (those
+    # only when someone opens them).
+    if has_frame(stored) and not stored.has_original and not dismissed(stored):
+        await registry.request_event(conn.device_id, body.night_id, body.id, EventVariant.ORIGINAL)
 
 
 _tasks: set[asyncio.Task[Any]] = set()

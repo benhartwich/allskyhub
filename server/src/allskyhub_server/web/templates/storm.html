@@ -4,6 +4,25 @@
 <a class="back" href="/cameras/{{ device.id }}/nights/{{ storm.night_id }}">← {{ storm.night_id | night_title }}</a>
 <h1>Gewitter</h1>
 <p class="muted">{{ storm.start | localtime }} – {{ storm.end | clock }} · {{ storm.flashes | length }} Blitz{{ 'e' if storm.flashes | length != 1 }}</p>
+<section class="card stack">
+  <h2>Blitzsatellit <span class="muted small">(Quelle: EUMETSAT)</span></h2>
+  <p>{{ li.text }}</p>
+  {% if li.confirmed %}
+  <p class="muted small">Ein Blitz zählt, wenn der Satellit im Umkreis von 400 km in Richtung des Leuchtens (±60°) einen Blitz sah. Solange einer zählt, bleibt das ganze Gewitter unmarkiert.</p>
+  <div class="table-scroll"><table class="stats">
+    <thead><tr><th>Zeit</th><th>Leuchten aus</th><th>Satellitenblitz</th></tr></thead>
+    <tbody>
+    {% for e in li.confirmed[:20] %}
+    <tr>
+      <td><a href="/cameras/{{ device.id }}/events/{{ e.night_id }}/{{ e.event_id }}">{{ e.start | clock }}</a></td>
+      <td>{% if (e.data or {}).azimuth_deg is number %}{{ direction(e.data.azimuth_deg) }} ({{ e.data.azimuth_deg | round | int }}°){% else %}–{% endif %}</td>
+      <td>{{ e.li_km | round | int }} km {{ direction(e.li_bearing_deg) }} ({{ e.li_bearing_deg | round | int }}°)</td>
+    </tr>
+    {% endfor %}
+    </tbody>
+  </table></div>
+  {% endif %}
+</section>
 <div class="event-strip">
   {% for e in storm.flashes %}{% include "_event_thumb.html" %}{% endfor %}
 </div>

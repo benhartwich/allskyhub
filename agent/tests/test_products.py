@@ -22,6 +22,7 @@ from allskyhub_agent.products.build import (
     TIMELAPSE,
     ProductConfig,
     build_night,
+    flash_frames,
     keogram,
     newest_products,
     night_products,
@@ -34,7 +35,7 @@ from allskyhub_agent.store.images import INDEX_NAME, ImageStore
 from allskyhub_protocol import FrameInfo, Mode
 
 TZ = ZoneInfo("Europe/Vienna")
-LOC = Location(48.14, 14.39)
+LOC = Location(50.04, 10.39)
 HAVE_FFMPEG = shutil.which("ffmpeg") is not None
 
 
@@ -237,3 +238,43 @@ def test_bad_frames_stay_out_of_the_products(tmp_path: Path) -> None:
     assert result.frames == len(night) - bad
     with PILImage.open(store.night_dir("20261006") / KEOGRAM) as keo:
         assert keo.size[0] == len(night) - bad
+
+
+def test_flash_frames() -> None:
+    """SPEC §5.2 (roadmap L32): a frame lit up for one exposure by a light near the camera,
+    not a ramp at dusk, more gain on one frame or the first and last frame."""
+    t0 = datetime(2026, 10, 14, 20, 0, tzinfo=UTC)
+
+    def f(i: int, mean: float, gain: float = 100.0) -> FrameInfo:
+        frame = _frame("20261014", f"f{i}.jpg", Mode.NIGHT, t0 + timedelta(minutes=i), mean)
+        return frame.model_copy(update={"gain": gain, "exposure_us": 60_000_000})
+
+    cfg = ProductConfig()
+    # The lamp: +0.05 over both neighbours; the frame after has less gain (auto exposure).
+    assert flash_frames([f(0, 0.20), f(1, 0.25), f(2, 0.19, 90.0), f(3, 0.20)], cfg) == {"f1.jpg"}
+    # Dusk: brighter and brighter, never brighter than both neighbours.
+    assert flash_frames([f(i, 0.10 + 0.05 * i) for i in range(6)], cfg) == set()
+    # More gain on one frame: brighter as stored, the same light.
+    assert flash_frames([f(0, 0.20), f(1, 0.25, 120.0), f(2, 0.20)], cfg) == set()
+    # Too little to matter, and the first and last frames are kept.
+    assert flash_frames([f(0, 0.20), f(1, 0.21), f(2, 0.20)], cfg) == set()
+    assert flash_frames([f(0, 0.40), f(1, 0.20), f(2, 0.40)], cfg) == set()
+
+
+def test_flash_frames_stay_out_of_the_startrails(tmp_path: Path) -> None:
+    """SPEC §5.2 (roadmap L32): the lit frame is not in the startrails, the rest is."""
+    store = ImageStore(tmp_path, TZ)
+    t0 = datetime(2026, 10, 14, 20, 0, tzinfo=UTC)
+    nights: set[str] = set()
+    for i in range(12):
+        lamp = i == 5
+        rgb = np.full((40, 60, 3), 200 if lamp else 40, dtype=np.uint8)
+        stored = store.save(rgb, t0 + timedelta(minutes=i))
+        mean = 200 / 255 if lamp else 40 / 255
+        frame = _frame(stored.night_id, stored.name, Mode.NIGHT, t0 + timedelta(minutes=i), mean)
+        store.append_index(frame)
+        nights.add(stored.night_id)
+    (night,) = nights
+    build_night(store, night, ProductConfig(timelapse=False, startrails_max_mean=0.9))
+    with PILImage.open(store.night_dir(night) / STARTRAILS) as st:
+        assert int(np.asarray(st).max()) < 100

@@ -38,6 +38,12 @@ U8 = npt.NDArray[np.uint8]
 class ProductConfig:
     startrails_max_mean: float = 0.35
     startrails_min_frames: int = 10
+    # SPEC §5.2 (roadmap L32): a frame lit up for one exposure by a light near the camera
+    # (a lamp, a car) is left out of the startrails. It must be brighter than both
+    # neighbours by this share after evening out exposure and gain, and by this much in
+    # mean (0..1) as stored.
+    flash_rel: float = 0.15
+    flash_abs: float = 6 / 255
     keogram_band: int = 3
     keogram_max_height: int = 1080
     timelapse_fps: int = 25
@@ -108,6 +114,27 @@ def keogram(paths: Iterable[Path], cfg: ProductConfig) -> U8 | None:
         im = PILImage.fromarray(keo).resize((len(columns), cfg.keogram_max_height))
         keo = np.asarray(im, dtype=np.uint8)
     return keo
+
+
+def _light(f: FrameInfo) -> float:
+    """The frame's mean evened out for exposure and gain (gain in 0.1 dB, SPEC §4.4)."""
+    return f.mean / (max(f.exposure_us, 1) * 10 ** (f.gain / 200.0))
+
+
+def flash_frames(frames: list[FrameInfo], cfg: ProductConfig) -> set[str]:
+    """Names of frames brighter than the frames before and after (SPEC §5.2): a light
+    switched on for one exposure. A ramp at dusk or an exposure step is never brighter than
+    both neighbours; the first and last frame have only one and are kept."""
+    out: set[str] = set()
+    for a, b, c in zip(frames, frames[1:], frames[2:], strict=False):
+        lit = max(_light(a), _light(c))
+        if (
+            lit > 0
+            and _light(b) >= (1.0 + cfg.flash_rel) * lit
+            and b.mean - max(a.mean, c.mean) >= cfg.flash_abs
+        ):
+            out.add(b.name)
+    return out
 
 
 def startrails(frames: list[tuple[Path, float]], cfg: ProductConfig) -> U8 | None:
@@ -193,7 +220,14 @@ def build_night(store: ImageStore, night: str, cfg: ProductConfig | None = None)
         thumbnail(keo, thumbs / KEOGRAM)
         result.built.append(KEOGRAM)
 
-    st = startrails([(p, f.mean) for p, f in present], cfg) if cfg.startrails else None
+    flashes = flash_frames(frames, cfg)
+    if flashes:
+        log.info("night %s: %d flash frames left out of the startrails", night, len(flashes))
+    st = (
+        startrails([(p, f.mean) for p, f in present if f.name not in flashes], cfg)
+        if cfg.startrails
+        else None
+    )
     if not cfg.startrails:
         result.skipped[STARTRAILS] = "switched off"
     elif st is None:

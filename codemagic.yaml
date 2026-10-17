@@ -1,11 +1,11 @@
 # Codemagic builds of the Flutter app (app/, SPEC §2, M3).
 #
-# Before the release workflows can run, the following must be set up in the Codemagic UI
-# (Team settings → codemagic.yaml settings):
-#   - Android: a keystore uploaded as "allskyhub_upload" (code signing identities)
-#   - iOS: an App Store Connect API key as integration "allskyhub_asc" and the bundle id
-#     org.allskyhub.app registered in the Apple Developer account
-#   - Google Play: service account JSON in the env group "google_play"
+# The iOS release reads its keys from the app's secure variable group "allskyhub_store",
+# which the hub fills: admin page → App-Stores → "Prüfen und einrichten"
+# (server/src/allskyhub_server/admin/stores.py): the App Store Connect API key and the
+# private key of the iOS distribution certificate (made by the hub). No App Store Connect
+# integration in the Codemagic UI is needed. Android store builds run on the hub's own
+# server (deploy/android/README.md).
 # The check workflow needs none of that.
 
 definitions:
@@ -45,53 +45,33 @@ workflows:
     artifacts:
       - build/app/outputs/flutter-apk/app-debug.apk
 
-  # Manual: signed Android App Bundle to the Play Store internal track.
-  android-release:
-    name: Android release
-    instance_type: linux_x2
-    max_build_duration: 45
-    <<: *app_dir
-    environment:
-      <<: *flutter
-      android_signing: [allskyhub_upload]
-      groups: [google_play]
-    scripts:
-      - *get
-      - *check
-      - name: App Bundle
-        script: flutter build appbundle --release --build-number=$BUILD_NUMBER
-    artifacts:
-      - build/app/outputs/bundle/release/*.aab
-    publishing:
-      google_play:
-        credentials: $GCLOUD_SERVICE_ACCOUNT_CREDENTIALS
-        track: internal
-        submit_as_draft: true
-
-  # Manual: signed iOS build to TestFlight.
+  # Manual: signed iOS build to TestFlight. The certificate and profile come from Apple
+  # with the hub's key (fetch-signing-files --create makes them on the first run).
   ios-release:
     name: iOS release
     instance_type: mac_mini_m2
     max_build_duration: 60
     <<: *app_dir
-    integrations:
-      app_store_connect: allskyhub_asc
     environment:
       <<: *flutter
       xcode: latest
-      ios_signing:
-        distribution_type: app_store
-        bundle_identifier: org.allskyhub.app
+      groups: [allskyhub_store]
     scripts:
       - *get
       - *check
       - name: Signing
-        script: xcode-project use-profiles
+        script: |
+          keychain initialize
+          app-store-connect fetch-signing-files org.allskyhub.app --type IOS_APP_STORE --create
+          keychain add-certificates
+          xcode-project use-profiles
       - name: IPA
         script: flutter build ipa --release --build-number=$BUILD_NUMBER --export-options-plist=/Users/builder/export_options.plist
     artifacts:
       - build/ios/ipa/*.ipa
     publishing:
       app_store_connect:
-        auth: integration
+        api_key: $APP_STORE_CONNECT_PRIVATE_KEY
+        key_id: $APP_STORE_CONNECT_KEY_IDENTIFIER
+        issuer_id: $APP_STORE_CONNECT_ISSUER_ID
         submit_to_testflight: true

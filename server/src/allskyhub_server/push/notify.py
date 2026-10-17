@@ -12,6 +12,7 @@ from __future__ import annotations
 import asyncio
 import datetime as dt
 import logging
+import uuid
 from typing import Any, Protocol, cast
 
 from sqlalchemy import delete, select, update
@@ -20,6 +21,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from allskyhub_server.devices import (
     astro,
     events,
+    fireball,
     health,
     night_summary,
     space_weather,
@@ -31,7 +33,7 @@ from allskyhub_server.devices.event_text import EVENT_TITLES
 from allskyhub_server.devices.events import storm_key
 from allskyhub_server.devices.tonight import ForecastCache
 from allskyhub_server.mail.send import Mail, Mailer
-from allskyhub_server.models import Device, EventRecord, PushToken, User
+from allskyhub_server.models import Device, EventRecord, MeteorPair, PushToken, User
 from allskyhub_server.push.fcm import Message
 
 log = logging.getLogger(__name__)
@@ -54,6 +56,17 @@ SUMMARY_AFTER_SUNRISE = dt.timedelta(minutes=30)
 # the forecast has a good stretch of at least this length.
 TONIGHT_BEFORE_SUNSET = dt.timedelta(hours=1)
 TONIGHT_MIN_CLEAR = dt.timedelta(hours=2)
+# Roadmap N2: an aurora seen by a network camera alerts cameras this far around it, not
+# much further poleward (they would see it themselves), while the sighting is this fresh.
+AURORA_NET_KM = 800.0
+AURORA_NET_POLEWARD_DEG = 2.0
+AURORA_NET_FRESH = dt.timedelta(minutes=30)
+# SPEC §6.4 `peak_index`: % of the searched band that is aurora-green.
+AURORA_NET_MIN_INDEX = 5
+# Fireball alarm: pairs this close in time are the same meteor; members with a camera this
+# close to the fall area hear of it.
+FIREBALL_SAME = dt.timedelta(seconds=30)
+FIREBALL_RADIUS_KM = 300.0
 
 
 class PushSender(Protocol):
@@ -111,6 +124,7 @@ class Notifier:
         path = f"/cameras/{camera}" if camera else "/"
         if camera and night:
             path += f"/nights/{night}"
+        path = message.data.get("path", path)
         base = self.base_url.rstrip("/")
         return Mail(
             to=to,
@@ -291,6 +305,72 @@ class Notifier:
         except Exception:
             log.exception("push: unsafe notice failed")
 
+    async def fireball(self, pair_id: uuid.UUID) -> None:
+        """A fireball that may have dropped meteorites (devices/fireball.py): once per
+        meteor, to the owners of the cameras that saw it and to network members with a
+        camera nearby, each only with ``notify_fireball``."""
+        if not self._active:
+            return
+        try:
+            async with self._maker() as db:
+                pair = await db.get(MeteorPair, pair_id)
+                area = fireball.fall_area(pair) if pair is not None else None
+                if pair is None or area is None or pair.alerted:
+                    return
+                # Three cameras give three pairs of one meteor: one alarm.
+                near = await db.scalar(
+                    select(MeteorPair.id).where(
+                        MeteorPair.alerted.is_(True),
+                        MeteorPair.at.between(pair.at - FIREBALL_SAME, pair.at + FIREBALL_SAME),
+                    )
+                )
+                if near is not None:
+                    return
+                pair.alerted = True
+                await db.commit()
+                mid = ((area.near[0] + area.far[0]) / 2, (area.near[1] + area.far[1]) / 2)
+                rows = (
+                    await db.execute(
+                        select(Device, User)
+                        .join(User, User.id == Device.owner_id)
+                        .where(
+                            User.notify_fireball.is_(True),
+                            (Device.network.is_(True))
+                            | Device.id.in_((pair.device_a, pair.device_b)),
+                        )
+                    )
+                ).all()
+                # The nearest camera of each user, for the text.
+                best: dict[uuid.UUID, tuple[float, tuple[float, float], Device, User]] = {}
+                for device, user in rows:
+                    place = _place(device)
+                    if place is None:
+                        continue
+                    km = fireball.distance_km(*place, *mid)
+                    saw = device.id in (pair.device_a, pair.device_b)
+                    if km > FIREBALL_RADIUS_KM and not saw:
+                        continue
+                    if user.id not in best or km < best[user.id][0]:
+                        best[user.id] = (km, place, device, user)
+                when = pair.at.astimezone(_zone()).strftime("%H:%M")
+                for km, place, device, user in best.values():
+                    where = fireball.compass(fireball.bearing_deg(*place, *mid))
+                    await self._deliver(
+                        db,
+                        user,
+                        Message(
+                            title="Feuerkugel: Meteoritenfall möglich",
+                            body=(
+                                f"Um {when} Uhr endete eine Feuerkugel in "
+                                f"{area.end_km:.0f} km Höhe. Mögliches Fallgebiet etwa "
+                                f"{km:.0f} km {where} von {device.name}."
+                            ),
+                            data={"fireball": str(pair.id), "path": f"/feuerkugeln/{pair.id}"},
+                        ),
+                    )
+        except Exception:
+            log.exception("push: fireball alarm failed")
+
     async def aurora(self, device_id: str, kp: space_weather.KpCache) -> None:
         """Roadmap C2, after a status with a sky measurement: Kp at or above the rule of
         thumb for the camera's latitude while its own sky is clear and dark."""
@@ -309,20 +389,10 @@ class Notifier:
                 if row is None:
                     return
                 device, user = row
-                status: dict[str, Any] = device.last_status or {}
-                sky = cast(dict[str, Any], status.get("sky") or {})
-                settings = cast(dict[str, Any], status.get("settings") or {})
-                cloud, lat = sky.get("cloud_cover"), settings.get("latitude")
-                if not isinstance(cloud, int | float) or cloud >= CLEAR_BELOW:
+                place = _place(device)
+                if place is None or not _clear_and_dark(device, now):
                     return
-                if not isinstance(lat, int | float):
-                    return
-                try:
-                    measured = dt.datetime.fromisoformat(str(sky.get("at")))
-                except ValueError:
-                    return
-                if now - measured > SKY_FRESH or (device.last_frame or {}).get("mode") != "night":
-                    return
+                lat = place[0]
                 if device.aurora_notified_at and now - device.aurora_notified_at < AURORA_QUIET:
                     return
                 forecast = await kp.get()
@@ -343,6 +413,76 @@ class Notifier:
                 )
         except Exception:
             log.exception("push: aurora alarm failed")
+
+    async def aurora_seen(self, device_id: str, event_id: str) -> None:
+        """Roadmap N2: a network camera sees aurora (its own detection, not a forecast).
+        Owners of cameras up to ``AURORA_NET_KM`` away and not much further poleward, whose
+        sky is clear and dark, hear of it, at most once per ``AURORA_QUIET`` per camera
+        (shared with the Kp alarm)."""
+        if not self._active:
+            return
+        now = _now()
+        try:
+            async with self._maker() as db:
+                source = await db.get(Device, device_id)
+                event = await db.scalar(
+                    select(EventRecord).where(
+                        EventRecord.device_id == device_id, EventRecord.event_id == event_id
+                    )
+                )
+                if source is None or event is None or not source.network:
+                    return
+                if not _aurora_sighting(event, now):
+                    return
+                origin = _place(source)
+                if origin is None:
+                    return
+                rows = (
+                    await db.execute(
+                        select(Device, User)
+                        .join(User, User.id == Device.owner_id)
+                        .where(User.notify_aurora.is_(True), Device.id != device_id)
+                    )
+                ).all()
+                for device, user in rows:
+                    place = _place(device)
+                    if place is None or place[0] * origin[0] <= 0:
+                        continue  # no place, or the other hemisphere
+                    if abs(place[0]) > abs(origin[0]) + AURORA_NET_POLEWARD_DEG:
+                        continue
+                    km = fireball.distance_km(*origin, *place)
+                    if km > AURORA_NET_KM or not _clear_and_dark(device, now):
+                        continue
+                    if device.aurora_notified_at and now - device.aurora_notified_at < AURORA_QUIET:
+                        continue
+                    # Its own camera sees it already: that is its own news.
+                    own = await db.scalar(
+                        select(EventRecord.event_id).where(
+                            EventRecord.device_id == device.id,
+                            EventRecord.kind == "aurora",
+                            EventRecord.end >= now - AURORA_NET_FRESH,
+                        )
+                    )
+                    if own is not None:
+                        continue
+                    device.aurora_notified_at = now
+                    await db.commit()
+                    where = fireball.compass(fireball.bearing_deg(*place, *origin))
+                    pole = "Norden" if place[0] > 0 else "Süden"
+                    await self._deliver(
+                        db,
+                        user,
+                        Message(
+                            title=f"Polarlicht gesichtet, Himmel klar über {device.name}",
+                            body=(
+                                f"Eine Kamera etwa {km:.0f} km {where} sieht gerade "
+                                f"Polarlicht. Bei dir ist es klar: Blick tief nach {pole}."
+                            ),
+                            data={"camera": device.id},
+                        ),
+                    )
+        except Exception:
+            log.exception("push: aurora network alarm failed")
 
     async def check_morning(self, now: dt.datetime | None = None) -> None:
         """Roadmap C3, one pass: send each camera's summary of the night once, in the
@@ -493,6 +633,43 @@ class Notifier:
             except Exception:
                 log.exception("push: evening notice failed")
             await asyncio.sleep(OFFLINE_CHECK.total_seconds())
+
+
+def _clear_and_dark(device: Device, now: dt.datetime) -> bool:
+    """The camera's own sky measurement says clear, it is fresh, and it is night there."""
+    sky = cast(dict[str, Any], (device.last_status or {}).get("sky") or {})
+    cloud = sky.get("cloud_cover")
+    if not isinstance(cloud, int | float) or cloud >= CLEAR_BELOW:
+        return False
+    try:
+        measured = dt.datetime.fromisoformat(str(sky.get("at")))
+    except ValueError:
+        return False
+    return now - measured <= SKY_FRESH and (device.last_frame or {}).get("mode") == "night"
+
+
+def _aurora_sighting(event: EventRecord, now: dt.datetime) -> bool:
+    """A fresh aurora event of an oriented camera (azimuth known, SPEC §6.4) that is strong
+    enough and not marked a false alarm."""
+    data: dict[str, Any] = event.data or {}
+    index = data.get("peak_index")
+    return (
+        event.kind == "aurora"
+        and not events.dismissed(event)
+        and isinstance(data.get("azimuth_deg"), int | float)
+        and isinstance(index, int | float)
+        and index >= AURORA_NET_MIN_INDEX
+        and now - event.end <= AURORA_NET_FRESH
+        and not data.get("imported")
+    )
+
+
+def _place(device: Device) -> tuple[float, float] | None:
+    settings: dict[str, Any] = (device.last_status or {}).get("settings") or {}
+    lat, lon = settings.get("latitude"), settings.get("longitude")
+    if not isinstance(lat, int | float) or not isinstance(lon, int | float):
+        return None
+    return float(lat), float(lon)
 
 
 def _zone() -> dt.tzinfo:

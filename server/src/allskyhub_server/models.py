@@ -64,8 +64,12 @@ class User(Base):
     notify_summary: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
     # Roadmap C1: in the evening, when the night ahead looks clear.
     notify_tonight: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
+    # A fireball that may have dropped meteorites, seen by the network near the user's cameras.
+    notify_fireball: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
     # Roadmap #15: the notifications above (all but single detections) also by e-mail.
     notify_by_mail: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
+    # Roadmap N7: when this account started its one free Plus month.
+    plus_trial_at: Mapped[dt.datetime | None] = mapped_column(_tz())
     created_at: Mapped[dt.datetime] = mapped_column(_tz(), server_default=func.now())
 
 
@@ -141,10 +145,22 @@ class Device(Base):
     # The public page also listed on the hub's start page; the owner's choice, kept on the
     # hub only (not part of the profile of SPEC §6.8).
     public_on_home: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
+    # The camera takes part in the network of other owners' cameras: meteors seen together
+    # are triangulated with the exact places (devices/meteor_pairs.py), which tells the other
+    # owner a lot about where this camera stands. The owner's choice, kept on the hub only.
+    network: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
+    # Roadmap N7, "Plus": the longer archive (maintenance.py) until ``plus_until``; a gift
+    # (``plus_gift``, set by an admin) never ends. Paid and trial periods come from Paddle.
+    plus_until: Mapped[dt.datetime | None] = mapped_column(_tz())
+    plus_gift: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
+    # The free trial month (billing/plus.py), once per account; ``plus_until`` covers it too.
+    plus_trial_until: Mapped[dt.datetime | None] = mapped_column(_tz())
     # Roadmap H5: Discord webhook and what goes there (devices/discord.py), and the night
     # whose summary was posted.
     discord: Mapped[dict[str, Any] | None] = mapped_column(JSONB)
     discord_night: Mapped[str | None] = mapped_column(String(8))
+    # Roadmap H5: the owner's YouTube channel (devices/youtube.py): refresh token, privacy.
+    youtube: Mapped[dict[str, Any] | None] = mapped_column(JSONB)
     # Roadmap #17: the public page under the owner's own domain, set up by a root helper
     # (deploy/domains): state "pending", "active", "failed" or "removing".
     custom_domain: Mapped[str | None] = mapped_column(String(253), unique=True)
@@ -205,6 +221,21 @@ class DeviceToken(Base):
     expires_at: Mapped[dt.datetime] = mapped_column(_tz())
 
 
+class WidgetToken(Base):
+    """Roadmap N6: a home-screen widget's read-only key for one camera (latest image and a
+    few lines), stored as SHA-256. Separate from the app's token, so a widget, which keeps
+    its key outside the app's secure storage, can never do more than show the camera."""
+
+    __tablename__ = "widget_token"
+
+    token_hash: Mapped[bytes] = mapped_column(LargeBinary(32), primary_key=True)
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("user_account.id", ondelete="CASCADE"), index=True
+    )
+    device_id: Mapped[str] = mapped_column(ForeignKey("device.id", ondelete="CASCADE"))
+    created_at: Mapped[dt.datetime] = mapped_column(_tz(), server_default=func.now())
+
+
 class AppToken(Base):
     """Bearer token of a signed-in app (M3), stored as SHA-256."""
 
@@ -232,6 +263,24 @@ class Invitation(Base):
     created_at: Mapped[dt.datetime] = mapped_column(_tz(), server_default=func.now())
     expires_at: Mapped[dt.datetime] = mapped_column(_tz())
     used_at: Mapped[dt.datetime | None] = mapped_column(_tz())
+
+
+class AccessRequest(Base):
+    """Someone asks for an account on the public page (/zugang); an admin invites or declines."""
+
+    __tablename__ = "access_request"
+
+    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid7)
+    email: Mapped[str] = mapped_column(String(254), index=True)
+    name: Mapped[str] = mapped_column(String(100))
+    place: Mapped[str] = mapped_column(String(100), default="", server_default="")
+    # How far along: access_requests.STAGES.
+    stage: Mapped[str] = mapped_column(String(16))
+    message: Mapped[str] = mapped_column(String(1000), default="", server_default="")
+    created_at: Mapped[dt.datetime] = mapped_column(_tz(), server_default=func.now())
+    # "invited" or "declined"; null while open.
+    decision: Mapped[str | None] = mapped_column(String(16))
+    decided_at: Mapped[dt.datetime | None] = mapped_column(_tz())
 
 
 class Frame(Base):
@@ -275,6 +324,8 @@ class Product(Base):
     has_full: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
     has_thumb: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
     full_at: Mapped[dt.datetime | None] = mapped_column(_tz())
+    # Roadmap H5: the video on the owner's YouTube channel, once uploaded.
+    youtube_id: Mapped[str | None] = mapped_column(String(32))
     # Retention counts from the first announcement (privacy policy).
     created_at: Mapped[dt.datetime] = mapped_column(_tz(), server_default=func.now(), index=True)
 
@@ -297,6 +348,11 @@ class EventRecord(Base):
     data: Mapped[dict[str, Any]] = mapped_column(JSONB)
     has_full: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
     has_thumb: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
+    # SPEC §6.4 Original frame (roadmap L28): the whole frame the event was found in, and its
+    # size in pixels (the picture's window, ``data.crop_*``, is outlined in it).
+    has_original: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
+    original_w: Mapped[int | None] = mapped_column(Integer)
+    original_h: Mapped[int | None] = mapped_column(Integer)
     # The owner's verdict: "confirmed" or "false_positive" (e.g. "kein Meteor", an aircraft);
     # exported for tuning the detector.
     label: Mapped[str | None] = mapped_column(String(16))
@@ -311,8 +367,37 @@ class EventRecord(Base):
     label_detail: Mapped[str | None] = mapped_column(String(100))
     # Roadmap H5: already posted to the owner's Discord channel.
     discord_posted: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
+    # SPEC §7.10 (lightning): when the hub compared it with the Lightning Imager's flashes
+    # (null: unchecked), and the nearest flash within reach then (null: none).
+    li_checked_at: Mapped[dt.datetime | None] = mapped_column(_tz())
+    li_km: Mapped[float | None] = mapped_column(Float)
+    li_bearing_deg: Mapped[float | None] = mapped_column(Float)
     # Retention counts from the first report (privacy policy).
     created_at: Mapped[dt.datetime] = mapped_column(_tz(), server_default=func.now(), index=True)
+
+
+class LiFlash(Base):
+    """A flash Meteosat's Lightning Imager saw over Europe (SPEC §7.10), kept 48 hours."""
+
+    __tablename__ = "li_flash"
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    at: Mapped[dt.datetime] = mapped_column(_tz(), index=True)
+    lat: Mapped[float] = mapped_column(Float)
+    lon: Mapped[float] = mapped_column(Float)
+
+
+class LiGranule(Base):
+    """A Lightning Imager product the hub has read: its time span counts as covered, also
+    when it held no flash over Europe (SPEC §7.10)."""
+
+    __tablename__ = "li_granule"
+
+    id: Mapped[str] = mapped_column(String(160), primary_key=True)
+    start: Mapped[dt.datetime] = mapped_column(_tz(), index=True)
+    end: Mapped[dt.datetime] = mapped_column(_tz())
+    flashes: Mapped[int] = mapped_column(Integer)
+    read_at: Mapped[dt.datetime] = mapped_column(_tz(), server_default=func.now())
 
 
 class PushToken(Base):
@@ -426,6 +511,10 @@ class MeteorPair(Base):
     low_km: Mapped[float] = mapped_column(Float)
     length_km: Mapped[float] = mapped_column(Float)
     convergence_deg: Mapped[float] = mapped_column(Float)
+    # The brighter of the two events' `peak` (SPEC §6.4), for fireballs (devices/fireball.py),
+    # and whether the fireball alarm for this meteor went out.
+    peak: Mapped[float | None] = mapped_column(Float)
+    alerted: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
     created_at: Mapped[dt.datetime] = mapped_column(_tz(), server_default=func.now())
 
 
@@ -444,6 +533,12 @@ class StatusSample(Base):
     sensor_temp_c: Mapped[float | None] = mapped_column(Float)
     cpu_temp_c: Mapped[float | None] = mapped_column(Float)
     disk_free_pct: Mapped[float | None] = mapped_column(Float)
+    # SPEC §7.11 weather sensor and dew heater (roadmap L30), null without them.
+    air_temp_c: Mapped[float | None] = mapped_column(Float)
+    humidity_pct: Mapped[float | None] = mapped_column(Float)
+    dewpoint_c: Mapped[float | None] = mapped_column(Float)
+    pressure_hpa: Mapped[float | None] = mapped_column(Float)
+    heater_on: Mapped[bool | None] = mapped_column(Boolean)
 
     __table_args__ = (Index("ix_status_sample_device_id_at", "device_id", "at"),)
 
@@ -459,3 +554,29 @@ class PasswordReset(Base):
     )
     expires_at: Mapped[dt.datetime] = mapped_column(_tz(), index=True)
     used_at: Mapped[dt.datetime | None] = mapped_column(_tz())
+
+
+class Subscription(Base):
+    """A Plus subscription at Paddle (roadmap N7, billing/paddle.py), as its webhooks last
+    described it. Removing the camera keeps the row (``device_id`` None) until Paddle has
+    cancelled it."""
+
+    __tablename__ = "subscription"
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)  # Paddle's sub_…
+    device_id: Mapped[str | None] = mapped_column(
+        ForeignKey("device.id", ondelete="SET NULL"), index=True
+    )
+    user_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("user_account.id", ondelete="SET NULL"), index=True
+    )
+    customer_id: Mapped[str] = mapped_column(String(64))
+    # Paddle's status: trialing, active, past_due, paused or canceled.
+    status: Mapped[str] = mapped_column(String(16))
+    price_id: Mapped[str] = mapped_column(String(64), default="", server_default="")
+    period_end: Mapped[dt.datetime | None] = mapped_column(_tz())
+    # Set while a cancellation at the end of the period is scheduled.
+    cancel_at: Mapped[dt.datetime | None] = mapped_column(_tz())
+    ended_at: Mapped[dt.datetime | None] = mapped_column(_tz())
+    # Paddle's occurred_at of the event this row reflects; older events are ignored.
+    event_at: Mapped[dt.datetime] = mapped_column(_tz())

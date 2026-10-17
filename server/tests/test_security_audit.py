@@ -36,12 +36,13 @@ async def test_unpairing_forgets_the_owners_choices(
     """A camera given away must not post to the old owner's Discord, nor carry their
     public texts or map and start-page choices to the next owner."""
     device_id, _ = await _public(app, client, new_client)
-    await _save(client, device_id, title="Lanzenberg", show_coordinates="on", on_home="on")
+    await _save(client, device_id, title="Sternwarte", show_coordinates="on", on_home="on")
     maker: async_sessionmaker[AsyncSession] = app.state.sessionmaker
     async with maker() as db:
         device = await db.get(Device, device_id)
         assert device
         device.discord = {"webhook": "https://discord.com/api/webhooks/1/x"}
+        device.network = True
         await db.commit()
     r = await client.post(
         f"/cameras/{device_id}/remove", data={"csrf_token": await home_csrf(client)}
@@ -49,6 +50,7 @@ async def test_unpairing_forgets_the_owners_choices(
     assert r.status_code == 303
     device = await _device(app, device_id)
     assert (device.discord, device.public_profile, device.public_on_home) == (None, None, False)
+    assert device.network is False
 
 
 async def test_switched_off_sections_stay_off(
@@ -65,7 +67,7 @@ async def test_switched_off_sections_stay_off(
     latest.write_bytes(b"\xff\xd8\xff\xe0" + b"\x00" * 64)
     assert (await new_client.get(f"/sky/{slug}/latest.jpg")).status_code == 200
 
-    await _save(client, device_id, title="Lanzenberg")  # every section unticked
+    await _save(client, device_id, title="Sternwarte")  # every section unticked
     for url in ("latest.jpg", "now", "widget", "products/20261012/keogram.jpg?full=1"):
         assert (await new_client.get(f"/sky/{slug}/{url}")).status_code == 404, url
     page = (await new_client.get(f"/sky/{slug}")).text
@@ -86,12 +88,12 @@ async def test_network_settings_are_for_the_owner_only() -> None:
 
 
 def test_public_tonight_uses_a_coarse_place() -> None:
-    status = {"settings": {"latitude": 48.136, "longitude": 14.39, "timezone": "Europe/Vienna"}}
+    status = {"settings": {"latitude": 50.036, "longitude": 10.39, "timezone": "Europe/Vienna"}}
     device = Device(id="d", last_status=status, public_profile=None)
     coarse = public.coarse_status(device)
     assert coarse is not None
-    assert (coarse["settings"]["latitude"], coarse["settings"]["longitude"]) == (48.0, 14.5)
-    assert status["settings"]["latitude"] == 48.136  # untouched
+    assert (coarse["settings"]["latitude"], coarse["settings"]["longitude"]) == (50.0, 10.5)
+    assert status["settings"]["latitude"] == 50.036  # untouched
     shown = Device(id="d", last_status=status, public_profile={"show_coordinates": True})
     assert public.coarse_status(shown) is status
 

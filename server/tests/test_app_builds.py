@@ -11,7 +11,7 @@ from allskyhub_server.settings import Settings
 
 
 async def test_latest_build_and_its_apk(client: httpx.AsyncClient, settings: Settings) -> None:
-    folder = settings.data_dir / "app-builds" / "android-test"
+    folder = settings.android_dir / "android-test"
     shutil.rmtree(folder, ignore_errors=True)
     assert (await client.get("/app/android/test.json")).status_code == 404
     assert (await client.get("/app/android/allskyhub-test.apk")).status_code == 404

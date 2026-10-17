@@ -1,0 +1,9 @@
+[Unit]
+Description=allskyhub: watch for Android release requests from the admin page
+
+[Path]
+PathExists=/var/lib/allskyhub-server/android-release/request
+Unit=allskyhub-android-release.service
+
+[Install]
+WantedBy=paths.target

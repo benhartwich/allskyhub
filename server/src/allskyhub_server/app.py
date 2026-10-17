@@ -20,12 +20,16 @@ from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
 from allskyhub_server import maintenance
 from allskyhub_server.admin.deploy import GitHub
+from allskyhub_server.admin.stores import Stores
 from allskyhub_server.api import app as app_api
-from allskyhub_server.api import app_manage, app_overview
+from allskyhub_server.api import app_manage, app_overview, sky_view
 from allskyhub_server.api import device as device_api
+from allskyhub_server.api import widget as app_widget
 from allskyhub_server.auth.hub_keys import HubKeys
+from allskyhub_server.billing import task as billing_task
+from allskyhub_server.billing.paddle import Paddle
 from allskyhub_server.db import create_engine, create_sessionmaker
-from allskyhub_server.devices import aircraft, domains
+from allskyhub_server.devices import aircraft, domains, lightning_li
 from allskyhub_server.devices.connections import ConnectionRegistry
 from allskyhub_server.devices.discord import Discord, Poster
 from allskyhub_server.devices.domains import HostMap
@@ -36,6 +40,7 @@ from allskyhub_server.devices.satellite_match import SatelliteCatalogue
 from allskyhub_server.devices.satellites import TleCache
 from allskyhub_server.devices.space_weather import KpCache, OvationCache
 from allskyhub_server.devices.tonight import ForecastCache
+from allskyhub_server.devices.youtube import YouTube
 from allskyhub_server.mail.send import SmtpMailer
 from allskyhub_server.push.fcm import Sender
 from allskyhub_server.push.notify import Notifier
@@ -43,17 +48,23 @@ from allskyhub_server.settings import Settings, get_settings
 from allskyhub_server.stall import StallWatch
 from allskyhub_server.version import short as version
 from allskyhub_server.web import (
+    routes_access,
     routes_account,
     routes_admin,
     routes_app_builds,
     routes_auth,
     routes_cameras,
+    routes_fireballs,
     routes_gallery,
     routes_legal,
     routes_local,
+    routes_plus,
     routes_public,
+    routes_showers,
+    routes_stores,
 )
 from allskyhub_server.web.deps import LoginRequiredError
+from allskyhub_server.web.image_download import LatestImage
 from allskyhub_server.web.render import render
 from allskyhub_server.web.templating import DESIGN_DIR, STATIC_DIR
 
@@ -211,6 +222,13 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         app.state.notifier.discord = Discord(
             app.state.sessionmaker, app.state.images, Poster(), settings.base_url
         )
+        app.state.youtube = YouTube(
+            app.state.sessionmaker,
+            app.state.images,
+            app.state.connections,
+            app.state.stores.vault,
+            settings.base_url,
+        )
         app.state.renderer = Renderer(app.state.sessionmaker, app.state.images, settings)
         adsb_client = httpx.AsyncClient(headers={"User-Agent": f"allskyhub ({settings.base_url})"})
         app.state.aircraft = aircraft.Watch(
@@ -228,9 +246,29 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 domains.run_forever(app.state.sessionmaker, settings.data_dir, app.state.hosts)
             ),
             asyncio.create_task(app.state.notifier.discord.run_forever()),
+            asyncio.create_task(app.state.youtube.run_forever()),
             asyncio.create_task(app.state.aircraft.run_forever()),
             asyncio.create_task(StallWatch().run_forever()),
         ]
+        li_store = (
+            lightning_li.DataStore(settings.eumetsat_key, settings.eumetsat_secret)
+            if settings.lightning_li
+            else None
+        )
+        if li_store is not None:
+            tasks.append(
+                asyncio.create_task(
+                    lightning_li.run_forever(
+                        app.state.sessionmaker, li_store, app.state.connections
+                    )
+                )
+            )
+        if settings.billing:
+            tasks.append(
+                asyncio.create_task(
+                    billing_task.run_forever(app.state.sessionmaker, app.state.paddle)
+                )
+            )
         if sender is not None or app.state.mailer.enabled:
             tasks.append(
                 asyncio.create_task(app.state.notifier.run_offline_checks(app.state.connections))
@@ -243,6 +281,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 with contextlib.suppress(asyncio.CancelledError):
                     await task
             await adsb_client.aclose()
+            if li_store is not None:
+                await li_store.client.aclose()
+            await app.state.paddle.client.aclose()
             await engine.dispose()
 
     app = FastAPI(
@@ -267,7 +308,14 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.state.hub_keys = HubKeys(settings.key_dir)
     app.state.forecast = ForecastCache()
     app.state.tles = TleCache()
+    app.state.paddle = Paddle(settings)
     app.state.github = GitHub(settings.deploy_repo, checks=settings.deploy_check_names)
+    app.state.latest_image = LatestImage(settings.deploy_repo)
+    app.state.stores = Stores(
+        settings.data_dir / "store",
+        settings.deploy_repo,
+        release_out=settings.android_dir / "release",
+    )
     app.add_middleware(CustomDomainMiddleware, hosts=app.state.hosts)
     app.add_middleware(AccessLogMiddleware)
     _install_error_handlers(app)
@@ -275,18 +323,26 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.mount("/static/design", CachedStaticFiles(directory=DESIGN_DIR), name="design")
     app.mount("/static", CachedStaticFiles(directory=STATIC_DIR), name="static")
     app.include_router(routes_auth.router)
+    app.include_router(routes_access.router)
     app.include_router(routes_account.router)
     app.include_router(routes_cameras.router)
     app.include_router(routes_gallery.router)
     app.include_router(routes_legal.router)
     app.include_router(routes_public.router)
+    app.include_router(routes_showers.router)
     app.include_router(routes_local.router)
     app.include_router(routes_admin.router)
+    app.include_router(routes_stores.router)
     app.include_router(routes_app_builds.router)
+    app.include_router(routes_fireballs.router)
+    app.include_router(routes_plus.router)
+    app.include_router(routes_plus.webhook_router)
     app.include_router(device_api.router)
     app.include_router(app_api.router)
     app.include_router(app_overview.router)
     app.include_router(app_manage.router)
+    app.include_router(app_widget.router)
+    app.include_router(sky_view.router)
 
     @app.get("/healthz", include_in_schema=False)
     async def healthz() -> dict[str, str]:  # pyright: ignore[reportUnusedFunction]

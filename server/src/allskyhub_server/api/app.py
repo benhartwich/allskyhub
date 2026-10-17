@@ -19,6 +19,7 @@ from sqlalchemy.dialects.postgresql import insert as pg_insert
 from allskyhub_protocol import (
     EVENT_ID_PATTERN,
     CloseCode,
+    EventVariant,
     FrameVariant,
     SetSettingsArgs,
     invalid_settings,
@@ -30,6 +31,7 @@ from allskyhub_server.devices import (
     archive,
     events,
     labels,
+    lightning_li,
     pairing,
     public,
     queries,
@@ -79,6 +81,7 @@ class AccountSettings(BaseModel):
     notify_aurora: bool | None = None
     notify_summary: bool | None = None
     notify_tonight: bool | None = None
+    notify_fireball: bool | None = None
     notify_by_mail: bool | None = None
     # Read only: the hub can send push notifications / e-mail at all.
     push_available: bool | None = None
@@ -176,6 +179,9 @@ class EventItem(BaseModel):
     label_detail: str | None = None
     # SPEC §6.4: revision of the picture; put it into image URLs (``v``) so caches renew.
     image_rev: int = 1
+    # SPEC §7.10, lightning only: what Meteosat's Lightning Imager saw, as a line of text
+    # ("Blitze in 230 km Richtung NW", "keine Blitze im Umkreis von 400 km", "ungeprüft").
+    lightning_check: str | None = None
 
 
 class LabelRequest(_In):
@@ -201,6 +207,7 @@ def _event(e: EventRecord) -> EventItem:
         label_auto=e.label_auto,
         label_detail=e.label_detail,
         image_rev=events.image_rev(e.data),
+        lightning_check=lightning_li.summary(e),
     )
 
 
@@ -281,10 +288,16 @@ async def _limit(request: Request, key: str, limits: tuple[ratelimit.Limit, ...]
 async def login(
     request: Request, body: LoginRequest, db: DbSession, settings: SettingsDep
 ) -> LoginResponse:
-    await _limit(request, f"login:ip:{client_ip(request, settings)}", ratelimit.LOGIN_PER_IP)
-    await _limit(
-        request, f"login:acct:{accounts.normalize_email(body.email)}", ratelimit.LOGIN_PER_ACCOUNT
-    )
+    try:
+        await ratelimit.login(
+            request.app.state.engine,
+            accounts.normalize_email(body.email),
+            client_ip(request, settings),
+        )
+    except ratelimit.RateLimitedError as exc:
+        raise HTTPException(
+            429, "Too many requests", {"Retry-After": str(exc.retry_after)}
+        ) from None
     user = await accounts.authenticate(db, body.email, body.password)
     if user is None:
         raise HTTPException(401, "Wrong email or password")
@@ -581,7 +594,7 @@ async def event_image(
     device_id: str,
     night_id: Annotated[str, Path(pattern=archive.NIGHT_ID)],
     event_id: Annotated[str, Path(pattern=EVENT_ID_PATTERN)],
-    variant: FrameVariant = FrameVariant.FULL,
+    variant: EventVariant = EventVariant.FULL,
 ) -> Response:
     """The event's picture, or 202 while the hub fetches the full one from the camera."""
     device = await _own(db, user, device_id)
@@ -602,6 +615,7 @@ def _account_settings(request: Request, user: User) -> AccountSettings:
         notify_aurora=user.notify_aurora,
         notify_summary=user.notify_summary,
         notify_tonight=user.notify_tonight,
+        notify_fireball=user.notify_fireball,
         notify_by_mail=user.notify_by_mail,
         push_available=request.app.state.notifier.enabled,
         mail_available=request.app.state.mailer.enabled,
@@ -632,6 +646,8 @@ async def put_settings(
         user.notify_summary = body.notify_summary
     if body.notify_tonight is not None:
         user.notify_tonight = body.notify_tonight
+    if body.notify_fireball is not None:
+        user.notify_fireball = body.notify_fireball
     if body.notify_by_mail is not None:
         user.notify_by_mail = body.notify_by_mail
     await db.commit()

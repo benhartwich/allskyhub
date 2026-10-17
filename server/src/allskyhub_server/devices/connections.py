@@ -20,6 +20,7 @@ from allskyhub_protocol import (
     CommandName,
     Envelope,
     ErrorReply,
+    EventVariant,
     FrameVariant,
     UploadEventArgs,
     UploadFrameArgs,
@@ -38,8 +39,10 @@ LIVE_HOLD = dt.timedelta(seconds=30)
 SendText = Callable[[str], Awaitable[None]]
 Close = Callable[[int], Awaitable[None]]
 # (what, night_id, name, variant); what is "frame", "product" or "event".
-UploadKey = tuple[str, str, str, FrameVariant]
+# The variants' values are plain strings, so a key is the same whichever enum built it.
+UploadKey = tuple[str, str, str, str]
 Kind = Literal["frame", "product", "event"]
+Variant = FrameVariant | EventVariant
 
 
 def _now() -> dt.datetime:
@@ -154,7 +157,7 @@ class ConnectionRegistry:
         return await self._request(device_id, key, cmd, PRODUCT_UPLOAD_WINDOW)
 
     async def request_event(
-        self, device_id: str, night_id: str, event_id: str, variant: FrameVariant
+        self, device_id: str, night_id: str, event_id: str, variant: EventVariant
     ) -> bool:
         """Send ``upload_event``; False when the device is not connected."""
         args = UploadEventArgs(night_id=night_id, event_id=event_id, variant=variant)
@@ -175,7 +178,12 @@ class ConnectionRegistry:
         return True
 
     def is_requested(
-        self, device_id: str, night_id: str, name: str, variant: FrameVariant, what: Kind = "frame"
+        self,
+        device_id: str,
+        night_id: str,
+        name: str,
+        variant: FrameVariant | EventVariant,
+        what: Kind = "frame",
     ) -> bool:
         """The hub asked for this upload and the window to start it is still open."""
         conn = self._conns.get(device_id)
@@ -183,13 +191,23 @@ class ConnectionRegistry:
         return until is not None and until > _now()
 
     def is_pending(
-        self, device_id: str, night_id: str, name: str, variant: FrameVariant, what: Kind
+        self,
+        device_id: str,
+        night_id: str,
+        name: str,
+        variant: FrameVariant | EventVariant,
+        what: Kind,
     ) -> bool:
         """Asked for and not yet delivered (the app shows "wird geholt")."""
         return self.is_requested(device_id, night_id, name, variant, what)
 
     def take_upload(
-        self, device_id: str, night_id: str, name: str, variant: FrameVariant, what: Kind = "frame"
+        self,
+        device_id: str,
+        night_id: str,
+        name: str,
+        variant: FrameVariant | EventVariant,
+        what: Kind = "frame",
     ) -> bool:
         """Mark a valid upload as done. The window was checked when the upload started, so a
         long one that ends after it still counts."""

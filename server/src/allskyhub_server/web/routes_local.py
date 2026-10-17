@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import ipaddress
 import re
 import time
 from typing import Annotated, Any
@@ -31,6 +32,9 @@ CONFIRM_CSP = (
 _CSP_ORIGIN = re.compile(
     r"^https?://[A-Za-z0-9.\-]+(?::\d{1,5})?$|^https?://\[[0-9a-fA-F:.]+\](?::\d{1,5})?$"
 )
+# Names and addresses of a home network or a VPN into it (audit L6).
+_LOCAL_SUFFIXES = (".local", ".lan", ".home", ".home.arpa", ".internal", ".fritz.box", ".ts.net")
+_CGNAT = ipaddress.ip_network("100.64.0.0/10")  # Tailscale and other VPNs
 _tasks: set[asyncio.Task[Any]] = set()
 
 
@@ -52,6 +56,18 @@ def return_base(value: str) -> str | None:
         return None
     del port
     return value if value.endswith("/") else value + "/"
+
+
+def looks_local(base: str) -> bool:
+    """Audit L6: whether the camera's address looks like the home network (a private,
+    link-local or CGNAT/VPN address, ``.local`` and friends, or a single-label name). Any
+    other address gets a warning on the confirm page; it is still allowed (SPEC §7.4 A)."""
+    host = (urlsplit(base).hostname or "").rstrip(".").lower()
+    try:
+        ip = ipaddress.ip_address(host)
+    except ValueError:
+        return "." not in host or host.endswith(_LOCAL_SUFFIXES)
+    return ip.is_private or ip.is_link_local or ip.is_loopback or ip in _CGNAT
 
 
 def _origin(base: str) -> str:
@@ -89,7 +105,14 @@ async def local_login_ask(
     response = render(
         request,
         "local_login.html",
-        {"device": device, "base": base, "origin": origin, "nonce": nonce},
+        {
+            "device": device,
+            "base": base,
+            "origin": origin,
+            "nonce": nonce,
+            "host": urlsplit(base).hostname,
+            "local": looks_local(base),
+        },
         session=session,
     )
     # The form posts here and is redirected to the camera; browsers check that redirect

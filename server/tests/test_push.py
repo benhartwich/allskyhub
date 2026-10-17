@@ -157,8 +157,15 @@ async def test_event_notifications(
         await send(ws, imported)
         await asyncio.sleep(0.3)
     assert fake_push.sent == []
-    listed = (await client.get(f"/api/v1/cameras/{dev.device_id}/events", headers=auth)).json()
-    assert {e["id"]: e["data"].get("imported") for e in listed}["meteor-20261008T215212Z"] is True
+    # The hub stores events in the background; a slow runner needs longer than 0.3 s.
+    imported_flags: dict[str, object] = {}
+    for _ in range(50):
+        listed = (await client.get(f"/api/v1/cameras/{dev.device_id}/events", headers=auth)).json()
+        imported_flags = {e["id"]: e["data"].get("imported") for e in listed}
+        if "meteor-20261008T215212Z" in imported_flags:
+            break
+        await asyncio.sleep(0.1)
+    assert imported_flags["meteor-20261008T215212Z"] is True
 
     # SPEC §6.4 Trail verdicts: a streak the camera judged no meteor never notifies, also
     # before its label arrives; a real meteor right after it still does.

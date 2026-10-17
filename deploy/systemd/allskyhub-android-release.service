@@ -1,0 +1,10 @@
+[Unit]
+Description=allskyhub: Android store build requested on the admin page, then the upload to Google Play
+After=network-online.target docker.service
+Requires=docker.service
+
+[Service]
+Type=oneshot
+Nice=10
+TimeoutStartSec=4h
+ExecStart=/opt/allskyhub-server/deploy/android/allskyhub-android-build.sh --release

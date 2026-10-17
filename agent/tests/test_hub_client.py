@@ -431,6 +431,9 @@ class _Events:
     def image_path(self, night: str, eid: str, thumbnail: bool) -> Path | None:
         return self.pics.get((eid, thumbnail))
 
+    def original_path(self, night: str, eid: str) -> Path | None:
+        return self.pics.get((eid + "#original", False))
+
 
 def test_events_resent_after_connect_and_pictures_uploaded(tmp_path: Path) -> None:
     """SPEC §6.4/§6.5/§6.7: the current night's events after connect; upload_event."""
@@ -444,7 +447,10 @@ def test_events_resent_after_connect_and_pictures_uploaded(tmp_path: Path) -> No
     pic.write_bytes(b"\xff\xd8meteor")
     thumb = tmp_path / "thumb.jpg"
     thumb.write_bytes(b"\xff\xd8thumb")
-    events = _Events([ev], {(eid, False): pic, (eid, True): thumb})
+    whole = tmp_path / "frame.jpg"
+    whole.write_bytes(b"\xff\xd8frame")
+    pics = {(eid, False): pic, (eid, True): thumb, (eid + "#original", False): whole}
+    events = _Events([ev], pics)
     identity = DeviceIdentity.load_or_create(tmp_path / "device.key")
     hub = FakeHub(register_unpaired=0, close_code=1000)
     hub.commands = [
@@ -456,6 +462,15 @@ def test_events_resent_after_connect_and_pictures_uploaded(tmp_path: Path) -> No
         Command(
             name=CommandName.UPLOAD_EVENT,
             args={"night_id": night, "event_id": "meteor-20261006T000000Z"},
+        ),
+        # SPEC §6.5, roadmap L28: the whole frame the event was found in.
+        Command(
+            name=CommandName.UPLOAD_EVENT,
+            args={"night_id": night, "event_id": eid, "variant": "original"},
+        ),
+        Command(
+            name=CommandName.UPLOAD_EVENT,
+            args={"night_id": night, "event_id": "meteor-20261006T000000Z", "variant": "original"},
         ),
     ]
 
@@ -481,10 +496,13 @@ def test_events_resent_after_connect_and_pictures_uploaded(tmp_path: Path) -> No
     sent = [e.body for e in hub.received if isinstance(e.body, Event)]
     assert sent == [ev]
     kinds = [(r.TYPE, getattr(r, "code", None)) if r else None for r in hub.reply_order]
-    assert kinds == [("ack", None), ("ack", None), ("error", "not_found")]
+    assert kinds == [
+        ("ack", None), ("ack", None), ("error", "not_found"), ("ack", None), ("error", "not_found"),
+    ]  # fmt: skip
     assert hub.uploads == [
         (f"/device/v1/events/{night}/{eid}", "thumb", b"\xff\xd8thumb"),
         (f"/device/v1/events/{night}/{eid}", "full", b"\xff\xd8meteor"),
+        (f"/device/v1/events/{night}/{eid}", "original", b"\xff\xd8frame"),
     ]
 
 

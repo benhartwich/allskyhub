@@ -388,6 +388,7 @@ class _ChartCard extends StatelessWidget {
                       cursor: ts,
                       text: theme.textTheme.bodySmall?.color ?? Colors.grey,
                       grid: theme.dividerColor.withValues(alpha: 0.35),
+                      fontFamily: theme.textTheme.bodySmall?.fontFamily,
                     ),
                   ),
                 ),
@@ -433,6 +434,7 @@ class _ChartPainter extends CustomPainter {
     required this.cursor,
     required this.text,
     required this.grid,
+    this.fontFamily,
   });
 
   static const left = 44.0;
@@ -446,6 +448,9 @@ class _ChartPainter extends CustomPainter {
   final double? cursor;
   final Color text;
   final Color grid;
+
+  /// The app's text font for the axis labels (a canvas knows no theme).
+  final String? fontFamily;
 
   (double, double) _range(
     List<_Line> lines, {
@@ -482,7 +487,7 @@ class _ChartPainter extends CustomPainter {
     final p = TextPainter(
       text: TextSpan(
         text: s,
-        style: TextStyle(color: text, fontSize: 10),
+        style: TextStyle(color: text, fontSize: 10, fontFamily: fontFamily),
       ),
       textDirection: TextDirection.ltr,
     )..layout();

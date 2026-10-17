@@ -25,6 +25,7 @@ from typing import Any
 from urllib.parse import parse_qs
 
 from allskyhub_agent.alpaca.safety import SafetyMonitor
+from allskyhub_protocol import EnvStatus
 
 log = logging.getLogger(__name__)
 
@@ -47,6 +48,20 @@ _OC_SENSORS = {
     "cloudcover": "Sternzählung der Allsky-Kamera",
     "skyquality": "Himmelshintergrund, normiert",
 }
+# SPEC §7.11: with the weather sensor on, these answer from it instead of 0x400.
+_OC_WEATHER = {
+    "temperature": "temperature_c",
+    "humidity": "humidity_pct",
+    "dewpoint": "dewpoint_c",
+    "pressure": "pressure_hpa",
+}
+_WEATHER_SENSOR = "BME280 der Kamera"
+_WEATHER_STATE = (
+    ("temperature", "Temperature"),
+    ("humidity", "Humidity"),
+    ("dewpoint", "DewPoint"),
+    ("pressure", "Pressure"),
+)
 
 
 class PortInUse(Exception):
@@ -71,8 +86,10 @@ class Alpaca:
         version: str,
         safety: SafetyMonitor,
         now: Callable[[], datetime] = lambda: datetime.now(UTC),
+        weather: Callable[[], EnvStatus | None] | None = None,
     ) -> None:
         self.name = f"allskyhub {device_id[:4].upper()}"
+        self._weather = weather  # SPEC §7.11: None without a weather sensor
         self._version = version
         self._safety = safety
         self._now = now
@@ -176,11 +193,30 @@ class Alpaca:
             return None, 0, ""
         return None
 
+    def _not_measured(self, member: str) -> bool:
+        return member in _OC_NOT_IMPLEMENTED and not (
+            self._weather is not None and member in _OC_WEATHER
+        )
+
+    def _weather_value(self, member: str) -> float | None:
+        env = self._weather() if self._weather is not None else None
+        if env is None or env.at is None or env.error is not None:
+            return None
+        value: object = getattr(env, _OC_WEATHER[member])
+        return float(value) if isinstance(value, int | float) else None
+
     def _conditions(
         self, d: _Device, member: str, params: dict[str, str]
     ) -> tuple[Any, int, str] | None:
-        if member in _OC_NOT_IMPLEMENTED:
+        if self._not_measured(member):
             return None, NOT_IMPLEMENTED, f"{member} is not measured by this camera"
+        if member in _OC_WEATHER:
+            if not d.connected:
+                return None, NOT_CONNECTED, "not connected"
+            value = self._weather_value(member)
+            if value is None:
+                return None, VALUE_NOT_SET, f"no {member} now (weather sensor not read)"
+            return value, 0, ""
         if member not in {"cloudcover", "skyquality", "timesincelastupdate",
                           "sensordescription", "averageperiod"}:  # fmt: skip
             return None
@@ -192,13 +228,18 @@ class Alpaca:
         if member in ("timesincelastupdate", "sensordescription"):
             sensor = params.get("sensorname", "").lower()
             if sensor and sensor not in _OC_SENSORS:
-                if sensor in _OC_NOT_IMPLEMENTED:
+                if self._not_measured(sensor):
                     return None, NOT_IMPLEMENTED, f"{sensor} is not measured by this camera"
-                return None, INVALID_VALUE, f"unknown sensor {sensor}"
+                if sensor not in _OC_WEATHER:
+                    return None, INVALID_VALUE, f"unknown sensor {sensor}"
             if member == "sensordescription":
                 if not sensor:
                     return None, INVALID_VALUE, "SensorName is required"
-                return _OC_SENSORS[sensor], 0, ""
+                return _OC_SENSORS.get(sensor, _WEATHER_SENSOR), 0, ""
+            if sensor in _OC_WEATHER:
+                env = self._weather() if self._weather is not None else None
+                at = env.at if env is not None else None
+                return (-1.0 if at is None else _age(self._now(), at)), 0, ""
             if m is None:
                 return -1.0, 0, ""
             return _age(self._now(), m.at), 0, ""
@@ -222,6 +263,11 @@ class Alpaca:
                 out.append({"Name": "CloudCover", "Value": round(100.0 * m.cloud_cover, 1)})
             if m is not None and m.sqm_mag is not None:
                 out.append({"Name": "SkyQuality", "Value": m.sqm_mag})
+            if self._weather is not None:
+                for member, name in _WEATHER_STATE:
+                    v = self._weather_value(member)
+                    if v is not None:
+                        out.append({"Name": name, "Value": v})
         out.append({"Name": "TimeStamp", "Value": now.isoformat().replace("+00:00", "Z")})
         return out
 

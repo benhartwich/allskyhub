@@ -241,8 +241,9 @@ class _AccountScreenState extends State<AccountScreen> {
               ),
               (
                 'notify_aurora',
-                'Polarlicht möglich',
-                'Kp hoch genug und der Himmel über der Kamera klar',
+                'Polarlicht',
+                'Kp hoch genug oder im Kameranetz gesichtet, und der Himmel über '
+                    'der Kamera klar',
               ),
               (
                 'notify_summary',
@@ -253,6 +254,11 @@ class _AccountScreenState extends State<AccountScreen> {
                 'notify_tonight',
                 'Heute Nacht klar',
                 'abends, wenn mindestens 2 Stunden klar und dunkel vorhergesagt sind',
+              ),
+              (
+                'notify_fireball',
+                'Feuerkugel mit möglichem Meteoritenfall',
+                'von zwei Kameras gesehen, in 300 km um deine Kameras',
               ),
               if (settings.mailAvailable)
                 (

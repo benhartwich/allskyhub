@@ -202,3 +202,51 @@ def _into_frame(x: float, y: float, lens: Lens, margin: float) -> tuple[float, f
         elif d < 0:
             t = min(t, (lo - c) / d)
     return cx + (x - cx) * t, cy + (y - cy) * t
+
+
+@dataclass(frozen=True)
+class SkyLines:
+    """Constellations as directions (altitude, azimuth in degrees) for a place and time,
+    for views that project them themselves (the app's sky view, roadmap N6)."""
+
+    lines: list[list[tuple[float, float]]]
+    names: list[tuple[str, float, float]]
+
+
+def sky_lines(lat: float, lon: float, at: dt.datetime, min_alt: float = -5.0) -> SkyLines:
+    """Lines cut below ``min_alt``, split every ``STEP_DEG`` like in ``overlay``."""
+    lst = sidereal_deg(at, lon)
+
+    def here(ra: float, dec: float) -> tuple[float, float]:
+        alt, az = alt_az(*precess(ra, dec, at), lst, lat)
+        return round(alt, 2), round(az, 2)
+
+    catalogue = _catalogue()
+    lines: list[list[tuple[float, float]]] = []
+    for strings in catalogue["lines"].values():
+        for string in strings:
+            points: list[tuple[float, float]] = []
+            for (ra1, dec1), (ra2, dec2) in itertools.pairwise(string):
+                dra = (ra2 - ra1 + 180.0) % 360.0 - 180.0
+                steps = max(1, math.ceil(math.hypot(dra, dec2 - dec1) / STEP_DEG))
+                points += [
+                    here(ra1 + dra * i / steps, dec1 + (dec2 - dec1) * i / steps)
+                    for i in range(steps)
+                ]
+            points.append(here(*string[-1]))
+            piece: list[tuple[float, float]] = []
+            for point in points:
+                if point[0] < min_alt:
+                    if len(piece) > 1:
+                        lines.append(piece)
+                    piece = []
+                    continue
+                piece.append(point)
+            if len(piece) > 1:
+                lines.append(piece)
+    names = [
+        (name, *here(ra, dec))
+        for name, ra, dec, rank in catalogue["names"].values()
+        if rank <= LABEL_MAX_RANK
+    ]
+    return SkyLines(lines, [n for n in names if n[1] >= min_alt])

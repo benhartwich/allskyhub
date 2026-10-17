@@ -45,6 +45,9 @@ dependencies:
   mobile_scanner: ^7.0.0
   # Opens the Android test build's APK in the browser (deploy/android), BSD-3-Clause.
   url_launcher: ^6.3.3
+  sensors_plus: ^7.1.1
+  # The phone's camera behind the sky view (AR, roadmap N6), BSD-3-Clause.
+  camera: ^0.12.1
 
 dev_dependencies:
   flutter_test:

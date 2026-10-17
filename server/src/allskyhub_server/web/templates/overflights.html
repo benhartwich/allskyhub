@@ -1,0 +1,86 @@
+{% extends "base.html" %}
+{% block title %}Überflüge · {{ device.name }} · allskyhub{% endblock %}
+{% block head %}<script src="{{ asset('overflights.js') }}" defer></script>{% endblock %}
+{% block content %}
+<a class="back" href="/cameras/{{ device.id }}">← {{ device.name }}</a>
+<div class="page-head">
+  <h1>Überflüge</h1>
+  {% if night_id %}
+  <nav class="row-links" aria-label="Nächte">
+    {% if older %}<a href="?nacht={{ older }}" rel="prev">← {{ older | night_title }}</a>{% endif %}
+    <strong>{{ night_id | night_title }}</strong>
+    {% if newer %}<a href="?nacht={{ newer }}" rel="next">{{ newer | night_title }} →</a>{% endif %}
+  </nav>
+  {% endif %}
+</div>
+
+{% if tracks %}
+<p><strong>{{ count or "Keine Überflüge" }}</strong>{% if meteor_count %} · {{ meteor_count }} {{ "Meteor" if meteor_count == 1 else "Meteore" }} zum Vergleich{% endif %}{% if mapped | length < tracks | length %} <span class="muted small">· {{ tracks | length - mapped | length }} ohne Himmelsrichtung, nur in der Liste</span>{% endif %}</p>
+
+{% if mapped %}
+<section class="card stack ovf" data-ovf data-zone="{{ zone }}">
+  <div class="ovf-legend" role="group" aria-label="Anzeigen">
+    {% for key, title in group_titles.items() %}
+    <label class="check ovf-key {{ key }}"><input type="checkbox" data-ovf-group="{{ key }}" checked> {{ title }}</label>
+    {% endfor %}
+  </div>
+  <svg class="ovf-map" viewBox="0 0 {{ map.SIZE }} {{ map.SIZE }}" role="img" aria-label="Himmelskarte der Nacht: Mitte ist der Zenit, Rand der Horizont, Norden oben">
+    <circle class="ovf-sky" cx="{{ map.CENTRE }}" cy="{{ map.CENTRE }}" r="{{ map.RADIUS }}"/>
+    {% for alt, r in map.rings() %}<circle class="ovf-ring" cx="{{ map.CENTRE }}" cy="{{ map.CENTRE }}" r="{{ r }}"/>{% endfor %}
+    <path class="ovf-ring" d="M{{ map.CENTRE }} {{ map.CENTRE - map.RADIUS }} V{{ map.CENTRE + map.RADIUS }} M{{ map.CENTRE - map.RADIUS }} {{ map.CENTRE }} H{{ map.CENTRE + map.RADIUS }}"/>
+    {% for sky in skies %}
+    <g class="ovf-stars" data-at="{{ sky.at.timestamp() | int }}"{% if not loop.first %} hidden{% endif %}>
+      {% for d in sky.lines %}<path d="{{ d }}"/>{% endfor %}
+      {% for name, x, y in sky.names %}<text x="{{ x }}" y="{{ y }}">{{ name }}</text>{% endfor %}
+    </g>
+    {% endfor %}
+    {% for name, x, y in map.compass() %}<text class="ovf-compass" x="{{ x }}" y="{{ y }}">{{ name }}</text>{% endfor %}
+    {% for t in mapped %}
+    <g class="ovf-track {{ t.group }}" data-i="{{ loop.index0 }}" data-group="{{ t.group }}" data-start="{{ t.event.start.timestamp() | int }}" data-end="{{ t.event.end.timestamp() | int }}" tabindex="0">
+      <title>{{ t.event.start | clock }} {{ one[t.group] }}{% if t.name %}: {{ t.name }}{% endif %}</title>
+      <path class="ovf-hit" d="{{ t.path }}"/>
+      <path class="ovf-line" d="{{ t.path }}"/>
+      <circle class="ovf-head" cx="{{ t.head[0] }}" cy="{{ t.head[1] }}" r="3"/>
+    </g>
+    {% endfor %}
+  </svg>
+  <div class="ovf-player" hidden>
+    <button type="button" class="secondary small" data-ovf-play aria-label="Abspielen">▶</button>
+    <input type="range" data-ovf-time aria-label="Zeit in der Nacht" min="{{ mapped[0].event.start.timestamp() | int }}" max="{{ (mapped | map(attribute='event.end') | max).timestamp() | int }}" step="60">
+    <output data-ovf-clock>alle</output>
+    <button type="button" class="secondary small" data-ovf-all>Alle</button>
+  </div>
+  <p class="muted small">Mitte: Zenit, Rand: Horizont, Norden oben, Osten links (wie beim Blick nach oben). Linien laufen vom Anfang zum Punkt am Ende. „▶“ spielt die Nacht ab: die letzten 20 Minuten hell, davor blass.</p>
+</section>
+{% endif %}
+
+<section class="card stack" id="ovf-detail" hidden>
+  <div class="cam-meta"><h2 data-ovf-title></h2><button type="button" class="secondary small" data-ovf-close aria-label="Schließen">✕</button></div>
+  <img class="product-image" data-ovf-img alt="" hidden>
+  <p data-ovf-text></p>
+  <p><a class="button small" data-ovf-link href="#">Ereignis öffnen</a></p>
+</section>
+
+<section class="card">
+  <div class="table-scroll"><table class="stats ovf-list">
+    <thead><tr><th>Zeit</th><th>Art</th><th>Name</th><th>Bahn</th></tr></thead>
+    <tbody>
+    {% for t in tracks %}
+    {%- set link = "/cameras/" ~ device.id ~ "/events/" ~ t.event.night_id ~ "/" ~ t.event.event_id ~ "?von=ueberfluege" -%}
+    <tr class="ovf-row {{ t.group }}" data-group="{{ t.group }}"{% if t.path %} data-i="{{ mapped.index(t) }}"{% endif %}
+        data-title="{{ one[t.group] }} · {{ t.event.start | clock }}–{{ t.event.end | clock }}"
+        data-text="{{ t.name or '' }}{% if t.name and t.text %} · {% endif %}{{ t.text or '' }}"
+        data-link="{{ link }}" data-img="{% if t.event.has_thumb %}/cameras/{{ device.id }}/events/{{ t.event.night_id }}/{{ t.event.event_id }}/image?variant=thumb{% endif %}">
+      <td><a href="{{ link }}">{{ t.event.start | clock }}</a></td>
+      <td><span class="ovf-dot {{ t.group }}" aria-hidden="true"></span>{{ one[t.group] }}</td>
+      <td>{{ t.name or '–' }}</td>
+      <td class="muted">{{ t.text or 'ohne Richtung' }}</td>
+    </tr>
+    {% endfor %}
+    </tbody>
+  </table></div>
+</section>
+{% else %}
+<div class="card empty"><p class="muted">Keine Überflüge und Meteore {% if night_id %}in dieser Nacht{% else %}bisher{% endif %}. Satelliten und Flugzeuge findet der Meteordetektor nachts; sie erscheinen hier statt bei den Meteoren.</p></div>
+{% endif %}
+{% endblock %}

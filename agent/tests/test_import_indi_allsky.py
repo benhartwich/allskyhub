@@ -88,8 +88,8 @@ def make_indi(root: Path) -> tuple[Path, Path]:
         " (1, ?, 'ZWO CCD ASI678MC', 1.0, 2.0)",
         (UUID,),
     )
-    config = {"LOCATION_NAME": "Hofkirchen", "LOCATION_LATITUDE": 48.13601,
-              "LOCATION_LONGITUDE": 14.38951, "NIGHT_SUN_ALT_DEG": -8.0, "OWNER": "Ben",
+    config = {"LOCATION_NAME": "Musterdorf", "LOCATION_LATITUDE": 50.03601,
+              "LOCATION_LONGITUDE": 10.38951, "NIGHT_SUN_ALT_DEG": -8.0, "OWNER": "Ben",
               "LENS_NAME": "2.5 mm", "IMAGE_FOLDER": str(images), "IMAGE_EXPIRE_DAYS": 30,
               "TIMELAPSE_EXPIRE_DAYS": 365}  # fmt: skip
     con.execute(
@@ -171,11 +171,11 @@ def make_importer(
 def test_settings_from_the_newest_config(tmp_path: Path) -> None:
     db, images = make_indi(tmp_path)
     s = IndiAllskySettings.load(db, 1)
-    assert (s.latitude, s.longitude, s.night_angle) == (48.13601, 14.38951, -8.0)
+    assert (s.latitude, s.longitude, s.night_angle) == (50.03601, 10.38951, -8.0)
     assert (s.camera, s.camera_name, s.location, s.owner, s.lens) == (
         "zwo-asi678mc",
         "ZWO CCD ASI678MC",
-        "Hofkirchen",
+        "Musterdorf",
         "Ben",
         "2.5 mm",
     )
@@ -289,7 +289,7 @@ def test_cli_saves_location_retention_and_backlog(tmp_path: Path) -> None:
     args = _args(tmp_path, db)
     assert run_import_indi(args) == 0
     s = AgentSettings.load(args.settings)
-    assert (s.latitude, s.longitude) == (48.13601, 14.38951)
+    assert (s.latitude, s.longitude) == (50.03601, 10.38951)
     assert s.keep_days >= 365  # SPEC §4.5: at least indi-allsky's retention
     backlog = Backlog(args.data / BACKLOG_NAME)
     assert backlog.next() == "20261010"  # SPEC §6.7: announced to the hub

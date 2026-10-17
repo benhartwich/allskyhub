@@ -28,8 +28,9 @@ android {
         manifestPlaceholders["appLabel"] = "allskyhub"
     }
 
-    // Release key from the environment: Codemagic's android_signing (CM_*) for the stores,
-    // the hub server's test key for test builds (deploy/android/README.md). Without one,
+    // Release key from the environment, both from the hub server's builds
+    // (deploy/android/README.md): the hub's upload key (PKCS#12) for the store, the test
+    // key for test builds. Without one,
     // the debug key, so `flutter run --release` works.
     val keystore = System.getenv("ALLSKYHUB_KEYSTORE") ?: System.getenv("CM_KEYSTORE_PATH")
     signingConfigs {

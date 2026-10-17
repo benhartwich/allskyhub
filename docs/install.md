@@ -4,8 +4,8 @@ allskyhub has three parts: the **camera** (a Raspberry Pi with the allskyhub ima
 **hub** (the server the camera talks to, [allskyhub.org](https://allskyhub.org) or your own)
 and the **app**. This guide goes through all of them.
 
-> **Status:** allskyhub is in testing. Accounts on allskyhub.org are by invitation, the app
-> is not in the stores yet, and images are built by CI rather than published as releases.
+> **Status:** allskyhub is in testing. Accounts on allskyhub.org are by invitation and the
+> app is not in the stores yet.
 
 ## 1. What you need
 
@@ -23,8 +23,12 @@ and the **app**. This guide goes through all of them.
 
 ### 2.1 Write the image
 
-1. Download the image: on GitHub open **Actions → image**, take the newest successful run
-   and download the artifact `allskyhub-image`. Unpack the zip.
+1. Download the image from the newest release:
+   [github.com/benhartwich/allskyhub/releases/latest](https://github.com/benhartwich/allskyhub/releases/latest),
+   the file `allskyhub-<version>.img.xz` (and, to check it, `allskyhub-<version>.img.xz.sha256`:
+   `sha256sum -c allskyhub-<version>.img.xz.sha256`). Every agent release `agent-vX.Y.Z`
+   carries the image with that agent. Images of other commits are only workflow artifacts
+   (**Actions → image**, artifact `allskyhub-image`, kept 14 days).
 2. Write `allskyhub-<version>.img.xz` to the microSD card with
    [Raspberry Pi Imager](https://www.raspberrypi.com/software/): *Choose OS → Use custom*.
    Skip the OS customisation; the camera needs no login user.
@@ -53,7 +57,7 @@ except `allskyhub_setup` are optional):
 {"allskyhub_setup": 1,
  "wifi": {"ssid": "Home", "password": "secret-password"}, "wifi_country": "AT",
  "hub_url": "https://allskyhub.org",
- "location": {"latitude": 48.14, "longitude": 14.39}, "timezone": "Europe/Vienna",
+ "location": {"latitude": 50.04, "longitude": 10.39}, "timezone": "Europe/Vienna",
  "camera": "auto"}
 ```
 
@@ -132,7 +136,7 @@ keeps its own network setup.
    and start with a settings file (owned by `allskyhub`):
 
    ```json
-   {"latitude": 48.14, "longitude": 14.39, "timezone": "Europe/Vienna", "camera": "zwo-asi678mc"}
+   {"latitude": 50.04, "longitude": 10.39, "timezone": "Europe/Vienna", "camera": "zwo-asi678mc"}
    ```
 
    `--lat`, `--lon`, `--tz` and `--profile` on the command line would override the file,
@@ -221,8 +225,11 @@ cameras have images, `--camera <id>` picks one; the dry run lists them.
 
 ## 3. An account on allskyhub.org
 
-Accounts are by invitation for now. Ask the project for an invitation; you get a link to set
-your password. Afterwards you can change the password and delete the account yourself
+Accounts are by invitation for now. Ask for one at
+[allskyhub.org/zugang](https://allskyhub.org/zugang); once an admin accepts, you get a link by
+mail to set your password, and [/start](https://allskyhub.org/start) walks you through parts,
+assembly, the SD card and pairing. The parts list is at
+[allskyhub.org/hardware](https://allskyhub.org/hardware). Afterwards you can change the password and delete the account yourself
 under **Konto**.
 
 ## 4. Run your own hub
@@ -329,7 +336,7 @@ uv run ruff check . && uv run ruff format --check .
 uv run pyright
 uvx --from 'reuse[charset-normalizer]' reuse lint
 tools/dev-postgres.sh                      # PostgreSQL in Docker for the hub's tests
-uv run allskyhub-agent --sim --lat 48.14 --lon 14.39 run --frames 20 --data /tmp/ash
+uv run allskyhub-agent --sim --lat 50.04 --lon 10.39 run --frames 20 --data /tmp/ash
 ```
 
 The protocol between camera and hub is specified in [SPEC.md](SPEC.md).

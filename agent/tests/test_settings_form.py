@@ -39,8 +39,8 @@ def test_schema_is_usable_and_follows_the_profile() -> None:
 
 def test_values_report_every_key_and_fit_device_settings() -> None:
     schema = build_schema(get_profile("zwo-asi678mc"))
-    v = values(AgentSettings(latitude=48.1, longitude=14.4, wb_r=52), schema)
-    assert (v["latitude"], v["wb_r"], v["wb_b"], v["jpeg_quality"]) == (48.1, 52, None, 90)
+    v = values(AgentSettings(latitude=50.0, longitude=10.4, wb_r=52), schema)
+    assert (v["latitude"], v["wb_r"], v["wb_b"], v["jpeg_quality"]) == (50.0, 52, None, 90)
     assert DeviceSettings.model_validate(v).model_extra == {
         "night_max_exposure_s": None,
         "night_max_gain": None,
@@ -75,6 +75,16 @@ def test_values_report_every_key_and_fit_device_settings() -> None:
         "safe_hold_min": 10,
         "nina_url": "",
         "adsb_url": "",
+        "env_sensor": "off",
+        "env_sensor_address": "0x76",
+        "heater": "off",
+        "heater_gpio": None,
+        "heater_active_low": False,
+        "heater_dew_margin_c": 3.0,
+        "lightning_sensor": "off",
+        "lightning_sensor_address": "0x03",
+        "lightning_sensor_irq_gpio": None,
+        "lightning_sensor_indoor": False,
         "mqtt_host": "",
         "mqtt_port": 1883,
         "mqtt_tls": False,
@@ -86,6 +96,39 @@ def test_values_report_every_key_and_fit_device_settings() -> None:
         "language": "de",
         "temperature_unit": "c",
     }
+
+
+def test_heater_settings_round_trip(tmp_path: Path) -> None:
+    """SPEC §7.11: the heater's pin, polarity and margin are kept; null takes the pin away."""
+    schema = build_schema(get_profile("zwo-asi678mc"))
+    changes = {"env_sensor": "bme280", "heater": "auto", "heater_gpio": 17,
+               "heater_active_low": True, "heater_dew_margin_c": 2.5}  # fmt: skip
+    assert check(schema, changes) == []
+    assert check(schema, {"heater_gpio": 40, "heater": "warm"}) == ["heater", "heater_gpio"]
+    s = AgentSettings().with_values(changes)
+    path = tmp_path / "settings.json"
+    s.save(path)
+    loaded = AgentSettings.load(path)
+    assert (loaded.env_sensor, loaded.heater, loaded.heater_gpio) == ("bme280", "auto", 17)
+    assert (loaded.heater_active_low, loaded.heater_dew_margin_c) == (True, 2.5)
+    assert loaded.with_values({"heater_gpio": None}).heater_gpio is None
+
+
+def test_lightning_sensor_settings(tmp_path: Path) -> None:
+    """SPEC §7.12: sensor, address, interrupt pin; never the heater's pin."""
+    schema = build_schema(get_profile("zwo-asi678mc"))
+    changes = {"lightning_sensor": "as3935", "lightning_sensor_address": "0x02",
+               "lightning_sensor_irq_gpio": 4, "lightning_sensor_indoor": True}  # fmt: skip
+    assert check(schema, changes) == []
+    assert check(schema, {"heater_gpio": 4, "lightning_sensor_irq_gpio": 4}) == [
+        "heater_gpio",
+        "lightning_sensor_irq_gpio",
+    ]
+    path = tmp_path / "settings.json"
+    AgentSettings().with_values(changes).save(path)
+    loaded = AgentSettings.load(path)
+    assert (loaded.lightning_sensor, loaded.lightning_sensor_address) == ("as3935", "0x02")
+    assert (loaded.lightning_sensor_irq_gpio, loaded.lightning_sensor_indoor) == (4, True)
 
 
 def test_check_uses_the_schema_and_the_fixed_rules() -> None:
@@ -136,7 +179,7 @@ def _call(url: str, body: dict[str, Any] | None = None) -> tuple[int, Any]:
 
 def test_local_settings_api() -> None:
     schema = build_schema(get_profile("zwo-asi678mc"))
-    current = AgentSettings(latitude=48.1, longitude=14.4)
+    current = AgentSettings(latitude=50.0, longitude=10.4)
     stored: list[Mapping[str, Any]] = []
 
     def change(c: Mapping[str, Any], source: str) -> list[str]:
@@ -153,7 +196,7 @@ def test_local_settings_api() -> None:
         status, data = _call(base)
         assert status == 200
         assert data["schema"][0]["key"] == "location"
-        assert data["values"]["latitude"] == 48.1
+        assert data["values"]["latitude"] == 50.0
         assert _call(base, {"wb_b": 120}) == (400, {"detail": "invalid", "fields": ["wb_b"]})
         assert stored == []
         assert _call(base, {"wb_b": 60, "night_max_gain": None})[0] == 202

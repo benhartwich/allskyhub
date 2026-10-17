@@ -116,8 +116,10 @@ def test_aurora_events_upsert_by_id(tmp_path: Path) -> None:
     got: list[Event] = []
     worker = DetectionWorker(store, on_event=got.append, mask_radius_frac=0.48)
     imgs = [sky(0)] + [sky(i, GREEN) for i in range(1, 5)]
+    names: list[str] = []
     for i, rgb in enumerate(imgs):
         stored = store.save(rgb, frame(i).captured_at)
+        names.append(stored.name)
         f = frame(i).model_copy(update={"name": stored.name, "night_id": stored.night_id})
         worker.process_frame(f, rgb)
     aurora = [e for e in got if e.kind is EventKind.AURORA]
@@ -128,7 +130,11 @@ def test_aurora_events_upsert_by_id(tmp_path: Path) -> None:
     assert first.data["image_rev"] == 1
     assert first.data["ongoing"] is True
     assert set(first.data) == {"peak_index", "green", "frames", "direction_deg", "ongoing",
-                               "image_rev", "azimuth_deg", "altitude_deg"}  # fmt: skip
+                               "image_rev", "azimuth_deg", "altitude_deg", "frame", "crop_x",
+                               "crop_y", "crop_w", "crop_h"}  # fmt: skip
+    # SPEC §6.4 Original frame: an episode's picture is the whole frame of its best moment.
+    assert first.data["frame"] in names[1:]
+    assert first.data["crop_x"] is None
     events = EventStore(store)
     stored_events = [e for e in events.night_events(first.night_id) if e.kind is EventKind.AURORA]
     assert [e.id for e in stored_events] == [first.id]  # one entry, the last update
@@ -158,11 +164,11 @@ def test_with_an_orientation_only_the_polar_sector_counts() -> None:
                    tilt_north=0.0, stars=30, rms_px=1.0, rms_deg=0.1,
                    width=W, height=H)  # fmt: skip
     east = [(frame(i), sky(i, GREEN)) for i in range(3)]  # the rays are right of the centre
-    north_up = AuroraDetector(CFG, orientation=lambda: sol, latitude=lambda: 48.1)
+    north_up = AuroraDetector(CFG, orientation=lambda: sol, latitude=lambda: 50.0)
     assert [u for f, img in east for u in north_up.feed(f, img, Path(f"/{f.name}"))] == []
     # The same rays with north to the right of the image: now they are toward the pole.
     sol_e = dataclasses.replace(sol, rot=90.0)
-    north_right = AuroraDetector(CFG, orientation=lambda: sol_e, latitude=lambda: 48.1)
+    north_right = AuroraDetector(CFG, orientation=lambda: sol_e, latitude=lambda: 50.0)
     assert [u for f, img in east for u in north_right.feed(f, img, Path(f"/{f.name}"))]
     # Southern hemisphere: the pole is south, opposite.
     south = AuroraDetector(CFG, orientation=lambda: sol_e, latitude=lambda: -45.0)

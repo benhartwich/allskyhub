@@ -3,20 +3,25 @@
 Two meteor events pair when their exposures overlap (SPEC §6.4: the meteor happened
 somewhere within ``start``..``end``), both carry their track ends and the triangulation
 gives a plausible trajectory. Only cameras whose data may meet are paired: cameras of
-the same owner, or two cameras whose owners show their location on a public page.
+the same owner, or two cameras whose owners both joined the network (``Device.network``).
+A pair of other owners' cameras tells each owner much about where the other camera stands
+(and a dishonest owner could send made-up meteors to find out), so it takes both owners'
+consent; showing rounded coordinates on a public page is not that.
 """
 
 from __future__ import annotations
 
 import datetime as dt
 import logging
+import uuid
+from collections.abc import Awaitable, Callable
 from typing import Any
 
 from sqlalchemy import or_, select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
-from allskyhub_server.devices import events, public, triangulation
+from allskyhub_server.devices import events, fireball, triangulation
 from allskyhub_server.models import Device, EventRecord, MeteorPair
 
 log = logging.getLogger(__name__)
@@ -46,12 +51,19 @@ def may_pair(a: Device, b: Device) -> bool:
         return False
     if a.owner_id == b.owner_id:
         return True
-    return public.coordinates(a) is not None and public.coordinates(b) is not None
+    return a.network and b.network
 
 
-async def pair_event(maker: async_sessionmaker[AsyncSession], device_id: str, event_id: str) -> int:
-    """Look for the same meteor at other cameras; returns how many pairs were stored."""
+async def pair_event(
+    maker: async_sessionmaker[AsyncSession],
+    device_id: str,
+    event_id: str,
+    on_fireball: Callable[[uuid.UUID], Awaitable[None]] | None = None,
+) -> int:
+    """Look for the same meteor at other cameras; returns how many pairs were stored.
+    ``on_fireball`` gets each stored pair that may have dropped meteorites, after commit."""
     stored = 0
+    fireballs: list[uuid.UUID] = []
     try:
         async with maker() as db:
             device = await db.get(Device, device_id)
@@ -87,11 +99,22 @@ async def pair_event(maker: async_sessionmaker[AsyncSession], device_id: str, ev
                 trajectory = triangulation.triangulate(mine, theirs)
                 if trajectory is None:
                     continue
-                stored += await _store(db, (device, event), (other, other_event), trajectory)
+                pair_id = await _store(db, (device, event), (other, other_event), trajectory)
+                stored += 1
+                if trajectory.points[1].height_km <= fireball.METEORITE_END_KM:
+                    fireballs.append(pair_id)
             await db.commit()
+        if on_fireball is not None:
+            for pair_id in fireballs:
+                await on_fireball(pair_id)
     except Exception:
         log.exception("meteor pairing failed")
     return stored
+
+
+def _peak(event: EventRecord) -> float | None:
+    peak = (event.data or {}).get("peak")
+    return float(peak) if isinstance(peak, int | float) else None
 
 
 async def _store(
@@ -99,23 +122,26 @@ async def _store(
     first: tuple[Device, EventRecord],
     second: tuple[Device, EventRecord],
     trajectory: triangulation.Trajectory,
-) -> int:
+) -> uuid.UUID:
     (da, ea), (db_, eb) = sorted((first, second), key=lambda pair: pair[0].id)
     high, low = trajectory.points
+    peaks = [p for p in (_peak(ea), _peak(eb)) if p is not None]
     values = {
         "at": max(ea.start, eb.start),
         "high_lat": high.lat, "high_lon": high.lon, "high_km": high.height_km,
         "low_lat": low.lat, "low_lon": low.lon, "low_km": low.height_km,
         "length_km": trajectory.length_km, "convergence_deg": trajectory.convergence_deg,
+        "peak": max(peaks) if peaks else None,
     }  # fmt: skip
-    await db.execute(
+    result = await db.execute(
         pg_insert(MeteorPair)
         .values(device_a=da.id, event_a=ea.event_id, device_b=db_.id, event_b=eb.event_id, **values)
         .on_conflict_do_update(
             index_elements=["device_a", "event_a", "device_b", "event_b"], set_=values
         )
+        .returning(MeteorPair.id)
     )
-    return 1
+    return result.scalar_one()
 
 
 async def for_event(
@@ -130,10 +156,12 @@ async def for_event(
             )
         )
     )
+    device = await db.get(Device, device_id)
     out: list[tuple[MeteorPair, Device]] = []
     for pair in rows:
         other_id = pair.device_b if pair.device_a == device_id else pair.device_a
         other = await db.get(Device, other_id)
-        if other is not None:
+        # An owner who left the network takes their pairs along.
+        if device is not None and other is not None and may_pair(device, other):
             out.append((pair, other))
     return out

@@ -204,7 +204,9 @@ deleted for this: detections run on it as on every other frame (a lightning flas
 a frame bright), and retention (§4.5) removes it with its night. Bad frames are left out
 of the night products (§5.2), the loop on the live page and the image grids of the local
 UI and the hub; the local archive shows them on request. `bad_frames` (default on)
-switches the marking off. Blur and dew are not judged per frame here: dew and dirt are
+switches the marking off. A light that lights up one frame without making it bright is
+not a bad frame; the startrails leave such flash frames out by themselves (§5.2, roadmap
+L32). Blur and dew are not judged per frame here: dew and dirt are
 recognised over many frames on the hub (roadmap C12).
 
 ## 5. Products (M4)
@@ -232,6 +234,13 @@ Each can be switched off (`product_keogram`, `product_startrails`, `product_time
 - **Startrails** `startrails.jpg`: the per-pixel maximum of all frames whose mean
   brightness is at most `startrails_max_mean` (default 0.35), so twilight and moonlit
   or cloud-lit frames do not wash out the trails. Built only with at least 10 such frames.
+  A **flash frame** is left out too (roadmap L32, Benjamin, 2026-10-15): a frame lit up
+  for one exposure by a light near the camera (a lamp with a motion sensor, a car). It is
+  a night frame whose mean, divided by exposure time and linear gain (10^(gain/200), gain
+  in 0.1 dB), is at least 15 % above both its neighbours' and whose stored mean is at
+  least 6/255 above both; a ramp at dusk or an exposure step is never brighter than both
+  neighbours, and the first and last frame are kept. The frame itself stays as it is and
+  is not marked bad (§4.9): it is only known one frame later.
 - **Timelapse** `timelapse.mp4`: H.264, 25 fps, width at most 1920 px, `yuv420p`, built
   with `ffmpeg` from the night frames in capture order.
 
@@ -485,6 +494,15 @@ the meteor's midpoint, the centroid of the lit area, of the green or of the blue
 agent computes them with the orientation (§4.8) valid when it saves the event, so they
 stay right after a later re-solve; both are null while the camera has no orientation.
 
+**Original frame** (Benjamin, 2026-10-15, roadmap L28). An event with a picture also names
+the stored frame it was found in and where its picture lies in it, so the owner can judge it
+in the whole sky: `frame` (that frame's name, §4.5, as for `upload_frame`) and `crop_x`,
+`crop_y`, `crop_w`, `crop_h` (the picture's window in that frame's pixels, all four null
+when the picture is the whole frame, as for lightning). An episode's (`aurora`, `nlc`)
+`frame` is that of its current picture and changes with `image_rev`. Events without
+`frame` (agents before this rule, imported events whose source does not name the frame)
+have no original.
+
 A `meteor` also carries the two ends of its track for triangulation between cameras
 (roadmap C4): `start_azimuth_deg`, `start_altitude_deg`, `end_azimuth_deg`,
 `end_altitude_deg` (same orientation and nulls as above) and `track_ordered` (bool). A
@@ -568,9 +586,12 @@ is there in the frames before and after too (a drifting star) and every streak o
 cloudy or twinkling frame are dropped without an event, as before. The camera sets the
 automatic label when it saves the event and sends it as `event_label` (§6.3).
 
-The pieces of one moving object (`moving` or `circle`) in frames at most 5 minutes apart,
-each continuing the previous piece or at the same place (a drifting contrail), are one
-event (Benjamin, 2026-10-13): it is sent again with the same id as it grows, `end` and
+The pieces of one moving object (`moving` or `circle`) in frames at most 150 s apart
+(one frame may be missing), each at the same place (a drifting contrail) or continuing the
+previous piece along its trail (the move within 25° of the trail's axis) and onward (not
+back against the last move), are one event (Benjamin, 2026-10-13); one event spans at most
+10 minutes, a later piece starts a new one (Benjamin, 2026-10-15: separate objects along one
+airway were chained into passes of up to 38 minutes that no aircraft or satellite fits): it is sent again with the same id as it grows, `end` and
 `data.frames` grow, `end_*` is the end of the newest piece farther from `start_*`, and the
 picture stays the first piece's. At most 300 non-`meteor`
 events are kept per night (a growing one counts once); beyond that they are only counted in the log. Nothing is deleted:
@@ -591,6 +612,18 @@ never make one. Its picture is a crop of 300 × 300 px around it from the best f
 event is an episode: sent again as more frames find it, `ongoing` false after 30 minutes
 without it. At most 3 per night; `detect_transient` `off` runs no check, `low`/`high` move
 the magnitude limit to 3.0/4.0. The hub decides what is worth a push (roadmap H7).
+
+**Overflights** (Benjamin, 2026-10-15, roadmap L29). Meteor events whose `trail` is
+`moving`, `circle` or `dashed`, or whose label (automatic or the owner's) has the reason
+`aircraft` or `satellite`, are overflights. The local UI and the hub list them per night
+under "Überflüge", apart from the meteors and from "Aussortierte", grouped as Satelliten,
+Flugzeuge and Unbekannt: time (`start`–`end`), path across the sky from `start_*` to
+`end_*` as compass points and altitudes (if known), picture and original frame, and the
+name from the label's `detail` (a satellite's name and NORAD number, an aircraft's call
+sign). The night's summary counts them ("23 Überflüge: 6 Satelliten, 3 Flugzeuge,
+14 unbekannt"); they still count nowhere as meteors. The camera shows the names it got
+from the hub with `label_event`; without the hub only its own verdicts. Overflights are
+found by the meteor detector and therefore only at night.
 
 ### 6.5 Hub → device
 
@@ -629,6 +662,15 @@ right away and the full product when someone opens it.
 device uploads the event's picture with
 `PUT /device/v1/events/{night_id}/{event_id}?variant=<variant>` (`image/jpeg`), then
 answers `ack`, or `error` with `not_found` if the event has no picture or it is gone.
+
+With `variant` `original` (roadmap L28) it uploads the whole frame named by the event's
+`frame` (§6.4) in full size instead, and answers `not_found` once retention (§4.5) removed
+that frame; an older device answers `invalid_args`. The hub fetches the original right away
+for every event that is not a false positive and keeps it with the event's full picture;
+for a false positive, overflights included, only when someone opens the event, while the
+camera still has the frame. Both UIs show the event's picture and, one click away, the
+original frame with the picture's window outlined (for lightning, the lit area's centroid
+marked).
 
 **`local_access`** `{verifier}`: the verifier of the camera's offline code (§7.4), a PHC
 string `$argon2id$v=19$m=19456,t=2,p=1$<salt>$<hash>`, or `null` to remove it. The device
@@ -880,7 +922,7 @@ For setting up without the app (and for cameras on Ethernet with a fixed hub): a
 ```json
 {"allskyhub_setup": 1, "wifi": {"ssid": "Home", "password": "secret"},
  "wifi_country": "AT", "hub_url": "https://allskyhub.org",
- "location": {"latitude": 48.14, "longitude": 14.39}, "timezone": "Europe/Vienna",
+ "location": {"latitude": 50.04, "longitude": 10.39}, "timezone": "Europe/Vienna",
  "camera": "auto"}
 ```
 
@@ -1157,6 +1199,91 @@ satellite's name and NORAD number (`"STARLINK-1234 44238"`; the ISS and Tiangong
 `"ISS"` and `"Tiangong"`), which goes to the camera with `label_event`. Events are checked
 when they arrive, also after an outage, since orbits can be computed for any time.
 
+### 7.10 Lightning cross-check
+
+Roadmap H8 (Benjamin, 2026-10-15): the camera sees a flash only as sky that lights up for
+one frame, which a lamp or a car near the camera does as well; its storms on calm October
+nights were such light. The hub therefore checks lightning against the flashes the
+Lightning Imager on Meteosat Third Generation (MTG-I, EUMETSAT open data, a free account)
+saw from space.
+
+The hub loads LI's flash product (LI-2-LFL) every 10 minutes for Europe and keeps 48 hours
+of flashes (time, latitude, longitude). A lightning event is near a storm when LI saw a
+flash within 400 km of the camera in `start − 60 s .. end + 60 s`; farther, its light is
+below the horizon. When the event has an `azimuth_deg` (§6.4), the flash must also lie in
+its direction: its compass bearing from the camera within 60° of `azimuth_deg`; light from
+the north is no flash of a storm in the south (Benjamin, 2026-10-15: a lamp's glow from the
+NNW was "confirmed" by storms elsewhere within 400 km). Without `azimuth_deg` any direction
+counts. The hub keeps, per event, the nearest flash that counts and shows it next to the
+event ("Blitzsatellit: Blitze in 230 km Richtung NW"). When LI saw no flash that counts
+for any checked event of a storm (every event with the same `data.storm`, §6.4), each of its
+checked events gets the automatic label `false_positive`/`other` with detail
+`kein Gewitter (Blitzsatellit)`, which goes to the camera with `label_event`; one confirmed
+event keeps the whole storm unlabelled. Not checked, shown as unchecked and never labelled:
+imported events, events older than the kept flashes and events whose window LI data does not
+cover (an outage on either side). Gaps in LI data no longer hold back the label of a storm's
+other events (Benjamin, 2026-10-15: 85 of 90 flashes of a lamp's "storm" had no flash in
+their direction, 5 fell into gaps, and the storm stayed unlabelled). Labels set by the
+owner win as always (§6.4 Labels).
+
+### 7.11 Weather sensor and dew heater
+
+Roadmap L30 (Benjamin, 2026-10-15): housings such as Daniel Nimmervoll's bring a dome
+heater (resistors switched by a MOSFET on a GPIO pin) and room for a BME280. The agent
+reads the sensor and keeps the dome free of dew.
+
+**Sensor.** Setting `env_sensor`: `off` (default) or `bme280` (I²C bus 1, `env_sensor_address`
+`0x76` default or `0x77`). The agent reads temperature, humidity and pressure every 30 s
+and computes the dew point (Magnus formula). `status.env` is `{at, temperature_c,
+humidity_pct, pressure_hpa, dewpoint_c, error}` (`error` null, `not_found` or `bad_data`),
+null while `env_sensor` is off. A sensor that fails is retried every minute and never slows
+capture. The values go to the hub with `status` and from there to the charts
+(temperature, humidity and dew point over the night), to MQTT (§7.7) and to Alpaca
+ObservingConditions (§7.5: `temperature`, `humidity`, `dewpoint`, `pressure` then answer
+instead of `0x400`). Overlay fields (§7 Overlay) `env_temp`, `humidity`, `dewpoint` and
+`heater`.
+
+**Heater.** Settings `heater`: `off` (default), `auto` or `on`; `heater_gpio` (BCM pin
+number, no default: the owner names the pin, nothing is switched before); `heater_active_low`
+(default false; true for a stage that switches on with a low level). In `auto` the heater is
+on when the temperature is within `heater_dew_margin_c` (default 3 °C) of the dew point or
+the humidity is at least 90 %, and off again once it is more than 1.5 °C above that margin
+and below 85 % (hysteresis). Without a working sensor `auto` heats whenever the camera is in
+night mode. The heater is always off above 45 °C measured temperature, switches at most
+once a minute, is off while the agent stops (the pin is set to off and released), and
+`status.heater` is `{on, reason}` with `reason` one of `off`, `on`, `dew`, `humidity`,
+`night`, `too_warm`. The owner wires the stage so that a released (floating) pin means off.
+
+The image enables I²C (`dtparam=i2c_arm=on`) and puts the agent's user in the groups `i2c`
+and `gpio`; the agent uses `smbus2` and `gpiod` (libgpiod), which work on the Pi 4 and
+the Pi 5.
+
+### 7.12 Lightning sensor
+
+Roadmap L31 (Benjamin, 2026-10-15): an AS3935 lightning sensor hears strikes by their
+radio crackle up to about 40 km, by day and night, and confirms the camera's flashes on the
+spot, also without the hub (§7.10).
+
+Settings `lightning_sensor`: `off` (default) or `as3935` (I²C bus 1, `lightning_sensor_address`
+default `0x03`, interrupt on `lightning_sensor_irq_gpio`, BCM pin, no default), and
+`lightning_sensor_indoor` (default false: the sensor's outdoor gain; true inside a
+housing that dampens). The agent calibrates the sensor's antenna once at start, reads a
+strike on its interrupt (estimated distance 1..40 km or "out of range", energy) and counts
+disturbers and noise; it never slows capture. `status.lightning_sensor` is `{at, strikes_30min,
+nearest_km, last_strike_at, error}` (`error` null, `not_found`, `no_interrupt` when the
+interrupt line stays silent while the antenna is tuned, or `bad_data`), null while off.
+
+- **Confirmation.** While the sensor is on, every `lightning` event (§6.4) gets
+  `data.sensor_km`: the nearest strike the sensor heard in `start − 60 s .. end + 60 s`,
+  or null if it heard none. A storm (all events with the same `data.storm`) in which the
+  sensor heard no strike at all gets the automatic label `false_positive`/`other` with
+  detail `kein Blitz am Sensor` (§6.4 Labels), sent as `event_label`; the hub's
+  satellite check (§7.10) then labels nothing more, labels set by the owner win as always.
+- **Without a flash.** Strikes the sensor hears by day or behind clouds are no events;
+  they are counted in `status.lightning_sensor` and make Alpaca's SafetyMonitor (§7.5)
+  unsafe for 30 minutes after the last one, as a `lightning` event does.
+- MQTT (§7.7) publishes `strikes_30min` and `nearest_km`.
+
 ## 8. Updates
 
 Signed update packages (agent and profiles), installed by the device itself into an
@@ -1191,6 +1318,17 @@ report healthy within a timeout.
   which reads and deletes it. `now` checks at once and installs also at night;
   `rollback` switches to the previous installed release with the same health check and
   marks the current one as not to be installed again by itself.
+- **System steps:** a bundle brings only the agent's venv, so system settings a feature
+  needs beyond it are applied by the updater on every run by day (not at night, since
+  they can restart the agent), with the code of the running release
+  (`allskyhub_agent.update.system`). Each step does nothing when already in place and only
+  on an allskyhub camera (the user `allskyhub` exists). A camera flashed before a feature
+  gets it one updater run after the update that brings it. Today: the groups `i2c` and
+  `gpio` and the agent user in them, a unit drop-in with `SupplementaryGroups=i2c gpio` when
+  the unit lacks them (then the agent restarts), `i2c-dev` in `modules-load.d`, and
+  `dtparam=i2c_arm=on` appended under `[all]` to `config.txt` unless I²C is already on
+  (`/dev/i2c-1` or such a line), which asks for the daytime reboot below through
+  `/run/reboot-required` (SPEC §7.11, §7.12).
 - **System updates:** Debian and Raspberry Pi OS security updates install by themselves
   (unattended-upgrades, no automatic reboot by apt). When they need a reboot
   (`/run/reboot-required`, a new kernel), the agent reboots once it is day: sun at least

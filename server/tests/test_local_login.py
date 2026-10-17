@@ -28,7 +28,7 @@ from allskyhub_protocol import (
     split_local_login_assertion,
 )
 from allskyhub_server.models import Device
-from allskyhub_server.web.routes_local import return_base
+from allskyhub_server.web.routes_local import looks_local, return_base
 from tests.fake_device import FakeDevice
 from tests.helpers import home_csrf, make_account
 from tests.ws_helpers import device_ws, next_command, paired_token, send
@@ -77,6 +77,24 @@ def test_return_base(value: str, base: str | None) -> None:
     assert return_base(value) == base
 
 
+@pytest.mark.parametrize(
+    ("base", "local"),
+    [
+        ("http://192.168.1.20:8080/", True),
+        ("http://[fe80::1]/", True),
+        ("http://100.101.2.3/", True),
+        ("http://allskyhub.local/", True),
+        ("https://garten.fritz.box/", True),
+        ("http://allskyhub/", True),
+        ("https://cam.example.org/", False),
+        ("http://8.8.8.8/", False),
+    ],
+)
+def test_looks_local(base: str, local: bool) -> None:
+    """Audit L6: addresses outside a home network get a warning."""
+    assert looks_local(base) is local
+
+
 async def test_single_sign_on(
     app: FastAPI, client: httpx.AsyncClient, new_client: httpx.AsyncClient
 ) -> None:
@@ -97,6 +115,9 @@ async def test_single_sign_on(
     page = await client.get(url, params=query)
     assert page.status_code == 200
     assert "http://192.168.1.20:8080" in page.text
+    assert "nicht in einem Heimnetz" not in page.text
+    far = await client.get(url, params={**query, "return": "https://cam.example.org/"})
+    assert "nicht in einem Heimnetz" in far.text
     # The form is redirected to the camera, so its origin must be an allowed form target.
     assert "form-action 'self' http://192.168.1.20:8080" in page.headers["content-security-policy"]
     assert (await client.get(url, params={**query, "return": "ftp://x/"})).status_code == 400
@@ -184,13 +205,13 @@ async def test_public_page_from_the_camera(
 
     on = (await new_client.put(url, json={"enabled": True}, headers=auth)).json()
     assert on["url"].startswith("http://testserver/sky/")
-    profile = {"title": "Lanzenberg", "sections": {"loop": False}}
+    profile = {"title": "Sternwarte", "sections": {"loop": False}}
     r = await new_client.put(url, json={"profile": profile}, headers=auth)
     assert r.json()["url"] == on["url"]  # only the profile changed
-    assert r.json()["profile"]["title"] == "Lanzenberg"
+    assert r.json()["profile"]["title"] == "Sternwarte"
     assert r.json()["profile"]["sections"]["loop"] is False
     page = (await new_client.get(on["url"].removeprefix("http://testserver"))).text
-    assert "Lanzenberg" in page
+    assert "Sternwarte" in page
     assert "Die letzte Stunde" not in page
 
     too_long = await new_client.put(url, json={"profile": {"title": "x" * 101}}, headers=auth)
@@ -201,7 +222,7 @@ async def test_public_page_from_the_camera(
     assert unknown.json()["detail"] == "colour gibt es nicht."
     off = (await new_client.put(url, json={"enabled": False}, headers=auth)).json()
     assert off["url"] is None
-    assert off["profile"]["title"] == "Lanzenberg"
+    assert off["profile"]["title"] == "Sternwarte"
 
 
 async def test_unpairing_drops_local_access(app: FastAPI, client: httpx.AsyncClient) -> None:

@@ -1,0 +1,39 @@
+{% extends "base.html" %}
+{% block title %}Zugang beantragen · allskyhub{% endblock %}
+{% block content %}
+<div class="auth">
+  {% if sent %}
+  <h1>Danke!</h1>
+  <p class="lead">Deine Anfrage ist angekommen. Wir melden uns per E-Mail, sobald dein Zugang bereit ist.</p>
+  <p>Bis dahin: <a href="/hardware">Was du für eine Kamera brauchst</a>.</p>
+  {% else %}
+  <h1>Zugang beantragen</h1>
+  <p class="muted">allskyhub ist im Aufbau; Konten vergeben wir nach und nach. Erzähl uns kurz, wo du stehst, wir schicken dir dann eine Einladung per E-Mail.</p>
+  <form method="post" action="/zugang" class="card stack">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <label>Name
+      <input name="name" value="{{ form.name if form else '' }}" autocomplete="name" maxlength="100" required>
+    </label>
+    <label>E-Mail-Adresse
+      <input type="email" name="email" value="{{ form.email if form else '' }}" autocomplete="email" maxlength="254" required>
+    </label>
+    <label>Ort oder Region (freiwillig)
+      <input name="place" value="{{ form.place if form else '' }}" maxlength="100" placeholder="z. B. Mühlviertel">
+    </label>
+    <fieldset class="stack">
+      <legend>Wie weit bist du?</legend>
+      {% for key, label in stages.items() %}
+      <label class="check"><input type="radio" name="stage" value="{{ key }}" required{% if form and form.stage == key %} checked{% endif %}> {{ label }}</label>
+      {% endfor %}
+    </fieldset>
+    <label>Nachricht (freiwillig)
+      <textarea name="message" rows="4" maxlength="1000" placeholder="Welche Kamera, was du vorhast …">{{ form.message if form else '' }}</textarea>
+    </label>
+    <label class="hp" aria-hidden="true">Website <input name="website" tabindex="-1" autocomplete="off"></label>
+    <label class="check"><input type="checkbox" name="privacy" value="true" required> Ich habe die <a href="/datenschutz#zugang">Datenschutzerklärung</a> gelesen. Meine Angaben werden nur für die Anfrage verwendet.</label>
+    <button type="submit">Zugang beantragen</button>
+  </form>
+  <p class="muted">Schon ein Konto? <a href="/login">Anmelden</a></p>
+  {% endif %}
+</div>
+{% endblock %}

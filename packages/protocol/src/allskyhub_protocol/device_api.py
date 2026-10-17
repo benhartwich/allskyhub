@@ -144,6 +144,15 @@ class FrameVariant(StrEnum):
     THUMB = "thumb"
 
 
+class EventVariant(StrEnum):
+    """Which picture of an event to upload (SPEC §6.5): `original` is the whole frame the
+    event was found in (roadmap L28)."""
+
+    FULL = "full"
+    THUMB = "thumb"
+    ORIGINAL = "original"
+
+
 class UploadFrameArgs(_Model):
     """`args` of the `upload_frame` command (SPEC §6.5)."""
 
@@ -173,7 +182,7 @@ class UploadEventArgs(_Model):
 
     night_id: str = Field(pattern=r"^\d{8}$")
     event_id: str = Field(pattern=r"^[a-z]+-\d{8}T\d{6}Z(-\d+)?$")
-    variant: FrameVariant = FrameVariant.FULL
+    variant: EventVariant = EventVariant.FULL
 
 
 CameraChoice = Literal["auto", "zwo-asi678mc", "rpi-hq", "sim"]

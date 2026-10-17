@@ -52,4 +52,185 @@
   </form>
   {% endif %}
 </section>
+<section class="card stack" id="zugang">
+  <h2>Zugangsanfragen</h2>
+  {% if access_requests %}
+  <ul class="parts">
+    {% for r in access_requests %}
+    <li>
+      <div class="part-head"><strong>{{ r.name }} · {{ r.email }}</strong><span class="part-price">{{ r.created_at | localtime }}</span></div>
+      <span class="muted small">{{ stages[r.stage] }}{% if r.place %} · {{ r.place }}{% endif %}</span>
+      {% if r.message %}<span>{{ r.message }}</span>{% endif %}
+      <span class="part-links">
+        <form method="post" action="/admin/access/{{ r.id }}/invite" class="inline">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+          <button type="submit" class="small">Einladen</button>
+        </form>
+        <form method="post" action="/admin/access/{{ r.id }}/decline" class="inline">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+          <button type="submit" class="secondary small">Ablehnen</button>
+        </form>
+      </span>
+    </li>
+    {% endfor %}
+  </ul>
+  {% else %}
+  <p class="muted">Keine offenen Anfragen.</p>
+  {% endif %}
+  <p class="muted small">„Einladen“ schickt den Einladungslink (14 Tage gültig) und den Link zu den ersten Schritten per E-Mail. „Ablehnen“ schickt nichts.</p>
+</section>
+<section class="card stack" id="stores">
+  <h2>App-Stores</h2>
+  {% if store_report %}
+  <ul class="parts">
+    {% for step in store_report.steps %}
+    <li><strong class="{{ '' if step.state == 'ok' else 'warn' }}">{{ {'ok': '✓', 'warn': '!', 'fail': '✕'}[step.state] }} {{ step.title }}</strong><span>{{ step.text }}</span></li>
+    {% endfor %}
+  </ul>
+  {% endif %}
+  <dl class="facts">
+    {% for e in stores %}
+    <dt>{{ e.title }}</dt>
+    <dd>{% if e.meta %}hinterlegt {{ e.meta.at[:10] }}
+      {%- if e.meta.client_email %}<br><code class="small">{{ e.meta.client_email }}</code>{% endif %}
+      {%- if e.meta.key_id %}<br><span class="small">Key-ID <code>{{ e.meta.key_id }}</code></span>{% endif %}
+      {%- if e.meta.sha256 %}<br><span class="small">SHA-256 <code>{{ e.meta.sha256 }}</code></span>{% endif %}
+      {%- if e.meta.app_id %}<br><span class="small">Codemagic-App <code>{{ e.meta.app_id }}</code></span>{% endif %}
+    {%- else %}<span class="muted">{{ 'fehlt' if e.kind in ('play', 'asc', 'codemagic') else 'wird beim Einrichten erzeugt' }}</span>{% endif %}</dd>
+    {% endfor %}
+  </dl>
+  <form method="post" action="/admin/stores-setup" class="inline">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <button type="submit">Prüfen und einrichten</button>
+  </form>
+  <p class="muted small">Prüft jeden Zugang, erzeugt die Signierschlüssel, legt die Bundle-ID {{ package }} bei Apple an, fügt das Repository in Codemagic hinzu und legt dort alle Schlüssel in die geschützte Variablengruppe <code>allskyhub_store</code>. Die Schlüssel stehen nur auf dem Server und werden nie wieder angezeigt.</p>
+
+  {% if store_builds %}
+  <h3>Letzte Builds</h3>
+  <ul class="commit-list">
+    {% for b in store_builds %}
+    {%- set url = build_url(b) %}
+    {%- set name = 'Android' if b.platform == 'android' else 'iOS' %}
+    <li>{% if url %}<a href="{{ url }}">{{ name }}</a> <span class="muted small">(Codemagic)</span>{% else %}{{ name }}{% endif %} · {{ android_states.get(b.status or 'idle', b.status) if not url else (b.status or 'gestartet') }} <span class="muted small">· {{ b.at[:16] | replace('T', ' ') }} UTC</span></li>
+    {% endfor %}
+  </ul>
+  {% endif %}
+  {% if android_job.latest %}
+  <p><a href="/admin/stores-android/{{ android_job.latest.file }}">{{ android_job.latest.file }}</a> <span class="muted small">· Version {{ android_job.latest.version }} ({{ android_job.latest.build }}), {{ (android_job.latest.size / 1e6) | round | int }} MB · für das erste Hochladen von Hand</span></p>
+  {% endif %}
+  {% if android_job.log %}
+  <details{% if android_job.state in ('failed', 'built') %} open{% endif %}>
+    <summary>Protokoll des Android-Builds</summary>
+    <pre class="small">{{ android_job.log }}</pre>
+  </details>
+  {% endif %}
+  {% if android_key or codemagic_app %}
+  <div class="row-links">
+    {% for platform, name, ready in (('android', 'Android-Release bauen', android_key and not android_job.busy), ('ios', 'iOS-Release bauen', codemagic_app)) %}
+    {% if ready %}
+    <form method="post" action="/admin/stores-build" class="inline">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+      <input type="hidden" name="platform" value="{{ platform }}">
+      <button type="submit" class="secondary">{{ name }}</button>
+    </form>
+    {% endif %}
+    {% endfor %}
+  </div>
+  <p class="muted small">Beide bauen <code>main</code>. Android baut dieser Server als App Bundle und lädt es selbst in den internen Test bei Google Play; iOS baut Codemagic und schickt es nach TestFlight.</p>
+  {% endif %}
+
+  {% if stores[0].meta %}
+  <h3>Store-Eintrag bei Google Play</h3>
+  <p class="muted small">Titel, Beschreibungen (Deutsch und Englisch), Icon, Grafik und Screenshots kommen aus dem Repository (<code>app/store/play</code>); die Screenshots dort sind aus der App mit Beispieldaten und simuliertem Himmel. Hier hochgeladene Screenshots ersetzen sie. Kontakt: support@webinx.eu, allskyhub.org. Screenshots: {{ screenshots or 'keine' }}{% if screenshots and not uploaded_screenshots %} aus dem Repository{% endif %}.</p>
+  <form method="post" action="/admin/stores-screenshots" enctype="multipart/form-data" class="stack">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <label>Handy-Screenshots (2 bis 8, PNG oder JPEG)<input type="file" name="files" accept="image/png,image/jpeg" multiple required></label>
+    <button type="submit" class="secondary">Screenshots hochladen</button>
+  </form>
+  {% if listing %}
+  <p class="small"><strong>Letzte Übertragung</strong> <span class="muted">{{ listing.at[:16] | replace('T', ' ') }} UTC</span>{% if listing.running %} · läuft …{% endif %}</p>
+  {% if listing.steps %}
+  <ul class="parts">
+    {% for step in listing.steps %}
+    <li><strong class="{{ '' if step.state == 'ok' else 'warn' }}">{{ {'ok': '✓', 'warn': '!', 'fail': '✕'}[step.state] }} {{ step.title }}</strong><span>{{ step.text }}</span></li>
+    {% endfor %}
+  </ul>
+  {% endif %}
+  {% endif %}
+  <form method="post" action="/admin/stores-listing" class="inline">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <button type="submit" class="secondary">Store-Eintrag übertragen</button>
+  </form>
+  {% endif %}
+
+  <details>
+    <summary>Zugänge hochladen</summary>
+    <form method="post" action="/admin/stores/play" enctype="multipart/form-data" class="stack">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+      <h3>{{ store_titles.play }}</h3>
+      <label>JSON-Schlüssel des Dienstkontos<input type="file" name="file" accept=".json,application/json" required></label>
+      <p class="muted small">Google Cloud → IAM → Dienstkonten → Schlüssel → JSON. In der Play Console das Dienstkonto unter Nutzer und Berechtigungen einladen und für {{ package }} Releases erlauben. Im Cloud-Projekt muss die „Google Play Android Developer API“ aktiv sein.</p>
+      <label>Dein Passwort<input type="password" name="password" autocomplete="current-password" required></label>
+      <button type="submit" class="secondary">Hochladen</button>
+    </form>
+    <form method="post" action="/admin/stores/asc" enctype="multipart/form-data" class="stack">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+      <h3>{{ store_titles.asc }}</h3>
+      <label>Schlüsseldatei (.p8)<input type="file" name="file" accept=".p8" required></label>
+      <label>Key-ID<input name="key_id" required maxlength="10" autocomplete="off"></label>
+      <label>Issuer-ID<input name="issuer_id" required maxlength="36" autocomplete="off"></label>
+      <p class="muted small">App Store Connect → Benutzer und Zugriff → Integrationen → App Store Connect API → Teamschlüssel, Rolle „App Manager“. Die .p8-Datei lässt sich nur einmal laden.</p>
+      <label>Dein Passwort<input type="password" name="password" autocomplete="current-password" required></label>
+      <button type="submit" class="secondary">Hochladen</button>
+    </form>
+    <form method="post" action="/admin/stores/codemagic" class="stack">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+      <h3>{{ store_titles.codemagic }}</h3>
+      <label>API-Token<input type="password" name="token" required maxlength="512" autocomplete="off"></label>
+      <p class="muted small">Codemagic → Teams → Persönliches Konto oder Team → Integrationen → Codemagic API → Show.</p>
+      <label>Dein Passwort<input type="password" name="password" autocomplete="current-password" required></label>
+      <button type="submit" class="secondary">Speichern</button>
+    </form>
+    <form method="post" action="/admin/stores/youtube" enctype="multipart/form-data" class="stack">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+      <h3>{{ store_titles.youtube }}</h3>
+      <label>JSON des OAuth-Clients<input type="file" name="file" accept=".json,application/json" required></label>
+      <p class="muted small">Google Cloud → APIs und Dienste → Anmeldedaten → OAuth-Client-ID, Typ „Webanwendung“, autorisierter Weiterleitungs-URI <code>{{ youtube_redirect }}</code> → JSON herunterladen. Im Projekt muss die „YouTube Data API v3“ aktiv sein.</p>
+      <label>Dein Passwort<input type="password" name="password" autocomplete="current-password" required></label>
+      <button type="submit" class="secondary">Hochladen</button>
+    </form>
+  </details>
+</section>
+<section class="card stack">
+  <h2>Plus</h2>
+  {% if plus %}
+  <div class="table-scroll"><table class="stats">
+    <thead><tr><th>Kamera</th><th>Konto</th><th>Plus</th><th></th></tr></thead>
+    <tbody>
+    {% for device, email in plus %}
+    <tr>
+      <td>{{ device.name or device.id }}<br><code class="small">{{ device.id }}</code></td>
+      <td>{{ email }}</td>
+      <td>{% if device.plus_gift %}geschenkt{% elif device.plus_until %}bis {{ device.plus_until | localtime }}{% endif %}</td>
+      <td>{% if device.plus_gift %}
+        <form method="post" action="/admin/plus" class="inline">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+          <input type="hidden" name="device_id" value="{{ device.id }}">
+          <button type="submit" class="secondary small">Geschenk beenden</button>
+        </form>{% endif %}</td>
+    </tr>
+    {% endfor %}
+    </tbody>
+  </table></div>
+  {% else %}
+  <p class="muted">Noch keine Kamera mit Plus.</p>
+  {% endif %}
+  <form method="post" action="/admin/plus" class="stack">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <input type="hidden" name="gift" value="true">
+    <label>Kamera-ID<input name="device_id" required maxlength="26" autocomplete="off"></label>
+    <p class="muted small">Plus als Geschenk endet nie: 90 Tage Vollbilder und Zeitraffer, ein Jahr Vorschaubilder und Nachtprodukte. Die ID steht in der Adresse der Kameraseite.</p>
+    <button type="submit" class="secondary">Plus schenken</button>
+  </form>
+</section>
 {% endblock %}

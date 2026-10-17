@@ -21,7 +21,7 @@ EVENING = dt.datetime(2026, 10, 12, 19, tzinfo=dt.UTC)
 
 
 async def _setup(
-    app: FastAPI, client: httpx.AsyncClient, *, lat: float = 48.14, **user: bool
+    app: FastAPI, client: httpx.AsyncClient, *, lat: float = 50.04, **user: bool
 ) -> tuple[str, FakeSender, Notifier]:
     dev = FakeDevice()
     await paired_token(client, dev)
@@ -32,7 +32,7 @@ async def _setup(
         device = await db.get(Device, dev.device_id)
         assert device
         device.last_status = {
-            "settings": {"latitude": lat, "longitude": 14.39, "timezone": "Europe/Vienna"},
+            "settings": {"latitude": lat, "longitude": 10.39, "timezone": "Europe/Vienna"},
             "sky": {"at": dt.datetime.now(dt.UTC).isoformat(), "night_id": NIGHT,
                     "cloud_cover": 0.1, "sqm_mag": 21.0, "stars": 400},
         }  # fmt: skip
@@ -139,7 +139,7 @@ async def test_morning_summary_once_after_sunrise(app: FastAPI, client: httpx.As
     before = dt.datetime(2026, 10, 13, 4, tzinfo=dt.UTC)  # 06:00 local, before sunrise
     await notifier.check_morning(before)
     assert sender.sent == []
-    morning = dt.datetime(2026, 10, 13, 6, tzinfo=dt.UTC)  # 08:00 local
+    morning = dt.datetime(2026, 10, 13, 6, 30, tzinfo=dt.UTC)  # 08:30 local
     await notifier.check_morning(morning)
     await notifier.check_morning(morning + dt.timedelta(minutes=5))
     assert [m.title for _, m in sender.sent] == ["Die Nacht über Garten"]
@@ -161,3 +161,45 @@ async def test_camera_page_shows_last_night(app: FastAPI, client: httpx.AsyncCli
     page = (await client.get(f"/cameras/{device_id}")).text
     assert "Letzte Nacht" in page
     assert "21,30 mag/″²" in page
+
+
+async def test_aurora_network_alerts_clear_cameras_around(
+    app: FastAPI, client: httpx.AsyncClient
+) -> None:
+    """Roadmap N2: a network camera's own aurora event, not a forecast, alerts cameras
+    around it with a clear, dark sky, once."""
+    source, _, notifier = await _setup(app, client, lat=56.0)
+    clear, _, _ = await _setup(app, client, lat=52.0, notify_aurora=True)
+    cloudy, _, _ = await _setup(app, client, lat=53.0, notify_aurora=True)
+    await _setup(app, client, lat=59.0, notify_aurora=True)  # too far poleward
+    far, _, _ = await _setup(app, client, lat=50.0, notify_aurora=True)
+    await _set(app, far, last_status={
+        "settings": {"latitude": 50.0, "longitude": 40.0},
+        "sky": {"at": dt.datetime.now(dt.UTC).isoformat(), "cloud_cover": 0.0}})  # fmt: skip
+    await _set(app, cloudy, last_status={
+        "settings": {"latitude": 53.0, "longitude": 10.39},
+        "sky": {"at": dt.datetime.now(dt.UTC).isoformat(), "cloud_cover": 0.9}})  # fmt: skip
+    now = dt.datetime.now(dt.UTC)
+    maker: async_sessionmaker[AsyncSession] = app.state.sessionmaker
+    async with maker() as db:
+        data = {"peak_index": 12, "green": 140, "azimuth_deg": 355.0, "altitude_deg": 12.0,
+                "ongoing": True}  # fmt: skip
+        db.add(EventRecord(device_id=source, event_id="aurora-1", night_id=NIGHT, kind="aurora",
+                           start=now - dt.timedelta(minutes=10), end=now, confidence=0.8,
+                           has_image=False, data=data))  # fmt: skip
+        await db.commit()
+
+    sender = FakeSender()
+    notifier = Notifier(maker, sender)
+    await notifier.aurora_seen(source, "aurora-1")
+    assert sender.sent == []  # the source camera is not in the network
+
+    await _set(app, source, network=True)
+    await notifier.aurora_seen(source, "aurora-1")
+    assert [m.data["camera"] for _, m in sender.sent] == [clear]
+    message = sender.sent[0][1]
+    assert message.title == "Polarlicht gesichtet, Himmel klar über Garten"
+    assert "etwa 445 km nördlich" in message.body
+    assert "Blick tief nach Norden" in message.body
+    await notifier.aurora_seen(source, "aurora-1")  # the event grows: no second alarm
+    assert len(sender.sent) == 1

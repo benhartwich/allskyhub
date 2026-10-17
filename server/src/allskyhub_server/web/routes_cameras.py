@@ -9,10 +9,12 @@ from typing import Annotated, Any
 from fastapi import APIRouter, Depends, Form, HTTPException, Request
 from fastapi.responses import FileResponse, RedirectResponse, Response
 from pydantic import ValidationError
+from sqlalchemy import select
 
 from allskyhub_protocol import CloseCode, FrameVariant
 from allskyhub_server.auth import ratelimit
 from allskyhub_server.auth.sessions import SessionInfo
+from allskyhub_server.billing import plus
 from allskyhub_server.devices import (
     archive,
     camera_map,
@@ -21,12 +23,14 @@ from allskyhub_server.devices import (
     events,
     health,
     night_summary,
+    nowcast,
     pairing,
     public,
     queries,
     settings_form,
     sharing,
     tonight,
+    youtube,
 )
 from allskyhub_server.devices import settings as camera_settings
 from allskyhub_server.devices.connections import ConnectionRegistry
@@ -34,7 +38,7 @@ from allskyhub_server.devices.event_text import EVENT_TITLES, orientation_line, 
 from allskyhub_server.devices.images import ImageStore
 from allskyhub_server.devices.queries import Role
 from allskyhub_server.devices.tonight import ForecastCache
-from allskyhub_server.models import Device
+from allskyhub_server.models import Device, Product, User
 from allskyhub_server.web.deps import (
     CurrentSession,
     DbSession,
@@ -133,6 +137,14 @@ async def camera(
     return render(request, "camera.html", context, session=session)
 
 
+async def _trial_free(db: DbSession, device: Device) -> bool:
+    """Whether the owner's account may still start the free Plus month."""
+    if device.owner_id is None:
+        return False
+    owner = await db.get(User, device.owner_id)
+    return owner is not None and owner.plus_trial_at is None
+
+
 async def _camera_context(
     request: Request,
     db: DbSession,
@@ -153,6 +165,7 @@ async def _camera_context(
         "tonight": await tonight.for_device(
             forecast, device.last_status, now, request.app.state.tles
         ),
+        "nowcast": await nowcast.for_device(db, forecast, device, now),
         "last_night": await _last_night(db, device),
         "health": await health.full_check(db, device, online, now, forecast),
         "paused": health.paused(device),
@@ -172,10 +185,33 @@ async def _camera_context(
         "charts": await archive.recent_charts(db, device.id, now - dt.timedelta(hours=24)),
         "members": await sharing.members(db, device.id) if role == "owner" else [],
         "discord": discord.settings_of(device) if role == "owner" else None,
+        "plus": await plus.state(db, device, now) if role == "owner" else None,
+        "plus_message": plus.MESSAGES.get(request.query_params.get("plus", "")),
+        "plus_trial_free": role == "owner" and await _trial_free(db, device),
+        "billing": request.app.state.settings.billing,
+        "price_month": plus.PRICE_MONTH,
+        "price_year": plus.PRICE_YEAR,
         "discord_kinds": discord.KINDS,
+        "youtube": youtube.settings_of(device) if role == "owner" else None,
+        "youtube_available": role == "owner" and request.app.state.youtube.available,
+        "youtube_privacy": youtube.PRIVACY,
+        "youtube_videos": await _youtube_videos(db, device) if role == "owner" else [],
         "masked": discord.masked,
         **extra,
     }
+
+
+async def _youtube_videos(db: DbSession, device: Device) -> list[tuple[str, str, str]]:
+    """Roadmap H5: the last uploads as (night id, kind, address)."""
+    if device.youtube is None:
+        return []
+    rows = await db.execute(
+        select(Product.night_id, Product.kind, Product.youtube_id)
+        .where(Product.device_id == device.id, Product.youtube_id.is_not(None))
+        .order_by(Product.night_id.desc())
+        .limit(5)
+    )
+    return [(night, kind, youtube.video_url(video)) for night, kind, video in rows if video]
 
 
 async def _last_night(db: DbSession, device: Device) -> night_summary.NightSummary | None:
@@ -432,6 +468,17 @@ async def public_domain_remove(
     return RedirectResponse(f"/cameras/{device.id}/public/edit#domain", status_code=303)
 
 
+@router.post("/cameras/{device_id}/network")
+async def network_save(
+    request: Request, db: DbSession, session: CurrentSession, device_id: str
+) -> Response:
+    """Audit L2: the owner's consent to the network of other owners' cameras."""
+    device = await _own_device(db, session, device_id)
+    device.network = (await request.form()).get("network") == "on"
+    await db.commit()
+    return RedirectResponse(f"/cameras/{device.id}#netz", status_code=303)
+
+
 @router.post("/cameras/{device_id}/discord")
 async def discord_save(
     request: Request, db: DbSession, session: CurrentSession, device_id: str
@@ -488,3 +535,113 @@ async def discord_remove(db: DbSession, session: CurrentSession, device_id: str)
     device.discord = None
     await db.commit()
     return RedirectResponse(f"/cameras/{device.id}#discord", status_code=303)
+
+
+# --- Roadmap H5: YouTube (devices/youtube.py) ---------------------------------------------
+# Google's consent page comes back to /youtube/callback; the state travels in a short-lived
+# cookie, so only the browser that started can finish.
+
+
+def _youtube(request: Request) -> youtube.YouTube:
+    service: youtube.YouTube = request.app.state.youtube
+    return service
+
+
+async def _youtube_error(
+    request: Request, db: DbSession, session: CurrentSession, device: Device, error: str
+) -> Response:
+    context = await _camera_context(request, db, device, error=error)
+    return render(request, "camera.html", context, session=session, status_code=400)
+
+
+@router.post("/cameras/{device_id}/youtube/verbinden")
+async def youtube_start(
+    request: Request, db: DbSession, session: CurrentSession, device_id: str
+) -> Response:
+    device = await _own_device(db, session, device_id)
+    try:
+        url, cookie = _youtube(request).start(device.id)
+    except youtube.YouTubeError as exc:
+        return await _youtube_error(request, db, session, device, str(exc))
+    response = RedirectResponse(url, status_code=303)
+    response.set_cookie(
+        youtube.STATE_COOKIE,
+        cookie,
+        max_age=youtube.STATE_AGE_S,
+        path=youtube.CALLBACK,
+        httponly=True,
+        secure=request.app.state.settings.session_cookie_secure,
+        samesite="lax",  # Google's redirect back is a top-level GET
+    )
+    return response
+
+
+@router.get(youtube.CALLBACK)
+async def youtube_callback(
+    request: Request,
+    db: DbSession,
+    session: CurrentSession,
+    state: str = "",
+    code: str = "",
+    error: str = "",
+) -> Response:
+    device_id = youtube.check_state(request.cookies.get(youtube.STATE_COOKIE), state)
+    if device_id is None:
+        return RedirectResponse("/", status_code=303)
+    device = await _own_device(db, session, device_id)
+    if error or not code:
+        response = await _youtube_error(
+            request, db, session, device, "Die Verbindung mit YouTube wurde abgebrochen."
+        )
+    else:
+        service = _youtube(request)
+        try:
+            refresh = await service.connect(code[:2048])
+        except youtube.YouTubeError as exc:
+            response = await _youtube_error(request, db, session, device, str(exc))
+        else:
+            old = youtube.settings_of(device)
+            if old is not None and old.refresh_token != refresh:
+                await service.revoke(old.refresh_token)
+            settings: dict[str, Any] = (device.last_status or {}).get("settings") or {}
+            zone = tonight.zone_for(settings.get("timezone"))
+            config = youtube.YouTubeSettings(
+                refresh_token=refresh,
+                privacy=old.privacy if old else "unlisted",
+                day=old.day if old else False,
+                since=night_summary.last_night_id(dt.datetime.now(dt.UTC), zone),
+            )
+            device.youtube = config.model_dump()
+            await db.commit()
+            response = RedirectResponse(f"/cameras/{device.id}#youtube", status_code=303)
+    response.delete_cookie(youtube.STATE_COOKIE, path=youtube.CALLBACK)
+    return response
+
+
+@router.post("/cameras/{device_id}/youtube")
+async def youtube_save(
+    db: DbSession,
+    session: CurrentSession,
+    device_id: str,
+    privacy: Annotated[str, Form(max_length=16)] = "unlisted",
+    day: Annotated[str, Form(max_length=4)] = "",
+) -> Response:
+    device = await _own_device(db, session, device_id)
+    config = youtube.settings_of(device)
+    if config is not None and privacy in youtube.PRIVACY:
+        device.youtube = {**config.model_dump(), "privacy": privacy, "day": day == "on"}
+        await db.commit()
+    return RedirectResponse(f"/cameras/{device.id}#youtube", status_code=303)
+
+
+@router.post("/cameras/{device_id}/youtube/trennen")
+async def youtube_remove(
+    request: Request, db: DbSession, session: CurrentSession, device_id: str
+) -> Response:
+    device = await _own_device(db, session, device_id)
+    config = youtube.settings_of(device)
+    device.youtube = None
+    await db.commit()
+    if config is not None:
+        await _youtube(request).revoke(config.refresh_token)
+    return RedirectResponse(f"/cameras/{device.id}#youtube", status_code=303)

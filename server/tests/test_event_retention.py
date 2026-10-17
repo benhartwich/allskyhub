@@ -9,7 +9,7 @@ from fastapi import FastAPI
 from sqlalchemy import func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
-from allskyhub_protocol import FrameVariant
+from allskyhub_protocol import EventVariant, FrameVariant
 from allskyhub_server import maintenance
 from allskyhub_server.devices.images import ImageStore
 from allskyhub_server.models import EventRecord, User
@@ -71,8 +71,8 @@ async def test_longer_retention_fetches_and_keeps_the_full_picture(
 
     store: ImageStore = app.state.images
     for dev, token, expected in (
-        (keeper, keeper_token, {FrameVariant.THUMB, FrameVariant.FULL}),
-        (default, default_token, {FrameVariant.THUMB}),
+        (keeper, keeper_token, {EventVariant.THUMB, EventVariant.FULL}),
+        (default, default_token, {EventVariant.THUMB}),
     ):
         async with device_ws(live_app, token) as ws:
             await send(ws, meteor())
@@ -95,10 +95,10 @@ async def test_longer_retention_fetches_and_keeps_the_full_picture(
         await maintenance.purge(db, store, settings, now=now + dt.timedelta(days=31))
         remaining = await db.scalar(select(func.count()).select_from(EventRecord))
     assert remaining == 1  # only the one kept for a year
-    assert store.event_path(keeper.device_id, NIGHT, METEOR, FrameVariant.FULL).exists()
+    assert store.event_path(keeper.device_id, NIGHT, METEOR, EventVariant.FULL).exists()
     assert not (store.root / default.device_id / NIGHT / "events").exists()
 
     async with app.state.sessionmaker() as db:
         await maintenance.purge(db, store, settings, now=now + dt.timedelta(days=366))
         assert await db.scalar(select(func.count()).select_from(EventRecord)) == 0
-    assert not store.event_path(keeper.device_id, NIGHT, METEOR, FrameVariant.FULL).exists()
+    assert not store.event_path(keeper.device_id, NIGHT, METEOR, EventVariant.FULL).exists()

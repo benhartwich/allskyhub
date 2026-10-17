@@ -77,6 +77,12 @@ them most:
 | L25 | ✅ Trail verdicts: keep every streak, say from the trail why it is not a meteor (moving, great circle, blinking, fragments, star, star trail, glare, edge glow, repeat) and label it automatically | agent | Benjamin, 2026-10-13: like his Allsky modules Meteor Detection and Sky Traffic; mark, never delete; all checks label (no shadow mode); SPEC §6.4 Trail verdicts. Done: #207 (agent), #208 (hub) |
 | L26 | Transparency: per sky cell how much the sky dims the stars, in magnitudes against the camera's clearest nights (`status.sky.transparency_map`, `transparency`) | agent | proposal 2026-10-14: haze and thin cirrus that the star count misses; for N.I.N.A. (L16) and the hub's nowcast. Test on the Pi's frames: on the clear night 20261012 all 440 catalogue stars to mag 5 were measurable with 0.43 mag scatter, the low band 0.3 mag dimmer from airmass; on overcast frames 30 % had no flux; SPEC §6.3 |
 | L27 | New star: a nova or bright comet, a new point of light fixed among the stars (`transient` event) | agent | proposal 2026-10-14: needs L26 for magnitudes; vetoed by Hipparcos to mag 7, bright variables, planets and moon; 10 frames over 20 min; SPEC §6.4 Transients |
+| L28 | ✅ Original frame for every event: the whole frame next to the zoomed picture, its window outlined; on the camera and kept on the hub | agent + hub | Benjamin, 2026-10-15; SPEC §6.4 Original frame, §6.5 `upload_event` `original` |
+| L29 | ✅ "Überflüge": satellites and aircraft of the night in their own list, named where the hub knows them, counted in the night summary | agent + hub | Benjamin, 2026-10-15; SPEC §6.4 Overflights |
+| L30 | ✅ Weather sensor and dew heater: BME280 (temperature, humidity, pressure, dew point) and the housing's dome heater on a GPIO pin, automatic by dew point | agent | Benjamin, 2026-10-15 (Daniel Nimmervoll's housing; idea from VIGILIS AllSky); SPEC §7.11 |
+| L31 | ✅ Lightning sensor AS3935: hears strikes up to 40 km, confirms the camera's flashes on the spot, makes Alpaca unsafe | agent | Benjamin, 2026-10-15 (idea from VIGILIS AllSky; flashes from a neighbour's lamp); SPEC §7.12 |
+| L32 | ✅ Startrails without light flashes: frames lit up for one exposure by a lamp near the camera stay out of the startrails | agent | Benjamin, 2026-10-15 (idea from VIGILIS AllSky's clean startrail); SPEC §5.2 |
+| L33 | System steps by the updater: what a feature needs beyond the venv (today I²C, groups for the sensors) also on cameras flashed before it | agent | Benjamin, 2026-10-17 (OTA cameras had no I²C for L30/L31); SPEC §8 System steps |
 
 Not ported on purpose: the free-form module manager and file editor (fixed detectors
 instead), the website upload/remote server (the hub and its public page do that).
@@ -120,11 +126,28 @@ hub side. Push needs the Firebase project; until then the same messages show on 
 |---|---|---|---|
 | H1 | ~~Constellation lines, names and N/E/S/W over the live image on the public page~~ done | hub (+ agent: lens model in status) | lens in `status.orientation` (SPEC §4.8, §6.3), #135; shared drawing in `packages/sky` (#142) |
 | H2 | ~~Flutter app catches up with the web: charts, lightbox, sharing, statistics, "Heute Nacht", exports, e-mail notification switches~~ done | hub | done 2026-10 (in parallel with the local work) |
-| H3 | Aircraft from ADS-B: label planes in the live image and drop their trails from meteor detections | hub + agent | Benjamin, 2026-10-13 (indi-allsky ADS-B): adsb.lol on the hub plus, optionally, the owner's own receiver on the camera (`adsb_url`); a match is an automatic label false_positive/aircraft, never a deletion; SPEC §7.8 |
+| H3 | ✅ Aircraft from ADS-B: label planes in the live image and drop their trails from meteor detections | hub + agent | Benjamin, 2026-10-13 (indi-allsky ADS-B): adsb.lol on the hub plus, optionally, the owner's own receiver on the camera (`adsb_url`); a match is an automatic label false_positive/aircraft, never a deletion; SPEC §7.8 |
 | H4 | "Ziel frei?": is a chosen object (or a sky area) clear now and in the next hours, from the camera's cloud map and the forecast; light-pollution map next to it | hub | Benjamin, 2026-10-13; from the roadmap brainstorm 2026-09-26. Done: planets and Messier, height, darkness, moon and forecast per hour, the camera's overall cloud cover now (web and app); light-pollution view on the camera map from the cameras' own SQM (Benjamin, 2026-10-13). Also done: the cell of the camera's cloud map (SPEC §6.3 `cloud_map`) in the object's direction |
-| H5 | Upload the night's timelapse to YouTube and post detections to Discord | hub | Benjamin, 2026-10-13 (indi-allsky/Allsky); the owner connects the accounts on the hub, never on the camera. Done: Discord (webhook per camera, web and app). Open: YouTube (needs a Google Cloud project with YouTube API access from Benjamin) |
-| H6 | Satellites among the meteors: name them from CelesTrak (SGP4, sunlit), ISS and Tiangong by name, automatic label | hub | Benjamin, 2026-10-13: on the hub, not on the camera; SPEC §7.9 |
+| H5 | Upload the night's timelapse to YouTube and post detections to Discord | hub | Benjamin, 2026-10-13 (indi-allsky/Allsky); the owner connects the accounts on the hub, never on the camera. Done: Discord (webhook per camera, web and app). YouTube: built (camera page, devices/youtube.py); on once Benjamin uploads the OAuth client on the admin page |
+| H6 | ✅ Satellites among the meteors: name them from CelesTrak (SGP4, sunlit), ISS and Tiangong by name, automatic label | hub | Benjamin, 2026-10-13: on the hub, not on the camera; SPEC §7.9 |
 | H7 | New star confirmed by the network: a `transient` (L27) seen by a second camera within 0.5° the same night is confirmed; push and a map of who saw it only when confirmed, or when the owner marks it | hub | proposal 2026-10-14; compare with known novae and comets (e.g. TNS/MPC) before calling it new |
+| H8 | ✅ Lightning cross-check with Meteosat's Lightning Imager: a "storm" without satellite flashes within 400 km is labelled a false alarm | hub | Benjamin, 2026-10-15 (storms on calm October nights from light near the camera); SPEC §7.10; needs a free EUMETSAT account. Built: LI-2-LFL (EO:EUM:DAT:0691) every 10 min, 48 h of flashes over Europe, coverage per product, storm labels; off until key and secret are set |
+| H9 | Aircraft by day: which planes crossed the sky, from ADS-B, without image detection | hub | Benjamin, 2026-10-15; idea, not specified yet |
+
+## Network features (hub)
+
+Benjamin, 2026-10-14: "Mach alles", Firebase last. What a single camera cannot do.
+
+| # | Item | Owner | Notes |
+|---|---|---|---|
+| N1 | Fireball alarm with a fall area | hub | done: a triangulated meteor ending below 35 km gives a rough fall strip (no speed, no wind), an alarm once per meteor to the cameras' owners and network members within 300 km (`notify_fireball`), public list `/feuerkugeln` when both cameras are in the network |
+| N2 | Aurora network: a real aurora event from a camera further north alerts clear-sky users | hub | done: an aurora event (SPEC §6.4) of an oriented network camera with `peak_index` ≥ 5 alerts owners with `notify_aurora` whose camera is within 800 km, at most 2° further poleward, clear and dark, without its own aurora event; shares the 6 h quiet time with the Kp alarm |
+| N3 | Live meteor showers: radiant and hourly rate from all cameras, public page | hub | done (#234): `/meteorstroeme`, active showers from the IMO list, meteors per hour and clear network camera, apparent radiant from triangulated network pairs |
+| N4 | Cloud nowcast from neighbouring cameras' `cloud_map` and the wind | hub | done (#235): wind at 700 hPa from Open-Meteo, the own map's upwind sector and network cameras upwind, "Die nächste Stunde" on the camera page and in the app; a push "es klart auf" once real nights show how reliable it is |
+| N5 | Light-pollution trend over the years from the cameras' SQM | hub | done (#236): monthly median of clear moonless nights, Theil–Sen trend per year, statistics page and app |
+| N6 | App: home-screen widget, AR sky view | hub | done for Android: widget with a read-only key (#237), sky view "Himmel" from the phone's sensors (#238). Open: the iOS widget (WidgetKit extension, needs Xcode or Codemagic) |
+| N7 | Paid tier "Plus": 90 days of full images, a year of thumbnails and night products; Paddle, 4.99 €/month or 49 €/year, first month free | hub | in progress: Plus retention, admin gift, trial month, Paddle checkout and webhooks, terms (AGB) done; S3 archive next |
+| N8 | Go-live: "Zugang beantragen" instead of open sign-up, parts list with Daniel Nimmervoll's housing, first steps for new accounts | hub | Benjamin, 2026-10-15: requests like on portal.eu, admins invite or decline; `/zugang`, `/hardware`, `/start` |
 
 ## Security (review 2026-10-13)
 
@@ -141,6 +164,19 @@ again in the code. Benjamin decided the open questions on 2026-10-13.
 | S6 | ✅ Offline code: tries counted before Argon2, one at a time, parameters capped | agent | #204; caps in SPEC §6.5 |
 | S7 | ✅ Image: nftables input filter, narrower polkit rule for NetworkManager, reboot by day for security updates | agent | SPEC §8; reboot: #215 |
 | S8 | ✅ Wi-Fi credentials without control characters | agent | #204 |
+
+Leftovers of the hub audit (2026-10-13), done 2026-10-14 after Benjamin's "Mach alles":
+
+- L2: meteors of other owners' cameras are triangulated only when both owners joined the
+  network (`Device.network`, switch "Kameranetz" on the camera page and in the app API);
+  showing rounded coordinates on a public page no longer counts as consent.
+- L5: login attempts count per address and IP (10 per 15 min), plus a cap per address
+  across all IPs (100 per 15 min, 500 per day).
+- L6: the local-login confirm page shows the target host large and warns when it does not
+  look like a home network or VPN address; other addresses stay allowed (SPEC §7.4 A).
+- HSTS with `includeSubDomains` on allskyhub.org (all its names point to this server and
+  answer over HTTPS); own domains keep plain HSTS, their subdomains are not ours.
+- `/healthz` keeps the commit: the admin deploy checks it, and the code is public anyway.
 
 ## Needs Benjamin / hardware
 

@@ -15,6 +15,7 @@ from typing import Any, cast
 FIELDS = (
     "time", "date", "exposure", "gain", "sensor_temp", "sun", "moon", "cloud_cover", "sqm",
     "stars", "mode", "text1", "text2",
+    "env_temp", "humidity", "dewpoint", "heater",  # SPEC §7.11: from the weather sensor
 )  # fmt: skip
 CORNERS = ("tl", "tr", "bl", "br")
 SIZES = ("small", "normal", "large")

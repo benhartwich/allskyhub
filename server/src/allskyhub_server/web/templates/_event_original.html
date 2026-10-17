@@ -1,0 +1,24 @@
+{%- set base = "/cameras/" ~ device.id ~ "/events/" ~ event.night_id ~ "/" ~ event.event_id -%}
+{%- set rev = (event.data or {}).get("image_rev", 1) -%}
+{% if original_state == "ready" %}
+  {% if event.original_w and event.original_h %}
+  {%- set w, h = event.original_w, event.original_h -%}
+  <a href="{{ base }}/image?variant=original&v={{ rev }}" data-lightbox>
+    <svg class="product-image original-frame" viewBox="0 0 {{ w }} {{ h }}" role="img" aria-label="Ganzes Bild der Kamera{% if crop %}, Ausschnitt markiert{% endif %}">
+      <image href="{{ base }}/image?variant=original&v={{ rev }}" width="{{ w }}" height="{{ h }}"/>
+      {% if crop %}<rect class="crop" x="{{ crop[0] }}" y="{{ crop[1] }}" width="{{ crop[2] }}" height="{{ crop[3] }}" stroke-width="{{ [w, h] | max // 250 + 2 }}"/>{% endif %}
+    </svg>
+  </a>
+  {% else %}
+  <a href="{{ base }}/image?variant=original&v={{ rev }}" data-lightbox><img class="product-image" src="{{ base }}/image?variant=original&v={{ rev }}" alt="Ganzes Bild der Kamera"></a>
+  {% endif %}
+  <p class="muted small">Das ganze Bild, in dem die Kamera das Ereignis gefunden hat{% if crop %}; der Rahmen zeigt den Ausschnitt oben{% endif %}.</p>
+{% elif original_state == "fetching" %}
+  <div hx-get="{{ base }}/original?n={{ n }}" hx-trigger="every 3s" hx-target="#original" hx-swap="innerHTML">
+    <p class="muted">Ganzes Bild wird von der Kamera geholt …</p>
+  </div>
+{% elif original_state == "offline" %}
+  <p class="muted">Das ganze Bild kommt, sobald die Kamera wieder verbunden ist.</p>
+{% elif original_state == "gone" %}
+  <p class="muted">Die Kamera hat das ganze Bild nicht geschickt: Es ist schon gelöscht, oder ihre Software kann das noch nicht.</p>
+{% endif %}

@@ -22,7 +22,7 @@ from allskyhub_agent.alpaca.server import (
     AlpacaServer,
     PortInUse,
 )
-from allskyhub_protocol import SkyMetrics
+from allskyhub_protocol import EnvStatus, SkyMetrics
 
 T0 = datetime(2026, 10, 12, 21, 0, tzinfo=UTC)
 DEVICE = "k44i7rl6cuaek5yufvr7oh3c5i"
@@ -150,6 +150,31 @@ def _http(port: int, method: str, path: str, form: dict[str, str] | None = None)
             return r.status, json.loads(r.read())
     except urllib.error.HTTPError as e:
         return e.code, e.read().decode()
+
+
+def test_weather_sensor_members() -> None:
+    """SPEC §7.11: with the weather sensor on, temperature, humidity, dew point and pressure
+    answer from it; before its first reading they are not set."""
+    env: list[EnvStatus] = [EnvStatus(error="not_found")]
+    clock = [at(0)]
+    a = Alpaca(DEVICE, "0.1.0", SafetyMonitor(), now=lambda: clock[0], weather=lambda: env[0])
+    oc = "observingconditions"
+    ask(a, oc, "connected", "PUT", {"connected": "true"})
+    assert ask(a, oc, "temperature", "GET", {})[1] == VALUE_NOT_SET
+    assert ask(a, oc, "windspeed", "GET", {})[1] == NOT_IMPLEMENTED
+    env[0] = EnvStatus(at=at(0), temperature_c=8.4, humidity_pct=91.0, pressure_hpa=1012.3,
+                       dewpoint_c=7.1)  # fmt: skip
+    clock[0] = at(1)
+    assert ask(a, oc, "temperature", "GET", {}) == (8.4, 0, "")
+    assert ask(a, oc, "humidity", "GET", {})[0] == 91.0
+    assert ask(a, oc, "dewpoint", "GET", {})[0] == 7.1
+    assert ask(a, oc, "pressure", "GET", {})[0] == 1012.3
+    assert ask(a, oc, "timesincelastupdate", "GET", {"sensorname": "Humidity"})[0] == 60.0
+    assert ask(a, oc, "sensordescription", "GET", {"sensorname": "dewpoint"})[0] == (
+        "BME280 der Kamera"
+    )
+    names = {d["Name"] for d in ask(a, oc, "devicestate", "GET", {})[0]}
+    assert {"Temperature", "Humidity", "DewPoint", "Pressure"} <= names
 
 
 def test_http(server: AlpacaServer) -> None:

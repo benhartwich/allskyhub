@@ -1,0 +1,78 @@
+{% extends "base.html" %}
+{% block title %}Erste Schritte · allskyhub{% endblock %}
+{% block content %}
+<div class="page-head"><h1>Erste Schritte</h1></div>
+<ol class="wizard-steps" aria-label="Schritte">
+  {% set names = {'hardware': 'Hardware', 'zusammenbau': 'Zusammenbau', 'image': 'Speicherkarte', 'koppeln': 'Koppeln'} %}
+  {% for s in steps %}
+  <li class="{{ 'done' if loop.index0 < index }}{{ ' current' if s == step }}"><a href="/start?schritt={{ s }}"{% if s == step %} aria-current="step"{% endif %}><span class="wizard-num">{{ loop.index }}</span> {{ names[s] }}</a></li>
+  {% endfor %}
+</ol>
+
+{% if step == 'hardware' %}
+<p class="lead">Was du kaufen musst und wo. Hast du schon eine Allsky-Kamera mit Raspberry Pi, kannst du allskyhub auch darauf installieren.</p>
+<div class="grid-2">
+  <section class="card stack">
+    <h2>Ich brauche Hardware</h2>
+    <p class="muted">Die Liste unten ist erprobt: Gehäuse von Daniel Nimmervoll, Raspberry Pi 4, Kamera, ein Netzwerkkabel für Strom und Daten. Zusammen {{ total_hq }} bis {{ total_zwo }}.</p>
+    <p><a href="/hardware">Liste zum Ausdrucken und Teilen</a></p>
+  </section>
+  <section class="card stack">
+    <h2>Ich habe schon eine Kamera</h2>
+    <p class="muted">Läuft dein Pi mit ZWO-Kamera schon mit Allsky oder indi-allsky? allskyhub läuft daneben und übernimmt auf Wunsch deine bisherigen Bilder.</p>
+    <p><a href="/allsky">Anleitung für bestehende Allsky-Kameras</a> (<a href="/allsky?lang=en" hreflang="en" lang="en">English</a>)</p>
+  </section>
+</div>
+{% include "_daniel.html" %}
+{% include "_hardware_list.html" %}
+
+{% elif step == 'zusammenbau' %}
+<p class="lead">Der Zusammenbau dauert etwa eine Stunde. Daniel zeigt jeden Handgriff in seinen <a href="{{ videos }}" rel="noopener" target="_blank">Videos ↗</a>; hier die Reihenfolge im Überblick.</p>
+<section class="card stack">
+  <ol class="howto">
+    <li><strong>Raspberry-Pi-Kamera:</strong> den eingebauten Filter der Kamera und den am Objektiv entfernen und Daniels UV/IR-Filter ins M12-Gewinde setzen. Das Objektiv einschrauben. <span class="muted">(Bei der ZWO entfällt das.)</span></li>
+    <li><strong>PoE HAT</strong> auf den Raspberry Pi stecken und festschrauben.</li>
+    <li><strong>Kamera</strong> auf die Kameraplatte schrauben. Die ZWO mit dem kurzen USB-Kabel an einen blauen USB-3-Anschluss des Pi, die Raspberry-Pi-Kamera mit dem Flachbandkabel an den Kameraanschluss.</li>
+    <li><strong>Netzwerkkabel</strong> durch die Kabelverschraubung führen, den Dichtring passend zum Kabeldurchmesser wählen (der wichtigste Schritt für ein dichtes Gehäuse) und am Pi einstecken.</li>
+    <li><strong>Silicagel</strong> ins Gehäuse legen, die O-Ringe dünn mit Silikonfett bestreichen, Kuppel und Ring aufsetzen und verschrauben.</li>
+    <li><strong>Montieren:</strong> die Halterung mit den mitgelieferten Schrauben an die vier M5-Gewinde unten (nicht tiefer als 9 mm), dann ans Rohr. Die Kamera möglichst waagrecht und mit freiem Blick bis zum Horizont ausrichten; die Himmelsrichtung lernt sie später selbst aus den Sternen.</li>
+    <li><strong>Strom:</strong> das Kabel im Haus an den PoE-Injektor, den Injektor an den Router. Erst einschalten, wenn die Speicherkarte aus Schritt 3 steckt.</li>
+  </ol>
+  <p class="muted small">Kuppelheizung (Mosfet) und Klimasensor (BME280) steuert allskyhub noch nicht. Du kannst sie schon einbauen und anschließen wie in Daniels Video; sie werden genutzt, sobald die Kamera es kann.</p>
+</section>
+
+{% elif step == 'image' %}
+<p class="lead">Die Kamera bekommt ihr Betriebssystem auf der microSD-Karte: Raspberry Pi OS mit allskyhub, fertig eingerichtet.</p>
+<section class="card stack">
+  <ol class="howto">
+    <li>Das allskyhub-Image herunterladen: <a class="button small" href="/download/image">{% if image %}Image {{ image.version }} herunterladen ({{ image.size_mb }} MB){% else %}Image herunterladen{% endif %}</a></li>
+    <li>Den <a href="https://www.raspberrypi.com/software/" rel="noopener" target="_blank">Raspberry Pi Imager ↗</a> installieren und starten. Unter „Betriebssystem“ ganz unten „Eigenes Image“ wählen und die heruntergeladene Datei nehmen.</li>
+    <li>Die Speicherkarte wählen und schreiben. Die Frage nach eigenen Einstellungen (Benutzer, WLAN) mit „Nein“ beantworten: allskyhub braucht keine.</li>
+    <li>Die Karte in den Pi stecken. Fertig für Schritt 4.</li>
+  </ol>
+  <p class="muted small">Für Bastler: Eine Datei <code>allskyhub-setup.json</code> auf der Karte richtet WLAN, Standort und Zeitzone ohne App ein (<a href="https://github.com/benhartwich/allskyhub/blob/main/docs/image.md" rel="noopener" target="_blank">Beschreibung ↗</a>).</p>
+</section>
+
+{% elif step == 'koppeln' %}
+<p class="lead">Zum Schluss verbindest du die Kamera mit deinem Konto. Danach siehst du ihr Livebild hier und in der App.</p>
+<section class="card stack">
+  <h2>Mit Netzwerkkabel (PoE)</h2>
+  <ol class="howto">
+    <li>Den PoE-Injektor einschalten. Die Kamera startet und ist nach zwei bis drei Minuten in deinem Heimnetz.</li>
+    <li>Am Computer oder Handy im selben Netz <a href="http://allskyhub.local:8080" rel="noopener" target="_blank">http://allskyhub.local:8080</a> öffnen. Klappt das nicht, steht die Adresse des Geräts „allskyhub“ in der Geräteliste deines Routers.</li>
+    <li>Die Seite zeigt einen Kopplungscode wie <code>ABC-DEF</code>. Ihn unter <a href="/cameras/pair">Kamera koppeln</a> eingeben.</li>
+    <li>In den Einstellungen der Kamera Standort und Zeitzone setzen. Dann weiß sie, wann es Nacht wird.</li>
+  </ol>
+</section>
+<section class="card stack">
+  <h2>Mit WLAN und App</h2>
+  <p class="muted">Ohne Netzwerkkabel öffnet die Kamera ein eigenes WLAN <code>allskyhub-XXXX</code>. Die allskyhub-App gibt ihr dann dein Heimnetz, Standort und Zeitzone und koppelt sie. Den WLAN-Schlüssel findest du in der Datei <code>allskyhub-setup-key.txt</code> auf der Speicherkarte.</p>
+</section>
+<p><a class="button" href="/cameras/pair">Kamera koppeln</a></p>
+{% endif %}
+
+<p class="wizard-nav">
+  {% if prev %}<a class="button secondary" href="/start?schritt={{ prev }}">Zurück</a>{% endif %}
+  {% if next %}<a class="button" href="/start?schritt={{ next }}">Weiter</a>{% endif %}
+</p>
+{% endblock %}

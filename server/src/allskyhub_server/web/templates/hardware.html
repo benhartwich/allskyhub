@@ -1,0 +1,11 @@
+{% extends "base.html" %}
+{% block title %}Hardware · allskyhub{% endblock %}
+{% block content %}
+<div class="page-head"><h1>Was du für eine Kamera brauchst</h1></div>
+<p class="lead">Eine allskyhub-Kamera ist ein Raspberry Pi mit Allsky-Kamera in einem wetterfesten Gehäuse, verbunden über ein einziges Netzwerkkabel. Alles zusammen kostet {{ total_hq }} mit der Raspberry-Pi-Kamera oder {{ total_zwo }} mit der ZWO ASI678MC.</p>
+{% include "_daniel.html" %}
+{% include "_hardware_list.html" %}
+<p>Läuft bei dir schon eine Kamera mit Allsky? Dann brauchst du nichts Neues: <a href="/allsky">allskyhub neben Allsky installieren</a> (<a href="/allsky?lang=en" hreflang="en" lang="en">English</a>).</p>
+<p class="muted small">Preise sind grobe Richtwerte (Oktober 2026). Die Links führen zu fremden Shops, mit denen allskyhub nicht verbunden ist; du kannst die Teile überall kaufen. Andere Raspberry-Pi-Kameras und ZWO-Modelle können funktionieren, getestet ist die Liste oben.</p>
+<p>{% if user %}<a class="button" href="/start">Erste Schritte</a>{% else %}<a class="button" href="/zugang">Zugang beantragen</a>{% endif %}</p>
+{% endblock %}

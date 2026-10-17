@@ -156,7 +156,7 @@ def test_runner_survives_camera_errors(tmp_path: Path) -> None:
         auto_exposure=AutoExposure(get_profile("sim").exposure),
         store=ImageStore(tmp_path, ZoneInfo("Europe/Vienna")),
         clock=clock,
-        location=Location(48.14, 14.39),
+        location=Location(50.04, 10.39),
         profile="sim",
     )
     start = clock.now()
@@ -176,7 +176,7 @@ def test_runner_stop_ends_run(tmp_path: Path) -> None:
         auto_exposure=AutoExposure(get_profile("sim").exposure),
         store=ImageStore(tmp_path, ZoneInfo("Europe/Vienna")),
         clock=clock,
-        location=Location(48.14, 14.39),
+        location=Location(50.04, 10.39),
         profile="sim",
     )
     seen: list[object] = []

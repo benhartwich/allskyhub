@@ -440,6 +440,24 @@ class HubClient {
       Member.fromJson(m as Map<String, dynamic>),
   ];
 
+  /// Audit L2: whether the camera takes part in the network of other owners' cameras
+  /// (owner only).
+  Future<bool> network(String cameraId) async =>
+      (await _send('GET', '/cameras/$cameraId/network')
+              as Map<String, dynamic>)['network']
+          as bool;
+
+  Future<bool> setNetwork(String cameraId, bool on) async =>
+      (await _send('PUT', '/cameras/$cameraId/network', body: {'network': on})
+              as Map<String, dynamic>)['network']
+          as bool;
+
+  /// Roadmap N6: a read-only key for the home-screen widget; replaces an older one.
+  Future<String> widgetKey(String cameraId) async =>
+      (await _send('POST', '/cameras/$cameraId/widget')
+              as Map<String, dynamic>)['token']
+          as String;
+
   /// Roadmap H5: the camera's Discord channel (owner only).
   Future<DiscordState> discord(String cameraId) async => DiscordState.fromJson(
     await _send('GET', '/cameras/$cameraId/discord') as Map<String, dynamic>,
@@ -614,6 +632,11 @@ class HubClient {
   }
 
   /// Health, "Heute Nacht" and last night (roadmap C1, C3, C14) for the camera screen.
+  /// Roadmap N6: directions above the camera now, for the sky view.
+  Future<SkyViewData> skyView(String cameraId) async => SkyViewData.fromJson(
+    await _send('GET', '/cameras/$cameraId/sky-view') as Map<String, dynamic>,
+  );
+
   Future<Overview> overview(String cameraId) async => Overview.fromJson(
     await _send('GET', '/cameras/$cameraId/overview') as Map<String, dynamic>,
   );
@@ -708,6 +731,7 @@ class AccountSettings {
     'notify_aurora',
     'notify_summary',
     'notify_tonight',
+    'notify_fireball',
     'notify_by_mail',
   ];
 
@@ -778,13 +802,38 @@ class Overview {
       lastNight =
           (json['last_night'] as Map<String, dynamic>?)?['line'] as String?,
       lastNightId =
-          (json['last_night'] as Map<String, dynamic>?)?['night_id'] as String?;
+          (json['last_night'] as Map<String, dynamic>?)?['night_id'] as String?,
+      nowcast = json['nowcast'] == null
+          ? null
+          : Nowcast.fromJson(json['nowcast'] as Map<String, dynamic>);
 
   final bool online;
   final List<HealthItem> health;
   final Tonight? tonight;
   final String? lastNight;
   final String? lastNightId;
+  final Nowcast? nowcast;
+}
+
+/// Roadmap N4: clouds in the next hour from the camera and its neighbours.
+class Nowcast {
+  Nowcast.fromJson(Map<String, dynamic> json)
+    : cover = (json['cover'] as num).toDouble(),
+      summary = json['summary'] as String,
+      wind = json['wind'] as String,
+      steps = [
+        for (final s in json['steps'] as List<dynamic>)
+          (
+            minutes: (s as Map<String, dynamic>)['minutes'] as int,
+            cover: (s['cover'] as num).toDouble(),
+            label: s['label'] as String,
+          ),
+      ];
+
+  final double cover;
+  final String summary;
+  final String wind;
+  final List<({int minutes, double cover, String label})> steps;
 }
 
 /// One table of `GET /cameras/<id>/series`: times (Unix seconds) and value columns;
@@ -903,7 +952,15 @@ class YearStats {
         for (final e in (json['showers'] as Map<String, dynamic>).entries)
           e.key: e.value as int,
       },
-      years = [for (final y in json['years'] as List<dynamic>) y as int];
+      years = [for (final y in json['years'] as List<dynamic>) y as int],
+      sqmTrendText = json['sqm_trend_text'] as String? ?? '',
+      sqmMonths = [
+        for (final m in json['sqm_months'] as List<dynamic>? ?? const [])
+          (
+            label: (m as List<dynamic>)[0] as String,
+            sqm: (m[1] as num).toDouble(),
+          ),
+      ];
 
   final int year;
   final List<StatsPeriod> months;
@@ -914,6 +971,11 @@ class YearStats {
 
   /// Years with data, newest first.
   final List<int> years;
+
+  /// Roadmap N5: how the sky brightness changes over the years ('' without data), and
+  /// the monthly values behind it (mag/″², higher is darker).
+  final String sqmTrendText;
+  final List<({String label, double sqm})> sqmMonths;
 }
 
 /// A CSV export (roadmap C11), e.g. `meteors` → `meteors.csv`.
@@ -1016,4 +1078,57 @@ class TargetPlan {
   final String verdict;
   final String verdictText;
   final List<TargetHourItem> hours;
+}
+
+/// A direction in the sky: altitude and azimuth in degrees.
+typedef SkyDir = ({double alt, double az});
+
+SkyDir _dir(List<dynamic> v) =>
+    (alt: (v[0] as num).toDouble(), az: (v[1] as num).toDouble());
+
+/// Roadmap N6: what lies in which direction above the camera (`GET …/sky-view`).
+class SkyViewData {
+  SkyViewData.fromJson(Map<String, dynamic> json)
+    : lines = [
+        for (final line in json['lines'] as List<dynamic>)
+          [for (final p in line as List<dynamic>) _dir(p as List<dynamic>)],
+      ],
+      objects = [
+        for (final o in json['objects'] as List<dynamic>)
+          (
+            label: (o as Map<String, dynamic>)['label'] as String,
+            kind: o['kind'] as String,
+            dir: (
+              alt: (o['alt'] as num).toDouble(),
+              az: (o['az'] as num).toDouble(),
+            ),
+          ),
+      ],
+      meteors = [
+        for (final m in json['meteors'] as List<dynamic>)
+          (
+            at: DateTime.parse((m as Map<String, dynamic>)['at'] as String),
+            start: _dir(m['start'] as List<dynamic>),
+            end: _dir(m['end'] as List<dynamic>),
+          ),
+      ],
+      // SPEC §6.4 Overflights; missing from hubs before roadmap L29.
+      overflights = [
+        for (final o in (json['overflights'] as List<dynamic>?) ?? const [])
+          (
+            at: DateTime.parse((o as Map<String, dynamic>)['at'] as String),
+            start: _dir(o['start'] as List<dynamic>),
+            end: _dir(o['end'] as List<dynamic>),
+            kind: o['kind'] as String,
+            name: o['name'] as String?,
+          ),
+      ];
+
+  final List<List<SkyDir>> lines;
+  final List<({String label, String kind, SkyDir dir})> objects;
+  final List<({DateTime at, SkyDir start, SkyDir end})> meteors;
+  final List<
+    ({DateTime at, SkyDir start, SkyDir end, String kind, String? name})
+  >
+  overflights;
 }

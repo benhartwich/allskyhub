@@ -26,6 +26,11 @@
     {% if st.mode is defined %}<dt>Modus</dt><dd>{{ 'Nacht' if st.mode == 'night' else 'Tag' }}</dd>{% endif %}
     {% if st.exposure_us is defined %}<dt>Belichtung</dt><dd>{{ '%.3g' | format(st.exposure_us / 1e6) }} s{% if st.gain is defined %}, Gain {{ st.gain }}{% endif %}</dd>{% endif %}
     {% if st.sensor_temp_c is defined and st.sensor_temp_c is not none %}<dt>Sensor</dt><dd>{{ '%.1f' | format(st.sensor_temp_c) }} °C</dd>{% endif %}
+    {% set env = st.env if st.env is defined and st.env else none %}
+    {% if env and not env.error and env.temperature_c is not none %}<dt>Am Gehäuse</dt><dd>{{ '%.1f' | format(env.temperature_c) }} °C{% if env.humidity_pct is not none %}, {{ env.humidity_pct | round | int }} %{% endif %}{% if env.dewpoint_c is not none %}, Taupunkt {{ '%.1f' | format(env.dewpoint_c) }} °C{% endif %}</dd>{% endif %}
+    {% if st.heater is defined and st.heater %}<dt>Kuppelheizung</dt><dd>{{ heater_text(st.heater) }}</dd>{% endif %}
+    {% set ls = st.lightning_sensor if st.lightning_sensor is defined and st.lightning_sensor else none %}
+    {% if ls and not ls.error %}<dt>Blitzsensor</dt><dd>{% if ls.strikes_30min %}{{ ls.strikes_30min }} Blitz{{ 'e' if ls.strikes_30min != 1 }} in 30 Min.{% if ls.nearest_km is not none %}, nächster {{ ls.nearest_km | round | int }} km{% endif %}{% else %}keine Blitze in 30 Min.{% endif %}</dd>{% endif %}
     {% if st.disk_free_pct is defined and st.disk_free_pct is not none %}<dt>Speicher frei</dt><dd>{{ st.disk_free_pct | round | int }} %</dd>{% endif %}
     {% if st.time_trusted is defined and not st.time_trusted %}<dt>Uhrzeit</dt><dd class="warn">nicht synchronisiert</dd>{% endif %}
     {% endif %}

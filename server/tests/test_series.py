@@ -55,7 +55,7 @@ def test_night_range_is_local_noon_to_noon() -> None:
 
 
 def test_ephemeris_has_night_at_midnight() -> None:
-    eph = series.ephemeris(T0, T0 + dt.timedelta(hours=6), 48.1, 14.4)
+    eph = series.ephemeris(T0, T0 + dt.timedelta(hours=6), 50.0, 10.4)
     assert len(eph["t"]) == 73  # every 5 minutes, both ends
     sun = eph["sun"]
     assert all(v is not None and v < -18 for v in sun[24:48])  # 22:00-24:00 UTC in October
@@ -65,9 +65,9 @@ def test_ephemeris_has_night_at_midnight() -> None:
 
 
 def test_public_place_is_rounded() -> None:
-    device = Device(last_status={"settings": {"latitude": 48.137, "longitude": 14.392}})
-    assert series.location(device, public=True) == (48.0, 14.5)
-    assert series.location(device, public=False) == (48.137, 14.392)
+    device = Device(last_status={"settings": {"latitude": 50.037, "longitude": 10.392}})
+    assert series.location(device, public=True) == (50.0, 10.5)
+    assert series.location(device, public=False) == (50.037, 10.392)
 
 
 async def _camera(app: FastAPI, client: httpx.AsyncClient, new_client: httpx.AsyncClient) -> str:
@@ -84,7 +84,7 @@ async def _camera(app: FastAPI, client: httpx.AsyncClient, new_client: httpx.Asy
             .where(Device.id == dev.device_id)
             .values(
                 last_status={
-                    "settings": {"latitude": 48.14, "longitude": 14.39, "timezone": "Europe/Vienna"}
+                    "settings": {"latitude": 50.04, "longitude": 10.39, "timezone": "Europe/Vienna"}
                 }
             )
         )

@@ -45,7 +45,11 @@ MAX_NM = 250  # adsb.lol's largest radius
 MAX_AGE_S = 60.0  # a position older than this is not taken
 RECEIVER_WINS = dt.timedelta(seconds=30)
 DEAD_RECKON = dt.timedelta(seconds=30)
-FETCH_GAP = dt.timedelta(seconds=30)  # longer without positions: the window is not covered
+# Longer without positions: the window is not covered. adsb.lol times out or answers 429
+# now and then; a few failed fetches in a row still leave a straight line between fixes.
+FETCH_GAP = dt.timedelta(seconds=60)
+# Longer between two fixes: the aircraft may have turned, so no straight line between them.
+TURN_GAP = dt.timedelta(minutes=2)
 NIGHT_SUN = -6.0
 EARTH_KM = 6371.0
 FEET = 0.3048
@@ -181,7 +185,7 @@ class _Track:
         if i == len(self.fixes):
             return _ahead(self.fixes[-1], t)
         a, b = self.fixes[i - 1], self.fixes[i]
-        if b.at - a.at > FETCH_GAP * 4:  # a long gap: the aircraft may have turned
+        if b.at - a.at > TURN_GAP:
             return _ahead(a, t)
         return _between(a, b, t)
 

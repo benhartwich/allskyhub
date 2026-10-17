@@ -230,18 +230,25 @@ table.stats.target-hours th:nth-child(2) { text-align: left; }
 .chart-temp polyline { stroke: #ff9bd2; } .chart-temp circle { fill: #ff9bd2; }
 .chart-cpu polyline { stroke: #ff7a93; } .chart-cpu circle { fill: #ff7a93; }
 .chart-disk polyline { stroke: #8fe3ff; } .chart-disk circle { fill: #8fe3ff; }
+.chart-air polyline { stroke: #ffb86b; } .chart-air circle { fill: #ffb86b; }
+.chart-dew polyline { stroke: #7dcfff; } .chart-dew circle { fill: #7dcfff; }
+.chart-humidity polyline { stroke: #4fe3b0; } .chart-humidity circle { fill: #4fe3b0; }
+.chart-pressure polyline { stroke: #a7b0cc; } .chart-pressure circle { fill: #a7b0cc; }
+.chart-heater polyline { stroke: #ff9e64; } .chart-heater circle { fill: #ff9e64; }
 
 /* Measurement viewer (charts.js, uPlot). Colours as tokens: 6-digit hex, charts.js appends
    alpha for fills. The red theme turns everything into reds of different brightness. */
 :root {
   --chart-sqm: #7aa2f7; --chart-clouds: #a7b0cc; --chart-stars: #9ece6a; --chart-exposure: #f2c06b;
   --chart-gain: #b48cff; --chart-temp: #ff9bd2; --chart-cpu: #ff7a93; --chart-disk: #8fe3ff;
+  --chart-air: #ffb86b; --chart-dew: #7dcfff; --chart-humidity: #4fe3b0; --chart-heater: #ff9e64;
   --chart-sun: #ffd166; --chart-moon: #e6e9f5; --chart-grid: #ffffff14; --chart-axis: #a9b1d6;
   --chart-day: #4a6cd426; --chart-civil: #3a56b01c; --chart-nautical: #2a3f8a14; --chart-astro: #1c2c6a0d;
 }
 [data-theme="red"] {
   --chart-sqm: #ff4040; --chart-clouds: #b03030; --chart-stars: #ff7070; --chart-exposure: #ff5050;
   --chart-gain: #c03838; --chart-temp: #ff6060; --chart-cpu: #d04040; --chart-disk: #a02828;
+  --chart-air: #ff7050; --chart-dew: #b83030; --chart-humidity: #e05050; --chart-heater: #ff8a60;
   --chart-sun: #ff8080; --chart-moon: #ffa0a0; --chart-grid: #ff20201a; --chart-axis: #d04040;
   --chart-day: #ff20201f; --chart-civil: #ff202016; --chart-nautical: #ff20200f; --chart-astro: #ff202008;
 }
@@ -369,3 +376,99 @@ details.settings-group { border-top: 1px solid var(--line); padding-top: 10px; }
 details.settings-group > summary { font-family: var(--display); font-weight: 600; font-size: 15px;
   color: var(--text-2); text-transform: uppercase; letter-spacing: 1px; padding: 4px 0; }
 details.settings-group[open] > summary { margin-bottom: 8px; }
+
+/* Audit L6: the address the local login goes to, big enough to read. */
+.target-host { margin: 0; font-size: 1.35rem; font-weight: 700; overflow-wrap: anywhere; }
+
+/* Fireballs (routes_fireballs.py). */
+.badge.warn { background: rgba(242, 192, 107, .12); color: var(--warn); border-color: rgba(242, 192, 107, .35); }
+.fireballs { display: grid; gap: 10px; padding: 0; list-style: none; }
+.fireball-row { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 14px; text-decoration: none; color: inherit; }
+/* Meteor showers live (routes_showers.py): meteors per hour as bars, heights in tenths
+   (the CSP allows no inline styles). */
+.hour-bars { display: grid; grid-template-columns: repeat(24, minmax(0, 1fr)); gap: 3px; align-items: end; }
+.hour-bar { display: grid; grid-template-rows: 120px auto auto auto; justify-items: center; font-size: 11px; color: var(--text-2); }
+.hour-bar .bar { align-self: end; width: 100%; border-radius: 4px 4px 0 0; background: var(--accent); min-height: 0; height: 0; }
+.hour-bar .bar.h1 { height: 10%; }
+.hour-bar .bar.h2 { height: 20%; }
+.hour-bar .bar.h3 { height: 30%; }
+.hour-bar .bar.h4 { height: 40%; }
+.hour-bar .bar.h5 { height: 50%; }
+.hour-bar .bar.h6 { height: 60%; }
+.hour-bar .bar.h7 { height: 70%; }
+.hour-bar .bar.h8 { height: 80%; }
+.hour-bar .bar.h9 { height: 90%; }
+.hour-bar .bar.h10 { height: 100%; }
+.hour-bar .n { color: var(--text); font-weight: 600; min-height: 1.2em; }
+.hour-bar .c { color: var(--ok); min-height: 1.2em; }
+@media (max-width: 600px) { .hour-bar .t { visibility: hidden; } .hour-bar:nth-child(3n+1) .t { visibility: visible; } }
+
+/* Roadmap N4: the next hour's clouds. */
+.nowcast-steps { display: grid; gap: 4px; padding: 0; list-style: none; margin: 0; }
+/* Roadmap N5: up to 36 months of sky brightness; narrower gaps, every third label. */
+.sqm-bars { gap: 2px; }
+.sqm-bars li small { visibility: hidden; }
+.sqm-bars li:nth-child(3n+1) small { visibility: visible; }
+/* Plus (roadmap N7) */
+.features { padding-left: 20px; margin: 0; }
+.features li + li { margin-top: 4px; }
+.plus-state { font-weight: 600; }
+
+/* Access request, parts list and first steps (web/routes_access.py) */
+.hp { position: absolute; left: -10000px; width: 1px; height: 1px; overflow: hidden; }
+fieldset { border: 0; padding: 0; margin: 0; }
+legend { margin-bottom: 6px; }
+label.check { display: flex; gap: 8px; align-items: baseline; }
+.parts { list-style: none; padding: 0; margin: 0; display: grid; gap: 14px; }
+.parts li { display: grid; gap: 4px; }
+.part-head { display: flex; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+.part-price { color: var(--text-2); white-space: nowrap; }
+.part-links { display: flex; gap: 14px; flex-wrap: wrap; }
+.wizard-steps { list-style: none; padding: 0; margin: 0 0 16px; display: flex; gap: 8px; flex-wrap: wrap; }
+.wizard-steps a { display: inline-flex; align-items: center; gap: 6px; padding: 6px 12px; border-radius: 999px; border: 1px solid var(--line); color: var(--text-2); text-decoration: none; }
+.wizard-steps .current a { color: var(--text); border-color: var(--accent); }
+.wizard-steps .done a { color: var(--text); }
+.wizard-num { display: inline-grid; place-items: center; width: 22px; height: 22px; border-radius: 50%; background: var(--surface-2); font-size: 13px; }
+.wizard-steps .current .wizard-num { background: var(--accent); color: var(--accent-ink); }
+.howto { padding-left: 22px; margin: 0; display: grid; gap: 10px; }
+.wizard-nav { display: flex; gap: 10px; justify-content: space-between; }
+
+/* SPEC §6.5 original frame: the event's window outlined (roadmap L28) */
+.original-frame { display: block; width: 100%; height: auto; }
+.original-frame .crop { fill: none; stroke: var(--accent-2); }
+
+/* Command blocks (/allsky) */
+pre { margin: 0; padding: 12px 14px; overflow-x: auto; border-radius: 12px; background: var(--surface-2); border: 1px solid var(--line); }
+pre code { white-space: pre; }
+
+/* Overflights on the sky map (roadmap L29, overflights.js) */
+.ovf { --ovf-sat: var(--accent); --ovf-air: var(--warn); --ovf-unk: var(--text-2); --ovf-met: var(--accent-2); }
+.ovf-map { width: 100%; max-width: 560px; height: auto; margin: 0 auto; display: block; }
+.ovf-sky { fill: #050a1f; stroke: var(--line); }
+.ovf-ring { fill: none; stroke: var(--line); stroke-dasharray: 3 4; }
+.ovf-stars path { fill: none; stroke: var(--text-2); stroke-opacity: .28; stroke-width: .8; }
+.ovf-stars text { fill: var(--text-2); fill-opacity: .55; font-size: 9px; text-anchor: middle; }
+.ovf-compass { fill: var(--text-2); font-size: 13px; font-weight: 600; text-anchor: middle; }
+.ovf-track { cursor: pointer; }
+.ovf-track .ovf-line { fill: none; stroke-width: 2; stroke-linecap: round; }
+.ovf-track .ovf-hit { fill: none; stroke: transparent; stroke-width: 12; }
+.ovf-track.satellite { color: var(--ovf-sat); } .ovf-track.aircraft { color: var(--ovf-air); } .ovf-track.unknown { color: var(--ovf-unk); } .ovf-track.meteor { color: var(--ovf-met); }
+.ovf-track .ovf-line { stroke: currentColor; } .ovf-track .ovf-head { fill: currentColor; }
+.ovf-track.old { opacity: .25; }
+.ovf-track.on .ovf-line, .ovf-track:focus .ovf-line { stroke-width: 4; }
+.ovf-track.on { opacity: 1; }
+.ovf-legend { display: flex; gap: 14px; flex-wrap: wrap; }
+.ovf-key::after, .ovf-dot { content: ""; display: inline-block; width: 18px; height: 3px; border-radius: 2px; margin-left: 2px; vertical-align: middle; }
+.ovf-key.satellite::after, .ovf-dot.satellite { background: var(--accent); }
+.ovf-key.aircraft::after, .ovf-dot.aircraft { background: var(--warn); }
+.ovf-key.unknown::after, .ovf-dot.unknown { background: var(--text-2); }
+.ovf-key.meteor::after, .ovf-dot.meteor { background: var(--accent-2); }
+.ovf-dot { margin: 0 6px 0 0; }
+.ovf-player { display: flex; gap: 10px; align-items: center; }
+.ovf-player input[type="range"] { flex: 1; min-width: 0; }
+.ovf-player output { min-width: 3.5em; font-variant-numeric: tabular-nums; }
+.ovf-list tbody tr { cursor: pointer; }
+.ovf-list tbody tr.on { background: var(--surface-2); }
+table.stats.ovf-list th, table.stats.ovf-list td { text-align: left; }
+.voucher { border-color: var(--accent); }
+.voucher-code code { font-size: 1.05em; padding: 1px 6px; border-radius: 6px; background: var(--surface-2); }

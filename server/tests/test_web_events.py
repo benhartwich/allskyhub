@@ -10,7 +10,7 @@ import pytest
 from fastapi import FastAPI
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
-from allskyhub_protocol import CommandName, FrameVariant, UploadEventArgs
+from allskyhub_protocol import CommandName, EventVariant, FrameVariant, UploadEventArgs
 from allskyhub_server.devices.event_text import event_rows, meteor_summary, shower_text
 from allskyhub_server.devices.images import ImageStore
 from allskyhub_server.models import EventRecord
@@ -83,7 +83,7 @@ async def test_web_events(
     dev = FakeDevice()
     token = await paired_token(client, dev)
     store: ImageStore = app.state.images
-    thumb = store.event_path(dev.device_id, NIGHT, EVENT, FrameVariant.THUMB)
+    thumb = store.event_path(dev.device_id, NIGHT, EVENT, EventVariant.THUMB)
     thumb.parent.mkdir(parents=True, exist_ok=True)
     thumb.write_bytes(JPEG)
     maker: async_sessionmaker[AsyncSession] = app.state.sessionmaker
@@ -113,7 +113,7 @@ async def test_web_events(
         assert "Vollbild wird von der Kamera geholt" in page
         cmd = await next_command(ws)
         assert cmd.name is CommandName.UPLOAD_EVENT
-        assert UploadEventArgs.model_validate(cmd.args).variant is FrameVariant.FULL
+        assert UploadEventArgs.model_validate(cmd.args).variant == FrameVariant.FULL
         state = (await client.get(f"{detail}/state")).text
         assert "Vollbild wird von der Kamera geholt" in state
         with pytest.raises(TimeoutError):  # asked only once

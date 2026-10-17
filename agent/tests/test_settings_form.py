@@ -60,6 +60,7 @@ def test_values_report_every_key_and_fit_device_settings() -> None:
         "detect_aurora": "normal",
         "detect_lightning": "normal",
         "detect_nlc": "normal",
+        "lightning_light_source": "label",
         "product_keogram": True,
         "product_startrails": True,
         "product_timelapse": True,

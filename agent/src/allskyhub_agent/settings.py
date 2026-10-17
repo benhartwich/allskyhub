@@ -36,6 +36,8 @@ DEW_MARGIN_RANGE = (0.5, 10.0)
 # Lightning sensor (SPEC §7.12, roadmap L31).
 LIGHTNING_SENSOR_CHOICES = ("off", "as3935")
 LIGHTNING_ADDRESS_CHOICES = ("0x01", "0x02", "0x03")
+# SPEC §6.4 Light source check (roadmap L35).
+LIGHT_SOURCE_CHOICES = ("label", "drop", "off")
 _CHOICES = {
     "day_capture": DAY_CAPTURE_CHOICES,
     "image_flip": FLIP_CHOICES,
@@ -47,6 +49,7 @@ _CHOICES = {
     "heater": HEATER_CHOICES,
     "lightning_sensor": LIGHTNING_SENSOR_CHOICES,
     "lightning_sensor_address": LIGHTNING_ADDRESS_CHOICES,
+    "lightning_light_source": LIGHT_SOURCE_CHOICES,
 }
 _PRODUCT_SWITCHES = (
     "product_keogram",
@@ -182,6 +185,7 @@ class AgentSettings:
     detect_aurora: str = "normal"
     detect_lightning: str = "normal"
     detect_nlc: str = "normal"
+    lightning_light_source: str = "label"  # SPEC §6.4 Light source check
     # Night products and retention (roadmap L9, SPEC §4.5, §5.2).
     keep_days: int = DEFAULT_KEEP_DAYS
     product_keogram: bool = True

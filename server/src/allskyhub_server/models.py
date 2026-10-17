@@ -159,6 +159,8 @@ class Device(Base):
     # whose summary was posted.
     discord: Mapped[dict[str, Any] | None] = mapped_column(JSONB)
     discord_night: Mapped[str | None] = mapped_column(String(8))
+    # Roadmap H5: the owner's YouTube channel (devices/youtube.py): refresh token, privacy.
+    youtube: Mapped[dict[str, Any] | None] = mapped_column(JSONB)
     # Roadmap #17: the public page under the owner's own domain, set up by a root helper
     # (deploy/domains): state "pending", "active", "failed" or "removing".
     custom_domain: Mapped[str | None] = mapped_column(String(253), unique=True)
@@ -322,6 +324,8 @@ class Product(Base):
     has_full: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
     has_thumb: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
     full_at: Mapped[dt.datetime | None] = mapped_column(_tz())
+    # Roadmap H5: the video on the owner's YouTube channel, once uploaded.
+    youtube_id: Mapped[str | None] = mapped_column(String(32))
     # Retention counts from the first announcement (privacy policy).
     created_at: Mapped[dt.datetime] = mapped_column(_tz(), server_default=func.now(), index=True)
 

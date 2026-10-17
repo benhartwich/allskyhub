@@ -123,6 +123,43 @@
   </div>
   {% endif %}
 </details>
+{% if youtube_available or youtube %}
+<details class="card fold" id="youtube" data-fold="youtube">
+  <summary><h2>YouTube</h2></summary>
+  <p class="muted">Der Zeitraffer jeder Nacht morgens auf deinem YouTube-Kanal, einmal pro Nacht. allskyhub darf nur Videos hochladen, nichts lesen oder löschen; trennen kannst du jederzeit hier oder in deinem Google-Konto.</p>
+  {% if youtube and youtube.broken %}<p class="warn">YouTube nimmt die Verbindung nicht mehr an. Bitte neu verbinden.</p>{% endif %}
+  {% if youtube %}
+  <p>Verbunden{% if youtube.channel %} mit <strong>{{ youtube.channel }}</strong>{% endif %}.</p>
+  <form method="post" action="/cameras/{{ device.id }}/youtube" class="stack">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <label>Sichtbarkeit der Videos<select name="privacy">
+      {% for key, label in youtube_privacy.items() %}<option value="{{ key }}" {% if youtube.privacy == key %}selected{% endif %}>{{ label }}</option>{% endfor %}
+    </select></label>
+    <label class="check"><input type="checkbox" name="day" {% if youtube.day %}checked{% endif %}> Auch den Zeitraffer des Tages (abends)</label>
+    <button type="submit" class="secondary">Speichern</button>
+  </form>
+  {% if youtube_videos %}
+  <ul class="list small">
+    {% for night, kind, url in youtube_videos %}<li><a href="{{ url }}" rel="noopener">{{ "Tag" if kind == "day_timelapse" else "Nacht" }} {{ night | night_title }}</a></li>{% endfor %}
+  </ul>
+  {% endif %}
+  {% endif %}
+  <div class="actions">
+    {% if youtube_available %}
+    <form method="post" action="/cameras/{{ device.id }}/youtube/verbinden">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+      <button type="submit" class="{{ 'secondary' if youtube and not youtube.broken else '' }}">{{ "Neu verbinden" if youtube else "Mit YouTube verbinden" }}</button>
+    </form>
+    {% endif %}
+    {% if youtube %}
+    <form method="post" action="/cameras/{{ device.id }}/youtube/trennen">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+      <button type="submit" class="danger">YouTube trennen</button>
+    </form>
+    {% endif %}
+  </div>
+</details>
+{% endif %}
 <details class="card fold" id="lokal" data-fold="lokal">
   <summary><h2>Lokale Seite der Kamera</h2></summary>
   <p class="muted">Im Heimnetz hat die Kamera eine eigene Seite. Dort meldest du dich mit „Mit allskyhub anmelden“ an. Für Zeiten ohne Internet gibt es einen Offline-Code.</p>

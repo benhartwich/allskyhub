@@ -4,9 +4,9 @@
 - Cloud cover at night: the share of cells in the upper sky without a star. Near the
   horizon trees, haze and the image circle's edge blank cells on clear nights too, so only
   the inner part of the image circle counts.
-- No cloud cover by day yet: the blue/red ratio of the module fails with cameras without
-  an IR cut filter (an overcast sky stays bluish on the ASI678MC); null until a method
-  works on real frames.
+- Cloud cover by day (sun ≥ 3°, roadmap L22) from the sky's colour saturation against the
+  camera's own threshold, see `detect/daycloud.py`; the blue/red ratio of the module fails
+  with cameras without an IR cut filter (an overcast sky stays bluish on the ASI678MC).
 - SQM: mean background normalised by exposure and gain, `mag = offset - 2.5 log10(signal)`.
   Gain is in 0.1 dB in every profile, so the gain factor is 10^(gain/200). The offset of
   the ZWO ASI678MC profile (18.8) is the module's calibration against a dark sky.
@@ -31,10 +31,13 @@ from allskyhub_protocol import FrameInfo, SkyMetrics
 
 Mask = npt.NDArray[np.bool_]
 Points = npt.NDArray[np.intp]
+Rgb = npt.NDArray[np.uint8]
 # (frame, (h, w), sky mask, star xs, star ys) -> the cloud map (SPEC §6.3) or None.
 CloudMapper = Callable[
     [FrameInfo, tuple[int, int], Mask, Points, Points], list[float | None] | None
 ]
+# (frame, RGB image, sky mask) -> the cloud cover by day (SPEC §6.3) or None.
+DayClouds = Callable[[FrameInfo, Rgb, Mask], float | None]
 
 
 @dataclass(frozen=True)
@@ -44,6 +47,7 @@ class SkyConfig:
     cells_across: int = 16  # cells across the short image side
     inner_frac: float = 0.75  # cloud cells only within this part of the circle radius
     night_sun_deg: float = -12.0  # star based values at or below this sun elevation
+    day_sun_deg: float = 3.0  # colour based cloud cover at or above this sun elevation
     sqm_sun_deg: float = -18.0  # SQM only at astronomical night
 
 
@@ -117,10 +121,15 @@ class SkyMeter:
         self._lock = threading.Lock()
         self._latest: SkyMetrics | None = None
         self._mapper: CloudMapper | None = None
+        self._day: DayClouds | None = None
 
     def set_mapper(self, mapper: CloudMapper) -> None:
         """Cloud cover per sky cell (SPEC §6.3 `cloud_map`), once the camera can be oriented."""
         self._mapper = mapper
+
+    def set_day_clouds(self, day: DayClouds) -> None:
+        """Cloud cover by day (SPEC §6.3 `cloud_cover`, roadmap L22), needs an orientation."""
+        self._day = day
 
     @property
     def latest(self) -> SkyMetrics | None:
@@ -167,6 +176,8 @@ class SkyMeter:
             if sun <= cfg.sqm_sun_deg:
                 # The mean over the sky, as the offset was calibrated with.
                 mag = sqm(float(gray[mask].mean()), frame.exposure_us, frame.gain, cfg.sqm_offset)
+        elif sun >= cfg.day_sun_deg and image.ndim == 3 and self._day is not None:
+            cloud = self._day(frame, image, mask)
         m = SkyMetrics(
             at=frame.captured_at,
             night_id=frame.night_id,

@@ -44,10 +44,12 @@ from allskyhub_agent.core.quality import FrameQuality
 from allskyhub_agent.core.sun import sun_elevation
 from allskyhub_agent.detect import tuning
 from allskyhub_agent.detect.cloudmap import cloud_map
+from allskyhub_agent.detect.daycloud import CALIBRATION_FILE as DAY_CALIBRATION
+from allskyhub_agent.detect.daycloud import DayCloud
 from allskyhub_agent.detect.events import DetectionWorker, EventStore
 from allskyhub_agent.detect.labels import Labels
 from allskyhub_agent.detect.nlc import NlcDetector
-from allskyhub_agent.detect.sky import Mask, Points, SkyConfig, SkyMeter
+from allskyhub_agent.detect.sky import Mask, Points, Rgb, SkyConfig, SkyMeter
 from allskyhub_agent.detect.trail import label_for as trail_label
 from allskyhub_agent.discovery import Announcer, host_name, local_ipv4
 from allskyhub_agent.hub.identity import DEFAULT_KEY_PATH, DeviceIdentity
@@ -1139,6 +1141,16 @@ def main(argv: list[str] | None = None) -> int:
                          here.lat, here.lon)  # fmt: skip
 
     sky_meter.set_mapper(map_clouds)
+    day_cloud = DayCloud(Path(args.data) / "calibration" / DAY_CALIBRATION)
+
+    def day_clouds(frame: FrameInfo, rgb: Rgb, sky: Mask) -> float | None:
+        """SPEC §6.3 `cloud_cover` by day (roadmap L22): only with an orientation."""
+        sol = orienter.solution
+        if sol is None:
+            return None
+        return day_cloud.measure(frame, rgb, sky, sol, here.lat, here.lon)
+
+    sky_meter.set_day_clouds(day_clouds)
     tuned = load_settings()
     # SPEC §7.5: the camera as safety monitor for observatory software (roadmap L16).
     safety = SafetyMonitor(

@@ -31,3 +31,10 @@ def test_bright_moon_up() -> None:
 def test_sun() -> None:
     noon = dt.datetime(2026, 6, 21, 11, 0, tzinfo=dt.UTC)
     assert 63 < astro.sun_altitude(noon, *VIENNA) < 66
+
+
+def test_sun_radec() -> None:
+    # Near the June solstice the sun stands at RA 6 h, declination +23.4°.
+    ra, dec = astro.sun_radec(dt.datetime(2026, 6, 21, 11, 0, tzinfo=dt.UTC))
+    assert abs(ra - 90.0) < 1.0
+    assert abs(dec - 23.44) < 0.1

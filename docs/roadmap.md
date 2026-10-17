@@ -128,7 +128,7 @@ hub side. Push needs the Firebase project; until then the same messages show on 
 | H5 | Upload the night's timelapse to YouTube and post detections to Discord | hub | Benjamin, 2026-10-13 (indi-allsky/Allsky); the owner connects the accounts on the hub, never on the camera. Done: Discord (webhook per camera, web and app). Open: YouTube (needs a Google Cloud project with YouTube API access from Benjamin) |
 | H6 | ✅ Satellites among the meteors: name them from CelesTrak (SGP4, sunlit), ISS and Tiangong by name, automatic label | hub | Benjamin, 2026-10-13: on the hub, not on the camera; SPEC §7.9 |
 | H8 | Lightning cross-check with Meteosat's Lightning Imager: a "storm" without satellite flashes within 400 km is labelled a false alarm | hub | Benjamin, 2026-10-15 (storms on calm October nights from light near the camera); SPEC §7.10; needs a free EUMETSAT account. Built: LI-2-LFL (EO:EUM:DAT:0691) every 10 min, 48 h of flashes over Europe, coverage per product, storm labels; off until key and secret are set |
-| H9 | Aircraft by day: which planes crossed the sky, from ADS-B, without image detection | hub | Benjamin, 2026-10-15; idea, not specified yet |
+| H9 | Aircraft by day: which planes crossed the sky, from ADS-B, without image detection | hub | Benjamin, 2026-10-15; specified in SPEC §7.8 "By day", waiting for Benjamin's OK |
 
 ## Network features (hub)
 

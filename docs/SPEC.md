@@ -1143,6 +1143,43 @@ call sign and the altitude, with a short trail of its last minute. A switch "Flu
 next to "Sternbilder" shows them, remembered per browser. On the public page only with
 the section `aircraft` (§6.8).
 
+**By day** (roadmap H9, Benjamin, 2026-10-15). The meteor detector finds overflights only
+at night; by day the hub lists the aircraft that crossed a camera's sky from the ADS-B
+positions alone, without looking at the images. Hub only: the camera and the protocol do
+not change.
+
+- *When.* While the camera is online, has a location and the sun is at −6° or above, the
+  hub fetches its area from adsb.lol every 30 s (10 s while someone watches the live
+  image, as above). Cameras still share one request per area. The owner switches it off
+  per camera on the hub ("Flugzeuge am Tag", default on); off, the hub fetches by day only
+  for the live image, as before.
+- *A pass.* The positions of one aircraft (ICAO address) while it is at least 20° above
+  the horizon seen from the camera (altitude and azimuth as for a meteor match, camera at
+  sea level), from the first to the last such position. 20° keeps out aircraft that are
+  only dots near the horizon: an airliner at 11 km is then at most about 30 km away. A gap
+  of more than 2 minutes without a position ends the pass; a pass shorter
+  than 20 s or with fewer than two positions is dropped.
+- *What is kept,* per pass: ICAO address, call sign, registration and type code if
+  adsb.lol gives them (`r`, `t`), `start` and `end`, the highest altitude above the horizon
+  and when it was reached, the azimuth and altitude at both ends, the flight altitude
+  (`alt_m`) and the smallest distance to the camera in km. Nothing else of the track is
+  kept; the 15-minute limit above still holds for the raw positions.
+- *Which day.* A pass belongs to the local date it starts on and is stored under that
+  date's evening night id, like the day products (§5.2): it is shown with that day's
+  timelapse. Passes are deleted with the night's other data on the hub.
+- *Shown* on the hub's "Überflüge" page of that night id, in a section "Am Tag" before the
+  night's overflights: time, call sign (linked to adsb.lol's map of that aircraft at that
+  time), type, highest point as compass point and altitude, closest distance, flight
+  altitude. If the hub has the camera's frame nearest the highest point in its frame index
+  (§5.1), a click shows it, fetched with `upload_frame` when first opened, with the
+  pass drawn with the lens (§4.8) as a line from its start through its highest point to
+  its end; without an orientation nothing is drawn. The night page counts them ("12 Flugzeuge am Tag"). They are never
+  events: no `event` id, no label, not sent to the camera, not in the night summary's
+  meteor or overflight counts, and not on the public page (§6.8), which shows aircraft only
+  live. The hub's privacy page says that call signs of passes are kept with the night.
+- *Credit* "Aircraft data: adsb.lol (ODbL)" under the list, as everywhere aircraft are
+  shown.
+
 ### 7.9 Satellites
 
 Roadmap H6 (Benjamin, 2026-10-13): the hub names satellites among the meteor events, as it

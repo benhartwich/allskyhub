@@ -17,6 +17,8 @@ on:
       - "packages/sky/**"
       - "uv.lock"
       - ".github/workflows/image.yml"
+      - "tools/e2e/**"
+      - "tools/release/**"
 
 permissions:
   contents: read

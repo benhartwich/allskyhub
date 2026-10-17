@@ -57,8 +57,24 @@ done
 cat > "$MNT/etc/allskyhub-agent/allskyhub-agent.env" <<'ENV'
 ALLSKYHUB_AGENT_ARGS="--sim --lat 50.04 --lon 10.39 run --data /var/lib/allskyhub-agent/data --network none --http 127.0.0.1:8080"
 ENV
-echo "ALLSKYHUB_UPDATE_MANIFEST_URL=http://127.0.0.1:8000/manifest.json" \
-    > "$MNT/etc/allskyhub-agent/updater.env"
+# The channel must be https (allskyhub_protocol.updates): a certificate for 127.0.0.1 that
+# only the updater trusts, through httpx's SSL_CERT_FILE.
+CHANNEL=https://127.0.0.1:9443
+install -d "$MNT/srv/e2e-tls"
+openssl req -x509 -newkey ec -pkeyopt ec_paramgen_curve:P-256 -nodes -days 2 -subj /CN=127.0.0.1 \
+    -addext subjectAltName=IP:127.0.0.1 -keyout "$MNT/srv/e2e-tls/key.pem" \
+    -out "$MNT/srv/e2e-tls/cert.pem" 2>/dev/null
+cat > "$MNT/srv/e2e-tls/serve.py" <<'PY'
+import functools, http.server, ssl
+handler = functools.partial(http.server.SimpleHTTPRequestHandler, directory="/srv/e2e")
+server = http.server.ThreadingHTTPServer(("127.0.0.1", 9443), handler)
+ctx = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
+ctx.load_cert_chain("/srv/e2e-tls/cert.pem", "/srv/e2e-tls/key.pem")
+server.socket = ctx.wrap_socket(server.socket, server_side=True)
+server.serve_forever()
+PY
+printf 'ALLSKYHUB_UPDATE_MANIFEST_URL=%s/manifest.json\nSSL_CERT_FILE=/srv/e2e-tls/cert.pem\n' \
+    "$CHANNEL" > "$MNT/etc/allskyhub-agent/updater.env"
 openssl genpkey -algorithm ed25519 -out "$WORK/key.pem" 2>/dev/null
 openssl pkey -in "$WORK/key.pem" -pubout -out "$MNT/etc/allskyhub-agent/update-keys/e2e.pem"
 install -d "$MNT/srv/e2e"
@@ -79,7 +95,7 @@ publish() {  # publish VERSION [broken]
     local name="allskyhub-agent-$v-arm64.tar.xz"
     tar -C "$d" --owner=0 --group=0 --numeric-owner -cJf "$MNT/srv/e2e/$name" "$v"
     python3 "$ROOT/tools/release/make_manifest.py" "$MNT/srv/e2e/$name" "$v" \
-        "http://127.0.0.1:8000/$name" > "$MNT/srv/e2e/manifest.json"
+        "$CHANNEL/$name" > "$MNT/srv/e2e/manifest.json"
     openssl pkeyutl -sign -inkey "$WORK/key.pem" -rawin -in "$MNT/srv/e2e/manifest.json" \
         -out "$MNT/srv/e2e/manifest.json.sig"
     rm -rf "$d"
@@ -115,8 +131,7 @@ for _ in $(seq 120); do
 done
 timeout 300 systemd-run -M "$CAM" --wait --pipe --quiet -- systemctl is-system-running --wait \
     >/dev/null 2>&1 || true
-systemd-run -M "$CAM" --unit e2e-channel --quiet -- \
-    /usr/bin/python3 -m http.server 8000 --bind 127.0.0.1 --directory /srv/e2e
+systemd-run -M "$CAM" --unit e2e-channel --quiet -- /usr/bin/python3 /srv/e2e-tls/serve.py
 for _ in $(seq 60); do [ "$(health)" = "$VER" ] && break; sleep 5; done
 [ "$(health)" = "$VER" ] || fail "agent $VER did not come up"
 

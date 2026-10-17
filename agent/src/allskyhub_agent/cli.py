@@ -108,13 +108,14 @@ from allskyhub_agent.weather import WeatherConfig, WeatherStation
 from allskyhub_agent.web.archive import LocalArchive
 from allskyhub_agent.web.auth import LocalAuth
 from allskyhub_agent.web.calibration import LocalCalibration
-from allskyhub_agent.web.check import CheckFacts
+from allskyhub_agent.web.check import CheckFacts, run_checks
 from allskyhub_agent.web.overlay import OverlayLayout
 from allskyhub_agent.web.server import SettingsForm, SystemPage, TlsSetup, UpdatePage, WebServer
 from allskyhub_agent.web.support import RecentLog, Support
 from allskyhub_agent.web.tls import Certificates
 from allskyhub_protocol import (
     AdsbStatus,
+    CheckItem,
     DeviceSettings,
     Event,
     EventKind,
@@ -681,6 +682,7 @@ def main(argv: list[str] | None = None) -> int:
     adsb_status: list[Callable[[], AdsbStatus | None]] = [lambda: None]  # receiver, §7.8
     weather_box: list[WeatherStation | None] = [None]  # sensor and heater, §7.11
     lightning_box: list[LightningSensor | None] = [None]  # AS3935, §7.12
+    check_box: list[CheckFacts | None] = [None]  # camera check, §7; set once all parts exist
     strike_hooks: list[Callable[[Strike], None]] = []  # safety monitor, once it exists
     reboot_required: list[Callable[[], bool]] = [lambda: False]  # system updates, §8
     # Learned at night, edited in the local UI (roadmap L8) before the camera is open.
@@ -805,7 +807,17 @@ def main(argv: list[str] | None = None) -> int:
                 env=weather_box[0].env_status if weather_box[0] is not None else None,
                 heater=weather_box[0].heater_status if weather_box[0] is not None else None,
                 lightning_sensor=lightning_box[0].status if lightning_box[0] is not None else None,
+                checks=status_checks(),
             )
+
+        def status_checks() -> list[CheckItem] | None:
+            """SPEC §6.3: the camera check for the hub's setup card, without the hub's
+            own light (it knows whether it is connected)."""
+            facts = check_box[0]
+            if facts is None:
+                return None
+            items = run_checks(facts, datetime.now(UTC))
+            return [CheckItem.model_validate(i) for i in items if i["id"] != "hub"]
 
         def device_settings() -> DeviceSettings:
             return DeviceSettings.model_validate(settings_values())
@@ -896,6 +908,22 @@ def main(argv: list[str] | None = None) -> int:
     )
     lightning_sensor.start()
     lightning_box[0] = lightning_sensor
+    # SPEC §7 Camera check: the local UI's traffic light, also sent in status (§6.3).
+    check_facts = CheckFacts(
+        power=system.power_flags,
+        time_trusted=system.time_trusted,
+        disk_free_pct=lambda: system.disk_free_pct(Path(args.data)),
+        last_frame=live.last_frame,
+        paused=lambda: live.paused,
+        calibration=calibration.info,
+        hub=(lambda: (pairing.info().paired, pairing.info().connected))
+        if pairing is not None
+        else None,
+        env=lambda: weather.env_status,
+        heater=lambda: (wcfg.heater, wcfg.heater_gpio, weather.heater_status),
+        lightning=lambda: lightning_sensor.status,
+    )
+    check_box[0] = check_facts
 
     def observatory_facts() -> dict[str, Any]:
         """SPEC §7.5 for the system page: Alpaca on/off, port or error, N.I.N.A."""
@@ -997,20 +1025,7 @@ def main(argv: list[str] | None = None) -> int:
             tls_context=tls_context,
             overlay=OverlayLayout(Path(args.data) / "overlay.json"),
             status_extra=lambda: overlay_values(sky_meter, loc, weather),
-            check=CheckFacts(
-                power=system.power_flags,
-                time_trusted=system.time_trusted,
-                disk_free_pct=lambda: system.disk_free_pct(Path(args.data)),
-                last_frame=live.last_frame,
-                paused=lambda: live.paused,
-                calibration=calibration.info,
-                hub=(lambda: (pairing.info().paired, pairing.info().connected))
-                if pairing is not None
-                else None,
-                env=lambda: weather.env_status,
-                heater=lambda: (wcfg.heater, wcfg.heater_gpio, weather.heater_status),
-                lightning=lambda: lightning_sensor.status,
-            ),
+            check=check_facts,
         )
         web.start()
         if web.tls_port is not None:

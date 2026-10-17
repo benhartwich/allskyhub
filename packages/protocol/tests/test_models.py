@@ -455,3 +455,20 @@ def test_key_list() -> None:
     for bad in ({"revoked": ["AB" * 32]}, {"added": ["MFkwEwYHKoZIzj0CAQYI"]}, {"serial": 0}):
         with pytest.raises(ValidationError):
             KeyList.model_validate({"serial": 1, "issued_at": "2026-10-13T18:00:00Z"} | bad)
+
+
+def test_status_carries_the_camera_check() -> None:
+    # SPEC §6.3: optional, so older agents and hubs keep working.
+    from allskyhub_protocol import CheckItem, CheckState, Status
+
+    base = {"mode": "day", "exposure_us": 1000, "gain": 0, "mean": 0.3, "uptime_s": 5,
+            "time_trusted": True}  # fmt: skip
+    assert Status.model_validate(base).checks is None
+    st = Status.model_validate(base | {"checks": [
+        {"id": "mask", "state": "warn", "detail": "Himmelsmaske noch nicht gelernt."},
+        {"id": "future_check", "state": "ok", "detail": "x", "extra": 1},
+    ]})  # fmt: skip
+    assert st.checks is not None
+    assert st.checks[0] == CheckItem(id="mask", state=CheckState.WARN,
+                                     detail="Himmelsmaske noch nicht gelernt.")  # fmt: skip
+    assert st.checks[1].id == "future_check"

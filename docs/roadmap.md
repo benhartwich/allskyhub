@@ -81,6 +81,7 @@ them most:
 | L31 | ✅ Lightning sensor AS3935: hears strikes up to 40 km, confirms the camera's flashes on the spot, makes Alpaca unsafe | agent | Benjamin, 2026-10-15 (idea from VIGILIS AllSky; flashes from a neighbour's lamp); SPEC §7.12 |
 | L32 | ✅ Startrails without light flashes: frames lit up for one exposure by a lamp near the camera stay out of the startrails | agent | Benjamin, 2026-10-15 (idea from VIGILIS AllSky's clean startrail); SPEC §5.2 |
 | L33 | System steps by the updater: what a feature needs beyond the venv (today I²C, groups for the sensors) also on cameras flashed before it | agent | Benjamin, 2026-10-17 (OTA cameras had no I²C for L30/L31); SPEC §8 System steps |
+| L34 | First steps: the live page shows what the new camera still lacks (frames, sky mask, north) until it is all green; the camera check goes to the hub in `status.checks` for a setup card | agent + hub | Benjamin, 2026-10-17; SPEC §7 Camera check, §6.3 `checks` |
 
 Not ported on purpose: the free-form module manager and file editor (fixed detectors
 instead), the website upload/remote server (the hub and its public page do that).

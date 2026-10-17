@@ -333,6 +333,9 @@ const T = {
     "power.throttled_seen": "war gedrosselt",
     "power.temp_limit_seen": "Temperaturgrenze war erreicht",
     // camera check
+    "first.title": "Erste Schritte",
+    "first.help": "Die Kamera lernt Himmelsmaske und Norden selbst, sobald eine klare, dunkle Nacht kommt. Bis dahin steht hier, was noch fehlt.",
+    "first.all": "Kompletter Kamera-Check unter System",
     "check.title": "Kamera-Check",
     "check.power": "Stromversorgung",
     "check.clock": "Uhrzeit",
@@ -773,6 +776,9 @@ const T = {
     "power.throttled_seen": "was throttled",
     "power.temp_limit_seen": "Temperature limit was reached",
     // camera check
+    "first.title": "First steps",
+    "first.help": "The camera learns its sky mask and north by itself on the first clear, dark night. Until then this shows what is still missing.",
+    "first.all": "Full camera check under System",
     "check.title": "Camera check",
     "check.power": "Power supply",
     "check.clock": "Clock",
@@ -1140,6 +1146,7 @@ function saveWithOverlay(img, svgInner, f) {
 // --- Live (L3) ---------------------------------------------------------------------
 function viewLive() {
   page.innerHTML = `
+    <section class="card stack" id="firstSteps" hidden></section>
     <section class="card stack">
       <div class="live-stage">
         <img class="live-img" id="live" alt="${t("live.current")}">
@@ -1176,6 +1183,7 @@ function viewLive() {
         <img class="live-img" id="crop" alt="${t("live.crop")}">
       </div>
     </section>`;
+  firstSteps().catch(() => {});
   let lastFrames = -1;
   let focus = false;
   let lastFrame = null;
@@ -2223,6 +2231,22 @@ async function viewCheck() {
   box.innerHTML = `<h2>${t("check.title")} <span class="light ${worst}" aria-hidden="true"></span></h2>
     <ul class="checks">${items.map((i) => `<li class="${i.state}"><span class="light ${i.state}" aria-label="${tn("state." + i.state) ?? ""}"></span>
       <b>${esc(tn("check." + i.id) || i.id)}</b> <span class="muted small">${esc(i.detail)}</span></li>`).join("")}</ul>`;
+}
+
+// SPEC §7 Camera check: until the camera takes pictures and has learned its sky mask and
+// north, the live page says what is still missing; the full check is on the system page.
+const FIRST_STEPS = ["frames", "mask", "orientation"];
+async function firstSteps() {
+  const box = $("firstSteps");
+  if (!box) return;
+  const items = (await getJSON("api/check")).filter((i) => FIRST_STEPS.includes(i.id));
+  const open = items.filter((i) => i.state !== "ok");
+  box.hidden = open.length === 0;
+  if (box.hidden) return;
+  box.innerHTML = `<h2>${t("first.title")}</h2><p class="muted small">${t("first.help")}</p>
+    <ul class="checks">${items.map((i) => `<li class="${i.state}"><span class="light ${i.state}" aria-label="${tn("state." + i.state) ?? ""}"></span>
+      <b>${esc(tn("check." + i.id) || i.id)}</b> <span class="muted small">${esc(i.detail)}</span></li>`).join("")}</ul>
+    <p class="small"><a href="#system">${t("first.all")}</a></p>`;
 }
 
 // SPEC §4.1: pause capture, e.g. to clean the dome; it stays paused until resumed.

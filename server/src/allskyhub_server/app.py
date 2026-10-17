@@ -40,6 +40,7 @@ from allskyhub_server.devices.satellite_match import SatelliteCatalogue
 from allskyhub_server.devices.satellites import TleCache
 from allskyhub_server.devices.space_weather import KpCache, OvationCache
 from allskyhub_server.devices.tonight import ForecastCache
+from allskyhub_server.devices.youtube import YouTube
 from allskyhub_server.mail.send import SmtpMailer
 from allskyhub_server.push.fcm import Sender
 from allskyhub_server.push.notify import Notifier
@@ -221,6 +222,13 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         app.state.notifier.discord = Discord(
             app.state.sessionmaker, app.state.images, Poster(), settings.base_url
         )
+        app.state.youtube = YouTube(
+            app.state.sessionmaker,
+            app.state.images,
+            app.state.connections,
+            app.state.stores.vault,
+            settings.base_url,
+        )
         app.state.renderer = Renderer(app.state.sessionmaker, app.state.images, settings)
         adsb_client = httpx.AsyncClient(headers={"User-Agent": f"allskyhub ({settings.base_url})"})
         app.state.aircraft = aircraft.Watch(
@@ -238,6 +246,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 domains.run_forever(app.state.sessionmaker, settings.data_dir, app.state.hosts)
             ),
             asyncio.create_task(app.state.notifier.discord.run_forever()),
+            asyncio.create_task(app.state.youtube.run_forever()),
             asyncio.create_task(app.state.aircraft.run_forever()),
             asyncio.create_task(StallWatch().run_forever()),
         ]

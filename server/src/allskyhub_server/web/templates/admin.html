@@ -191,6 +191,14 @@
       <label>Dein Passwort<input type="password" name="password" autocomplete="current-password" required></label>
       <button type="submit" class="secondary">Speichern</button>
     </form>
+    <form method="post" action="/admin/stores/youtube" enctype="multipart/form-data" class="stack">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+      <h3>{{ store_titles.youtube }}</h3>
+      <label>JSON des OAuth-Clients<input type="file" name="file" accept=".json,application/json" required></label>
+      <p class="muted small">Google Cloud → APIs und Dienste → Anmeldedaten → OAuth-Client-ID, Typ „Webanwendung“, autorisierter Weiterleitungs-URI <code>{{ youtube_redirect }}</code> → JSON herunterladen. Im Projekt muss die „YouTube Data API v3“ aktiv sein.</p>
+      <label>Dein Passwort<input type="password" name="password" autocomplete="current-password" required></label>
+      <button type="submit" class="secondary">Hochladen</button>
+    </form>
   </details>
 </section>
 <section class="card stack">

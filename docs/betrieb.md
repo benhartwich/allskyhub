@@ -141,6 +141,74 @@ gunzip -c allskyhub-latest.sql.gz | sudo -u allskyhub-server \
 systemctl start allskyhub-server.socket
 ```
 
+### Was wohin gesichert wird
+
+| Pfad | Inhalt | ohne ihn |
+|---|---|---|
+| `/var/lib/allskyhub-server/backup/` | nächtliche DB-Dumps (03:15) | Konten, Kameras, Ereignisse weg |
+| `/var/lib/allskyhub-server/images/` | Bildarchiv und Produkte der Kameras | Bilder nur noch auf den Kameras |
+| `/var/lib/allskyhub-server/keys/` | Schlüssel des Hubs für lokale Logins (SPEC §6.2, §7.4) | lokale Logins an den Kameras über den Hub gehen nicht mehr |
+| `/var/lib/allskyhub-server/store/` | Store-Zugänge und der Android-Upload-Schlüssel | Upload-Schlüssel nur über den Reset bei Google Play (Tage) |
+| `/etc/allskyhub-server/` | Env-Datei (DB-Passwort, Mail, Paddle) | Zugänge neu eintragen |
+| `/var/lib/allskyhub-android/keys/` | Signierschlüssel der Test-APK | Tester müssen die App einmal neu installieren |
+| `/opt/allskyhub-server/` | Code | kommt aus Git neu |
+
+Die externe Sicherung (`/root/rsync.sh`, 03:45 aus `/etc/crontab`, Protokoll in
+`/var/log/rsync-backup.log`) muss alle Pfade der Tabelle außer `/opt` mitnehmen. Prüfen:
+`grep -n allskyhub /root/rsync.sh`.
+
+### Wiederherstellung üben
+
+Einmal im Quartal und nach jeder Änderung an der Sicherung, auf dem Server, ohne den
+laufenden Hub anzufassen. Etwa 15 Minuten. Als root:
+
+```bash
+# 1. Aus der externen Sicherung holen, nicht vom Server selbst.
+mkdir -p /root/restore-drill && cd /root/restore-drill
+rsync -a <storagebox>:<pfad>/var/lib/allskyhub-server/backup/allskyhub-latest.sql.gz .
+rsync -a <storagebox>:<pfad>/var/lib/allskyhub-android/keys/ android-keys/
+rsync -a <storagebox>:<pfad>/etc/allskyhub-server/ etc/
+
+# 2. Der Dump ist vollständig und aktuell.
+ls -la allskyhub-latest.sql.gz           # Datum von heute Nacht
+gunzip -t allskyhub-latest.sql.gz && echo ok
+
+# 3. In eine Wegwerf-Datenbank einspielen, als Rolle des Hubs.
+sudo -u postgres createdb -O allskyhub_server allskyhub_drill
+gunzip -c allskyhub-latest.sql.gz | sudo -u postgres psql -q -v ON_ERROR_STOP=1 allskyhub_drill
+for t in user_account device event frame; do
+  printf '%-12s Sicherung %s, live %s\n' "$t" \
+    "$(sudo -u postgres psql -tAc "select count(*) from $t" allskyhub_drill)" \
+    "$(sudo -u postgres psql -tAc "select count(*) from $t" allskyhub)"
+done
+sudo -u postgres dropdb allskyhub_drill
+
+# 4. Schlüssel und Env-Datei sind da.
+ls -la android-keys/ etc/
+
+# 5. Aufräumen; die Kopien enthalten Geheimnisse.
+cd / && rm -rf /root/restore-drill
+```
+
+Bestanden, wenn der Dump von heute Nacht ist, `psql` ohne Fehler durchläuft, die Zahlen bis
+auf das, was seit 03:15 dazukam, übereinstimmen, und die Schlüssel nicht leer sind. Datum
+und Ergebnis hier notieren:
+
+| Datum | Ergebnis | wer |
+|---|---|---|
+| | | |
+
+### Ernstfall: neuer Server
+
+1. Debian 13 wie unter „Ersteinrichtung“, aber noch nicht starten.
+2. `/etc/allskyhub-server/`, `/var/lib/allskyhub-server/` und
+   `/var/lib/allskyhub-android/keys/` aus der Sicherung zurückspielen, Eigentümer
+   `allskyhub-server` bzw. root, Rechte wie vorher (`keys/` und `store/` 0700).
+3. Datenbank wie oben „Wiederherstellen in eine leere Datenbank“.
+4. DNS auf den neuen Server, TLS wie unter „TLS“, dann `systemctl start allskyhub-server.socket`.
+5. Die Kameras verbinden sich von selbst wieder (gleiche Schlüssel, gleiche Adresse);
+   Ereignisse aus der Zeit dazwischen holen sie nach.
+
 ## Eigene Domains für öffentliche Seiten
 
 Besitzer tragen unter „Seite gestalten“ eine Domain ein (CNAME auf `allskyhub.org`). Der Hub

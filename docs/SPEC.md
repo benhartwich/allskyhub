@@ -389,6 +389,13 @@ base64url-encoded without padding.
   expected stars (mostly obstructed or too small) and when its centre is within 25° of a
   moon that is at least 25 % lit. The map is not smoothed over time; the hub averages
   if it wants to.
+  `checks` (optional, null on older agents): the camera check of §7, `[{id, state, detail}]`
+  (`allskyhub_protocol.CheckItem`, at most 30) without the light `hub`, with `state` `ok`,
+  `warn` or `fail` and `detail` the German text of what to do. Ids are stable (`power`,
+  `clock`, `disk`, `frames`, `mask`, `orientation`, `weather`, `heater`,
+  `lightning_sensor`); a reader shows an unknown id by its `detail`. The hub shows a setup
+  card on the camera page while `frames`, `mask` or `orientation` is not `ok`, and any
+  other `fail` as a warning there.
   `orientation` (null until solved, §4.8): `{north_deg, mirrored, solved_at, stars,
   rms_deg}`. `north_deg` (0..360) is the image direction of north at the horizon, 0 = up,
   clockwise, like `direction_deg` in events; `mirrored` true means east is
@@ -801,7 +808,10 @@ the hub was not reachable.
 **Camera check.** `GET /api/check` lists checks, each `{id, state, detail}` with `state`
 `ok`, `warn` or `fail`: power (no under-voltage), clock synchronised, free disk, frames
 coming, sharpness against the best seen, sky mask learned, orientation solved, hub
-connected. The UI shows them as a traffic light with what to do.
+connected. The UI shows them as a traffic light with what to do. Until the light for frames,
+sky mask and orientation is green, the live page shows these three as "Erste Schritte"
+with a link to the whole check (Benjamin, 2026-10-17). The same list without `hub`
+goes to the hub in `status.checks` (§6.3).
 
 ### 7.1 Setup mode
 

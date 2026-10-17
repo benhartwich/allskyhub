@@ -355,6 +355,22 @@ class UpdateStatus(BaseModel):
     code: str | None = None  # why it failed or rolled back, e.g. "unhealthy", "checksum"
 
 
+class CheckState(StrEnum):
+    OK = "ok"
+    WARN = "warn"
+    FAIL = "fail"
+
+
+class CheckItem(BaseModel):
+    """One light of the camera check (SPEC §7 Camera check), also sent in `status`."""
+
+    model_config = ConfigDict(extra="ignore", frozen=True)
+
+    id: str = Field(max_length=40)  # stable: power, clock, disk, frames, mask, orientation, …
+    state: CheckState
+    detail: str = Field(max_length=300)  # German, what to do about it
+
+
 class Status(_Body):
     """Periodic device status (SPEC §6.3)."""
 
@@ -388,6 +404,8 @@ class Status(_Body):
     heater: HeaterStatus | None = None
     # SPEC §7.12: the lightning sensor, null unless switched on.
     lightning_sensor: LightningSensorStatus | None = None
+    # SPEC §6.3: the camera check (§7) without the hub's own light; null on older agents.
+    checks: list[CheckItem] | None = Field(default=None, max_length=30)
 
 
 class FrameInfo(_Body):

@@ -5,6 +5,7 @@ from __future__ import annotations
 import datetime as dt
 
 import httpx
+import pytest
 from fastapi import FastAPI
 from sqlalchemy import update
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
@@ -136,3 +137,59 @@ def test_dome_hint() -> None:
     assert health.dome_hint([*samples[:-1], (now, 0.2)], clear, now) is None
     assert health.dome_hint(samples[:3], clear, now) is None
     assert health.dome_hint(samples, {}, now) is None
+
+
+def _with_checks(*checks: tuple[str, str], disk: float = 50) -> Device:
+    """SPEC §6.3 ``checks``: (id, state) pairs, detail "<id> tun"."""
+    items = [{"id": i, "state": s, "detail": f"{i} tun"} for i, s in checks]
+    return _device(last_status={"time_trusted": True, "disk_free_pct": disk, "checks": items})
+
+
+def test_setup_card_and_check_warnings() -> None:
+    assert health.setup_steps(_device()) == []  # an older agent: no checks, no card
+    done = _with_checks(("frames", "ok"), ("mask", "ok"), ("orientation", "ok"))
+    assert health.setup_steps(done) == []
+    fresh = _with_checks(
+        ("power", "ok"), ("frames", "ok"), ("mask", "warn"), ("orientation", "fail")
+    )
+    assert [(s.title, s.state, s.detail) for s in health.setup_steps(fresh)] == [
+        ("Bilder kommen an", "ok", "frames tun"),
+        ("Himmelsmaske gelernt", "warn", "mask tun"),
+        ("Ausrichtung (Norden) bestimmt", "fail", "orientation tun"),
+    ]
+    # Setup steps are not repeated as warnings; other fails are, by their detail, unknown
+    # ids too; what the hub says itself (free disk) is said once.
+    many = _with_checks(
+        ("orientation", "fail"), ("power", "fail"), ("dew", "fail"), ("weather", "warn"),
+        ("disk", "fail"), disk=5,
+    )  # fmt: skip
+    assert [(p.key, p.text) for p in health.check(many, True, NOW)] == [
+        ("disk", "Nur noch 5 % Speicher frei."),
+        ("check_power", "power tun"),
+        ("check_dew", "dew tun"),
+    ]
+
+
+async def test_camera_page_shows_setup_card(
+    app: FastAPI, client: httpx.AsyncClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    dev = FakeDevice()
+    await paired_token(client, dev)
+    maker: async_sessionmaker[AsyncSession] = app.state.sessionmaker
+    async with maker() as db:
+        await db.execute(
+            update(Device)
+            .where(Device.id == dev.device_id)
+            .values(last_status={"checks": [{"id": "mask", "state": "warn", "detail": "Abwarten"}]})
+        )
+        await db.commit()
+    page = (await client.get(f"/cameras/{dev.device_id}")).text
+    assert "Einrichtung" not in page  # offline: the last status may be old
+
+    def online(_device_id: str) -> bool:
+        return True
+
+    monkeypatch.setattr(app.state.connections, "is_online", online)
+    page = (await client.get(f"/cameras/{dev.device_id}")).text
+    assert "<h2>Einrichtung</h2>" in page
+    assert "<strong>Himmelsmaske gelernt</strong>: Abwarten" in page

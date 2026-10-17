@@ -69,6 +69,53 @@ SENSOR_ERRORS = {
 }
 
 
+# SPEC §6.3 ``checks``: the camera's own check (§7). These three make the setup card; any
+# other ``fail`` is a warning, unless the hub's own check above already says it.
+SETUP_STEPS = {
+    "frames": "Bilder kommen an",
+    "mask": "Himmelsmaske gelernt",
+    "orientation": "Ausrichtung (Norden) bestimmt",
+}
+HUB_SAYS = {
+    "disk": "disk",
+    "clock": "clock",
+    "weather": "env",
+    "lightning_sensor": "lightning_sensor",
+}
+
+
+@dataclass(frozen=True)
+class Step:
+    title: str
+    state: Literal["ok", "warn", "fail"]
+    detail: str
+
+
+def _checks(device: Device) -> list[dict[str, Any]]:
+    raw = (device.last_status or {}).get("checks")
+    if not isinstance(raw, list):
+        return []
+    items = [cast(dict[str, Any], c) for c in cast(list[object], raw) if isinstance(c, dict)]
+    return [
+        c for c in items
+        if isinstance(c.get("id"), str) and c.get("state") in ("ok", "warn", "fail")
+        and isinstance(c.get("detail"), str)
+    ]  # fmt: skip
+
+
+def setup_steps(device: Device) -> list[Step]:
+    """The setup card while frames, sky mask or orientation is not ``ok``; else empty.
+    Agents without ``checks`` (null) get no card."""
+    found = {c["id"]: c for c in _checks(device) if c["id"] in SETUP_STEPS}
+    if not found or all(c["state"] == "ok" for c in found.values()):
+        return []
+    return [
+        Step(title, found[key]["state"], found[key]["detail"])
+        for key, title in SETUP_STEPS.items()
+        if key in found
+    ]
+
+
 def check(device: Device, online: bool, now: dt.datetime) -> list[Problem]:
     problems: list[Problem] = []
     if not online:
@@ -116,6 +163,11 @@ def check(device: Device, online: bool, now: dt.datetime) -> list[Problem]:
     alpaca = status.get("alpaca_error")  # SPEC §6.3, §7.5
     if isinstance(alpaca, str) and alpaca:
         problems.append(Problem("alpaca", "warn", _alpaca_text(alpaca, settings)))
+    said = {p.key for p in problems}
+    for c in _checks(device):
+        if c["state"] != "fail" or c["id"] in SETUP_STEPS or HUB_SAYS.get(c["id"]) in said:
+            continue
+        problems.append(Problem(f"check_{c['id'][:40]}", "error", c["detail"][:300]))
     return problems
 
 

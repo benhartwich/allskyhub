@@ -31,6 +31,7 @@ from typing import Any, cast
 import httpx
 
 from allskyhub_agent.update.manifest import ManifestError, fetch_manifest
+from allskyhub_agent.update.system import Result
 from allskyhub_protocol.updates import UpdateManifest, is_newer
 
 log = logging.getLogger(__name__)
@@ -94,6 +95,7 @@ class Updater:
     fallback_version: str
     service: str = "allskyhub-agent.service"
     health_timeout_s: float = HEALTH_TIMEOUT_S
+    system: Callable[[], Result] | None = None  # system steps for new features (system.py)
     _state: dict[str, Any] = field(default_factory=dict[str, Any])
 
     # --- state file ------------------------------------------------------------------------
@@ -129,10 +131,27 @@ class Updater:
         self._state = self.load_state()
         if self._state.get("state") == "installing":
             self._finish_interrupted()
+        self._sync_system()
         if request == "rollback":
             self._manual_rollback()
             return
         self._update(at_night=request == "now")
+
+    def _sync_system(self) -> None:
+        """System settings the running release needs (SPEC §8 System steps), by day only:
+        new groups need an agent restart, which must not cut into a night."""
+        if self.system is None:
+            return
+        before = self.status()
+        if before is not None and _mode(before) == "night":
+            return
+        try:
+            result = self.system()
+        except OSError as exc:  # a read-only or odd system: updates still go on
+            log.error("system steps failed: %s", exc)
+            return
+        if result.restart:
+            self.restart_agent()
 
     def _manual_rollback(self) -> None:
         current = self.current_version()

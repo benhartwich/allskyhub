@@ -61,6 +61,7 @@ from allskyhub_server.devices import (
     pairing,
     public,
     settings_form,
+    youtube,
 )
 from allskyhub_server.devices.connections import Connection, ConnectionRegistry
 from allskyhub_server.devices.discord import Discord
@@ -692,6 +693,7 @@ async def _on_products(
     async with maker() as db:
         device = await db.get(Device, conn.device_id)
         public_video = device is not None and public.shows_videos(device)
+        uploads = youtube.wanted_kinds(device) if device is not None else frozenset[str]()
         for item in body.products:
             row = await db.scalar(
                 select(Product).where(
@@ -726,6 +728,8 @@ async def _on_products(
                 # Roadmap #16: the public page shows last night's timelapse like Allsky's
                 # website; only recent nights, so an import does not upload years of video.
                 wanted.append((item.name, FrameVariant.FULL))
+            elif item.kind.value in uploads and not row.has_full and recent:
+                wanted.append((item.name, FrameVariant.FULL))  # roadmap H5, devices/youtube.py
         await db.commit()
     for name, variant in wanted:
         await registry.request_product(conn.device_id, body.night_id, name, variant)

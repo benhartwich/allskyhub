@@ -80,8 +80,9 @@ TITLES = {
     "codemagic": "Codemagic-API-Token",
     "android_upload": "Android-Upload-Schlüssel",
     "ios_certificate": "Schlüssel des iOS-Zertifikats",
+    "youtube": "YouTube-OAuth-Client",
 }
-UPLOADED = ("play", "asc", "codemagic")
+UPLOADED = ("play", "asc", "codemagic", "youtube")
 # Variables an earlier version put into the Codemagic group, for the Android builds there.
 OBSOLETE = frozenset(
     {
@@ -231,6 +232,32 @@ def parse_codemagic(token: str) -> tuple[bytes, dict[str, Any]]:
     if not TOKEN.match(token):
         raise StoreError("Das sieht nicht wie ein Codemagic-API-Token aus.")
     return token.encode(), {}
+
+
+def parse_youtube(raw: bytes, redirect_uri: str) -> tuple[bytes, dict[str, Any]]:
+    """Roadmap H5: the OAuth client (type web application) the owners connect their YouTube
+    channels with; Google Cloud → APIs & Services → Credentials → Download JSON."""
+    try:
+        data = json.loads(raw)
+    except ValueError:
+        raise StoreError("Das ist keine JSON-Datei.") from None
+    web: object = cast(dict[str, Any], data).get("web") if isinstance(data, dict) else None
+    if not isinstance(web, dict):
+        raise StoreError(
+            "Das ist kein OAuth-Client vom Typ „Webanwendung“ (in der Datei fehlt „web“)."
+        )
+    client = cast(dict[str, Any], web)
+    if not all(
+        isinstance(client.get(k), str) and client[k] for k in ("client_id", "client_secret")
+    ):
+        raise StoreError("In der Datei fehlen client_id oder client_secret.")
+    uris: object = client.get("redirect_uris") or []
+    if not isinstance(uris, list) or redirect_uri not in cast(list[object], uris):
+        raise StoreError(
+            f"Beim OAuth-Client fehlt der autorisierte Weiterleitungs-URI {redirect_uri}. "
+            "Bitte in Google Cloud eintragen und die JSON-Datei neu herunterladen."
+        )
+    return raw, {"client_id": client["client_id"], "project_id": client.get("project_id")}
 
 
 # --- What the hub makes itself ---------------------------------------------------------

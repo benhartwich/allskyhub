@@ -368,11 +368,21 @@ base64url-encoded without padding.
   stars}` measured on the newest frame. `at` is that frame's `captured_at` and
   `night_id` its night (§4.5); status repeats the last `sky` until a new frame is
   measured, so the hub keeps one sample per `at`. `cloud_cover` (0..1) comes from the
-  stars visible in the upper sky at night (sun ≤ −12°), by day (sun ≥ 3°) once
-  roadmap L22 has a method that works on real frames, else null. (A blue-to-red ratio
+  stars visible in the upper sky at night (sun ≤ −12°), by day (sun ≥ 3°) from the sky's
+  colour (roadmap L22, approximate like `sqm_mag`), else null. By day it is the share of
+  sky pixels whose HSV saturation (max − min)/max is below the camera's threshold T: pixels
+  inside the sky mask, at least 15° above the horizon and more than 25° from the sun (so
+  only with an orientation, §4.8), on the frame scaled to 960 px width; null when more than
+  20 % of them are clipped (glare). T is the midpoint between this camera's overcast and
+  clear sky: (5th + 95th percentile of the frame medians of that saturation over the day
+  frames of the last 30 days) / 2 once there are at least 10 days, else 0.35. Each value
+  is the median of the day values of the last 15 minutes. A fixed blue-to-red threshold
   fails on cameras without an IR cut filter such as the ASI678MC, where an overcast sky
-  stays bluish; the method is chosen on the test camera's day frames first, Benjamin,
-  2026-10-13.) `sqm_mag` (mag/arcsec², approximate until calibrated) is the
+  stays bluish; the camera's own clear and overcast levels still differ clearly (on the
+  test camera 0.47 and 0.25; checked on 2546 day frames against a forecast model and
+  against frames judged by eye, about 80 % right in three classes, Benjamin, 2026-10-17).
+  Known errors: glare and ghost rings read as cloud, thin cirrus as clear, snow, dew or
+  drops on the dome as cloud, fog as cloud. `sqm_mag` (mag/arcsec², approximate until calibrated) is the
   sky background normalised by exposure and gain, only at astronomical night (sun ≤
   −18°), else null. `stars` is the number of stars detected at night, else null.
   `cloud_map` (optional, roadmap H4; null or missing unless all of: sun ≤ −12°, a trusted
@@ -542,6 +552,24 @@ every few minutes) and once more when it ends, with `ongoing` false. `start` sta
 episode's best frame). It is incremented whenever the picture changes; when a resent
 event has a higher `image_rev`, the hub fetches the picture again. Events without it
 keep their picture.
+
+**Light source check** (roadmap L35, Benjamin, 2026-10-17). A lamp near the camera, such as
+a neighbour's motion-sensor light, lights the same part of the sky again and again in its
+own colour; lightning lights changing places in a bluish white. For each confirmed flash
+the camera sums the added light, RGB of the frame minus RGB of the frame before, over the
+lit area: the flash is "lamp-coloured" when green is at most 0.28 and blue at least 0.37
+of the sum (the test camera's magenta LED light; lightning was about 0.30 and 0.35). A
+lamp-coloured flash is a light source when an earlier lamp-coloured flash of the same
+storm lit the same place: their lit areas overlap with IoU ≥ 0.3 on a 240 × 135 grid, or
+their centroids are within 4 % of the frame width. Then both are, and every later such
+flash of the storm. Colour alone or place alone is not enough: a distant storm lights the
+same sector again and again, and a few real flashes look lamp-coloured. Setting
+`lightning_light_source`: `label` (default), `drop` or `off`. With `label` the flash stays
+a `lightning` event with the automatic label `false_positive`/`other`, detail `Lichtquelle
+in der Nähe`, and still counts in `storm_flashes`; with `drop` it is no event at all and
+neither starts nor extends a storm; `off` does not check. On the test camera's nights this
+caught 72 of 249 lamp flashes and none of 213 real ones; the rest of the false storms were
+drifting cloud edges lit by sky glow, which this check does not address.
 
 Events are sent when detected and, after every (re)connect, again for the current
 night (§6.7).

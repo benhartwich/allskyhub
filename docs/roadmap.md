@@ -83,6 +83,7 @@ them most:
 | L31 | ✅ Lightning sensor AS3935: hears strikes up to 40 km, confirms the camera's flashes on the spot, makes Alpaca unsafe | agent | Benjamin, 2026-10-15 (idea from VIGILIS AllSky; flashes from a neighbour's lamp); SPEC §7.12 |
 | L32 | ✅ Startrails without light flashes: frames lit up for one exposure by a lamp near the camera stay out of the startrails | agent | Benjamin, 2026-10-15 (idea from VIGILIS AllSky's clean startrail); SPEC §5.2 |
 | L33 | System steps by the updater: what a feature needs beyond the venv (today I²C, groups for the sensors) also on cameras flashed before it | agent | Benjamin, 2026-10-17 (OTA cameras had no I²C for L30/L31); SPEC §8 System steps |
+| L34 | First steps: the live page shows what the new camera still lacks (frames, sky mask, north) until it is all green; the camera check goes to the hub in `status.checks` for a setup card | agent + hub | Benjamin, 2026-10-17; SPEC §7 Camera check, §6.3 `checks` |
 
 Not ported on purpose: the free-form module manager and file editor (fixed detectors
 instead), the website upload/remote server (the hub and its public page do that).
@@ -132,7 +133,7 @@ hub side. Push needs the Firebase project; until then the same messages show on 
 | H6 | ✅ Satellites among the meteors: name them from CelesTrak (SGP4, sunlit), ISS and Tiangong by name, automatic label | hub | Benjamin, 2026-10-13: on the hub, not on the camera; SPEC §7.9 |
 | H7 | New star confirmed by the network: a `transient` (L27) seen by a second camera within 0.5° the same night is confirmed; push and a map of who saw it only when confirmed, or when the owner marks it | hub | proposal 2026-10-14; compare with known novae and comets (e.g. TNS/MPC) before calling it new |
 | H8 | ✅ Lightning cross-check with Meteosat's Lightning Imager: a "storm" without satellite flashes within 400 km is labelled a false alarm | hub | Benjamin, 2026-10-15 (storms on calm October nights from light near the camera); SPEC §7.10; needs a free EUMETSAT account. Built: LI-2-LFL (EO:EUM:DAT:0691) every 10 min, 48 h of flashes over Europe, coverage per product, storm labels; off until key and secret are set |
-| H9 | Aircraft by day: which planes crossed the sky, from ADS-B, without image detection | hub | Benjamin, 2026-10-15; idea, not specified yet |
+| H9 | Aircraft by day: which planes crossed the sky, from ADS-B, without image detection | hub | Benjamin, 2026-10-15; specified in SPEC §7.8 "By day", waiting for Benjamin's OK |
 
 ## Network features (hub)
 

@@ -24,6 +24,15 @@
 </section>
 {% endif %}
 </div>
+{% if setup_steps %}
+<div class="card health setup-steps" id="einrichtung">
+  <h2>Einrichtung</h2>
+  <p class="muted">Die Kamera ist noch nicht ganz eingerichtet. Was noch fehlt, sagt dir ihre eigene Prüfung:</p>
+  <ul class="health-list">
+    {% for s in setup_steps %}<li class="health-line {{ 'ok' if s.state == 'ok' else ('error' if s.state == 'fail' else 'warn') }}"><strong>{{ s.title }}</strong>{% if s.state != 'ok' %}: {{ s.detail }}{% endif %}</li>{% endfor %}
+  </ul>
+</div>
+{% endif %}
 <div class="card health">
   <h2>Zustand</h2>
   {% if reboot_required and online %}<p class="health-line">Sicherheitsupdates warten auf einen Neustart; die Kamera startet dafür tagsüber von selbst neu.</p>{% endif %}

@@ -14,6 +14,29 @@
   {% endif %}
 </div>
 
+{% if day_passes %}
+<section class="card stack" id="am-tag">
+  <h2>Am Tag: {{ day_passes | length }} {{ "Flugzeug" if day_passes | length == 1 else "Flugzeuge" }}</h2>
+  <p class="muted small">Flugzeuge, die mindestens 20° über dem Horizont vorbeiflogen, aus ihren ADS-B-Positionen, nicht aus den Bildern.</p>
+  <div class="table-scroll"><table class="stats">
+    <thead><tr><th>Zeit</th><th>Flug</th><th>Typ</th><th>Höchster Punkt</th><th>Abstand</th><th>Flughöhe</th></tr></thead>
+    <tbody>
+    {% for p in day_passes %}
+    <tr>
+      <td><a href="/cameras/{{ device.id }}/flugzeuge/{{ p.id }}">{{ p.start | clock }}</a></td>
+      <td><a href="{{ adsb_link(p) }}" rel="noopener">{{ p.callsign or p.icao | upper }}</a></td>
+      <td>{{ p.type_code or '–' }}</td>
+      <td>{{ p.top_alt_deg | round | int }}° {{ p.top_az_deg | compass }}</td>
+      <td>{{ "%.0f" | format(p.min_km) }} km</td>
+      <td>{% if p.alt_m is not none %}{{ "%.1f" | format(p.alt_m / 1000) | replace(".", ",") }} km{% else %}–{% endif %}</td>
+    </tr>
+    {% endfor %}
+    </tbody>
+  </table></div>
+  <p class="muted small">{{ credit }}</p>
+</section>
+{% endif %}
+
 {% if tracks %}
 <p><strong>{{ count or "Keine Überflüge" }}</strong>{% if meteor_count %} · {{ meteor_count }} {{ "Meteor" if meteor_count == 1 else "Meteore" }} zum Vergleich{% endif %}{% if mapped | length < tracks | length %} <span class="muted small">· {{ tracks | length - mapped | length }} ohne Himmelsrichtung, nur in der Liste</span>{% endif %}</p>
 
@@ -80,7 +103,7 @@
     </tbody>
   </table></div>
 </section>
-{% else %}
+{% elif not day_passes %}
 <div class="card empty"><p class="muted">Keine Überflüge und Meteore {% if night_id %}in dieser Nacht{% else %}bisher{% endif %}. Satelliten und Flugzeuge findet der Meteordetektor nachts; sie erscheinen hier statt bei den Meteoren.</p></div>
 {% endif %}
 {% endblock %}

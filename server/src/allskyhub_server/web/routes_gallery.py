@@ -14,7 +14,9 @@ from sqlalchemy import select
 from allskyhub_protocol import EVENT_ID_PATTERN, EventVariant, FrameVariant
 from allskyhub_server.auth.sessions import SessionInfo
 from allskyhub_server.devices import (
+    aircraft,
     archive,
+    day_aircraft,
     events,
     fireball,
     labels,
@@ -27,6 +29,7 @@ from allskyhub_server.devices import (
     science,
     series,
     sky_chart,
+    sky_overlay,
     sqm_trend,
     stats,
     target,
@@ -37,7 +40,7 @@ from allskyhub_server.devices.event_text import EVENT_TITLES, event_rows, meteor
 from allskyhub_server.devices.images import ImageStore
 from allskyhub_server.devices.queries import Role
 from allskyhub_server.devices.tonight import ForecastCache
-from allskyhub_server.models import Device, EventRecord, RenderJob
+from allskyhub_server.models import AircraftPass, Device, EventRecord, RenderJob
 from allskyhub_server.web.deps import CurrentSession, DbSession, csrf_protect
 from allskyhub_server.web.render import render
 from allskyhub_sky.objects import catalogue
@@ -115,6 +118,7 @@ async def night(
             "events": events.collapse(night_events),
             "meteors": meteor_summary(night_events),
             "overflights": events.overflight_count(all_events),
+            "day_aircraft": await day_aircraft.count(db, device.id, night_id),
             "titles": PRODUCT_TITLES,
             "event_titles": EVENT_TITLES,
         },
@@ -247,19 +251,26 @@ async def overflights(
     """SPEC §6.4 Overflights (roadmap L29): the night's satellites, aircraft and unknown
     objects on a sky map that plays like a timelapse, and as a compact list."""
     device = await _own(db, session, device_id)
-    nights = list(
-        await db.scalars(
-            select(EventRecord.night_id)
-            .where(
-                EventRecord.device_id == device.id,
-                EventRecord.kind == "meteor",
-            )
-            .group_by(EventRecord.night_id)
-            .order_by(EventRecord.night_id.desc())
-            .limit(90)
+    meteor_nights = await db.scalars(
+        select(EventRecord.night_id)
+        .where(
+            EventRecord.device_id == device.id,
+            EventRecord.kind == "meteor",
         )
+        .group_by(EventRecord.night_id)
+        .order_by(EventRecord.night_id.desc())
+        .limit(90)
     )
+    day_nights = await db.scalars(  # roadmap H9: days with aircraft count too
+        select(AircraftPass.night_id)
+        .where(AircraftPass.device_id == device.id)
+        .group_by(AircraftPass.night_id)
+        .order_by(AircraftPass.night_id.desc())
+        .limit(90)
+    )
+    nights = sorted({*meteor_nights, *day_nights}, reverse=True)[:90]
     night_id = nacht or (nights[0] if nights else None)
+    day_passes = await day_aircraft.for_night(db, device.id, night_id) if night_id else []
     tracks: list[overflight_map.Track] = []
     skies: list[overflight_map.Sky] = []
     if night_id is not None:
@@ -296,6 +307,9 @@ async def overflights(
             "meteor_count": sum(t.group == "meteor" for t in tracks),
             "zone": str(series.zone(device)),
             "map": overflight_map,
+            "day_passes": day_passes,
+            "adsb_link": day_aircraft.adsb_link,
+            "credit": aircraft.CREDIT,
         },
         session=session,
     )
@@ -328,6 +342,36 @@ async def _event_state(request: Request, device: Device, event: EventRecord) -> 
     ) or await registry.request_event(device.id, event.night_id, event.event_id, EventVariant.FULL):
         return "fetching"
     return "offline"
+
+
+@router.get("/cameras/{device_id}/flugzeuge/{pass_id}")
+async def day_pass(
+    request: Request, db: DbSession, session: CurrentSession, device_id: str, pass_id: str
+) -> Response:
+    """Roadmap H9 (SPEC §7.8 By day): one aircraft's pass on the camera's frame nearest its
+    highest point, drawn with the lens; the full frame is fetched when first opened."""
+    device = await _own(db, session, device_id)
+    found = await day_aircraft.one(db, device.id, pass_id)
+    if found is None:
+        raise HTTPException(404)
+    frame = await day_aircraft.frame_for(db, found)
+    if frame is not None and not frame.has_full:
+        await _registry(request).request_upload(
+            device.id, frame.night_id, frame.name, FrameVariant.FULL
+        )
+    return render(
+        request,
+        "day_pass.html",
+        {
+            "device": device,
+            "p": found,
+            "frame": frame,
+            "drawing": sky_overlay.day_pass(device.last_status, found),
+            "adsb_link": day_aircraft.adsb_link(found),
+            "credit": aircraft.CREDIT,
+        },
+        session=session,
+    )
 
 
 @router.get("/cameras/{device_id}/events/{night_id}/{event_id}")

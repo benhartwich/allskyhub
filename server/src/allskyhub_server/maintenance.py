@@ -17,6 +17,7 @@ from allskyhub_server.auth.sessions import IDLE_TIMEOUT
 from allskyhub_server.devices import renders, stats
 from allskyhub_server.devices.images import ImageStore
 from allskyhub_server.models import (
+    AircraftPass,
     AppToken,
     Device,
     DeviceNonce,
@@ -73,6 +74,15 @@ async def purge(
     await password_reset.purge(db, now)
     await access_requests.purge(db, now)
     await _purge_frames(db, store, settings, now)
+    # Roadmap H9: the day's aircraft go with the night's other data.
+    await db.execute(
+        delete(AircraftPass).where(
+            _expired(
+                AircraftPass.created_at, AircraftPass.device_id, now, settings.keep_thumb_days,
+                settings.keep_plus_thumb_days,
+            )
+        )
+    )  # fmt: skip
     await _purge_products(db, store, settings, now)
     await _purge_events(db, store, settings, now)
     await db.execute(

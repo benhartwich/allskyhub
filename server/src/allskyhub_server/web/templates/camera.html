@@ -94,6 +94,15 @@
     <button type="submit" class="secondary">Speichern</button>
   </form>
 </details>
+<details class="card fold" id="flugzeuge" data-fold="flugzeuge">
+  <summary><h2>Flugzeuge am Tag</h2></summary>
+  <p class="muted">Tagsüber listet der Hub die Flugzeuge, die mindestens 20° über deiner Kamera vorbeifliegen, unter „Überflüge“, mit Rufzeichen, Typ und Bild. Die Positionen kommen von adsb.lol; der Hub fragt dafür nur einen auf etwa 10 km gerundeten Punkt ab.</p>
+  <form method="post" action="/cameras/{{ device.id }}/day-aircraft" class="stack">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <label class="check"><input type="checkbox" name="day_aircraft"{% if device.day_aircraft %} checked{% endif %}> Flugzeuge am Tag auflisten</label>
+    <button type="submit" class="secondary">Speichern</button>
+  </form>
+</details>
 <details class="card fold" id="discord" data-fold="discord">
   <summary><h2>Discord</h2></summary>
   <p class="muted">Meteore, Polarlicht und die Nacht am Morgen in einem Discord-Kanal, mit Bild. In Discord: Servereinstellungen → Integrationen → Webhooks → Neuer Webhook → Webhook-URL kopieren. Links in den Nachrichten führen zur öffentlichen Seite, wenn sie an ist.</p>

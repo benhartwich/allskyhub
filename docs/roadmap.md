@@ -134,7 +134,7 @@ hub side. Push needs the Firebase project; until then the same messages show on 
 | H6 | ✅ Satellites among the meteors: name them from CelesTrak (SGP4, sunlit), ISS and Tiangong by name, automatic label | hub | Benjamin, 2026-10-13: on the hub, not on the camera; SPEC §7.9 |
 | H7 | New star confirmed by the network: a `transient` (L27) seen by a second camera within 0.5° the same night is confirmed; push and a map of who saw it only when confirmed, or when the owner marks it | hub | proposal 2026-10-14; compare with known novae and comets (e.g. TNS/MPC) before calling it new |
 | H8 | ✅ Lightning cross-check with Meteosat's Lightning Imager: a "storm" without satellite flashes within 400 km is labelled a false alarm | hub | Benjamin, 2026-10-15 (storms on calm October nights from light near the camera); SPEC §7.10; needs a free EUMETSAT account. Built: LI-2-LFL (EO:EUM:DAT:0691) every 10 min, 48 h of flashes over Europe, coverage per product, storm labels; off until key and secret are set |
-| H9 | Aircraft by day: which planes crossed the sky, from ADS-B, without image detection | hub | Benjamin, 2026-10-15; specified in SPEC §7.8 "By day", waiting for Benjamin's OK |
+| H9 | Aircraft by day: which planes crossed the sky, from ADS-B, without image detection | hub | Benjamin, 2026-10-15; SPEC §7.8 "By day" (approved 2026-10-17); built: devices/day_aircraft.py, "Am Tag" on the Überflüge page |
 
 ## Network features (hub)
 

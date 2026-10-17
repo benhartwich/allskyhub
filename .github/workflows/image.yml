@@ -56,11 +56,32 @@ jobs:
           retention-days: 14
           compression-level: 0
 
+  # SPEC §8 end to end: the built image installs a newer release, rolls it back when asked
+  # and rolls back a broken one by itself (tools/e2e/update-e2e.sh, roadmap S9).
+  update-e2e:
+    needs: build
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262  # v4
+      - name: tools
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends systemd-container xz-utils openssl
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093  # v4
+        with:
+          name: allskyhub-image
+          path: build
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093  # v4
+        with:
+          name: allskyhub-agent-bundle
+          path: build
+      - name: update, rollback, broken release
+        run: sudo tools/e2e/update-e2e.sh build/allskyhub-*.img.xz build/allskyhub-agent-*-arm64.tar.xz
+
   # SPEC §8: sign the manifest and publish it with the bundle. The private key is only in
   # the secret ALLSKYHUB_UPDATE_KEY; without it nothing is published.
   release:
     if: startsWith(github.ref, 'refs/tags/agent-v')
-    needs: build
+    needs: [build, update-e2e]
     runs-on: ubuntu-24.04
     # The signing key is a secret of this environment only; it requires Benjamin's approval
     # for every run (security review 2026-10-13, roadmap S4).

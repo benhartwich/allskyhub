@@ -160,6 +160,7 @@ again in the code. Benjamin decided the open questions on 2026-10-13.
 | S6 | ✅ Offline code: tries counted before Argon2, one at a time, parameters capped | agent | #204; caps in SPEC §6.5 |
 | S7 | ✅ Image: nftables input filter, narrower polkit rule for NetworkManager, reboot by day for security updates | agent | SPEC §8; reboot: #215 |
 | S8 | ✅ Wi-Fi credentials without control characters | agent | #204 |
+| S9 | ✅ Update end to end in CI: the built image boots in a container, installs a newer signed release, rolls it back when asked and rolls back a broken one by itself; a release is published only after it passed | agent | Benjamin, 2026-10-17; `tools/e2e/update-e2e.sh`, job `update-e2e` |
 
 Leftovers of the hub audit (2026-10-13), done 2026-10-14 after Benjamin's "Mach alles":
 

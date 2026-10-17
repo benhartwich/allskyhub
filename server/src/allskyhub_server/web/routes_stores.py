@@ -11,6 +11,7 @@ from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, Uplo
 from fastapi.responses import FileResponse, Response
 
 from allskyhub_server.admin import stores as admin_stores
+from allskyhub_server.devices import youtube
 from allskyhub_server.web.deps import CurrentSession, DbSession, SettingsDep, csrf_protect
 from allskyhub_server.web.routes_admin import admin_only, confirmed, page
 
@@ -52,15 +53,20 @@ async def upload_store_key(
             raise admin_stores.StoreError("Bitte die Datei auswählen.")
         elif kind == "play":
             secret, meta = admin_stores.parse_play(await _read(file))
+        elif kind == "youtube":
+            secret, meta = admin_stores.parse_youtube(
+                await _read(file), youtube.redirect_uri(settings.base_url)
+            )
         else:
             secret, meta = admin_stores.parse_asc(await _read(file), key_id, issuer_id)
     except admin_stores.StoreError as exc:
         return await page(request, db, session, 400, error=str(exc))
     stores.vault.put(kind, secret, meta, session.user.email)
-    return await page(
-        request, db, session,
-        notice=f"{admin_stores.TITLES[kind]} gespeichert. Jetzt „Prüfen und einrichten“.",
-    )  # fmt: skip
+    if kind == "youtube":
+        notice = "YouTube-OAuth-Client gespeichert. Besitzer können YouTube jetzt verbinden."
+    else:
+        notice = f"{admin_stores.TITLES[kind]} gespeichert. Jetzt „Prüfen und einrichten“."
+    return await page(request, db, session, notice=notice)
 
 
 @router.get("/admin/stores-android/{name}")

@@ -21,6 +21,7 @@ from allskyhub_server.auth import access_requests, ratelimit
 from allskyhub_server.auth.accounts import AccountError
 from allskyhub_server.auth.passwords import verify_secret_async
 from allskyhub_server.auth.sessions import SessionInfo
+from allskyhub_server.devices import youtube
 from allskyhub_server.mail.send import Mail, Mailer
 from allskyhub_server.models import Device, User
 from allskyhub_server.settings import Settings
@@ -94,6 +95,7 @@ async def page(
             ).all(),
             "stores": stores.vault.entries(),
             "store_titles": admin_stores.TITLES,
+            "youtube_redirect": youtube.redirect_uri(request.app.state.settings.base_url),
             "store_builds": await stores.recent_builds(),
             "codemagic_app": (stores.vault.meta("codemagic") or {}).get("app_id"),
             "android_job": stores.android_job(),

@@ -96,6 +96,7 @@ from allskyhub_agent.update.installer import Paths, Updater, read_request
 from allskyhub_agent.update.reboot import STATE_NAME as SECURITY_REBOOT_NAME
 from allskyhub_agent.update.reboot import SecurityReboot
 from allskyhub_agent.update.status import STATE_FILE, update_status
+from allskyhub_agent.update.system import SystemSync
 from allskyhub_agent.watchdog import (
     Heartbeat,
     WatchState,
@@ -536,6 +537,10 @@ def run_update(args: argparse.Namespace) -> int:
     def run_cmd(cmd: list[str]) -> int:
         return subprocess.run(cmd, check=False, timeout=120).returncode  # noqa: S603
 
+    def output(cmd: list[str]) -> str | None:
+        r = subprocess.run(cmd, check=False, timeout=60, capture_output=True, text=True)  # noqa: S603
+        return r.stdout if r.returncode == 0 else None
+
     with httpx.Client(timeout=30) as http:
         Updater(
             paths=Paths(args.install_dir, args.work, args.state, args.keys),
@@ -546,6 +551,7 @@ def run_update(args: argparse.Namespace) -> int:
             sleep=time.sleep,
             monotonic=time.monotonic,
             fallback_version=__version__,
+            system=SystemSync(Path("/"), run_cmd, output).apply,
         ).run_once(read_request(args.request))
     return 0
 

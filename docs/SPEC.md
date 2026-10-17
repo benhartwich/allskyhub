@@ -1289,6 +1289,17 @@ report healthy within a timeout.
   which reads and deletes it. `now` checks at once and installs also at night;
   `rollback` switches to the previous installed release with the same health check and
   marks the current one as not to be installed again by itself.
+- **System steps:** a bundle brings only the agent's venv, so system settings a feature
+  needs beyond it are applied by the updater on every run by day (not at night, since
+  they can restart the agent), with the code of the running release
+  (`allskyhub_agent.update.system`). Each step does nothing when already in place and only
+  on an allskyhub camera (the user `allskyhub` exists). A camera flashed before a feature
+  gets it one updater run after the update that brings it. Today: the groups `i2c` and
+  `gpio` and the agent user in them, a unit drop-in with `SupplementaryGroups=i2c gpio` when
+  the unit lacks them (then the agent restarts), `i2c-dev` in `modules-load.d`, and
+  `dtparam=i2c_arm=on` appended under `[all]` to `config.txt` unless I²C is already on
+  (`/dev/i2c-1` or such a line), which asks for the daytime reboot below through
+  `/run/reboot-required` (SPEC §7.11, §7.12).
 - **System updates:** Debian and Raspberry Pi OS security updates install by themselves
   (unattended-upgrades, no automatic reboot by apt). When they need a reboot
   (`/run/reboot-required`, a new kernel), the agent reboots once it is day: sun at least

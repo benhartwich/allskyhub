@@ -164,7 +164,7 @@ sky, `include` always is; they apply on top of the learned mask (or, until there
 the image circle) from the next frame on and survive relearning.
 
 Each detector has a level in the settings (§6.9): `detect_meteor`, `detect_aurora`,
-`detect_lightning`, `detect_nlc`, one of `off`, `low`, `normal` (default), `high`. `off`
+`detect_lightning`, `detect_nlc`, `detect_transient` (roadmap L27), one of `off`, `low`, `normal` (default), `high`. `off`
 runs no detection of that kind; the other levels move only the threshold that separates
 faint events from false alarms.
 
@@ -389,6 +389,28 @@ base64url-encoded without padding.
   expected stars (mostly obstructed or too small) and when its centre is within 25° of a
   moon that is at least 25 % lit. The map is not smoothed over time; the hub averages
   if it wants to.
+  `transparency_map` (optional, roadmap L26; null or missing whenever `cloud_map` is, and
+  until the camera has a photometric reference): how much the sky dims the stars, per sky
+  cell of the same 24-cell layout as `cloud_map`, each value the extinction in magnitudes
+  (0.00..2.50, 0 = as clear as the camera's clearest nights) or null. The camera measures
+  the catalogue stars down to magnitude 5.0 in the cell and inside the sky mask by aperture
+  photometry on the measured frame (an aperture of radius 3.5 px of a 3840 px wide frame,
+  scaled with the width, centred on the brightest pixel within 4 px of the predicted
+  position, the background the median of a ring from 7 to 11 px). Its instrumental
+  magnitude −2.5·log10(flux) is normalised by exposure and gain like `sqm_mag`. A star
+  without a positive flux counts as 2.50 mag dimmed. A cell's value is the median over its
+  stars of (instrumental − slope·catalogue − zp[band]), clipped to 0..2.50, with at least 5
+  stars, else null; cells near a lit moon are null as in `cloud_map`.
+  The reference `{slope, zp: [band 0, 1, 2], frames, updated_at, width, height}` is in
+  `<data>/calibration/photometry.json`. It is fitted on frames with the sun ≤ −18°,
+  `cloud_cover` ≤ 0.05 and no moon at least 25 % lit above the horizon: `slope` and `zp`
+  per band by least squares over each frame's stars, the reference being the per-band
+  90th percentile (the clearest) of the frames of the last 30 nights, after at least 20
+  such frames from at least 2 nights. The band term takes up the extinction by airmass, so
+  0 near the horizon means "as clear as usual there". A new orientation of another frame
+  size, another camera or another profile starts the reference again.
+  `transparency` (optional, roadmap L26): the median of the non-null cells of bands 1 and 2
+  (above 40°), else null. Both are rounded to 0.01.
   `checks` (optional, null on older agents): the camera check of §7, `[{id, state, detail}]`
   (`allskyhub_protocol.CheckItem`, at most 30) without the light `hub`, with `state` `ok`,
   `warn` or `fail` and `detail` the German text of what to do. Ids are stable (`power`,
@@ -455,7 +477,7 @@ base64url-encoded without padding.
 ### 6.4 Events
 
 `{id, night_id, kind, start, end, confidence, has_image, imported, data}` with `kind` one of
-`meteor`, `lightning`, `aurora`, `nlc`, `satellite`, `clouds`, `sky_quality`.
+`meteor`, `lightning`, `aurora`, `nlc`, `transient`, `satellite`, `clouds`, `sky_quality`.
 
 - `id` is stable on the device: the kind without underscores and the UTC start, e.g.
   `meteor-20261008T214512Z`, with `-2`, `-3` … for further events of the same kind
@@ -471,8 +493,9 @@ base64url-encoded without padding.
 | `lightning` | `area_frac` (0..1, part of the sky that lit up), `peak` (0..1, mean brightening of the lit area), `storm_flashes` (int, flashes in the last 30 min including this one), `storm` (string, `storm-` + UTC start of the storm like an event id; the same for all flashes of a storm, a gap of more than 30 min starts a new one) |
 | `aurora` | one event per episode (below): `peak_index` (0..100, % of the searched band that is aurora-green in the best frame; the band is the low sky (2–36°) within 70° of the pole's azimuth once the camera has an orientation (§4.8), else the whole low ring of the image circle), `green` (mean green over red of those pixels, 8 bit), `frames` (int, candidate frames so far), `direction_deg` (0..360 in the image, 0 = up, clockwise, of the green's centroid; not a compass bearing), `ongoing` (bool), `image_rev` |
 | `nlc` | one episode (below), only with an orientation (§4.8), sun −16° to −9°, in the low sky (12–45°) toward the sun: `peak_index` (0..100, % of that band that is NLC-blue and structured, best frame), `blue` (mean blue over red of those pixels, 8 bit), `frames`, `direction_deg`, `ongoing`, `image_rev` |
+| `transient` | one episode (below) per new point of light, §6.4 Transients: `ra_deg`, `dec_deg` (J2000, of its mean position), `mag` (estimated V magnitude from the photometric reference of `transparency_map`), `frames` (int, frames it was found in), `ongoing`, `image_rev` |
 
-`meteor`, `lightning`, `aurora` and `nlc` also carry `azimuth_deg` (0..360, compass, 0 = north,
+`meteor`, `lightning`, `aurora`, `nlc` and `transient` also carry `azimuth_deg` (0..360, compass, 0 = north,
 90 = east) and `altitude_deg` (degrees above the horizon) of their position in the sky:
 the meteor's midpoint, the centroid of the lit area, of the green or of the blue. The
 agent computes them with the orientation (§4.8) valid when it saves the event, so they
@@ -580,6 +603,22 @@ airway were chained into passes of up to 38 minutes that no aircraft or satellit
 picture stays the first piece's. At most 300 non-`meteor`
 events are kept per night (a growing one counts once); beyond that they are only counted in the log. Nothing is deleted:
 the owner sees them with "Aussortierte zeigen" and can label any of them a meteor.
+
+**Transients** (roadmap L27): a new star-like point of light that stays fixed among the
+stars, such as a nova or a bright comet's head. It needs an orientation (§4.8) and the
+photometric reference of `transparency_map`, sun ≤ −15° and a trusted clock. On each
+measured frame the camera takes the detected stars (the same detection as `stars`) above
+20° altitude, at least 50 px inside the sky mask's edge, and estimates their magnitude with
+the reference. A candidate is one of magnitude 3.5 or brighter with, within 0.5°, none of:
+a Hipparcos star to Vmag 7.0 or a Hipparcos variable whose brightest magnitude (Hpmax)
+is 4.0 or brighter, a planet Mercury to Saturn, the moon. It becomes a `transient` event
+when the same position (within 0.3° in RA/Dec) is a candidate in at least 10 frames over
+at least 20 minutes of the same night: in that time the sky turns by 5°, so a hot pixel or
+a lamp, fixed in the image, and a satellite or an aircraft, moving faster than the stars,
+never make one. Its picture is a crop of 300 × 300 px around it from the best frame. The
+event is an episode: sent again as more frames find it, `ongoing` false after 30 minutes
+without it. At most 3 per night; `detect_transient` `off` runs no check, `low`/`high` move
+the magnitude limit to 3.0/4.0. The hub decides what is worth a push (roadmap H7).
 
 **Overflights** (Benjamin, 2026-10-15, roadmap L29). Meteor events whose `trail` is
 `moving`, `circle` or `dashed`, or whose label (automatic or the owner's) has the reason

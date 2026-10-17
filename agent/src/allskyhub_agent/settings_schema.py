@@ -192,6 +192,26 @@ def _detector_entries() -> list[dict[str, Any]]:
         for de, en, help_de, help_en in [_DETECTOR_TEXT[k]]
     ] + [
         {
+            # SPEC §6.4 Light source check (roadmap L35).
+            "key": "lightning_light_source",
+            "type": "choice",
+            "label": {"de": "Lampen bei Blitzen", "en": "Lamps among lightning"},
+            "group": {"de": "Erkennung", "en": "Detection"},
+            "choices": [
+                {"value": "label", "label": {"de": "markieren", "en": "mark"}},
+                {"value": "drop", "label": {"de": "ausblenden", "en": "leave out"}},
+                {"value": "off", "label": {"de": "nicht prüfen", "en": "don't check"}},
+            ],
+            "help": {
+                "de": "Eine Lampe in der Nähe (z. B. mit Bewegungsmelder) leuchtet immer an "
+                "derselben Stelle und in ihrer eigenen Farbe auf. Solche Blitze werden als "
+                "„Lichtquelle in der Nähe“ markiert oder ganz ausgeblendet.",
+                "en": "A lamp nearby (e.g. with a motion sensor) lights up at the same place "
+                "in its own colour. Such flashes are marked as a light source nearby or left "
+                "out entirely.",
+            },
+        },
+        {
             "key": "adsb_url",
             "type": "string",
             "label": {"de": "Eigener ADS-B-Empfänger", "en": "Own ADS-B receiver"},

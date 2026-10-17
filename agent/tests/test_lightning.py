@@ -130,3 +130,91 @@ def test_lightning_event(tmp_path: Path) -> None:
     full = events.image_path(ev.night_id, ev.id, thumbnail=False)
     assert full is not None
     assert full.read_bytes()[:2] == b"\xff\xd8"
+
+
+# --- SPEC §6.4 Light source check (roadmap L35) ----------------------------------------------
+
+
+def rgb_sky(seed: int) -> np.ndarray:
+    g = sky(seed)
+    out = np.empty((H, W, 3), dtype=np.uint8)
+    out[:, :, :] = g[:, :, None]
+    return out
+
+
+def rgb_flash(seed: int, colour: tuple[int, int, int], x0: int = 50, x1: int = 600) -> np.ndarray:
+    out = rgb_sky(seed)
+    out[200:300, x0:x1] = colour
+    return out
+
+
+def gray_of(rgb: np.ndarray) -> np.ndarray:
+    return rgb.mean(axis=-1).astype(np.uint8)
+
+
+def run_rgb(frames: list[np.ndarray], mode: str = "label") -> list[LightningHit]:
+    from allskyhub_agent.detect.lightning import LightningConfig
+
+    det = LightningDetector(LightningConfig(light_source=mode))
+    hits: list[LightningHit] = []
+    for i, img in enumerate(frames):
+        f = frame(i)
+        hits += det.feed(f, gray_of(img), Path(f"/x/{i}.jpg"), img)
+    return hits
+
+
+def lamp_night(
+    colour: tuple[int, int, int], second_x: tuple[int, int] = (50, 600)
+) -> list[np.ndarray]:
+    return [rgb_sky(1), rgb_flash(2, colour), rgb_sky(3), rgb_sky(4),
+            rgb_flash(5, colour, *second_x), rgb_sky(6), rgb_sky(7)]  # fmt: skip
+
+
+def test_a_lamp_lighting_the_same_place_twice_is_a_light_source() -> None:
+    hits = run_rgb(lamp_night((200, 60, 160)))
+    assert [h.light_source for h in hits] == [False, True]
+    assert hits[1].also == (hits[0].seq,)  # the first one is the lamp too
+    assert hits[1].storm_flashes == 2  # "label" still counts it
+
+
+def test_bluish_white_flashes_at_the_same_place_stay_lightning() -> None:
+    # A distant storm lights the same sector again and again.
+    hits = run_rgb(lamp_night((160, 170, 200)))
+    assert [h.light_source for h in hits] == [False, False]
+
+
+def test_lamp_coloured_flashes_at_different_places_stay_lightning() -> None:
+    night = lamp_night((200, 60, 160), second_x=(50, 120))
+    night[1] = rgb_flash(2, (200, 60, 160), 500, 600)
+    hits = run_rgb(night)
+    assert [h.light_source for h in hits] == [False, False]
+
+
+def test_drop_leaves_the_lamp_out_of_the_storm() -> None:
+    hits = run_rgb(lamp_night((200, 60, 160)), mode="drop")
+    assert len(hits) == 1
+    assert hits[0].storm_flashes == 1
+    assert hits[0].light_source is False
+
+
+def test_off_does_not_check() -> None:
+    hits = run_rgb(lamp_night((200, 60, 160)), mode="off")
+    assert [h.light_source for h in hits] == [False, False]
+
+
+def test_worker_reports_the_lamp_before_and_after(tmp_path: Path) -> None:
+    # The second flash is labelled before it goes out, the first one after (SPEC §6.4).
+    store = ImageStore(tmp_path, ZoneInfo("Europe/Vienna"))
+    order: list[str] = []
+    worker = DetectionWorker(
+        store,
+        on_event=lambda e: order.append(f"event {e.id}"),
+        on_light_source=lambda e, sent: order.append(f"lamp {e.id} {sent}"),
+    )
+    for i, rgb in enumerate(lamp_night((200, 60, 160))):
+        stored = store.save(rgb, frame(i).captured_at)
+        f = frame(i).model_copy(update={"name": stored.name, "night_id": stored.night_id})
+        worker.process_frame(f, rgb)
+    first, second = "lightning-20260715T210100Z", "lightning-20260715T210400Z"
+    assert order == [f"event {first}", f"lamp {second} False", f"event {second}",
+                     f"lamp {first} True"]  # fmt: skip

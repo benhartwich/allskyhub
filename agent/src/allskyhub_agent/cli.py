@@ -18,6 +18,7 @@ import sys
 import threading
 import time
 from collections.abc import Callable, Mapping
+from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any, cast
@@ -1253,6 +1254,10 @@ def main(argv: list[str] | None = None) -> int:
             label = None  # a pass that grows: labelled with its first piece, or by the owner
         if label is not None:
             labels.set(label)
+        # SPEC §6.4 Light source check: labelled before the flash goes out.
+        if label is None and event.kind is EventKind.LIGHTNING:
+            lamp = labels.night(event.night_id).get(event.id)
+            label = lamp if lamp is not None and lamp.label == "false_positive" else None
         if adsb is not None:
             adsb.check_later(event)
         if mqtt is not None and label is None:  # false positives count nowhere
@@ -1261,6 +1266,21 @@ def main(argv: list[str] | None = None) -> int:
             hub.notify_event(event)
             if label is not None:
                 hub.notify_message(label)
+
+    def light_source_out(event: Event, sent: bool) -> None:
+        """SPEC §6.4 Light source check: an automatic label; a flash that went out before
+        it was found to be the lamp gets its label sent now."""
+        label = EventLabel(
+            night_id=event.night_id,
+            event_id=event.id,
+            label="false_positive",
+            reason="other",
+            auto=True,
+            detail="Lichtquelle in der Nähe",
+            at=datetime.now(UTC),
+        )
+        if labels.set(label) and sent and hub is not None:
+            hub.notify_message(label)
 
     if tuned.alpaca_enabled:
         alpaca_id = identity.device_id if identity is not None else "local"
@@ -1295,7 +1315,11 @@ def main(argv: list[str] | None = None) -> int:
         cfg=tuning.meteor_config(tuned.detect_meteor),
         mask_radius_frac=profile.image_circle_frac,
         events=event_store,
-        lightning_cfg=tuning.lightning_config(tuned.detect_lightning),
+        lightning_cfg=replace(
+            tuning.lightning_config(tuned.detect_lightning),
+            light_source=tuned.lightning_light_source,
+        ),
+        on_light_source=light_source_out,
         sky=sky_meter,
         aurora_cfg=tuning.aurora_config(tuned.detect_aurora),
         sky_mask=sky_mask,

@@ -498,6 +498,7 @@ class DetectionWorker:
         latitude: Callable[[], float | None] | None = None,
         enabled: Mapping[str, bool] | None = None,
         on_sky: Callable[[SkyMetrics], None] | None = None,
+        on_light_source: Callable[[Event, bool], None] | None = None,
     ) -> None:
         self._store = store
         self._on_sky = on_sky  # the Alpaca safety monitor (SPEC §7.5) sees every measurement
@@ -513,6 +514,10 @@ class DetectionWorker:
             location=self.events.location,
         )
         self._lightning = LightningDetector(lightning_cfg, mask, mask_radius_frac)
+        # SPEC §6.4 Light source check: flashes by their number, so an earlier one can be
+        # marked once a later one shows it was a lamp; only the current storm matters.
+        self._on_light_source = on_light_source
+        self._flash_events: dict[int, Event] = {}
         self._sky = sky
         self._aurora = AuroraDetector(
             aurora_cfg,
@@ -609,13 +614,25 @@ class DetectionWorker:
         for hit in hits:
             event = self.events.save_lightning(hit)
             log.info(
-                "lightning %s: %.1f %% of the sky, %d in the storm",
+                "lightning %s: %.1f %% of the sky, %d in the storm%s",
                 event.id,
                 100 * hit.flash.area_frac,
                 hit.storm_flashes,
+                ", a light source nearby" if hit.light_source else "",
             )
+            # The label of this flash is set before it goes out (false positives count
+            # nowhere, SPEC §6.4); earlier flashes found to be the lamp only now, after.
+            if self._on_light_source is not None and hit.light_source:
+                self._on_light_source(event, False)
             if self._on_event is not None:
                 self._on_event(event)
+            self._flash_events[hit.seq] = event
+            for old in [k for k in self._flash_events if k < hit.seq - 500]:
+                del self._flash_events[old]
+            if self._on_light_source is not None:
+                for e in [self._flash_events.get(s) for s in hit.also]:
+                    if e is not None:
+                        self._on_light_source(e, True)
 
     def _emit_aurora(self, updates: list[AuroraUpdate]) -> None:
         for u in updates:
@@ -666,7 +683,7 @@ class DetectionWorker:
         if self._on["meteor"]:
             self._emit(self._meteor.feed(job.frame, gray, job.path))
         if self._on["lightning"]:
-            self._emit_lightning(self._lightning.feed(job.frame, gray, job.path))
+            self._emit_lightning(self._lightning.feed(job.frame, gray, job.path, rgb))
         if self._on["aurora"]:
             self._emit_aurora(self._aurora.feed(job.frame, rgb, job.path, cloud))
         if self._nlc is not None:

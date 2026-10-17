@@ -85,9 +85,14 @@ def _altitude(ra: float, dec: float, t: dt.datetime, lat: float, lon: float) -> 
     return math.degrees(math.asin(_sin(lat) * _sin(dec) + _cos(lat) * _cos(dec) * _cos(ha)))
 
 
-def sun_altitude(t: dt.datetime, lat: float, lon: float) -> float:
+def sun_radec(t: dt.datetime) -> tuple[float, float]:
+    """Right ascension and declination of the sun (degrees, equinox of date)."""
     d = _days(t)
-    ra, dec = _equatorial(_sun_ecliptic(d), 0.0, d)
+    return _equatorial(_sun_ecliptic(d), 0.0, d)
+
+
+def sun_altitude(t: dt.datetime, lat: float, lon: float) -> float:
+    ra, dec = sun_radec(t)
     return _altitude(ra, dec, t, lat, lon)
 
 

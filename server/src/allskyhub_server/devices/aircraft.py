@@ -41,6 +41,8 @@ API = "https://api.adsb.lol/v2/point/{lat:.3f}/{lon:.3f}/{nm}"
 CREDIT = "Aircraft data: adsb.lol (ODbL)"
 FETCH_EVERY = dt.timedelta(seconds=10)
 DAY_EVERY = 3  # rounds: every 30 s by day, for the list only (SPEC §7.8 By day)
+# adsb.lol answering 429 or 5xx: wait twice as long each time, at most this (SPEC §7.8).
+MAX_BACKOFF = dt.timedelta(minutes=5)
 KEEP = dt.timedelta(minutes=15)
 RADIUS_KM = 150.0
 MAX_NM = 250  # adsb.lol's largest radius
@@ -443,21 +445,38 @@ def areas(cameras: list[tuple[str, float, float]]) -> list[Area]:
     ]
 
 
+def _throttled(exc: Exception) -> bool:
+    """adsb.lol asks us to slow down (429) or is struggling (5xx)."""
+    if not isinstance(exc, httpx.HTTPStatusError):
+        return False
+    code = exc.response.status_code
+    return code == 429 or code >= 500
+
+
 async def fetch_areas(
     tracks: Tracks, fetch: Fetch, wanted: list[tuple[str, float, float]], now: dt.datetime
-) -> None:
-    """One round: every area once; a failed request leaves its cameras uncovered."""
+) -> Literal["ok", "throttled", "failed"]:
+    """One round: every area once; a failed request leaves its cameras uncovered. After a
+    429 or 5xx the rest of the round is left out too: the limit is the hub's, not the
+    area's. "ok" when at least one request worked and none was throttled."""
+    worked = False
+    throttled = False
     for area in areas(wanted):
         try:
             body = await fetch(area.lat, area.lon, area.nm)
         except (httpx.HTTPError, ValueError) as exc:
             log.info("adsb.lol failed", extra={"error": str(exc)})
+            if _throttled(exc):
+                throttled = True
+                break
             continue
+        worked = True
         for hex_, fix in parse(body, now):
             tracks.add("adsb.lol", hex_, fix)
         for device_id in area.devices:
             tracks.covered(device_id, now)
     tracks.prune(now)
+    return "throttled" if throttled else "ok" if worked else "failed"
 
 
 def wants_aircraft(
@@ -548,6 +567,9 @@ class Watch:
         self._checked_new: dict[tuple[str, str], dt.datetime] = {}
         self._watched_until: dict[str, dt.datetime] = {}
         self._rounds = 0
+        # SPEC §7.8: no request before ``_paused_until`` after adsb.lol said 429 or 5xx.
+        self._backoff = dt.timedelta(0)
+        self._paused_until: dt.datetime | None = None
         self.passes = day_aircraft.Passes(maker)
         # Roadmap H6 (SPEC §7.9): set by the app; meteors are checked against both.
         self.satellites: SatelliteCatalogue | None = None
@@ -591,8 +613,14 @@ class Watch:
             where = place or (day if day_round else None)
             if where is not None:
                 wanted.append((device_id, *where))
-        if wanted:
-            await fetch_areas(self.tracks, self._fetch, wanted, now)
+        if wanted and (self._paused_until is None or now >= self._paused_until):
+            outcome = await fetch_areas(self.tracks, self._fetch, wanted, now)
+            if outcome == "throttled":
+                self._backoff = min(MAX_BACKOFF, max(self._backoff, FETCH_EVERY) * 2)
+                self._paused_until = now + self._backoff
+                log.warning("adsb.lol throttled", extra={"wait_s": self._backoff.seconds})
+            elif outcome == "ok":
+                self._backoff, self._paused_until = dt.timedelta(0), None
         if day_round:
             await self.passes.update(self.tracks, by_day, now)
 

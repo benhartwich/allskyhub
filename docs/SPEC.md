@@ -1178,8 +1178,11 @@ detections that are an aircraft are marked. Two sources:
   hub fetches the aircraft within 150 km of a camera every 10 s while that camera is
   online and has a location, and either it is night there (sun below −6°) with meteor
   detection not off, or someone watches its live image; cameras within 150 km of each
-  other share one request. The credit "Aircraft data: adsb.lol (ODbL)" is shown wherever
-  aircraft are drawn.
+  other share one request. If adsb.lol answers 429 or a server error (5xx), the hub waits
+  twice as long before the next request (20 s, 40 s, … at most 5 minutes) and goes back
+  to the normal pace after the first answer that works (Benjamin, 2026-10-18); positions
+  missing in that time leave meteors unchecked and passes by day unrecorded. The credit
+  "Aircraft data: adsb.lol (ODbL)" is shown wherever aircraft are drawn.
 - **the owner's receiver** (agent, optional): setting `adsb_url`, empty = off, the URL of a
   readsb, dump1090-fa or tar1090 `aircraft.json` on the local network (for example
   `http://192.168.1.40/tar1090/data/aircraft.json`). The agent reads it every 5 s, keeps

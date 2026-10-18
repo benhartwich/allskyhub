@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import datetime as dt
+import itertools
 from typing import Any
 from zoneinfo import ZoneInfo
 
@@ -197,3 +198,34 @@ async def test_pages(app: FastAPI, client: httpx.AsyncClient) -> None:
         device = await db.get(Device, device_id)
         assert device is not None
         assert device.day_aircraft is False
+
+
+async def test_backs_off_while_adsb_lol_throttles(
+    app: FastAPI, client: httpx.AsyncClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """SPEC §7.8: after 429 or 5xx the wait doubles up to 5 minutes, then back to 10 s."""
+    camera = await _camera(app, client, day_aircraft=True)
+    answers = [429, 503, 429, 200]
+    asked: list[dt.datetime] = []
+    now = NOON
+
+    async def fetch(lat: float, lon: float, nm: int) -> dict[str, Any]:
+        asked.append(now)
+        code = answers.pop(0) if answers else 200
+        if code != 200:
+            request = httpx.Request("GET", "https://api.adsb.lol/")
+            raise httpx.HTTPStatusError("busy", request=request, response=httpx.Response(code))
+        return {"now": now.timestamp() * 1000, "ac": []}
+
+    watch = aircraft.Watch(app.state.sessionmaker, app.state.connections, fetch)
+    monkeypatch.setattr(app.state.connections, "online_ids", lambda: [camera])
+
+    def watched(device_id: str, at: dt.datetime) -> bool:
+        return True
+
+    monkeypatch.setattr(watch, "_is_watched", watched)
+    while now < NOON + dt.timedelta(seconds=180):
+        await watch.round(now)
+        now += dt.timedelta(seconds=10)
+    waits = [int((b - a).total_seconds()) for a, b in itertools.pairwise(asked)]
+    assert waits[:4] == [20, 40, 80, 10]

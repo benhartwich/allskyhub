@@ -18,7 +18,7 @@ from allskyhub_server import maintenance
 from allskyhub_server.devices import events
 from allskyhub_server.devices.images import ImageStore, jpeg_size
 from allskyhub_server.devices.night_summary import summarize
-from allskyhub_server.models import EventRecord
+from allskyhub_server.models import AircraftPass, EventRecord
 from allskyhub_server.settings import Settings
 from tests.fake_device import FakeDevice
 from tests.ws_helpers import JPEG, device_ws, next_command, paired_token, send
@@ -193,8 +193,26 @@ async def test_overflight_page_and_summary(
                                   "end_altitude_deg": 40.0}))  # fmt: skip
         await send(ws, _event(9, {"trail": "dashed"}))
         await _requests(ws)
+    top = START - dt.timedelta(hours=6)
+    async with app.state.sessionmaker() as db:
+        db.add_all(
+            AircraftPass(
+                device_id=dev.device_id, night_id=NIGHT, icao=f"3c64{i:02x}", callsign=f"DLH{i}",
+                registration="D-AIUA", type_code="A320", start=top + dt.timedelta(minutes=i),
+                end=top + dt.timedelta(minutes=i, seconds=40), top_at=top, top_alt_deg=60.0,
+                top_az_deg=90.0, start_alt_deg=21.0, start_az_deg=2.0, end_alt_deg=22.0,
+                end_az_deg=181.0, alt_m=10_000, min_km=5.0,
+            )
+            for i in range(12)
+        )  # fmt: skip
+        await db.commit()
     page = await client.get(f"/cameras/{dev.device_id}/ueberfluege")
     assert page.status_code == 200
+    # The night's map and list come first, the long day list after them; both lists can be
+    # searched and folded (Benjamin, 2026-10-19).
+    assert page.text.index("ovf-map") < page.text.index('id="am-tag"')
+    assert page.text.count("data-long-list") == 2
+    assert 'data-search="D-AIUA 3c6400"' in page.text
     assert "2 Überflüge: 2 unbekannt" in page.text
     assert "N 20° → O 40°" in page.text
     async with app.state.sessionmaker() as db:

@@ -1,6 +1,7 @@
 // The night's overflights on the sky map (roadmap L29): play the night like a timelapse,
-// filter by kind, pick a track or a row to see its picture. Without JavaScript the map
-// shows every track and the list links to each event.
+// filter by kind, pick a track or a row to see its picture. Lists longer than LONG rows get
+// a search field and show the first LONG rows until "Alle zeigen" (Benjamin, 2026-10-19).
+// Without JavaScript the map shows every track and the lists show every row.
 (function () {
   "use strict";
   const root = document.querySelector("[data-ovf]");
@@ -32,6 +33,7 @@
       g.classList.toggle("old", now !== null && !off && Number(g.dataset.end) < now - RECENT);
     }
     for (const r of rows) r.toggleAttribute("hidden", hidden.has(r.dataset.group));
+    document.dispatchEvent(new Event("ovf:rows"));
     if (skies.length) {
       const t = now ?? Number(skies[Math.floor(skies.length / 2)].dataset.at);
       let best = skies[0];
@@ -49,6 +51,7 @@
 
   function open(row) {
     selected = row;
+    row.classList.remove("cut");
     for (const r of rows) r.classList.toggle("on", r === row);
     select(row.dataset.i);
     if (root) show();
@@ -94,6 +97,49 @@
       if (root) show();
     });
   }
+  const LONG = 10;
+  for (const table of document.querySelectorAll("[data-long-list]")) {
+    const all = Array.from(table.tBodies[0].rows);
+    if (all.length <= LONG) continue;
+    const box = table.closest(".table-scroll") || table;
+    const search = document.createElement("input");
+    search.type = "search";
+    search.className = "list-search";
+    search.placeholder = "Suchen: Name, Rufzeichen, Typ, Richtung";
+    search.setAttribute("aria-label", "Liste durchsuchen");
+    search.autocomplete = "off";
+    const none = document.createElement("p");
+    none.className = "muted small";
+    none.textContent = "Nichts gefunden.";
+    const more = document.createElement("button");
+    more.type = "button";
+    more.className = "secondary small";
+    box.before(search);
+    box.after(none, more);
+    let full = false;
+    const apply = () => {
+      const q = search.value.trim().toLowerCase();
+      let shown = 0;
+      for (const r of all) {
+        const text = (r.textContent + " " + (r.dataset.search || "")).toLowerCase();
+        const hit = !q || text.includes(q);
+        r.classList.toggle("miss", !hit);
+        if (hit && !r.hidden) shown += 1;
+        r.classList.toggle("cut", !q && !full && shown > LONG && r !== selected);
+      }
+      none.hidden = !q || shown > 0;
+      more.hidden = Boolean(q) || shown <= LONG;
+      more.textContent = full ? "Weniger zeigen" : `Alle ${shown} zeigen`;
+    };
+    search.addEventListener("input", apply);
+    more.addEventListener("click", () => {
+      full = !full;
+      apply();
+    });
+    document.addEventListener("ovf:rows", apply);
+    apply();
+  }
+
   if (!root) return;
 
   for (const box of root.querySelectorAll("[data-ovf-group]")) {

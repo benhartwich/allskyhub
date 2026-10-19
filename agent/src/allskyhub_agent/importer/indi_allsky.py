@@ -139,7 +139,8 @@ class IndiAllskySettings:
     owner: str
     lens: str
     image_folder: Path
-    days_to_keep: int | None = None
+    days_to_keep: int | None = None  # its images
+    product_days_to_keep: int | None = None  # its timelapses and keograms
 
     @classmethod
     def load(cls, db: Path, camera_id: int | None = None) -> IndiAllskySettings:
@@ -168,12 +169,12 @@ class IndiAllskySettings:
         angle = _num(config.get("NIGHT_SUN_ALT_DEG"))
         name = str(cam.get("name") or "")
         profile = next((p for k, p in _CAMERAS.items() if k in name.upper()), None)
-        # Images and products have their own retention: keep whichever is longer.
-        keep = [
-            int(v)
-            for v in (config.get("IMAGE_EXPIRE_DAYS"), config.get("TIMELAPSE_EXPIRE_DAYS"))
-            if isinstance(v, int | float) and not isinstance(v, bool) and v > 0
-        ]
+
+        # Images and products have their own retention, like ours (SPEC §4.5).
+        def days(v: object) -> int | None:
+            ok = isinstance(v, int | float) and not isinstance(v, bool) and v > 0
+            return int(cast(float, v)) if ok else None
+
         folder = config.get("IMAGE_FOLDER")
         return cls(
             latitude=lat,
@@ -185,7 +186,8 @@ class IndiAllskySettings:
             owner=str(config.get("OWNER") or cam.get("owner") or ""),
             lens=str(config.get("LENS_NAME") or cam.get("lensName") or ""),
             image_folder=Path(folder) if isinstance(folder, str) and folder else DEFAULT_IMAGES,
-            days_to_keep=max(keep) if keep else None,
+            days_to_keep=days(config.get("IMAGE_EXPIRE_DAYS")),
+            product_days_to_keep=days(config.get("TIMELAPSE_EXPIRE_DAYS")),
         )
 
 

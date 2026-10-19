@@ -7,6 +7,7 @@ from zoneinfo import ZoneInfo
 import numpy as np
 
 from allskyhub_agent.store.images import ImageStore, night_id
+from allskyhub_protocol import FrameInfo, Mode
 
 TZ = ZoneInfo("Europe/Vienna")
 
@@ -42,6 +43,39 @@ def test_cleanup_removes_old_nights_only(tmp_path: Path) -> None:
         "20261006",
         "keep-me",
     ]
+
+
+def test_cleanup_keeps_products_longer_than_frames(tmp_path: Path) -> None:
+    """SPEC §4.5: after keep_days only the frames go; after keep_product_days the night."""
+    store = ImageStore(tmp_path, TZ)
+    img = np.zeros((360, 640, 3), dtype=np.uint8)
+    kept = ("timelapse.mp4", "keogram.jpg", "products.json", "sky.jsonl", "events.jsonl")
+    for day in (10, 20, 30):
+        at = datetime(2026, 9, day, 20, 0, tzinfo=UTC)
+        s = store.save(img, at)
+        store.append_index(FrameInfo(night_id=s.night_id, name=s.path.name, captured_at=at,
+                                     mode=Mode.NIGHT, exposure_us=1, gain=0, mean=0.1,
+                                     sun_elevation=-20, profile="sim"))  # fmt: skip
+        folder = store.night_dir(s.night_id)
+        for name in kept:
+            (folder / name).write_bytes(b"x")
+        (folder / "thumbnails" / "keogram.jpg").write_bytes(b"x")
+        (folder / "events").mkdir()
+    removed = store.cleanup(datetime(2026, 10, 6, 20, 0, tzinfo=UTC), 10, 20)
+    assert removed == ["20260910"]
+    for night in ("20260920", "20260930"):
+        folder = store.night_dir(night)
+        names = sorted(p.name for p in folder.iterdir())
+        thumbs = sorted(p.name for p in (folder / "thumbnails").iterdir())
+        if night == "20260920":  # older than 10 days: the frames are gone
+            assert names == sorted([*kept, "events", "thumbnails"])
+            assert thumbs == ["keogram.jpg"]
+        else:
+            assert "frames.jsonl" in names
+            assert len(thumbs) == 2
+    # Again: nothing more to do, and keep_days alone still works as before.
+    assert store.cleanup(datetime(2026, 10, 6, 20, 0, tzinfo=UTC), 10, 20) == []
+    assert store.cleanup(datetime(2026, 10, 6, 20, 0, tzinfo=UTC), 10) == ["20260920"]
 
 
 def test_ensure_free_removes_oldest_nights_but_never_the_current(tmp_path: Path) -> None:

@@ -180,7 +180,7 @@ def test_settings_from_the_newest_config(tmp_path: Path) -> None:
         "2.5 mm",
     )
     assert s.image_folder == images
-    assert s.days_to_keep == 365  # timelapses are kept longer than images
+    assert (s.days_to_keep, s.product_days_to_keep) == (30, 365)  # images, timelapses
     assert [(c.id, c.images) for c in cameras(db)] == [(1, 5)]
 
 
@@ -290,7 +290,9 @@ def test_cli_saves_location_retention_and_backlog(tmp_path: Path) -> None:
     assert run_import_indi(args) == 0
     s = AgentSettings.load(args.settings)
     assert (s.latitude, s.longitude) == (50.03601, 10.38951)
-    assert s.keep_days >= 365  # SPEC §4.5: at least indi-allsky's retention
+    # SPEC §4.5: at least indi-allsky's retention, its images and products apart.
+    assert s.keep_days >= 30
+    assert s.keep_product_days >= 365
     backlog = Backlog(args.data / BACKLOG_NAME)
     assert backlog.next() == "20261010"  # SPEC §6.7: announced to the hub
 

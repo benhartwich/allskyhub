@@ -182,17 +182,34 @@ class ImageStore:
             removed.append(d.name)
         return removed
 
-    def cleanup(self, now: datetime, keep_days: int) -> list[str]:
-        """Delete night folders older than `keep_days`; returns the removed night ids."""
-        oldest = night_id(now, self._tz)
-        cutoff = (datetime.strptime(oldest, "%Y%m%d") - timedelta(days=keep_days)).strftime(  # noqa: DTZ007
-            "%Y%m%d"
-        )
+    def cleanup(
+        self, now: datetime, keep_days: int, keep_product_days: int | None = None
+    ) -> list[str]:
+        """Retention by days (SPEC §4.5). Nights older than `keep_product_days` are deleted;
+        older than `keep_days` they lose their frames but keep the night and day products,
+        detections and sky data. Returns the night ids deleted as a whole."""
+        today = datetime.strptime(night_id(now, self._tz), "%Y%m%d")  # noqa: DTZ007
+        keep_all = max(keep_days, keep_product_days or keep_days)
+        frames_cutoff = (today - timedelta(days=keep_days)).strftime("%Y%m%d")
+        cutoff = (today - timedelta(days=keep_all)).strftime("%Y%m%d")
         removed: list[str] = []
         if not self._images.is_dir():
             return removed
         for d in sorted(self._images.iterdir()):
-            if d.is_dir() and len(d.name) == 8 and d.name.isdigit() and d.name < cutoff:
+            if not (d.is_dir() and len(d.name) == 8 and d.name.isdigit()):
+                continue
+            if d.name < cutoff:
                 shutil.rmtree(d)
                 removed.append(d.name)
+            elif d.name < frames_cutoff:
+                self._drop_frames(d.name)
         return removed
+
+    def _drop_frames(self, night: str) -> None:
+        """The frames of a night, their thumbnails and their index; nothing else."""
+        index = self._images / night / INDEX_NAME
+        if not index.is_file():
+            return  # done before
+        for f in self.read_index(night):
+            self.remove(night, f.name)
+        index.unlink(missing_ok=True)

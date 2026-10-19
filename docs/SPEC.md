@@ -655,7 +655,9 @@ under "Überflüge", apart from the meteors and from "Aussortierte", grouped as 
 Flugzeuge and Unbekannt: time (`start`–`end`), path across the sky from `start_*` to
 `end_*` as compass points and altitudes (if known), picture and original frame, and the
 name from the label's `detail` (a satellite's name and NORAD number, an aircraft's call
-sign). The night's summary counts them ("23 Überflüge: 6 Satelliten, 3 Flugzeuge,
+sign). On the hub a list longer than 10 rows gets a search field (name, call sign, type,
+direction) and shows its first 10 rows until "Alle zeigen" (Benjamin, 2026-10-19); the
+same holds for "Am Tag" (§7.8). The night's summary counts them ("23 Überflüge: 6 Satelliten, 3 Flugzeuge,
 14 unbekannt"); they still count nowhere as meteors. The camera shows the names it got
 from the hub with `label_event`; without the hub only its own verdicts. Overflights are
 found by the meteor detector and therefore only at night.
@@ -1247,8 +1249,8 @@ not change.
 - *Which day.* A pass belongs to the local date it starts on and is stored under that
   date's evening night id, like the day products (§5.2): it is shown with that day's
   timelapse. Passes are deleted with the night's other data on the hub.
-- *Shown* on the hub's "Überflüge" page of that night id, in a section "Am Tag" before the
-  night's overflights: time, call sign (linked to adsb.lol's map of that aircraft at that
+- *Shown* on the hub's "Überflüge" page of that night id, in a section "Am Tag" after the
+  night's map and list (Benjamin, 2026-10-19): time, call sign (linked to adsb.lol's map of that aircraft at that
   time), type, highest point as compass point and altitude, closest distance, flight
   altitude. If the hub has the camera's frame nearest the highest point in its frame index
   (§5.1), a click shows it, fetched with `upload_frame` when first opened, with the

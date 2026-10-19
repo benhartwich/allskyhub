@@ -470,5 +470,7 @@ pre code { white-space: pre; }
 .ovf-list tbody tr { cursor: pointer; }
 .ovf-list tbody tr.on { background: var(--surface-2); }
 table.stats.ovf-list th, table.stats.ovf-list td { text-align: left; }
+[data-long-list] tr.cut, [data-long-list] tr.miss { display: none; }
+.list-search { max-width: 420px; }
 .voucher { border-color: var(--accent); }
 .voucher-code code { font-size: 1.05em; padding: 1px 6px; border-radius: 6px; background: var(--surface-2); }

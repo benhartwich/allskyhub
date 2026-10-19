@@ -1250,7 +1250,9 @@ not change.
   date's evening night id, like the day products (§5.2): it is shown with that day's
   timelapse. Passes are deleted with the night's other data on the hub.
 - *Shown* on the hub's "Überflüge" page of that night id, in a section "Am Tag" after the
-  night's map and list (Benjamin, 2026-10-19): time, call sign (linked to adsb.lol's map of that aircraft at that
+  night's map and list (Benjamin, 2026-10-19), with a sky map of its own like the night's
+  (each pass a line from its start through its highest point to its end, played over the
+  day, no constellations; Benjamin, 2026-10-19) and a list: time, call sign (linked to adsb.lol's map of that aircraft at that
   time), type, highest point as compass point and altitude, closest distance, flight
   altitude. If the hub has the camera's frame nearest the highest point in its frame index
   (§5.1), a click shows it, fetched with `upload_frame` when first opened, with the

@@ -300,6 +300,8 @@ async def overflights(
             "older": older[0] if older else None,
             "tracks": tracks,
             "mapped": [t for t in tracks if t.path],
+            "night_lines": overflight_map.lines([t for t in tracks if t.path]),
+            "day_lines": overflight_map.day_lines(day_passes),
             "skies": skies,
             "group_titles": MAP_GROUPS,
             "one": OVERFLIGHT_TITLES,

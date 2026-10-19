@@ -5,7 +5,8 @@ A polar map of the whole sky as seen looking up: the zenith in the middle, the h
 the circle, north at the top and east on the left. Each overflight is a line along the
 great circle from its start to its end, drawn in SVG on the hub; ``overflights.js`` plays
 the night like a timelapse. Constellations come from ``allskyhub_sky`` once an hour, so
-they turn with the sky as the night goes on.
+they turn with the sky as the night goes on. The aircraft by day (SPEC §7.8 By day) get a
+map of their own, without constellations (Benjamin, 2026-10-19).
 """
 
 from __future__ import annotations
@@ -13,12 +14,15 @@ from __future__ import annotations
 import datetime as dt
 import math
 from dataclasses import dataclass
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from allskyhub_server.devices import events
 from allskyhub_server.devices.event_text import shower_name
 from allskyhub_server.models import EventRecord
 from allskyhub_sky import sky_lines
+
+if TYPE_CHECKING:
+    from allskyhub_server.models import AircraftPass
 
 SIZE = 440
 CENTRE = SIZE / 2
@@ -83,6 +87,41 @@ class Track:
     path: str | None  # SVG path on the map, None without an orientation
     head: tuple[float, float] | None  # where it ended, for the arrow dot
     text: str | None  # "NW 15° → SO 31°"
+
+
+@dataclass(frozen=True)
+class Line:
+    """One line on a map, the same for the night's tracks and the passes by day."""
+
+    group: str
+    start: dt.datetime
+    end: dt.datetime
+    name: str | None
+    path: str
+    head: tuple[float, float]
+
+
+def lines(mapped: list[Track]) -> list[Line]:
+    """The night's tracks that have a path, in the same order."""
+    return [
+        Line(t.group, t.event.start, t.event.end, t.name, t.path, t.head)
+        for t in mapped
+        if t.path is not None and t.head is not None
+    ]
+
+
+def day_lines(passes: list[AircraftPass]) -> list[Line]:
+    """SPEC §7.8 By day: each pass from its start through its highest point to its end."""
+    out: list[Line] = []
+    for p in passes:
+        start = (p.start_alt_deg, p.start_az_deg)
+        top = (p.top_alt_deg, p.top_az_deg)
+        end = (p.end_alt_deg, p.end_az_deg)
+        points = great_circle(start, top, STEPS // 2) + great_circle(top, end, STEPS // 2)[1:]
+        out.append(
+            Line("aircraft", p.start, p.end, p.callsign or p.icao.upper(), _path(points), xy(*end))
+        )
+    return out
 
 
 @dataclass(frozen=True)

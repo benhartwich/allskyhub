@@ -1,6 +1,54 @@
 {% extends "base.html" %}
 {% block title %}Überflüge · {{ device.name }} · allskyhub{% endblock %}
 {% block head %}<script src="{{ asset('overflights.js') }}" defer></script>{% endblock %}
+{% macro sky_map(key, lines, skies, legend, label, time_label, play_text) %}
+<section class="card stack ovf" data-ovf="{{ key }}" data-zone="{{ zone }}">
+  {% if legend %}
+  <div class="ovf-legend" role="group" aria-label="Anzeigen">
+    {% for group, title in group_titles.items() %}
+    <label class="check ovf-key {{ group }}"><input type="checkbox" data-ovf-group="{{ group }}" checked> {{ title }}</label>
+    {% endfor %}
+  </div>
+  {% endif %}
+  <svg class="ovf-map" viewBox="0 0 {{ map.SIZE }} {{ map.SIZE }}" role="img" aria-label="{{ label }}">
+    <circle class="ovf-sky" cx="{{ map.CENTRE }}" cy="{{ map.CENTRE }}" r="{{ map.RADIUS }}"/>
+    {% for alt, r in map.rings() %}<circle class="ovf-ring" cx="{{ map.CENTRE }}" cy="{{ map.CENTRE }}" r="{{ r }}"/>{% endfor %}
+    <path class="ovf-ring" d="M{{ map.CENTRE }} {{ map.CENTRE - map.RADIUS }} V{{ map.CENTRE + map.RADIUS }} M{{ map.CENTRE - map.RADIUS }} {{ map.CENTRE }} H{{ map.CENTRE + map.RADIUS }}"/>
+    {% for sky in skies %}
+    <g class="ovf-stars" data-at="{{ sky.at.timestamp() | int }}"{% if not loop.first %} hidden{% endif %}>
+      {% for d in sky.lines %}<path d="{{ d }}"/>{% endfor %}
+      {% for name, x, y in sky.names %}<text x="{{ x }}" y="{{ y }}">{{ name }}</text>{% endfor %}
+    </g>
+    {% endfor %}
+    {% for name, x, y in map.compass() %}<text class="ovf-compass" x="{{ x }}" y="{{ y }}">{{ name }}</text>{% endfor %}
+    {% for l in lines %}
+    <g class="ovf-track {{ l.group }}" data-i="{{ loop.index0 }}" data-group="{{ l.group }}" data-start="{{ l.start.timestamp() | int }}" data-end="{{ l.end.timestamp() | int }}" tabindex="0">
+      <title>{{ l.start | clock }} {{ one[l.group] }}{% if l.name %}: {{ l.name }}{% endif %}</title>
+      <path class="ovf-hit" d="{{ l.path }}"/>
+      <path class="ovf-line" d="{{ l.path }}"/>
+      <circle class="ovf-head" cx="{{ l.head[0] }}" cy="{{ l.head[1] }}" r="3"/>
+    </g>
+    {% endfor %}
+  </svg>
+  <div class="ovf-player" hidden>
+    <button type="button" class="secondary small" data-ovf-play aria-label="Abspielen">▶</button>
+    <input type="range" data-ovf-time aria-label="{{ time_label }}" min="{{ lines[0].start.timestamp() | int }}" max="{{ (lines | map(attribute='end') | max).timestamp() | int }}" step="60">
+    <output data-ovf-clock>alle</output>
+    <button type="button" class="secondary small" data-ovf-all>Alle</button>
+  </div>
+  <p class="muted small">Mitte: Zenit, Rand: Horizont, Norden oben, Osten links (wie beim Blick nach oben). Linien laufen vom Anfang zum Punkt am Ende. {{ play_text }}</p>
+</section>
+{% endmacro %}
+
+{% macro detail(key, link_text) %}
+<section class="card stack ovf-detail" data-ovf-detail="{{ key }}" hidden>
+  <div class="cam-meta"><h2 data-ovf-title></h2><button type="button" class="secondary small" data-ovf-close aria-label="Schließen">✕</button></div>
+  <img class="product-image" data-ovf-img alt="" hidden>
+  <p data-ovf-text></p>
+  <p><a class="button small" data-ovf-link href="#">{{ link_text }}</a></p>
+</section>
+{% endmacro %}
+
 {% block content %}
 <a class="back" href="/cameras/{{ device.id }}">← {{ device.name }}</a>
 <div class="page-head">
@@ -17,52 +65,14 @@
 {% if tracks %}
 <p><strong>{{ count or "Keine Überflüge" }}</strong>{% if meteor_count %} · {{ meteor_count }} {{ "Meteor" if meteor_count == 1 else "Meteore" }} zum Vergleich{% endif %}{% if mapped | length < tracks | length %} <span class="muted small">· {{ tracks | length - mapped | length }} ohne Himmelsrichtung, nur in der Liste</span>{% endif %}</p>
 
-{% if mapped %}
-<section class="card stack ovf" data-ovf data-zone="{{ zone }}">
-  <div class="ovf-legend" role="group" aria-label="Anzeigen">
-    {% for key, title in group_titles.items() %}
-    <label class="check ovf-key {{ key }}"><input type="checkbox" data-ovf-group="{{ key }}" checked> {{ title }}</label>
-    {% endfor %}
-  </div>
-  <svg class="ovf-map" viewBox="0 0 {{ map.SIZE }} {{ map.SIZE }}" role="img" aria-label="Himmelskarte der Nacht: Mitte ist der Zenit, Rand der Horizont, Norden oben">
-    <circle class="ovf-sky" cx="{{ map.CENTRE }}" cy="{{ map.CENTRE }}" r="{{ map.RADIUS }}"/>
-    {% for alt, r in map.rings() %}<circle class="ovf-ring" cx="{{ map.CENTRE }}" cy="{{ map.CENTRE }}" r="{{ r }}"/>{% endfor %}
-    <path class="ovf-ring" d="M{{ map.CENTRE }} {{ map.CENTRE - map.RADIUS }} V{{ map.CENTRE + map.RADIUS }} M{{ map.CENTRE - map.RADIUS }} {{ map.CENTRE }} H{{ map.CENTRE + map.RADIUS }}"/>
-    {% for sky in skies %}
-    <g class="ovf-stars" data-at="{{ sky.at.timestamp() | int }}"{% if not loop.first %} hidden{% endif %}>
-      {% for d in sky.lines %}<path d="{{ d }}"/>{% endfor %}
-      {% for name, x, y in sky.names %}<text x="{{ x }}" y="{{ y }}">{{ name }}</text>{% endfor %}
-    </g>
-    {% endfor %}
-    {% for name, x, y in map.compass() %}<text class="ovf-compass" x="{{ x }}" y="{{ y }}">{{ name }}</text>{% endfor %}
-    {% for t in mapped %}
-    <g class="ovf-track {{ t.group }}" data-i="{{ loop.index0 }}" data-group="{{ t.group }}" data-start="{{ t.event.start.timestamp() | int }}" data-end="{{ t.event.end.timestamp() | int }}" tabindex="0">
-      <title>{{ t.event.start | clock }} {{ one[t.group] }}{% if t.name %}: {{ t.name }}{% endif %}</title>
-      <path class="ovf-hit" d="{{ t.path }}"/>
-      <path class="ovf-line" d="{{ t.path }}"/>
-      <circle class="ovf-head" cx="{{ t.head[0] }}" cy="{{ t.head[1] }}" r="3"/>
-    </g>
-    {% endfor %}
-  </svg>
-  <div class="ovf-player" hidden>
-    <button type="button" class="secondary small" data-ovf-play aria-label="Abspielen">▶</button>
-    <input type="range" data-ovf-time aria-label="Zeit in der Nacht" min="{{ mapped[0].event.start.timestamp() | int }}" max="{{ (mapped | map(attribute='event.end') | max).timestamp() | int }}" step="60">
-    <output data-ovf-clock>alle</output>
-    <button type="button" class="secondary small" data-ovf-all>Alle</button>
-  </div>
-  <p class="muted small">Mitte: Zenit, Rand: Horizont, Norden oben, Osten links (wie beim Blick nach oben). Linien laufen vom Anfang zum Punkt am Ende. „▶“ spielt die Nacht ab: die letzten 20 Minuten hell, davor blass.</p>
-</section>
+{% if night_lines %}
+{{ sky_map("night", night_lines, skies, true, "Himmelskarte der Nacht: Mitte ist der Zenit, Rand der Horizont, Norden oben", "Zeit in der Nacht", "„▶“ spielt die Nacht ab: die letzten 20 Minuten hell, davor blass.") }}
 {% endif %}
 
-<section class="card stack" id="ovf-detail" hidden>
-  <div class="cam-meta"><h2 data-ovf-title></h2><button type="button" class="secondary small" data-ovf-close aria-label="Schließen">✕</button></div>
-  <img class="product-image" data-ovf-img alt="" hidden>
-  <p data-ovf-text></p>
-  <p><a class="button small" data-ovf-link href="#">Ereignis öffnen</a></p>
-</section>
+{{ detail("night", "Ereignis öffnen") }}
 
 <section class="card">
-  <div class="table-scroll"><table class="stats ovf-list" data-long-list>
+  <div class="table-scroll"><table class="stats ovf-list" data-long-list data-ovf-rows="night">
     <thead><tr><th>Zeit</th><th>Art</th><th>Name</th><th>Bahn</th></tr></thead>
     <tbody>
     {% for t in tracks %}
@@ -88,11 +98,18 @@
 <section class="card stack" id="am-tag">
   <h2>Am Tag: {{ day_passes | length }} {{ "Flugzeug" if day_passes | length == 1 else "Flugzeuge" }}</h2>
   <p class="muted small">Flugzeuge, die mindestens 20° über dem Horizont vorbeiflogen, aus ihren ADS-B-Positionen, nicht aus den Bildern.</p>
-  <div class="table-scroll"><table class="stats" data-long-list>
+</section>
+{{ sky_map("day", day_lines, [], false, "Himmelskarte des Tages: Mitte ist der Zenit, Rand der Horizont, Norden oben", "Zeit am Tag", "Jede Linie läuft über den höchsten Punkt. „▶“ spielt den Tag ab: die letzten 20 Minuten hell, davor blass.") }}
+{{ detail("day", "Bild ansehen") }}
+<section class="card stack">
+  <div class="table-scroll"><table class="stats ovf-list" data-long-list data-ovf-rows="day">
     <thead><tr><th>Zeit</th><th>Flug</th><th>Typ</th><th>Höchster Punkt</th><th>Abstand</th><th>Flughöhe</th></tr></thead>
     <tbody>
     {% for p in day_passes %}
-    <tr data-search="{{ p.registration or '' }} {{ p.icao }}">
+    <tr class="ovf-row aircraft" data-group="aircraft" data-i="{{ loop.index0 }}" data-search="{{ p.registration or '' }} {{ p.icao }}"
+        data-title="{{ p.callsign or p.icao | upper }}{% if p.type_code %} · {{ p.type_code }}{% endif %} · {{ p.start | clock }}–{{ p.end | clock }}"
+        data-text="höchster Punkt {{ p.top_alt_deg | round | int }}° {{ p.top_az_deg | compass }} · {{ "%.0f" | format(p.min_km) }} km entfernt{% if p.registration %} · {{ p.registration }}{% endif %}"
+        data-link="/cameras/{{ device.id }}/flugzeuge/{{ p.id }}" data-img="">
       <td><a href="/cameras/{{ device.id }}/flugzeuge/{{ p.id }}">{{ p.start | clock }}</a></td>
       <td><a href="{{ adsb_link(p) }}" rel="noopener">{{ p.callsign or p.icao | upper }}</a></td>
       <td>{{ p.type_code or '–' }}</td>

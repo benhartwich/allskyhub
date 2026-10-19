@@ -221,7 +221,9 @@ async def test_overflight_page_and_summary(
     assert summary.overflights == "2 Überflüge: 2 unbekannt"
     assert "2 Überflüge" in summary.line()
     # On the map: the oriented one as a track, the other only in the list.
-    assert page.text.count('class="ovf-track') == 1
+    night_part, day_part = page.text.split('data-ovf="day"')
+    assert night_part.count('class="ovf-track') == 1
+    assert day_part.count('class="ovf-track aircraft"') == 12  # the day's map of its own
     # The possible meteor is there too, as its own kind, for comparison.
     assert "1 Meteor zum Vergleich" in page.text
     assert 'data-ovf-group="meteor"' in page.text

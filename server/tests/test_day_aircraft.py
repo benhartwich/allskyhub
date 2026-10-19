@@ -13,7 +13,7 @@ from fastapi import FastAPI
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
-from allskyhub_server.devices import aircraft, day_aircraft
+from allskyhub_server.devices import aircraft, day_aircraft, overflight_map
 from allskyhub_server.devices.aircraft import Fix, Tracks
 from allskyhub_server.models import AircraftPass, Device, Frame
 from tests.fake_device import FakeDevice
@@ -177,6 +177,10 @@ async def test_pages(app: FastAPI, client: httpx.AsyncClient) -> None:
     assert f"/cameras/{device_id}/flugzeuge/{pass_id}" in page
     assert "84° O" in page
     assert "Aircraft data: adsb.lol (ODbL)" in page
+    # On a map of its own (Benjamin, 2026-10-19), linked to its row.
+    assert 'data-ovf="day"' in page
+    assert page.count('class="ovf-track aircraft"') == 1
+    assert 'data-ovf-rows="day"' in page
     # A day without meteors is still in the list of nights.
     assert "Keine Überflüge und Meteore" not in page
 
@@ -229,3 +233,17 @@ async def test_backs_off_while_adsb_lol_throttles(
         now += dt.timedelta(seconds=10)
     waits = [int((b - a).total_seconds()) for a, b in itertools.pairwise(asked)]
     assert waits[:4] == [20, 40, 80, 10]
+
+
+def test_day_line_runs_through_the_top() -> None:
+    found = AircraftPass(
+        icao="3c6444", callsign=None, start=NOON, end=NOON + dt.timedelta(minutes=3),
+        start_alt_deg=20.0, start_az_deg=0.0, top_alt_deg=89.0, top_az_deg=90.0,
+        end_alt_deg=20.0, end_az_deg=180.0,
+    )  # fmt: skip
+    [line] = overflight_map.day_lines([found])
+    assert line.name == "3C6444"
+    assert line.head == overflight_map.xy(20.0, 180.0)
+    x, y = overflight_map.xy(89.0, 90.0)
+    assert f"{x} {y}" in line.path  # the highest point is one of its points
+    assert line.path.startswith("M" + " ".join(map(str, overflight_map.xy(20.0, 0.0))))

@@ -133,9 +133,14 @@ the hub treats frames from a device with `time_trusted: false` as possibly misda
 Frames are stored as JPEG under `<data>/images/<night-id>/` with a thumbnail. The
 *night id* is the date of the evening the night started: frames before local noon
 belong to the previous day's id, so a whole night lands in one folder. Retention is
-by days (setting `keep_days`, §6.9, default 14, after the night products; an import of an
-existing installation raises it to that installation's retention (the longest, if it keeps
-images and products for different times) and to the age of its oldest night) and by free disk space: every 10 minutes the oldest nights are removed until at least 10 % of the disk is free; the current night is never removed.
+by days, once a day after the night products: a night older than `keep_days` (§6.9,
+default 14) loses its frames, their thumbnails and its frame index, but keeps the night
+and day products, detections and sky data (about 50 MB instead of 1–2 GB); older than
+`keep_product_days` (default 90, at least `keep_days`) the whole night is removed
+(Benjamin, 2026-10-19, after Allsky issue #3650). An import of an existing installation
+raises `keep_days` to that installation's image retention and to the age of its oldest
+night, and `keep_product_days` to its product retention (indi-allsky keeps them apart)
+and to `keep_days`. And by free disk space: every 10 minutes the oldest nights are removed until at least 10 % of the disk is free; the current night is never removed.
 
 ### 4.6 Hot pixels
 

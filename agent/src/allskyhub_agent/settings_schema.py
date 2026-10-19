@@ -304,6 +304,27 @@ def _product_entries() -> list[dict[str, Any]]:
                 "up, the oldest go earlier anyway.",
             },
         },
+        {
+            "key": "keep_product_days",
+            "type": "int",
+            "label": {
+                "de": "Zeitraffer und Keogramme aufbewahren",
+                "en": "Keep timelapses and keograms",
+            },
+            "group": {"de": "Speicher", "en": "Storage"},
+            "unit": "d",
+            "min": 1,
+            "max": 3650,
+            "step": 1,
+            "help": {
+                "de": "Ältere Nächte verlieren ihre Einzelbilder, behalten aber Zeitraffer, "
+                "Keogramm, Sternspuren und Erkennungen, bis diese Zahl erreicht ist (etwa "
+                "50 MB statt 1–2 GB pro Nacht). Mindestens so lang wie „Nächte aufbewahren“.",
+                "en": "Older nights lose their frames but keep timelapse, keogram, star trails "
+                "and detections until this many days (about 50 MB instead of 1–2 GB a night). "
+                'At least as long as "Keep nights".',
+            },
+        },
     ]
 
 

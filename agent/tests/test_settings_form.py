@@ -70,6 +70,7 @@ def test_values_report_every_key_and_fit_device_settings() -> None:
         "timelapse_fps": 25,
         "timelapse_quality": "normal",
         "keep_days": 14,
+        "keep_product_days": 90,
         "alpaca_enabled": False,
         "alpaca_port": 11111,
         "safe_cloud_max": 30,

@@ -21,6 +21,7 @@ DETECT_CHOICES = ("off", "low", "normal", "high")
 # Night products (roadmap L9): x264 CRF per quality.
 TIMELAPSE_CRF = {"small": 28, "normal": 23, "high": 19}
 DEFAULT_KEEP_DAYS = 14
+DEFAULT_KEEP_PRODUCT_DAYS = 90  # SPEC §4.5: about 50 MB a night instead of 1–2 GB
 # Choices (SPEC §4.1, §7).
 DAY_CAPTURE_CHOICES = ("save", "live", "off")
 FLIP_CHOICES = ("none", "horizontal", "vertical")
@@ -71,6 +72,7 @@ _MQTT_STRINGS = ("mqtt_host", "mqtt_user", "mqtt_prefix")
 # Whole numbers the schema bounds (settings_schema.py); load() and with_values() keep them.
 _INT_RANGES = {
     "keep_days": (1, 3650),
+    "keep_product_days": (1, 3650),
     "timelapse_fps": (1, 60),
     "alpaca_port": (1024, 65535),
     "safe_cloud_max": (5, 95),
@@ -188,6 +190,7 @@ class AgentSettings:
     lightning_light_source: str = "label"  # SPEC §6.4 Light source check
     # Night products and retention (roadmap L9, SPEC §4.5, §5.2).
     keep_days: int = DEFAULT_KEEP_DAYS
+    keep_product_days: int = DEFAULT_KEEP_PRODUCT_DAYS
     product_keogram: bool = True
     product_startrails: bool = True
     product_timelapse: bool = True

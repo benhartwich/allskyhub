@@ -36,6 +36,7 @@ class ProductWorker:
         cfg: ProductConfig | None = None,
         on_done: Callable[[NightProducts], None] | None = None,
         keep_days: int | None = 14,
+        keep_product_days: int | None = None,
         min_free_pct: float | None = 10.0,
         free_check_s: float = 600.0,
         day: DayConfig | None = None,
@@ -44,6 +45,7 @@ class ProductWorker:
     ) -> None:
         self._store = store
         self._keep_days = keep_days
+        self._keep_product_days = keep_product_days
         self._min_free_pct = min_free_pct
         self._free_check_s = free_check_s
         self._cfg = cfg or ProductConfig()
@@ -108,7 +110,9 @@ class ProductWorker:
         if self._keep_days is not None:
             # Retention by days (SPEC §4.5), once a day after the products are done.
             try:
-                removed = self._store.cleanup(datetime.now(UTC), self._keep_days)
+                removed = self._store.cleanup(
+                    datetime.now(UTC), self._keep_days, self._keep_product_days
+                )
                 if removed:
                     log.info("removed old nights %s", removed)
             except OSError:

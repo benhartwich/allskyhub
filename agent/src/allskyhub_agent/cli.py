@@ -306,7 +306,7 @@ def run_import_indi(args: argparse.Namespace) -> int:
     if args.dry_run:
         return 0
     _finish_import(args, current, store, r, (indi.latitude, indi.longitude), indi.camera,
-                   indi.days_to_keep, owner)  # fmt: skip
+                   indi.days_to_keep, owner, indi.product_days_to_keep)  # fmt: skip
     return 0
 
 
@@ -331,6 +331,7 @@ def _finish_import(
     camera: str | None,
     days_to_keep: int | None,
     owner: tuple[int, int],
+    product_days_to_keep: int | None = None,
 ) -> None:
     """The location if the agent has none, retention, and the nights for the hub."""
     lat, lon = location
@@ -346,10 +347,19 @@ def _finish_import(
         oldest = datetime.strptime(nights[-1], "%Y%m%d").replace(tzinfo=tz)
         age = (datetime.now(tz) - oldest).days + 1
         keep = min(3650, max(current.keep_days, days_to_keep or 0, age))
+        # Products at least as long as the other program kept them (or the frames).
+        keep_products = min(3650, max(current.keep_product_days, product_days_to_keep or 0, keep))
+        changes: dict[str, object] = {}
         if keep > current.keep_days:
-            current.with_values({"keep_days": keep}).save(args.settings)
-            print(f"keeping nights for {keep} days now (was {current.keep_days}); "
-                  "restart the agent to apply it")  # fmt: skip
+            changes["keep_days"] = keep
+            print(f"keeping nights for {keep} days now (was {current.keep_days})")
+        if keep_products > current.keep_product_days:
+            changes["keep_product_days"] = keep_products
+            print(f"keeping timelapses and keograms for {keep_products} days now "
+                  f"(was {current.keep_product_days})")  # fmt: skip
+        if changes:
+            current.with_values(changes).save(args.settings)
+            print("restart the agent to apply it")
     # SPEC §6.7: the running agent announces these nights to the hub, one per second.
     Backlog(args.data / BACKLOG_NAME).add(sorted(r.nights), owner)
 
@@ -1399,6 +1409,7 @@ def main(argv: list[str] | None = None) -> int:
         ),
         on_done=products_done,
         keep_days=night_cfg.keep_days,
+        keep_product_days=night_cfg.keep_product_days,
         day=DayConfig(night_cfg.product_day_timelapse, night_cfg.product_day_keogram)
         if night_cfg.product_day_timelapse or night_cfg.product_day_keogram
         else None,

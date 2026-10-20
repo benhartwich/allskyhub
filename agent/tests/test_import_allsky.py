@@ -251,3 +251,56 @@ def test_what_root_made_goes_to_the_agent(tmp_path: Path, monkeypatch: pytest.Mo
     chowned.clear()
     common.FilePlacer(copy=False, owner=None).hand_over(tmp_path / "images")
     assert chowned == []
+
+
+def _website_products(home: Path, date: str) -> None:
+    """Allsky's local website keeps products after the night's folder is gone."""
+    web = home / "html" / "allsky"
+    _jpeg(web / "keograms" / f"keogram-{date}.jpg")
+    _jpeg(web / "keograms" / "thumbnails" / f"keogram-{date}.jpg")
+    _jpeg(web / "startrails" / f"startrails-{date}.jpg")
+    (web / "videos").mkdir(parents=True, exist_ok=True)
+    (web / "videos" / f"allsky-{date}.mp4").write_bytes(b"\x00" * 100)
+    _jpeg(web / "videos" / "thumbnails" / f"allsky-{date}.jpg")
+    (web / "videos" / "index.php").write_text("<?php")
+
+
+def test_products_from_the_website_for_nights_without_a_folder(tmp_path: Path) -> None:
+    home = make_allsky(tmp_path)
+    _website_products(home, "20251012")
+    _website_products(home, "20261011")  # also in the night's folder: that one is taken
+    imp, store, _ = make_importer(tmp_path, home)
+    assert imp.web_dates() == ["20251012", "20261011"]
+    assert imp.dates() == ["20251012", "20261011"]
+    r = imp.run()
+    assert r.products == 6
+    assert "20251012" in r.nights
+    old = store.night_dir("20251012")
+    assert sorted(p.name for p in old.iterdir()) == [
+        "keogram.jpg", "startrails.jpg", "thumbnails", "timelapse.mp4",
+    ]  # fmt: skip
+    assert (old / "thumbnails" / "timelapse.jpg").is_file()  # Allsky's video poster
+    assert store.read_index("20251012") == []  # no frames
+    src = home / "html" / "allsky" / "keograms" / "keogram-20251012.jpg"
+    assert src.stat().st_ino == (old / "keogram.jpg").stat().st_ino
+    folder = home / "images" / "20261011" / "keogram" / "keogram-20261011.jpg"
+    assert folder.stat().st_ino == (store.night_dir("20261011") / "keogram.jpg").stat().st_ino
+    assert imp.run().products == 0  # repeatable
+
+
+def test_website_only_nights_keep_products_not_frames(tmp_path: Path) -> None:
+    # SPEC §4.5: a year of keograms must not make the camera keep a year of frames.
+    home = make_allsky(tmp_path)
+    _website_products(home, "20251012")
+    data = tmp_path / "data"
+    data.mkdir()
+    path = tmp_path / "settings.json"
+    AgentSettings(timezone="Europe/Vienna").save(path)
+    args = argparse.Namespace(source=home, data=data, settings=path, tz=None, profile=None,
+                              copy=False, nights=None, dry_run=False)  # fmt: skip
+    assert run_import(args) == 0
+    s = AgentSettings.load(path)
+    oldest_frames = (datetime.now(UTC) - datetime(2026, 10, 10, tzinfo=UTC)).days
+    oldest = (datetime.now(UTC) - datetime(2025, 10, 12, tzinfo=UTC)).days
+    assert s.keep_days <= max(oldest_frames + 2, AgentSettings().keep_days)
+    assert s.keep_product_days >= oldest

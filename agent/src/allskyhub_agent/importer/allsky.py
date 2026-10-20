@@ -175,6 +175,25 @@ class AllskyImporter(FilePlacer):
         )
         return [n for n in names if only is None or n in only]
 
+    def web_dates(self, only: set[str] | None = None) -> list[str]:
+        """Dates with a timelapse, keogram or startrails on Allsky's local website, which
+        keeps them after the night's folder is gone."""
+        found: set[str] = set()
+        for sub, prefix, ext in (("videos", "allsky-", ".mp4"), ("keograms", "keogram-", ".jpg"),
+                                 ("startrails", "startrails-", ".jpg")):  # fmt: skip
+            d = self._web() / sub
+            if not d.is_dir():
+                continue
+            for p in d.glob(f"{prefix}*{ext}"):
+                date = p.name[len(prefix) : -len(ext)]
+                if _FOLDER.match(date):
+                    found.add(date)
+        return sorted(n for n in found if only is None or n in only)
+
+    def dates(self, only: set[str] | None = None) -> list[str]:
+        """Everything there is to import: night folders and dates with website products."""
+        return sorted(set(self.folders(only)) | set(self.web_dates(only)))
+
     # --- one Allsky folder ---------------------------------------------------------------
     def _frame(self, name: str, at: datetime, row: dict[str, Any] | None) -> FrameInfo:
         s = self.settings
@@ -242,12 +261,17 @@ class AllskyImporter(FilePlacer):
     def _import_products(self, date: str, report: ImportReport, dry: bool) -> None:
         """Allsky's products of a date belong to the night that starts on that evening."""
         src_dir = self._images / date
+        web = self._web()
         night = self._store.night_dir(date)
+        # The night's folder first; Allsky's local website keeps its copies far longer.
         candidates = [
-            (src_dir / "keogram" / f"keogram-{date}.jpg", KEOGRAM),
-            (src_dir / "startrails" / f"startrails-{date}.jpg", STARTRAILS),
-            (src_dir / f"allsky-{date}.mp4", TIMELAPSE),
-        ]
+            (_first(src_dir / "keogram" / f"keogram-{date}.jpg",
+                    web / "keograms" / f"keogram-{date}.jpg"), KEOGRAM),
+            (_first(src_dir / "startrails" / f"startrails-{date}.jpg",
+                    web / "startrails" / f"startrails-{date}.jpg"), STARTRAILS),
+            (_first(src_dir / f"allsky-{date}.mp4", web / "videos" / f"allsky-{date}.mp4"),
+             TIMELAPSE),
+        ]  # fmt: skip
         durations: dict[str, float] = {}
         for src, name in candidates:
             if not src.is_file() or not self._place(src, night / name, report, dry):
@@ -260,7 +284,9 @@ class AllskyImporter(FilePlacer):
             try:
                 if name == TIMELAPSE:
                     poster = next((src_dir / "videothumbnail").glob("*.jpg"), None)
-                    if poster is not None:
+                    if poster is None:
+                        poster = web / "videos" / "thumbnails" / f"allsky-{date}.jpg"
+                    if poster.is_file():
                         thumbnail(poster, thumb)
                     duration = video_duration(src)
                     if duration is not None:
@@ -552,6 +578,11 @@ class AllskyImporter(FilePlacer):
             self._import_products(date, report, dry)
             self._import_meteors(date, rows, report, dry)
             report.folders += 1
+        # Older nights whose folder Allsky has deleted: only their products.
+        rest = [d for d in self.web_dates(only) if d not in set(folders)]
+        for i, date in enumerate(rest, 1):
+            self._progress(f"[{i}/{len(rest)}] {date} (website)")
+            self._import_products(date, report, dry)
         self._import_sky(folders, report, dry)
         nights = set(folders)
         self._import_lightning(nights, report, dry)
@@ -579,3 +610,8 @@ def _axis_direction(angle_deg: float) -> float:
     """Allsky's streak angle (from the image x axis) as 0 = up, clockwise, 0..180."""
     dx, dy = math.cos(math.radians(angle_deg)), math.sin(math.radians(angle_deg))
     return round(math.degrees(math.atan2(dx, -dy)) % 180.0, 1)
+
+
+def _first(*paths: Path) -> Path:
+    """The first of `paths` that exists, else the first."""
+    return next((p for p in paths if p.is_file()), paths[0])

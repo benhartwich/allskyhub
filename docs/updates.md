@@ -6,11 +6,14 @@ and how the signing keys are handled.
 ## Flow
 
 1. Raise `version` in `agent/pyproject.toml` and `agent/src/allskyhub_agent/__init__.py`,
+   add what it brings to `agent/src/allskyhub_agent/update/news.json` (at the top, a few
+   short points in German and English, for owners, not developers; SPEC §8 What's new),
    merge, then push a tag `agent-vX.Y.Z` on `main`.
 2. The `image` workflow builds the image and the update bundle
    `allskyhub-agent-X.Y.Z-arm64.tar.xz`: the directory `X.Y.Z/` with its venv, exactly as
    the image installs it under `/opt/allskyhub-agent/releases/`.
-3. The `release` job checks that the tag matches the agent version, writes `manifest.json`
+3. The `release` job checks that the tag matches the agent version and has a news entry
+   (`tools/release/release_notes.py`, which also writes the release notes), writes `manifest.json`
    (`tools/release/make_manifest.py`: version, URL, SHA-256 and size of the bundle), signs
    it with the secret `ALLSKYHUB_UPDATE_KEY` (Ed25519) and checks the signature against
    the public keys in `image/files/etc/allskyhub-agent/update-keys/`.

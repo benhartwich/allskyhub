@@ -1405,6 +1405,13 @@ report healthy within a timeout.
   which reads and deletes it. `now` checks at once and installs also at night;
   `rollback` switches to the previous installed release with the same health check and
   marks the current one as not to be installed again by itself.
+- **What's new:** each bundle brings `allskyhub_agent/update/news.json`, newest first, per
+  version a few short points for owners in German and English (`de`, `en`, at most 8,
+  each ≤ 300 characters). The local UI's update page lists the running release's and the
+  ones before (at most 5); after an update the local UI shows the running release's points
+  once, until "Verstanden", remembered per browser (a browser seeing the camera for the
+  first time only notes the version). The release workflow refuses a tag without an entry
+  and takes the release notes from it (Benjamin, 2026-10-20, after Allsky #5426).
 - **System steps:** a bundle brings only the agent's venv, so system settings a feature
   needs beyond it are applied by the updater on every run by day (not at night, since
   they can restart the agent), with the code of the running release

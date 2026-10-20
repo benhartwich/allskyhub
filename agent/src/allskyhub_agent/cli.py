@@ -96,6 +96,7 @@ from allskyhub_agent.setup.setup_file import DEFAULT_PATH as SETUP_FILE_PATH
 from allskyhub_agent.setup.setup_file import apply_once as apply_setup_file
 from allskyhub_agent.store.images import ImageStore
 from allskyhub_agent.update.installer import Paths, Updater, read_request
+from allskyhub_agent.update.news import news_for
 from allskyhub_agent.update.reboot import STATE_NAME as SECURITY_REBOOT_NAME
 from allskyhub_agent.update.reboot import SecurityReboot
 from allskyhub_agent.update.status import STATE_FILE, update_status
@@ -371,7 +372,8 @@ UPDATER_PATH_UNIT = Path("/etc/systemd/system/allskyhub-updater.path")
 def update_facts(
     install_dir: Path = INSTALL_DIR, path_unit: Path = UPDATER_PATH_UNIT
 ) -> dict[str, Any]:
-    """Roadmap L14: the running version, the installed releases and the updater's state."""
+    """Roadmap L14: the running version, the installed releases, the updater's state and
+    what the running release and the ones before it brought (SPEC §8 What's new)."""
     releases = install_dir / "releases"
     try:
         current: str | None = (install_dir / "current").readlink().name
@@ -389,6 +391,7 @@ def update_facts(
         "state": state.model_dump(mode="json") if state is not None else None,
         "updater": _exists(path_unit),
         "pending": _exists(UPDATE_REQUEST),
+        "news": news_for(__version__),
     }
 
 

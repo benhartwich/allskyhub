@@ -397,6 +397,9 @@ const T = {
     "upd.code.bad_signature": "Signatur ungültig",
     "upd.code.checksum": "Prüfsumme falsch",
     "upd.code.bad_bundle": "Paket beschädigt",
+    "upd.news": "Was ist neu",
+    "upd.newsIn": "Neu in Version {v}",
+    "upd.newsOk": "Verstanden",
     // network
     "net.title": "Netzwerk",
     "net.wifi": "WLAN",
@@ -840,6 +843,9 @@ const T = {
     "upd.code.bad_signature": "invalid signature",
     "upd.code.checksum": "wrong checksum",
     "upd.code.bad_bundle": "damaged bundle",
+    "upd.news": "What's new",
+    "upd.newsIn": "New in version {v}",
+    "upd.newsOk": "Got it",
     // network
     "net.title": "Network",
     "net.wifi": "Wi-Fi",
@@ -2330,6 +2336,29 @@ async function viewSupport() {
 // --- Updates (L14, SPEC §8) -----------------------------------------------------------------
 // The updater's states and codes are "upd.state.<state>" and "upd.code.<code>" in the dictionary.
 
+// SPEC §8 What's new: the points of one release in the page's language.
+const newsBlock = (n) => `<p class="eyebrow">${t("upd.newsIn", { v: esc(n.version) })}</p>
+  <ul>${(n[LANG] || n.de).map((p) => `<li>${esc(p)}</li>`).join("")}</ul>`;
+
+// Once after an update, until "Got it" in this browser. A browser that has never been here
+// only notes the version: what's new is news to someone who knew the one before.
+async function showNews() {
+  const u = await getJSON("api/update").catch(() => null);
+  const n = u && (u.news || [])[0];
+  if (!n || n.version !== u.version) return;
+  let seen = null;
+  try { seen = localStorage.getItem("ash-news-seen"); } catch { return; }
+  const note = () => { try { localStorage.setItem("ash-news-seen", n.version); } catch { /* private mode */ } };
+  if (seen === null) { note(); return; }
+  if (seen === n.version) return;
+  const box = document.createElement("section");
+  box.className = "card";
+  box.id = "newsPanel";
+  box.innerHTML = `${newsBlock(n)}<div class="actions"><button type="button" id="newsOk">${t("upd.newsOk")}</button></div>`;
+  $("page").before(box);
+  $("newsOk").onclick = () => { note(); box.remove(); };
+}
+
 async function viewUpdates() {
   const box = $("upd");
   const u = await getJSON("api/update");
@@ -2350,7 +2379,8 @@ async function viewUpdates() {
         ${others.length ? `<button type="button" class="secondary" data-upd="rollback"${u.pending ? " disabled" : ""}>${t("upd.rollback")}</button>` : ""}
       </div>
       ${u.pending ? `<p class="msg ok">${t("upd.pending")}</p>` : `<p class="msg" id="updMsg" hidden></p>`}`
-      : `<p class="muted small">${t("upd.manual")}</p>`}`;
+      : `<p class="muted small">${t("upd.manual")}</p>`}
+    ${(u.news || []).length ? `<h3>${t("upd.news")}</h3>${u.news.map(newsBlock).join("")}` : ""}`;
   for (const b of box.querySelectorAll("[data-upd]")) {
     b.onclick = async () => {
       const word = b.dataset.upd;
@@ -2504,3 +2534,4 @@ Promise.all([settingsReady, setupReady]).finally(route);
   setTimeout(pollSetup, 3000);
 })();
 getJSON("api/status").then((s) => { $("version").textContent = s.version; }).catch(() => {});
+settingsReady.finally(showNews);

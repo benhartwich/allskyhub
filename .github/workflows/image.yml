@@ -117,6 +117,8 @@ jobs:
           VERSION="${GITHUB_REF_NAME#agent-v}"
           AGENT=$(sed -n 's/^version = "\(.*\)"$/\1/p' agent/pyproject.toml | head -n 1)
           [ "$VERSION" = "$AGENT" ] || { echo "tag $VERSION != agent $AGENT"; exit 1; }
+          # What's new (SPEC §8): every release has its entry; it is also the release notes.
+          python3 tools/release/release_notes.py "$VERSION" > "$RUNNER_TEMP/notes.md"
           echo "VERSION=$VERSION" >> "$GITHUB_ENV"
       - name: manifest and signature
         run: |
@@ -145,7 +147,7 @@ jobs:
           ASSETS=("dist/allskyhub-agent-$VERSION-arm64.tar.xz" "$IMAGE" "$IMAGE.sha256")
           gh release create "agent-v$VERSION" "${ASSETS[@]}" \
             --title "agent $VERSION" \
-            --notes "Agent update $VERSION (docs/updates.md). New cameras: write allskyhub-$VERSION.img.xz to a microSD card (docs/install.md)." \
+            --notes-file "$RUNNER_TEMP/notes.md" \
             || gh release upload "agent-v$VERSION" "${ASSETS[@]}" --clobber
           gh release view channel-stable >/dev/null 2>&1 || gh release create channel-stable \
             --title "update channel: stable" --notes "Manifest the cameras read (docs/updates.md)." --latest=false

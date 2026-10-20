@@ -94,7 +94,7 @@ from allskyhub_agent.setup.controller import (
 )
 from allskyhub_agent.setup.setup_file import DEFAULT_PATH as SETUP_FILE_PATH
 from allskyhub_agent.setup.setup_file import apply_once as apply_setup_file
-from allskyhub_agent.store.images import ImageStore
+from allskyhub_agent.store.images import INDEX_NAME, ImageStore
 from allskyhub_agent.update.installer import Paths, Updater, read_request
 from allskyhub_agent.update.news import news_for
 from allskyhub_agent.update.reboot import STATE_NAME as SECURITY_REBOOT_NAME
@@ -252,8 +252,8 @@ def run_import(args: argparse.Namespace) -> int:
     print(f"Allsky in {args.source}: {allsky.location or 'no place'}, {allsky.camera_name}, "
           f"{allsky.latitude}, {allsky.longitude}")  # fmt: skip
     only = set(args.nights.split(",")) if args.nights else None
-    if not importer.folders(only):
-        print("no Allsky night folders found")
+    if not importer.dates(only):
+        print("no Allsky night folders or website products found")
         return 1
     r = importer.run(only, dry=args.dry_run)
     _report_import(r, args.dry_run)
@@ -345,11 +345,22 @@ def _finish_import(
     # the other program kept its nights, and long enough for the oldest imported one.
     nights = store.nights()
     if args.settings and nights:
-        oldest = datetime.strptime(nights[-1], "%Y%m%d").replace(tzinfo=tz)
-        age = (datetime.now(tz) - oldest).days + 1
-        keep = min(3650, max(current.keep_days, days_to_keep or 0, age))
+
+        def age(night: str) -> int:
+            return (
+                datetime.now(tz) - datetime.strptime(night, "%Y%m%d").replace(tzinfo=tz)
+            ).days + 1
+
+        # Frames as long as the oldest night that has frames; a night with only products
+        # (from Allsky's website) counts for the products alone.
+        framed = [n for n in nights if (store.night_dir(n) / INDEX_NAME).is_file()]
+        keep = min(
+            3650, max(current.keep_days, days_to_keep or 0, age(framed[-1]) if framed else 0)
+        )
         # Products at least as long as the other program kept them (or the frames).
-        keep_products = min(3650, max(current.keep_product_days, product_days_to_keep or 0, keep))
+        keep_products = min(
+            3650, max(current.keep_product_days, product_days_to_keep or 0, keep, age(nights[-1]))
+        )
         changes: dict[str, object] = {}
         if keep > current.keep_days:
             changes["keep_days"] = keep

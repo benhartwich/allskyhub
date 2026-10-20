@@ -4,16 +4,19 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import sqlite3
 from datetime import UTC, datetime
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
 import numpy as np
+import pytest
 from PIL import Image as PILImage
 
 from allskyhub_agent.cli import run_import
 from allskyhub_agent.detect.events import EventStore
+from allskyhub_agent.importer import common
 from allskyhub_agent.importer.allsky import AllskyImporter, AllskySettings, coordinate
 from allskyhub_agent.importer.backlog import Backlog
 from allskyhub_agent.products.build import night_products
@@ -228,3 +231,23 @@ def test_lightning_and_episodes(tmp_path: Path) -> None:
     assert nlc[1].data["peak_index"] is None
     again = imp.run()
     assert (again.lightning, again.episodes) == (0, 0)
+
+
+def test_what_root_made_goes_to_the_agent(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    # SPEC §4.5: events and thumbnails written as root kept the cleanup from deleting nights.
+    night = tmp_path / "images" / "20260814" / "events"
+    night.mkdir(parents=True)
+    (night / "meteor.jpg").write_bytes(b"x")
+    chowned: list[str] = []
+    monkeypatch.setattr(common, "ROOT_UID", os.getuid())  # this test's files stand for root's
+
+    def chown(path: Path, uid: int, gid: int, follow_symlinks: bool = True) -> None:
+        chowned.append(path.name)
+
+    monkeypatch.setattr(os, "geteuid", lambda: 0)
+    monkeypatch.setattr(os, "chown", chown)
+    common.FilePlacer(copy=False, owner=(990, 990)).hand_over(tmp_path / "images")
+    assert sorted(chowned) == ["20260814", "events", "images", "meteor.jpg"]
+    chowned.clear()
+    common.FilePlacer(copy=False, owner=None).hand_over(tmp_path / "images")
+    assert chowned == []

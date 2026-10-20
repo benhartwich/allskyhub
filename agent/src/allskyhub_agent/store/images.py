@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 import shutil
 from collections.abc import Callable
 from dataclasses import dataclass
@@ -13,6 +14,8 @@ from pydantic import ValidationError
 
 from allskyhub_agent.adapters.camera import Image
 from allskyhub_protocol import FrameInfo, SkyMetrics
+
+log = logging.getLogger(__name__)
 
 THUMB_WIDTH = 400
 
@@ -178,8 +181,8 @@ class ImageStore:
             total, free = measure(self._images)
             if total <= 0 or 100.0 * free / total >= min_free_pct or d.name >= current:
                 break
-            shutil.rmtree(d)
-            removed.append(d.name)
+            if _remove_night(d):
+                removed.append(d.name)
         return removed
 
     def cleanup(
@@ -199,10 +202,13 @@ class ImageStore:
             if not (d.is_dir() and len(d.name) == 8 and d.name.isdigit()):
                 continue
             if d.name < cutoff:
-                shutil.rmtree(d)
-                removed.append(d.name)
+                if _remove_night(d):
+                    removed.append(d.name)
             elif d.name < frames_cutoff:
-                self._drop_frames(d.name)
+                try:
+                    self._drop_frames(d.name)
+                except OSError as exc:
+                    log.warning("cannot remove the frames of night %s: %s", d.name, exc)
         return removed
 
     def _drop_frames(self, night: str) -> None:
@@ -213,3 +219,14 @@ class ImageStore:
         for f in self.read_index(night):
             self.remove(night, f.name)
         index.unlink(missing_ok=True)
+
+
+def _remove_night(d: Path) -> bool:
+    """One night that cannot be deleted (a file the agent may not remove) is logged and
+    skipped; it must not stop the cleanup of the others."""
+    try:
+        shutil.rmtree(d)
+    except OSError as exc:
+        log.warning("cannot remove night %s: %s", d.name, exc)
+        return False
+    return True

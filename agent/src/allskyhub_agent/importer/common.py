@@ -3,6 +3,7 @@ hard link or copy, thumbnails and the video length."""
 
 from __future__ import annotations
 
+import logging
 import os
 import shutil
 import subprocess
@@ -14,6 +15,10 @@ from zoneinfo import ZoneInfo
 from PIL import Image as PILImage
 
 from allskyhub_agent.store.images import THUMB_WIDTH
+
+log = logging.getLogger(__name__)
+
+ROOT_UID = 0
 
 
 def system_timezone() -> tzinfo:
@@ -93,6 +98,19 @@ class FilePlacer:
         """Run as root (hard links need it): what this import creates belongs to the agent."""
         if self._owner is not None and os.geteuid() == 0:
             os.chown(path, *self._owner, follow_symlinks=False)
+
+    def hand_over(self, top: Path) -> None:
+        """Run as root: what the import made under `top` that still belongs to root (events,
+        thumbnails, indexes) goes to the agent, or its cleanup cannot delete those nights
+        (SPEC §4.5). Hard links of the other program's files keep their owner."""
+        if self._owner is None or os.geteuid() != 0 or not top.is_dir():
+            return
+        for path in [top, *top.rglob("*")]:
+            try:
+                if path.lstat().st_uid == ROOT_UID:
+                    os.chown(path, *self._owner, follow_symlinks=False)
+            except OSError as exc:
+                log.warning("cannot hand %s over to the agent: %s", path, exc)
 
     def _mkdir(self, path: Path) -> None:
         missing = [p for p in [path, *path.parents] if not p.exists()]

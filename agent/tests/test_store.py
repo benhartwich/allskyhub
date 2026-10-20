@@ -1,10 +1,12 @@
 """Image storage (SPEC §4.5)."""
 
+import os
 from datetime import UTC, datetime
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
 import numpy as np
+import pytest
 
 from allskyhub_agent.store.images import ImageStore, night_id
 from allskyhub_protocol import FrameInfo, Mode
@@ -94,3 +96,22 @@ def test_ensure_free_removes_oldest_nights_but_never_the_current(tmp_path: Path)
     removed = store.ensure_free(datetime(2026, 10, 6, 20, 0, tzinfo=UTC), 50.0, usage)
     assert removed == ["20261003"]  # stops at the current night
     assert (tmp_path / "images" / "20261006").is_dir()
+
+
+def test_a_night_that_cannot_be_removed_does_not_stop_the_cleanup(tmp_path: Path) -> None:
+    # An import run as root left a folder the agent may not empty (2026-10-20 on the test Pi).
+    if os.geteuid() == 0:
+        pytest.skip("root may remove anything")
+    store = ImageStore(tmp_path, TZ)
+    for nid in ("20260901", "20260902", "20260903", "20261006"):
+        (tmp_path / "images" / nid).mkdir(parents=True)
+    locked = tmp_path / "images" / "20260901" / "events"
+    locked.mkdir()
+    (locked / "meteor.jpg").write_bytes(b"x")
+    locked.chmod(0o555)
+    try:
+        removed = store.cleanup(datetime(2026, 10, 6, 20, 0, tzinfo=UTC), keep_days=10)
+        assert removed == ["20260902", "20260903"]
+        assert (tmp_path / "images" / "20260901").is_dir()
+    finally:
+        locked.chmod(0o755)

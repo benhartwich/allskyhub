@@ -557,6 +557,8 @@ class AllskyImporter(FilePlacer):
         self._import_lightning(nights, report, dry)
         self._import_episodes(EventKind.AURORA, nights, report, dry)
         self._import_episodes(EventKind.NLC, nights, report, dry)
+        if not dry:
+            self.hand_over(self._store.images_dir)
         return report
 
 

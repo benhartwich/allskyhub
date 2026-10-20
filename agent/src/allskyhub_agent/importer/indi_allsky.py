@@ -434,4 +434,6 @@ class IndiAllskyImporter(FilePlacer):
             self._import_images(night, report, dry)
             self._import_products(night, report, dry)
             report.folders += 1
+        if not dry:
+            self.hand_over(self._store.images_dir)
         return report

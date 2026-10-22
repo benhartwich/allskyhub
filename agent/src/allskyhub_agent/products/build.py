@@ -38,6 +38,12 @@ U8 = npt.NDArray[np.uint8]
 class ProductConfig:
     startrails_max_mean: float = 0.35
     startrails_min_frames: int = 10
+    # SPEC §5.2 (Allsky #4525): only frames from astronomical night (sun at or below this)
+    # go into the startrails; auto exposure keeps twilight frames dark enough to pass the
+    # brightness test. In a summer night where the sun stays higher, the frames within
+    # `startrails_sun_margin` degrees of the night's lowest sun are used instead.
+    startrails_max_sun: float = -18.0
+    startrails_sun_margin: float = 3.0
     # SPEC §5.2 (roadmap L32): a frame lit up for one exposure by a light near the camera
     # (a lamp, a car) is left out of the startrails. It must be brighter than both
     # neighbours by this share after evening out exposure and gain, and by this much in
@@ -137,6 +143,13 @@ def flash_frames(frames: list[FrameInfo], cfg: ProductConfig) -> set[str]:
     return out
 
 
+def startrails_sun_limit(frames: list[FrameInfo], cfg: ProductConfig) -> float:
+    """Highest sun elevation a startrails frame may have (SPEC §5.2): astronomical night,
+    or near the lowest sun of a night that never gets that dark."""
+    lowest = min((f.sun_elevation for f in frames), default=cfg.startrails_max_sun)
+    return max(cfg.startrails_max_sun, lowest + cfg.startrails_sun_margin)
+
+
 def startrails(frames: list[tuple[Path, float]], cfg: ProductConfig) -> U8 | None:
     """Per-pixel maximum of the dark enough frames; None with too few of them."""
     acc: U8 | None = None
@@ -223,8 +236,16 @@ def build_night(store: ImageStore, night: str, cfg: ProductConfig | None = None)
     flashes = flash_frames(frames, cfg)
     if flashes:
         log.info("night %s: %d flash frames left out of the startrails", night, len(flashes))
+    sun_limit = startrails_sun_limit([f for _, f in present], cfg)
     st = (
-        startrails([(p, f.mean) for p, f in present if f.name not in flashes], cfg)
+        startrails(
+            [
+                (p, f.mean)
+                for p, f in present
+                if f.name not in flashes and f.sun_elevation <= sun_limit
+            ],
+            cfg,
+        )
         if cfg.startrails
         else None
     )
@@ -233,6 +254,7 @@ def build_night(store: ImageStore, night: str, cfg: ProductConfig | None = None)
     elif st is None:
         result.skipped[STARTRAILS] = (
             f"fewer than {cfg.startrails_min_frames} frames darker than {cfg.startrails_max_mean}"
+            f" with the sun at or below {sun_limit:.1f}°"
         )
     else:
         save_jpeg(st, folder / STARTRAILS)

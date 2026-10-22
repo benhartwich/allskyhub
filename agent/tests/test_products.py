@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import shutil
 import subprocess
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
@@ -27,6 +27,7 @@ from allskyhub_agent.products.build import (
     newest_products,
     night_products,
     startrails,
+    startrails_sun_limit,
 )
 from allskyhub_agent.products.worker import DawnDetector, ProductWorker
 from allskyhub_agent.profiles import get_profile
@@ -39,7 +40,9 @@ LOC = Location(50.04, 10.39)
 HAVE_FFMPEG = shutil.which("ffmpeg") is not None
 
 
-def _frame(night: str, name: str, mode: Mode, t: datetime, mean: float = 0.2) -> FrameInfo:
+def _frame(
+    night: str, name: str, mode: Mode, t: datetime, mean: float = 0.2, sun: float | None = None
+) -> FrameInfo:
     return FrameInfo(
         captured_at=t,
         night_id=night,
@@ -48,7 +51,7 @@ def _frame(night: str, name: str, mode: Mode, t: datetime, mean: float = 0.2) ->
         exposure_us=1000,
         gain=0,
         mean=mean,
-        sun_elevation=-20 if mode is Mode.NIGHT else 10,
+        sun_elevation=sun if sun is not None else (-20 if mode is Mode.NIGHT else 10),
         profile="sim",
     )
 
@@ -190,8 +193,13 @@ def test_worker_builds_at_dawn_and_cleans_up(tmp_path: Path) -> None:
     store, frames = _simulate_night(tmp_path)
     (tmp_path / "images" / "20200101").mkdir()  # an old night that retention removes
     done: list[str] = []
+    # Keep the simulated night however long ago it is, but not the one from 2020.
+    keep = (datetime.now(UTC).date() - date(2026, 10, 6)).days + 30
     worker = ProductWorker(
-        store, ProductConfig(ffmpeg="no-such-ffmpeg"), on_done=lambda r: done.append(r.night_id)
+        store,
+        ProductConfig(ffmpeg="no-such-ffmpeg"),
+        on_done=lambda r: done.append(r.night_id),
+        keep_days=keep,
     )
     worker.start()
     for f in frames:
@@ -278,3 +286,37 @@ def test_flash_frames_stay_out_of_the_startrails(tmp_path: Path) -> None:
     build_night(store, night, ProductConfig(timelapse=False, startrails_max_mean=0.9))
     with PILImage.open(store.night_dir(night) / STARTRAILS) as st:
         assert int(np.asarray(st).max()) < 100
+
+
+def test_startrails_sun_limit() -> None:
+    """SPEC §5.2 (Allsky #4525): astronomical night, or near the lowest sun of a light night."""
+    cfg = ProductConfig()
+    t = datetime(2026, 6, 21, 22, 0, tzinfo=UTC)
+
+    def f(sun: float) -> FrameInfo:
+        return _frame("20260621", "a.jpg", Mode.NIGHT, t, 0.1, sun)
+
+    assert startrails_sun_limit([f(-8), f(-40), f(-10)], cfg) == -18.0
+    # June at 52° N: the sun gets only to -14.5°.
+    assert startrails_sun_limit([f(-8), f(-14.5), f(-10)], cfg) == pytest.approx(-11.5)
+
+
+def test_twilight_frames_stay_out_of_the_startrails(tmp_path: Path) -> None:
+    """SPEC §5.2: a twilight frame dark enough by brightness is still left out."""
+    store = ImageStore(tmp_path, TZ)
+    t0 = datetime(2026, 10, 14, 20, 0, tzinfo=UTC)
+    nights: set[str] = set()
+    for i in range(14):
+        twilight = i < 2
+        rgb = np.full((40, 60, 3), 90 if twilight else 40, dtype=np.uint8)
+        stored = store.save(rgb, t0 + timedelta(minutes=i))
+        frame = _frame(
+            stored.night_id, stored.name, Mode.NIGHT, t0 + timedelta(minutes=i),
+            (90 if twilight else 40) / 255, -10.0 if twilight else -30.0,
+        )  # fmt: skip
+        store.append_index(frame)
+        nights.add(stored.night_id)
+    (night,) = nights
+    build_night(store, night, ProductConfig(timelapse=False))
+    with PILImage.open(store.night_dir(night) / STARTRAILS) as st:
+        assert int(np.asarray(st).max()) < 60

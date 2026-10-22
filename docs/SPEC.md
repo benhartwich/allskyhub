@@ -239,6 +239,11 @@ Each can be switched off (`product_keogram`, `product_startrails`, `product_time
 - **Startrails** `startrails.jpg`: the per-pixel maximum of all frames whose mean
   brightness is at most `startrails_max_mean` (default 0.35), so twilight and moonlit
   or cloud-lit frames do not wash out the trails. Built only with at least 10 such frames.
+  Only frames with the sun at or below −18° (astronomical night) count (Allsky #4525,
+  Benjamin, 2026-10-22): auto exposure keeps twilight frames dark enough to pass the
+  brightness test, yet their sky is lit. In a night where the sun never gets that low
+  (summer north of about 48°), the limit is the night's lowest sun plus 3°, so the
+  darkest part of the night is used.
   A **flash frame** is left out too (roadmap L32, Benjamin, 2026-10-15): a frame lit up
   for one exposure by a light near the camera (a lamp with a motion sensor, a car). It is
   a night frame whose mean, divided by exposure time and linear gain (10^(gain/200), gain

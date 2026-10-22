@@ -77,7 +77,8 @@ async def _own_device(db: DbSession, session: SessionInfo, device_id: str) -> De
 
 @router.get("/")
 async def home(request: Request, db: DbSession, session: OptionalSession) -> Response:
-    """Signed in: the user's cameras. Otherwise the public start page."""
+    """Signed in: the user's cameras. Otherwise the public start page, German or English
+    (web/lang.py)."""
     if session is None:
         return render(request, "landing.html", {"cameras": await camera_map.home_cameras(db)})
     registry = _registry(request)

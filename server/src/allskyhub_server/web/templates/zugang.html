@@ -1,39 +1,57 @@
 {% extends "base.html" %}
-{% block title %}Zugang beantragen · allskyhub{% endblock %}
+{% block lang %}{{ 'en' if en else 'de' }}{% endblock %}
+{% block title %}{{ 'Ask for access' if en else 'Zugang beantragen' }} · allskyhub{% endblock %}
 {% block content %}
 <div class="auth">
   {% if sent %}
+  {% if en %}
+  <h1>Thank you!</h1>
+  <p class="lead">Your request has arrived. We'll email you as soon as your access is ready.</p>
+  <p>Meanwhile: <a href="/allsky?lang=en">allskyhub next to Allsky</a> or <a href="https://github.com/benhartwich/allskyhub">the source on GitHub</a>.</p>
+  {% else %}
   <h1>Danke!</h1>
   <p class="lead">Deine Anfrage ist angekommen. Wir melden uns per E-Mail, sobald dein Zugang bereit ist.</p>
   <p>Bis dahin: <a href="/hardware">Was du für eine Kamera brauchst</a>.</p>
+  {% endif %}
+  {% else %}
+  {% if en %}
+  <h1>Ask for access</h1>
+  <p class="muted">allskyhub is still being built, so we hand out accounts on the hosted hub step by step. Tell us briefly where you are and we'll send you an invitation by email. Prefer to run it all yourself? You need no account for that: <a href="https://github.com/benhartwich/allskyhub/blob/main/docs/install.md">installation guide</a>.</p>
   {% else %}
   <h1>Zugang beantragen</h1>
   <p class="muted">allskyhub ist im Aufbau; Konten vergeben wir nach und nach. Erzähl uns kurz, wo du stehst, wir schicken dir dann eine Einladung per E-Mail.</p>
+  {% endif %}
   <form method="post" action="/zugang" class="card stack">
     <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <input type="hidden" name="lang" value="{{ 'en' if en else 'de' }}">
     <label>Name
       <input name="name" value="{{ form.name if form else '' }}" autocomplete="name" maxlength="100" required>
     </label>
-    <label>E-Mail-Adresse
+    <label>{{ 'Email address' if en else 'E-Mail-Adresse' }}
       <input type="email" name="email" value="{{ form.email if form else '' }}" autocomplete="email" maxlength="254" required>
     </label>
-    <label>Ort oder Region (freiwillig)
-      <input name="place" value="{{ form.place if form else '' }}" maxlength="100" placeholder="z. B. Mühlviertel">
+    <label>{{ 'Place or region (optional)' if en else 'Ort oder Region (freiwillig)' }}
+      <input name="place" value="{{ form.place if form else '' }}" maxlength="100" placeholder="{{ 'e.g. Bavaria' if en else 'z. B. Mühlviertel' }}">
     </label>
     <fieldset class="stack">
-      <legend>Wie weit bist du?</legend>
+      <legend>{{ 'How far along are you?' if en else 'Wie weit bist du?' }}</legend>
       {% for key, label in stages.items() %}
       <label class="check"><input type="radio" name="stage" value="{{ key }}" required{% if form and form.stage == key %} checked{% endif %}> {{ label }}</label>
       {% endfor %}
     </fieldset>
-    <label>Nachricht (freiwillig)
-      <textarea name="message" rows="4" maxlength="1000" placeholder="Welche Kamera, was du vorhast …">{{ form.message if form else '' }}</textarea>
+    <label>{{ 'Message (optional)' if en else 'Nachricht (freiwillig)' }}
+      <textarea name="message" rows="4" maxlength="1000" placeholder="{{ 'Which camera, what you have in mind …' if en else 'Welche Kamera, was du vorhast …' }}">{{ form.message if form else '' }}</textarea>
     </label>
     <label class="hp" aria-hidden="true">Website <input name="website" tabindex="-1" autocomplete="off"></label>
+    {% if en %}
+    <label class="check"><input type="checkbox" name="privacy" value="true" required> I have read the <a href="/datenschutz#zugang">privacy policy</a> (in German). My details are used only for this request.</label>
+    <button type="submit">Ask for access</button>
+    {% else %}
     <label class="check"><input type="checkbox" name="privacy" value="true" required> Ich habe die <a href="/datenschutz#zugang">Datenschutzerklärung</a> gelesen. Meine Angaben werden nur für die Anfrage verwendet.</label>
     <button type="submit">Zugang beantragen</button>
+    {% endif %}
   </form>
-  <p class="muted">Schon ein Konto? <a href="/login">Anmelden</a></p>
+  <p class="muted">{{ 'Already have an account?' if en else 'Schon ein Konto?' }} <a href="/login">{{ 'Sign in' if en else 'Anmelden' }}</a></p>
   {% endif %}
 </div>
 {% endblock %}

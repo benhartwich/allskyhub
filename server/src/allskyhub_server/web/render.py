@@ -10,6 +10,7 @@ from sqlalchemy import inspect
 
 from allskyhub_server.auth import csrf
 from allskyhub_server.auth.sessions import SessionInfo
+from allskyhub_server.web import lang
 from allskyhub_server.web.templating import templates
 
 
@@ -44,8 +45,12 @@ def render(
         and request.app.state.mailer.enabled,
         "is_admin": _is_admin(request, session),
     }
+    data["en"] = lang.is_en(request)
+    data["path_now"] = request.url.path
     data.update(context or {})
     response = templates.TemplateResponse(request, template, data, status_code=status_code)
+    if (chosen := lang.asked(request)) is not None:
+        lang.remember(request, response, chosen)
     if anon_token and request.cookies.get(csrf.ANON_COOKIE) != anon_token:
         response.set_cookie(
             csrf.ANON_COOKIE,

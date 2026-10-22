@@ -1,20 +1,42 @@
 {% extends "base.html" %}
-{% block title %}allskyhub – deine Allsky-Kamera, einfach{% endblock %}
+{% block lang %}{{ 'en' if en else 'de' }}{% endblock %}
+{% block title %}{{ 'allskyhub – your all-sky camera, made simple' if en else 'allskyhub – deine Allsky-Kamera, einfach' }}{% endblock %}
 {% block content %}
 <section class="hero">
   <div class="stack">
     <p class="eyebrow">Allsky · Open Source · Plug and play</p>
+    {% if en %}
+    <h1>The whole sky, on your phone.</h1>
+    <p class="lead">allskyhub is an all-sky camera you just plug in: a Raspberry Pi with a tested camera, a ready-made SD card image, set up from your phone. No FTP, no port forwarding, no installation marathons.</p>
+    <p class="lead">Free and open source: run the camera software, the hub and the app yourself, or use the hosted hub on allskyhub.org.</p>
+    <p class="soon"><span aria-hidden="true">📱</span> Native apps for Android and iOS are coming soon</p>
+    <p class="actions">
+      <a class="button" href="/zugang">Ask for access</a>
+      <a class="button secondary" href="/allsky">Already running Allsky?</a>
+    </p>
+    <p class="hero-links">
+      <a href="https://github.com/benhartwich/allskyhub">Source on GitHub ↗</a>
+      <a href="https://github.com/benhartwich/allskyhub/blob/main/docs/install.md">Run your own hub ↗</a>
+      <a href="/karte">Camera map</a>
+    </p>
+    {% else %}
     <h1>Der ganze Himmel, auf deinem Handy.</h1>
     <p class="lead">allskyhub ist eine Allsky-Kamera zum Einstecken: Raspberry Pi mit getesteter Kamera, fertiges Image, Einrichtung mit dem Handy. Kein FTP, keine Portfreigabe, keine Installationsorgien.</p>
+    <p class="lead">Frei und Open Source: Kamera-Software, Hub und App kannst du selbst betreiben, oder du nutzt den Hub auf allskyhub.org.</p>
+    <p class="soon"><span aria-hidden="true">📱</span> Apps für Android und iOS kommen in Kürze</p>
     <p class="actions">
       <a class="button" href="/zugang">Zugang beantragen</a>
-      <a class="button secondary" href="/hardware">Was brauche ich?</a>
       <a class="button secondary" href="/allsky">Schon eine Allsky-Kamera?</a>
-      <a class="button secondary" href="/karte">Kamerakarte</a>
-      <a class="button secondary" href="https://github.com/benhartwich/allskyhub">Auf GitHub ansehen</a>
     </p>
+    <p class="hero-links">
+      <a href="/hardware">Was brauche ich?</a>
+      <a href="https://github.com/benhartwich/allskyhub">Quellcode auf GitHub ↗</a>
+      <a href="https://github.com/benhartwich/allskyhub/blob/main/docs/install.md">Selbst betreiben ↗</a>
+      <a href="/karte">Kamerakarte</a>
+    </p>
+    {% endif %}
   </div>
-  <svg class="dome" viewBox="0 0 400 400" role="img" aria-label="Allsky-Aufnahme: der ganze Himmel in einem Kreis, mit Milchstraße und Meteor">
+  <svg class="dome" viewBox="0 0 400 400" role="img" aria-label="{{ 'All-sky picture: the whole sky in one circle, with the Milky Way and a meteor' if en else 'Allsky-Aufnahme: der ganze Himmel in einem Kreis, mit Milchstraße und Meteor' }}">
     <defs>
       <radialGradient id="dome-sky" cx=".5" cy=".5" r=".5">
         <stop offset="0" stop-color="#16224f"/><stop offset=".72" stop-color="#0a1130"/><stop offset=".93" stop-color="#1b2a5e"/><stop offset="1" stop-color="#3a3f7a"/>
@@ -42,28 +64,72 @@
       <line class="meteor" x1="110" y1="80" x2="300" y2="210" stroke="url(#dome-meteor)" stroke-width="2.4" stroke-linecap="round"/>
     </g>
     <g font-family="Space Grotesk, system-ui, sans-serif" font-size="13" font-weight="600" fill="#a7b0cc" text-anchor="middle">
-      <text x="200" y="14">N</text><text x="392" y="205">O</text><text x="200" y="398">S</text><text x="8" y="205">W</text>
+      <text x="200" y="14">N</text><text x="392" y="205">{{ 'E' if en else 'O' }}</text><text x="200" y="398">S</text><text x="8" y="205">W</text>
     </g>
   </svg>
 </section>
 
 {% if cameras %}
 <section class="home-cameras stack" aria-labelledby="home-cameras">
-  <h2 id="home-cameras">Öffentliche Kameras</h2>
+  <h2 id="home-cameras">{{ 'Public cameras' if en else 'Öffentliche Kameras' }}</h2>
   <ul class="home-camera-grid">
     {% for c in cameras %}
     <li><a class="card home-camera" href="/sky/{{ c.slug }}">
-      {% if c.image_at %}<img src="/sky/{{ c.slug }}/latest.jpg?t={{ c.image_at.timestamp() | int }}" alt="Himmel über {{ c.title }}" loading="lazy" width="320" height="320">{% else %}<div class="sky-ph" aria-hidden="true"></div>{% endif %}
+      {% if c.image_at %}<img src="/sky/{{ c.slug }}/latest.jpg?t={{ c.image_at.timestamp() | int }}" alt="{{ 'Sky over' if en else 'Himmel über' }} {{ c.title }}" loading="lazy" width="320" height="320">{% else %}<div class="sky-ph" aria-hidden="true"></div>{% endif %}
       <strong>{{ c.title }}</strong>
       {% if c.place %}<span class="muted">{{ c.place }}</span>{% endif %}
     </a></li>
     {% endfor %}
   </ul>
-  <p><a href="/karte">Alle Kameras auf der Karte →</a></p>
+  <p><a href="/karte">{{ 'All cameras on the map →' if en else 'Alle Kameras auf der Karte →' }}</a></p>
 </section>
 {% endif %}
 
+{% if en %}
 <section class="features">
+  <div class="card">
+    <div class="feature-icon" aria-hidden="true">🔓</div>
+    <h2>Open source, run it yourself</h2>
+    <p class="muted">Camera software (GPL), hub (AGPL) and app (Apache) are free software. Run everything on your own server, or use the hosted hub. Your camera keeps capturing without any hub at all.</p>
+  </div>
+  <div class="card">
+    <div class="feature-icon" aria-hidden="true">📡</div>
+    <h2>Switch on and pair</h2>
+    <p class="muted">The camera opens its own Wi-Fi, the app hands it your home network and pairs it with your account. No SSH, no typing codes.</p>
+  </div>
+  <div class="card">
+    <div class="feature-icon" aria-hidden="true">🛰️</div>
+    <h2>Outbound connection only</h2>
+    <p class="muted">The camera connects to the hub by itself. You see the live picture and the latest captures anywhere, without touching your router.</p>
+  </div>
+  <div class="card">
+    <div class="feature-icon" aria-hidden="true">☄️</div>
+    <h2>Meteors, aurora, lightning</h2>
+    <p class="muted">The camera detects events in the sky itself and assigns meteors to their shower; the hub tells satellites and aircraft apart from meteors using orbit and ADS-B data.</p>
+  </div>
+  <div class="card">
+    <div class="feature-icon" aria-hidden="true">🌌</div>
+    <h2>Good pictures without tuning</h2>
+    <p class="muted">Automatic exposure, day and night switching by the sun's position, timelapse, keogram and star trails every night.</p>
+  </div>
+  <div class="card">
+    <div class="feature-icon" aria-hidden="true">📱</div>
+    <h2>Apps for Android and iOS</h2>
+    <p class="muted">Coming soon: set up the camera, watch the live sky and browse your nights. Until then everything works in the browser.</p>
+  </div>
+</section>
+
+<section class="card note">
+  <h2>Status</h2>
+  <p class="muted">allskyhub is in development and in testing; accounts on the hosted hub are by invitation for now. The first supported camera is the ZWO ASI678MC on a Raspberry Pi 4/5. Already running <a href="https://github.com/AllskyTeam/allsky" rel="noopener">Allsky</a>? allskyhub installs next to it without a new SD card: <a href="/allsky">how it works</a>. Follow along and contribute on <a href="https://github.com/benhartwich/allskyhub">GitHub</a>. Parts of the site, such as the parts list, the legal pages and the camera pages, are in German so far.</p>
+</section>
+{% else %}
+<section class="features">
+  <div class="card">
+    <div class="feature-icon" aria-hidden="true">🔓</div>
+    <h2>Open Source, selbst betreibbar</h2>
+    <p class="muted">Kamera-Software (GPL), Hub (AGPL) und App (Apache) sind freie Software. Betreib alles auf deinem eigenen Server oder nutz den Hub hier. Die Kamera nimmt auch ganz ohne Hub auf.</p>
+  </div>
   <div class="card">
     <div class="feature-icon" aria-hidden="true">📡</div>
     <h2>Einschalten und koppeln</h2>
@@ -77,12 +143,17 @@
   <div class="card">
     <div class="feature-icon" aria-hidden="true">☄️</div>
     <h2>Meteore, Polarlicht, Blitze</h2>
-    <p class="muted">Die Kamera erkennt Ereignisse am Himmel selbst, ordnet Meteore ihrem Strom zu und meldet sich, wenn etwas passiert.</p>
+    <p class="muted">Die Kamera erkennt Ereignisse am Himmel selbst und ordnet Meteore ihrem Strom zu; der Hub trennt Satelliten und Flugzeuge mit Bahn- und ADS-B-Daten von den Meteoren.</p>
   </div>
   <div class="card">
     <div class="feature-icon" aria-hidden="true">🌌</div>
     <h2>Gute Bilder ohne Tuning</h2>
     <p class="muted">Automatische Belichtung, Tag- und Nachtumschaltung nach Sonnenstand, Zeitraffer, Keogramm und Sternspuren jede Nacht. Die Kamera nimmt auch auf, wenn das Netz weg ist.</p>
+  </div>
+  <div class="card">
+    <div class="feature-icon" aria-hidden="true">📱</div>
+    <h2>Apps für Android und iOS</h2>
+    <p class="muted">Kommen in Kürze: Kamera einrichten, Livehimmel ansehen und durch deine Nächte blättern. Bis dahin geht alles im Browser.</p>
   </div>
 </section>
 
@@ -90,4 +161,5 @@
   <h2>Stand</h2>
   <p class="muted">allskyhub ist in Entwicklung und im Testbetrieb; Konten gibt es derzeit nur auf Einladung. Die erste unterstützte Kamera ist die ZWO ASI678MC am Raspberry Pi 4/5. Kamera-Software, Hub und App sind frei – mitlesen und mitmachen auf <a href="https://github.com/benhartwich/allskyhub">GitHub</a>.</p>
 </section>
+{% endif %}
 {% endblock %}

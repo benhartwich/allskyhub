@@ -26,6 +26,12 @@ STAGES = {
     "planning": "Ich plane eine",
     "curious": "Ich schaue mich erst um",
 }
+STAGES_EN = {
+    "camera": "I already have an all-sky camera",
+    "building": "I'm building one",
+    "planning": "I'm planning one",
+    "curious": "I'm just looking around",
+}
 INVITE_TTL = dt.timedelta(days=14)
 KEEP = dt.timedelta(days=30)
 KEEP_OPEN = dt.timedelta(days=180)

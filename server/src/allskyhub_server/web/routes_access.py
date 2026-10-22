@@ -27,6 +27,7 @@ from allskyhub_server.web.deps import (
     csrf_protect,
 )
 from allskyhub_server.web.image_download import LatestImage
+from allskyhub_server.web.lang import is_en
 from allskyhub_server.web.render import render
 
 log = logging.getLogger(__name__)
@@ -49,9 +50,15 @@ def _hardware_context() -> dict[str, object]:
     }
 
 
+def _stages(en: bool) -> dict[str, str]:
+    return access_requests.STAGES_EN if en else access_requests.STAGES
+
+
 @router.get("/zugang")
 async def access_form(request: Request, session: OptionalSession) -> Response:
-    return render(request, "zugang.html", {"stages": access_requests.STAGES}, session=session)
+    """German or English (web/lang.py)."""
+    stages = _stages(is_en(request))
+    return render(request, "zugang.html", {"stages": stages}, session=session)
 
 
 @router.post("/zugang")
@@ -67,15 +74,21 @@ async def access_request(
     message: Annotated[str, Form(max_length=1000)] = "",
     privacy: Annotated[bool, Form()] = False,
     website: Annotated[str, Form(max_length=200)] = "",  # left empty by people
+    lang: Annotated[str, Form(max_length=2)] = "",
 ) -> Response:
+    en = lang == "en" if lang else is_en(request)
     form = {"email": email, "name": name, "stage": stage, "place": place, "message": message}
-    context: dict[str, object] = {"stages": access_requests.STAGES, "form": form}
+    context: dict[str, object] = {"stages": _stages(en), "form": form, "en": en}
     if not privacy:
-        context["error"] = "Bitte bestätige, dass du die Datenschutzerklärung gelesen hast."
+        context["error"] = (
+            "Please confirm that you have read the privacy policy."
+            if en
+            else "Bitte bestätige, dass du die Datenschutzerklärung gelesen hast."
+        )
         return render(request, "zugang.html", context, session=session, status_code=400)
     if website:
         # A bot filled the hidden field: same answer as for a real request.
-        return render(request, "zugang.html", {"sent": True}, session=session)
+        return render(request, "zugang.html", {"sent": True, "en": en}, session=session)
     try:
         await ratelimit.hit(
             request.app.state.engine,
@@ -103,14 +116,15 @@ async def access_request(
                     to=to,
                     subject=f"allskyhub: Zugangsanfrage von {created.name}",
                     body=(
-                        f"{created.name} <{created.email}> fragt nach einem Zugang.\n\n"
+                        f"{created.name} <{created.email}> fragt nach einem Zugang"
+                        f"{' (Englisch)' if en else ''}.\n\n"
                         f"Stand: {access_requests.STAGES[created.stage]}\n"
                         f"Ort: {created.place or '–'}\n\n{created.message or ''}\n\n"
                         f"Einladen oder ablehnen: {admin}\n"
                     ),
                 )
             )
-    return render(request, "zugang.html", {"sent": True}, session=session)
+    return render(request, "zugang.html", {"sent": True, "en": en}, session=session)
 
 
 @router.get("/hardware")
@@ -119,9 +133,10 @@ async def hardware_page(request: Request, session: OptionalSession) -> Response:
 
 
 @router.get("/allsky")
-async def allsky_guide(request: Request, session: OptionalSession, lang: str = "de") -> Response:
-    """allskyhub next to an existing Allsky (docs/install.md 2.6, 2.7), German or English."""
-    return render(request, "allsky_guide.html", {"en": lang == "en"}, session=session)
+async def allsky_guide(request: Request, session: OptionalSession) -> Response:
+    """allskyhub next to an existing Allsky (docs/install.md 2.6, 2.7), German or English
+    (web/lang.py)."""
+    return render(request, "allsky_guide.html", {}, session=session)
 
 
 @router.get("/download/image")

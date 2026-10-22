@@ -25,7 +25,7 @@
     <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
     <label class="check"><input type="radio" name="plan" value="year" checked> {{ price_year }} im Jahr</label>
     <label class="check"><input type="radio" name="plan" value="month"> {{ price_month }} im Monat</label>
-    <label class="check"><input type="checkbox" name="consent" value="true" required> Ich stimme den <a href="/agb">AGB</a> zu und verlange, dass Plus sofort beginnt. Mir ist bekannt, dass ich bei einem <a href="/agb#widerruf">Widerruf</a> für die bis dahin genutzte Zeit anteilig zahle.</label>
+    <label class="check"><input type="checkbox" name="consent" value="true" required> <span>Ich stimme den <a href="/agb">AGB</a> zu und verlange, dass Plus sofort beginnt. Mir ist bekannt, dass ich bei einem <a href="/agb#widerruf">Widerruf</a> für die bis dahin genutzte Zeit anteilig zahle.</span></label>
     <button type="submit" class="secondary">Plus kaufen</button>
   </form>
   {% endif %}

@@ -44,10 +44,10 @@
     </label>
     <label class="hp" aria-hidden="true">Website <input name="website" tabindex="-1" autocomplete="off"></label>
     {% if en %}
-    <label class="check"><input type="checkbox" name="privacy" value="true" required> I have read the <a href="/datenschutz#zugang">privacy policy</a> (in German). My details are used only for this request.</label>
+    <label class="check"><input type="checkbox" name="privacy" value="true" required> <span>I have read the <a href="/datenschutz#zugang">privacy policy</a> (in German). My details are used only for this request.</span></label>
     <button type="submit">Ask for access</button>
     {% else %}
-    <label class="check"><input type="checkbox" name="privacy" value="true" required> Ich habe die <a href="/datenschutz#zugang">Datenschutzerklärung</a> gelesen. Meine Angaben werden nur für die Anfrage verwendet.</label>
+    <label class="check"><input type="checkbox" name="privacy" value="true" required> <span>Ich habe die <a href="/datenschutz#zugang">Datenschutzerklärung</a> gelesen. Meine Angaben werden nur für die Anfrage verwendet.</span></label>
     <button type="submit">Zugang beantragen</button>
     {% endif %}
   </form>

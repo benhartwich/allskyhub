@@ -224,3 +224,36 @@ async def test_without_github_the_download_goes_to_the_releases() -> None:
     )
     assert await down.get() is None
     assert down.releases_url == "https://github.com/benhartwich/allskyhub/releases/latest"
+
+
+async def test_english_pages_and_switch(app: FastAPI, client: httpx.AsyncClient) -> None:
+    """The public pages in English (web/lang.py, Benjamin, 2026-10-22)."""
+    landing = await client.get("/?lang=en")
+    assert '<html lang="en">' in landing.text
+    assert "The whole sky, on your phone." in landing.text
+    assert "Open source, run it yourself" in landing.text
+    assert "Native apps for Android and iOS are coming soon" in landing.text
+    assert landing.cookies.get("ash_lang") == "en"
+    # Remembered: the next page without ?lang is English too, the menu offers German.
+    form = await client.get("/zugang")
+    assert "How far along are you?" in form.text
+    assert "building one" in form.text
+    assert 'href="/sprache/de?next=/zugang"' in form.text
+    assert "Erzähl uns kurz" not in form.text
+    r = await client.post(
+        "/zugang",
+        data={"name": "Ann", "email": "ann@example.org", "stage": "camera", "lang": "en",
+              "csrf_token": csrf_from(form.text)},
+    )  # fmt: skip
+    assert r.status_code == 400
+    assert "Please confirm that you have read the privacy policy." in r.text
+    assert (await client.get("/allsky")).text.count("allskyhub next to Allsky") >= 1
+
+    # The switch: back to German, only to pages on this site.
+    r = await client.get("/sprache/de", params={"next": "/zugang"})
+    assert r.status_code == 303
+    assert r.headers["location"] == "/zugang"
+    assert "Wie weit bist du?" in (await client.get("/zugang")).text
+    r = await client.get("/sprache/en", params={"next": "//evil.example/"})
+    assert r.headers["location"] == "/"
+    assert (await client.get("/sprache/fr")).status_code == 404

@@ -48,6 +48,7 @@ from allskyhub_server.settings import Settings, get_settings
 from allskyhub_server.stall import StallWatch
 from allskyhub_server.version import short as version
 from allskyhub_server.web import (
+    lang,
     routes_access,
     routes_account,
     routes_admin,
@@ -324,6 +325,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.mount("/static", CachedStaticFiles(directory=STATIC_DIR), name="static")
     app.include_router(routes_auth.router)
     app.include_router(routes_access.router)
+    app.include_router(lang.router)
     app.include_router(routes_account.router)
     app.include_router(routes_cameras.router)
     app.include_router(routes_gallery.router)

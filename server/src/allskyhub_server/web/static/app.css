@@ -37,6 +37,12 @@ a.card.cam:hover { transform: translateY(-4px); border-color: rgba(122, 162, 247
 .hero h1 { font-size: clamp(40px, 9vw, 76px); line-height: 1.02; letter-spacing: -2px; }
 .features { display: grid; gap: 16px; }
 @media (min-width: 40rem) { .features { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (min-width: 64rem) { section.features { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+.hero-links { display: flex; flex-wrap: wrap; gap: 6px 18px; margin: 0; }
+.hero-links a { color: var(--text-2); font-weight: 600; }
+.hero-links a:hover { color: var(--text); }
+.soon { display: inline-flex; align-items: center; gap: 8px; width: fit-content; padding: 6px 14px; border-radius: 999px;
+        border: 1px solid rgba(122, 162, 247, .35); background: rgba(122, 162, 247, .08); color: var(--text); font-size: 14px; font-weight: 600; }
 .features .card h2 { font-size: 21px; }
 .home-cameras { margin-bottom: 24px; }
 .home-camera-grid { list-style: none; margin: 0; padding: 0; display: grid; gap: 16px; grid-template-columns: repeat(auto-fill, minmax(min(100%, 150px), 1fr)); }
@@ -410,7 +416,7 @@ details.settings-group[open] > summary { margin-bottom: 8px; }
 .sqm-bars li small { visibility: hidden; }
 .sqm-bars li:nth-child(3n+1) small { visibility: visible; }
 /* Plus (roadmap N7) */
-.features { padding-left: 20px; margin: 0; }
+ul.features { padding-left: 20px; margin: 0; }
 .features li + li { margin-top: 4px; }
 .plus-state { font-weight: 600; }
 
@@ -474,3 +480,11 @@ table.stats.ovf-list th, table.stats.ovf-list td { text-align: left; }
 .list-search { max-width: 420px; }
 .voucher { border-color: var(--accent); }
 .voucher-code code { font-size: 1.05em; padding: 1px 6px; border-radius: 6px; background: var(--surface-2); }
+.nav-lang-code { font-size: .85rem; font-weight: 600; letter-spacing: .04em; }
+.appbar .button { white-space: nowrap; }
+/* Signed out, the menu has the language switch too: on a phone the brand keeps its logo. */
+@media (max-width: 26rem) {
+  .appbar:has(.nav-lang) .appbar-end { gap: 0; }
+  .appbar:has(.nav-lang) .nav-link { padding: 0 9px; }
+  .appbar:has(.nav-lang) .brand-name { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+}

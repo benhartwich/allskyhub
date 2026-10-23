@@ -28,10 +28,22 @@
       matchPackageNames: ["pytest", "pytest-asyncio", "ruff", "pyright"],
     },
     {
+      // Native aarch64 wheels that go onto the Pi; numpy minors have broken pyright
+      // strict before (CLAUDE.md). One PR to test on a camera before an agent release.
+      groupName: "Agent native libraries",
+      matchManagers: ["pep621"],
+      matchUpdateTypes: ["minor", "patch"],
+      matchPackageNames: ["numpy", "opencv-python-headless", "pillow", "cryptography", "gpiod"],
+      addLabels: ["agent"],
+    },
+    {
       groupName: "Python dependencies",
       matchManagers: ["pep621"],
       matchUpdateTypes: ["minor", "patch"],
-      matchPackageNames: ["!pytest", "!pytest-asyncio", "!ruff", "!pyright"],
+      matchPackageNames: [
+        "!pytest", "!pytest-asyncio", "!ruff", "!pyright",
+        "!numpy", "!opencv-python-headless", "!pillow", "!cryptography", "!gpiod",
+      ],
     },
     {
       groupName: "Flutter packages",

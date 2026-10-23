@@ -1,0 +1,55 @@
+// Dependency updates by Renovate (Benjamin, 2026-10-23). Once a week, grouped, never
+// merged automatically: uv.lock goes into the Pi image (image/build.sh), so every
+// update reaches real cameras and needs a green CI and a review like any other PR.
+{
+  $schema: "https://docs.renovatebot.com/renovate-schema.json",
+  extends: ["config:recommended"],
+  timezone: "Europe/Berlin",
+  schedule: ["before 6am on monday"],
+  labels: ["dependencies"],
+  automerge: false,
+  prConcurrentLimit: 6,
+  prHourlyLimit: 0,
+  // A release has to be out for a few days first: broken or hijacked releases are
+  // usually pulled within that time.
+  minimumReleaseAge: "3 days",
+  // Python (uv workspace and uv.lock), the Flutter app and the workflows. The Android
+  // Gradle files are Flutter's templates and move with Flutter, not on their own.
+  enabledManagers: ["pep621", "pub", "github-actions"],
+  // The pyproject ranges are lower bounds only, so most updates land in uv.lock alone.
+  lockFileMaintenance: {
+    enabled: true,
+    schedule: ["before 6am on monday"],
+  },
+  packageRules: [
+    {
+      groupName: "Python dev tools",
+      matchManagers: ["pep621"],
+      matchPackageNames: ["pytest", "pytest-asyncio", "ruff", "pyright"],
+    },
+    {
+      groupName: "Python dependencies",
+      matchManagers: ["pep621"],
+      matchUpdateTypes: ["minor", "patch"],
+      matchPackageNames: ["!pytest", "!pytest-asyncio", "!ruff", "!pyright"],
+    },
+    {
+      groupName: "Flutter packages",
+      matchManagers: ["pub"],
+      matchUpdateTypes: ["minor", "patch"],
+    },
+    {
+      // The actions are pinned to a commit with the version as a comment; Renovate keeps both.
+      groupName: "GitHub Actions",
+      matchManagers: ["github-actions"],
+      matchDepTypes: ["action"],
+    },
+    {
+      // CI tests against the PostgreSQL major the hub runs on; that moves with the server.
+      matchManagers: ["github-actions"],
+      matchPackageNames: ["postgres"],
+      matchUpdateTypes: ["major"],
+      enabled: false,
+    },
+  ],
+}

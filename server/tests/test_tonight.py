@@ -120,5 +120,7 @@ async def test_camera_and_public_page_show_tonight(
         await db.commit()
     page = (await client.get(f"/cameras/{dev.device_id}")).text
     assert "Heute Nacht" in page
-    assert "Klar und dunkel von" in page  # the test forecast is clear
+    # The test forecast is clear; the real moon decides whether it is also dark (around
+    # full moon it is not), so either verdict about a clear sky is right.
+    assert "Klar und dunkel von" in page or "Klare Abschnitte nur bei hellem Mond" in page
     assert "night-bars" in page

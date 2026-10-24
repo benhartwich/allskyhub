@@ -52,6 +52,28 @@
   </form>
   {% endif %}
 </section>
+<section class="card stack" id="kameras">
+  <h2>Kameras</h2>
+  {% if camera_rows %}
+  <p class="muted small">{{ camera_rows | selectattr('online') | list | length }} von {{ camera_rows | length }} online. Ohne Bilder: private Kameras öffnen nur ihre Besitzer.</p>
+  <div class="table-scroll"><table class="stats">
+    <thead><tr><th>Kamera</th><th>Konto</th><th>Profil</th><th>Version</th><th>Zuletzt</th></tr></thead>
+    <tbody>
+    {% for c in camera_rows %}
+    <tr>
+      <td>{% if c.device.public_slug %}<a href="/sky/{{ c.device.public_slug }}">{{ c.device.name or c.device.id }}</a>{% else %}{{ c.device.name or c.device.id }}{% endif %}<br><code class="small">{{ c.device.id }}</code></td>
+      <td>{{ c.email }}</td>
+      <td>{{ c.device.profile }}</td>
+      <td>{{ c.device.agent_version }}{% if c.update %}<br><span class="small {{ 'warn' if c.update in ('failed', 'rolled_back') }}">{{ update_states.get(c.update, c.update) }}</span>{% endif %}</td>
+      <td>{% if c.online %}online{% elif c.device.last_seen_at %}<span class="warn">{{ c.device.last_seen_at | localtime }}</span>{% else %}<span class="muted">nie</span>{% endif %}</td>
+    </tr>
+    {% endfor %}
+    </tbody>
+  </table></div>
+  {% else %}
+  <p class="muted">Noch keine gekoppelte Kamera.</p>
+  {% endif %}
+</section>
 <section class="card stack" id="zugang">
   <h2>Zugangsanfragen</h2>
   {% if access_requests %}

@@ -165,3 +165,30 @@ async def test_admin_gifts_plus(
     r = await client.post("/admin/plus", data={"device_id": dev.device_id, "csrf_token": csrf})
     assert "Geschenk" in r.text
     assert "Noch keine Kamera mit Plus" in r.text
+
+
+async def test_admin_sees_all_cameras_without_pictures(
+    app: FastAPI, client: httpx.AsyncClient, settings: Settings, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Every paired camera with account, profile, version and last contact, no pictures."""
+    dev = FakeDevice()
+    await paired_token(client, dev)
+    monkeypatch.setattr(app.state, "github", FakeGitHub())
+    email = await owner_email(app, dev.device_id)
+    monkeypatch.setattr(settings, "admin_emails", email)
+    maker: async_sessionmaker[AsyncSession] = app.state.sessionmaker
+    async with maker() as db:
+        device = await db.get(Device, dev.device_id)
+        assert device is not None
+        device.name = "Dachkamera"
+        device.last_status = {"update": {"state": "failed", "version": "9.9", "at": "x"}}
+        await db.commit()
+
+    page = (await client.get("/admin")).text
+    section = page.split('id="kameras"')[1].split("</section>")[0]
+    assert "Dachkamera" in section
+    assert dev.device_id in section
+    assert email in section
+    assert "Update fehlgeschlagen" in section
+    assert "0 von 1 online" in section
+    assert "<img" not in section

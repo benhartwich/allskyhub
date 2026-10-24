@@ -1,4 +1,4 @@
-"""Admin page: the server's state and deploying new versions (admin/deploy.py).
+"""Admin page: the server's state, all cameras and deploying new versions (admin/deploy.py).
 
 Only for accounts in ``admin_emails``; everyone else gets a 404, as if the page did not
 exist. Starting a deploy needs the password again.
@@ -9,7 +9,8 @@ from __future__ import annotations
 import asyncio
 import shutil
 import uuid
-from typing import Annotated
+from dataclasses import dataclass
+from typing import Annotated, Any, cast
 
 from fastapi import APIRouter, Depends, Form, HTTPException, Request
 from fastapi.responses import Response
@@ -22,6 +23,7 @@ from allskyhub_server.auth.accounts import AccountError
 from allskyhub_server.auth.passwords import verify_secret_async
 from allskyhub_server.auth.sessions import SessionInfo
 from allskyhub_server.devices import youtube
+from allskyhub_server.devices.connections import ConnectionRegistry
 from allskyhub_server.mail.send import Mail, Mailer
 from allskyhub_server.models import Device, User
 from allskyhub_server.settings import Settings
@@ -30,6 +32,15 @@ from allskyhub_server.web.deps import CurrentSession, DbSession, SettingsDep, cs
 from allskyhub_server.web.render import render
 
 router = APIRouter(dependencies=[Depends(csrf_protect)])
+
+UPDATE_STATES = {
+    "downloading": "lädt ein Update",
+    "waiting": "Update wartet auf den Tag",
+    "installing": "installiert ein Update",
+    "installed": "Update installiert",
+    "rolled_back": "Update zurückgerollt",
+    "failed": "Update fehlgeschlagen",
+}
 
 
 def admin_only(session: SessionInfo, settings: Settings) -> None:
@@ -48,6 +59,40 @@ async def confirmed(request: Request, session: SessionInfo, password: str) -> bo
             429, "Zu viele Versuche.", {"Retry-After": str(exc.retry_after)}
         ) from None
     return await verify_secret_async(session.user.password_hash, password)
+
+
+@dataclass(frozen=True)
+class CameraRow:
+    device: Device
+    email: str
+    online: bool
+    update: str | None  # the updater's state unless it is up to date (SPEC §8)
+
+
+async def all_cameras(db: DbSession, registry: ConnectionRegistry) -> list[CameraRow]:
+    """Every paired camera without its pictures, for help and for following updates
+    (Benjamin, 2026-10-24): online first, then by when it was last seen."""
+    rows = (
+        await db.execute(
+            select(Device, User.email)
+            .join(User, User.id == Device.owner_id)
+            .order_by(Device.last_seen_at.desc().nulls_last(), Device.name)
+        )
+    ).all()
+    cameras: list[CameraRow] = []
+    for device, email in rows:
+        update = cast(dict[str, Any], (device.last_status or {}).get("update") or {})
+        state = update.get("state")
+        cameras.append(
+            CameraRow(
+                device,
+                email,
+                registry.is_online(device.id),
+                state if isinstance(state, str) and state != "up_to_date" else None,
+            )
+        )
+    cameras.sort(key=lambda c: not c.online)  # stable: keeps last seen within each part
+    return cameras
 
 
 async def page(
@@ -82,6 +127,8 @@ async def page(
             "cameras": await db.scalar(
                 select(func.count()).select_from(Device).where(Device.owner_id.is_not(None))
             ),
+            "camera_rows": await all_cameras(db, request.app.state.connections),
+            "update_states": UPDATE_STATES,
             "repo": settings.deploy_repo,
             "access_requests": await access_requests.open_requests(db),
             "stages": access_requests.STAGES,

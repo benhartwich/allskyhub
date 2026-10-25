@@ -18,6 +18,7 @@ from sqlalchemy import select
 
 from allskyhub_server.api.app import AppUser
 from allskyhub_server.devices import events, queries
+from allskyhub_server.i18n import english, tr
 from allskyhub_server.models import EventRecord
 from allskyhub_server.web.deps import DbSession
 from allskyhub_sky import alt_az, precess, sidereal_deg, sky_lines
@@ -74,19 +75,26 @@ async def sky_view(db: DbSession, user: AppUser, device_id: str) -> SkyView:
     settings: dict[str, Any] = (device.last_status or {}).get("settings") or {}
     lat, lon = settings.get("latitude"), settings.get("longitude")
     if not isinstance(lat, int | float) or not isinstance(lon, int | float):
-        raise HTTPException(409, "Die Kamera kennt ihren Standort noch nicht.")
+        raise HTTPException(
+            409,
+            tr(
+                "Die Kamera kennt ihren Standort noch nicht.",
+                "The camera does not know its location yet.",
+            ),
+        )
     now = dt.datetime.now(dt.UTC)
-    sky = sky_lines(float(lat), float(lon), now)
+    sky = sky_lines(float(lat), float(lon), now, latin=english())
     lst = sidereal_deg(now, float(lon))
     objects = [SkyObjectItem(label=name, kind="constellation", alt=alt, az=az)
                for name, alt, az in sky.names]  # fmt: skip
     for key, label in PLANETS.items():
+        label = key.capitalize() if english() else label  # the keys are the English names
         alt, az = alt_az(*precess(*planet_radec(key, now), now), lst, float(lat))
         if alt >= MIN_ALT:
             objects.append(SkyObjectItem(label=label, kind="planet", alt=alt, az=az))
     alt, az = alt_az(*moon_radec(now), lst, float(lat))
     if alt >= MIN_ALT:
-        objects.append(SkyObjectItem(label="Mond", kind="moon", alt=alt, az=az))
+        objects.append(SkyObjectItem(label=tr("Mond", "Moon"), kind="moon", alt=alt, az=az))
     rows = await db.scalars(
         select(EventRecord)
         .where(

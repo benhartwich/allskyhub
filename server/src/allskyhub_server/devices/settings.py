@@ -11,6 +11,7 @@ from typing import Any
 
 from allskyhub_protocol import Command, CommandName, ErrorReply, SetSettingsArgs
 from allskyhub_server.devices.connections import ConnectionRegistry, DeviceOfflineError
+from allskyhub_server.i18n import english, tr
 
 REPLY_TIMEOUT_S = 10.0
 
@@ -21,6 +22,14 @@ FIELD_NAMES = {
     "camera": "Kamera",
     "day_delay_s": "Pause am Tag",
     "night_delay_s": "Pause in der Nacht",
+}
+FIELD_NAMES_EN = {
+    "latitude": "Latitude",
+    "longitude": "Longitude",
+    "timezone": "Time zone",
+    "camera": "Camera",
+    "day_delay_s": "Pause by day",
+    "night_delay_s": "Pause at night",
 }
 CAMERA_CHOICES = {
     "auto": "Automatisch erkennen",
@@ -33,18 +42,18 @@ CAMERA_CHOICES = {
 @dataclass(frozen=True)
 class Outcome:
     ok: bool
-    # German message for web and app; None on success.
+    # Message for web (German) and app (its language, i18n.py); None on success.
     message: str | None = None
     # HTTP status for the app API.
     status: int = 200
 
 
 def describe_fields(message: str, labels: dict[str, str] | None = None) -> str:
-    """The device names invalid fields comma-separated (SPEC §6.5); make them German, with
-    the labels of the device's schema (§6.9) when known."""
-    names = labels or FIELD_NAMES
+    """The device names invalid fields comma-separated (SPEC §6.5); make them readable,
+    with the labels of the device's schema (§6.9) when known."""
+    names = labels or (FIELD_NAMES_EN if english() else FIELD_NAMES)
     found = [names.get(f.strip(), f.strip()) for f in message.split(",") if f.strip()]
-    return ", ".join(dict.fromkeys(found)) or "unbekannt"
+    return ", ".join(dict.fromkeys(found)) or tr("unbekannt", "unknown")
 
 
 # Settings that make the camera talk to other machines in the owner's network (or send
@@ -71,23 +80,52 @@ async def apply(
         else args
     )
     if not payload:
-        return Outcome(False, "Keine Änderung angegeben.", 400)
+        return Outcome(False, tr("Keine Änderung angegeben.", "No change given."), 400)
     if not owner and (kept := sorted(OWNER_ONLY & payload.keys())):
         names = ", ".join(dict.fromkeys((labels or {}).get(k, k) for k in kept))
-        return Outcome(False, f"Nur der Besitzer kann das ändern: {names}.", 403)
+        return Outcome(
+            False,
+            tr(
+                f"Nur der Besitzer kann das ändern: {names}.",
+                f"Only the owner can change this: {names}.",
+            ),
+            403,
+        )
     cmd = Command(name=CommandName.SET_SETTINGS, args=payload)
     try:
         reply = await registry.command(device_id, cmd, REPLY_TIMEOUT_S)
     except DeviceOfflineError:
         return Outcome(
-            False, "Die Kamera ist offline. Einstellungen gehen nur, wenn sie verbunden ist.", 409
+            False,
+            tr(
+                "Die Kamera ist offline. Einstellungen gehen nur, wenn sie verbunden ist.",
+                "The camera is offline. Settings can only be changed while it is connected.",
+            ),
+            409,
         )
     except TimeoutError:
-        return Outcome(False, "Die Kamera hat nicht rechtzeitig geantwortet.", 504)
+        return Outcome(
+            False,
+            tr(
+                "Die Kamera hat nicht rechtzeitig geantwortet.",
+                "The camera did not answer in time.",
+            ),
+            504,
+        )
     if isinstance(reply, ErrorReply):
         if reply.code == "invalid_args":
+            fields = describe_fields(reply.message, labels)
             return Outcome(
-                False, f"Die Kamera hat abgelehnt: {describe_fields(reply.message, labels)}.", 400
+                False,
+                tr(f"Die Kamera hat abgelehnt: {fields}.", f"The camera refused: {fields}."),
+                400,
             )
-        return Outcome(False, f"Die Kamera meldet einen Fehler ({reply.code}).", 502)
+        return Outcome(
+            False,
+            tr(
+                f"Die Kamera meldet einen Fehler ({reply.code}).",
+                f"The camera reports an error ({reply.code}).",
+            ),
+            502,
+        )
     return Outcome(True)

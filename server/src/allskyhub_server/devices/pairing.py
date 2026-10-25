@@ -31,6 +31,7 @@ from allskyhub_protocol import (
     signing_payload,
 )
 from allskyhub_server.auth.tokens import hash_token, new_token
+from allskyhub_server.i18n import tr
 from allskyhub_server.models import (
     CameraMember,
     Device,
@@ -200,12 +201,21 @@ async def claim(db: AsyncSession, user_id: uuid.UUID, code: str, name: str) -> D
         .with_for_update()
     )
     if pairing is None:
-        raise CodeInvalidError("Der Code ist ungültig oder abgelaufen.")
+        raise CodeInvalidError(
+            tr("Der Code ist ungültig oder abgelaufen.", "The code is invalid or has expired.")
+        )
     device = await db.get(Device, pairing.device_id, with_for_update=True)
     if device is None:  # pragma: no cover - the foreign key guarantees it
-        raise CodeInvalidError("Der Code ist ungültig oder abgelaufen.")
+        raise CodeInvalidError(
+            tr("Der Code ist ungültig oder abgelaufen.", "The code is invalid or has expired.")
+        )
     if device.owner_id is not None and device.owner_id != user_id:
-        raise PairedElsewhereError("Diese Kamera ist mit einem anderen Konto gekoppelt.")
+        raise PairedElsewhereError(
+            tr(
+                "Diese Kamera ist mit einem anderen Konto gekoppelt.",
+                "This camera is paired with another account.",
+            )
+        )
     now = _now()
     pairing.claimed_at = now
     pairing.claimed_by = user_id

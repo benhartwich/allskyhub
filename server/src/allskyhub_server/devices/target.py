@@ -14,6 +14,7 @@ from dataclasses import dataclass, field
 from typing import Any, Literal, cast
 
 from allskyhub_server.devices.tonight import Hour, zone_for
+from allskyhub_server.i18n import english, tr
 from allskyhub_sky import alt_az, precess, sidereal_deg
 from allskyhub_sky.astro import moon_altitude, moon_illumination, moon_radec, sun_altitude
 from allskyhub_sky.objects import SkyObject, catalogue, radec
@@ -27,6 +28,7 @@ MOON_NEAR = 15.0  # degrees
 MOON_BRIGHT = 0.5
 NOW_FRESH = dt.timedelta(minutes=20)
 COMPASS = ("N", "NO", "O", "SO", "S", "SW", "W", "NW")
+COMPASS_EN = ("N", "NE", "E", "SE", "S", "SW", "W", "NW")
 
 Verdict = Literal["clear", "partly", "cloudy", "low", "bright"]
 VERDICT_TEXT: dict[str, str] = {
@@ -36,6 +38,22 @@ VERDICT_TEXT: dict[str, str] = {
     "low": "zu tief",
     "bright": "zu hell",
 }
+VERDICT_TEXT_EN: dict[str, str] = {
+    "clear": "clear",
+    "partly": "partly cloudy",
+    "cloudy": "cloudy",
+    "low": "too low",
+    "bright": "too bright",
+}
+
+
+def verdict_text(verdict: str) -> str:
+    """In the language of the request (the web page uses VERDICT_TEXT)."""
+    return (VERDICT_TEXT_EN if english() else VERDICT_TEXT)[verdict]
+
+
+def _point(az: float) -> str:
+    return (COMPASS_EN if english() else COMPASS)[round(az / 45.0) % 8]
 
 
 @dataclass(frozen=True)
@@ -50,7 +68,7 @@ class TargetHour:
 
     @property
     def direction(self) -> str:
-        return COMPASS[round(self.az / 45.0) % 8]
+        return _point(self.az)
 
 
 @dataclass(frozen=True)
@@ -64,7 +82,7 @@ class TargetNow:
 
     @property
     def direction(self) -> str:
-        return COMPASS[round(self.az / 45.0) % 8]
+        return _point(self.az)
 
 
 @dataclass
@@ -95,16 +113,24 @@ class Plan:
 
     def summary(self) -> str:
         best = self.best
+        label = self.target.label
         if self.now.verdict == "clear":
-            return f"{self.target.label} ist jetzt frei."
+            return tr(f"{label} ist jetzt frei.", f"{label} is clear now.")
         if best is None:
-            return f"{self.target.label}: in den nächsten {HOURS} Stunden keine gute Zeit."
+            return tr(
+                f"{label}: in den nächsten {HOURS} Stunden keine gute Zeit.",
+                f"{label}: no good time in the next {HOURS} hours.",
+            )
         start, end = (self.clock(t) for t in best)
-        return f"{self.target.label}: am besten von {start} bis {end} Uhr."
+        return tr(
+            f"{label}: am besten von {start} bis {end} Uhr.",
+            f"{label}: best from {start} to {end}.",
+        )
 
 
 def find(key: str) -> SkyObject | None:
-    return next((o for o in catalogue() if o.key.lower() == key.strip().lower()), None)
+    found = catalogue(english=english())
+    return next((o for o in found if o.key.lower() == key.strip().lower()), None)
 
 
 def _sep(a: tuple[float, float], b: tuple[float, float]) -> float:
@@ -168,7 +194,7 @@ def plan(
     alt, az, _ = _position(target.key, now, lat, lon)
     sky: dict[str, Any] = (status or {}).get("sky") or {}
     cover: float | None = None
-    source = "ganzer Himmel"
+    source = tr("ganzer Himmel", "whole sky")
     try:
         measured = dt.datetime.fromisoformat(str(sky.get("at")))
     except ValueError:
@@ -177,7 +203,7 @@ def plan(
         cell = map_cell(sky.get("cloud_map"), alt, az)
         value = sky.get("cloud_cover")
         if cell is not None:
-            cover, source = cell, "in Richtung des Objekts"
+            cover, source = cell, tr("in Richtung des Objekts", "towards the object")
         elif isinstance(value, int | float):
             cover = float(value)
     now_verdict = _judge(

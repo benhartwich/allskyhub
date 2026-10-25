@@ -15,6 +15,7 @@ from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from allskyhub_server.auth.accounts import normalize_email
+from allskyhub_server.i18n import tr
 from allskyhub_server.models import CameraMember, Device, User
 
 ROLES = {"viewer": "ansehen", "admin": "verwalten"}
@@ -45,17 +46,24 @@ async def members(db: AsyncSession, device_id: str) -> list[Member]:
 async def add(db: AsyncSession, device: Device, email: str, role: str) -> None:
     """Add or change a member; the caller commits."""
     if role not in ROLES:
-        raise SharingError("Unbekannte Rolle.")
+        raise SharingError(tr("Unbekannte Rolle.", "Unknown role."))
     user = await db.scalar(select(User).where(User.email == normalize_email(email)))
     if user is None:
-        raise SharingError("Es gibt kein Konto mit dieser Adresse.")
+        raise SharingError(
+            tr("Es gibt kein Konto mit dieser Adresse.", "There is no account with this address.")
+        )
     if user.id == device.owner_id:
-        raise SharingError("Das ist dein eigenes Konto.")
+        raise SharingError(tr("Das ist dein eigenes Konto.", "This is your own account."))
     count = await db.scalar(
         select(func.count()).select_from(CameraMember).where(CameraMember.device_id == device.id)
     )
     if (count or 0) >= MAX_MEMBERS:
-        raise SharingError(f"Höchstens {MAX_MEMBERS} Personen pro Kamera.")
+        raise SharingError(
+            tr(
+                f"Höchstens {MAX_MEMBERS} Personen pro Kamera.",
+                f"At most {MAX_MEMBERS} people per camera.",
+            )
+        )
     await db.execute(
         pg_insert(CameraMember)
         .values(device_id=device.id, user_id=user.id, role=role)

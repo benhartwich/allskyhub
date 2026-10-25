@@ -15,6 +15,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from allskyhub_protocol import EventVariant
 from allskyhub_server.devices.connections import ConnectionRegistry
 from allskyhub_server.devices.images import ImageStore
+from allskyhub_server.i18n import tr
 from allskyhub_server.models import EventRecord
 
 
@@ -271,10 +272,16 @@ def overflight_count(rows: list[EventRecord]) -> str | None:
     sats, planes = groups.count("satellite"), groups.count("aircraft")
     unknown = groups.count("unknown")
     parts = [
-        f"{sats} {'Satellit' if sats == 1 else 'Satelliten'}" if sats else "",
-        f"{planes} {'Flugzeug' if planes == 1 else 'Flugzeuge'}" if planes else "",
-        f"{unknown} unbekannt" if unknown else "",
+        f"{sats} {tr('Satellit', 'satellite') if sats == 1 else tr('Satelliten', 'satellites')}"
+        if sats
+        else "",
+        f"{planes} {tr('Flugzeug', 'aircraft') if planes == 1 else tr('Flugzeuge', 'aircraft')}"
+        if planes
+        else "",
+        f"{unknown} {tr('unbekannt', 'unknown')}" if unknown else "",
     ]
     total = len(groups)
-    head = f"{total} {'Überflug' if total == 1 else 'Überflüge'}"
+    head = (
+        f"{total} {tr('Überflug', 'overflight') if total == 1 else tr('Überflüge', 'overflights')}"
+    )
     return f"{head}: " + ", ".join(p for p in parts if p)

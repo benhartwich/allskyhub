@@ -13,8 +13,9 @@ from dataclasses import dataclass
 from typing import Annotated, Any, cast
 
 from fastapi import APIRouter, Depends, Form, HTTPException, Request
-from fastapi.responses import Response
+from fastapi.responses import RedirectResponse, Response
 from sqlalchemy import func, select
+from starlette.routing import Match
 
 from allskyhub_server.admin import deploy
 from allskyhub_server.admin import stores as admin_stores
@@ -296,3 +297,17 @@ async def decline_request(
         return await page(request, db, session, 400, error=exc.message)
     await db.commit()
     return await page(request, db, session, notice=f"Anfrage von {asked.email} abgelehnt.")
+
+
+# Included after every other router (app.py): the admin forms answer with the page itself,
+# so reloading it afterwards asks for the form's address with GET; that leads back to the
+# page instead of "405 Method Not Allowed".
+reload_router = APIRouter()
+
+
+@reload_router.get("/admin/{rest:path}", include_in_schema=False)
+async def back_to_admin(request: Request, rest: str) -> Response:
+    # PARTIAL: a route has this address, only not for GET (a form's POST).
+    if any(route.matches(request.scope)[0] == Match.PARTIAL for route in request.app.routes):
+        return RedirectResponse("/admin", status_code=303)
+    raise HTTPException(404)

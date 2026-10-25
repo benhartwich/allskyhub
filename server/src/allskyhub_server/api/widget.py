@@ -23,6 +23,7 @@ from allskyhub_server.auth.tokens import hash_token, new_token
 from allskyhub_server.devices import queries, tonight
 from allskyhub_server.devices.connections import ConnectionRegistry
 from allskyhub_server.devices.images import ImageStore
+from allskyhub_server.i18n import tr
 from allskyhub_server.models import Device, User, WidgetToken
 from allskyhub_server.web.deps import DbSession
 
@@ -105,7 +106,7 @@ async def widget_state(request: Request, db: DbSession) -> WidgetState:
     sky: dict[str, Any] = (device.last_status or {}).get("sky") or {}
     cover = sky.get("cloud_cover")
     return WidgetState(
-        name=device.name or "Allsky-Kamera",
+        name=device.name or tr("Allsky-Kamera", "Allsky camera"),
         online=registry.is_online(device.id),
         image_at=device.latest_image_at,
         tonight=night.summary if night is not None else None,

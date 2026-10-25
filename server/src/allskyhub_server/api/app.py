@@ -41,6 +41,7 @@ from allskyhub_server.devices import settings as settings_mod
 from allskyhub_server.devices.connections import ConnectionRegistry
 from allskyhub_server.devices.images import ImageStore
 from allskyhub_server.devices.queries import Role
+from allskyhub_server.i18n import english, tr
 from allskyhub_server.models import Device, EventRecord, PushToken, User
 from allskyhub_server.web.deps import DbSession, SettingsDep, client_ip
 from allskyhub_server.web.routes_account import finish_deletion
@@ -534,23 +535,25 @@ async def camera_settings(
     request: Request, body: SetSettingsArgs, db: DbSession, user: AppUser, device_id: str
 ) -> dict[str, str]:
     """SPEC §6.5 ``set_settings`` (roadmap #2): only the given keys change. Waits for the
-    camera's answer; 409 offline, 400 rejected (German message), 504 no answer. The camera
-    then restarts its capture and reports the new values in ``status.settings``."""
+    camera's answer; 409 offline, 400 rejected (message in the app's language), 504 no
+    answer. The camera then restarts its capture and reports the new values in
+    ``status.settings``."""
     found = await queries.visible_one(db, user.id, device_id, "admin")
     if found is None:
         raise HTTPException(404, "Not found")
     device, role = found
     schema, own = settings_form.schema_of(device)
     changes = body.model_dump(mode="json", exclude_unset=True)
+    lang = "en" if english() else "de"
     if own and (bad := invalid_settings(schema, changes)):
-        names = settings_form.field_labels(schema)
+        names = settings_form.field_labels(schema, lang)
         listed = ", ".join(dict.fromkeys(names.get(k, k) for k in bad))
-        raise HTTPException(400, f"Ungültige Angabe: {listed}.")
+        raise HTTPException(400, tr(f"Ungültige Angabe: {listed}.", f"Not valid: {listed}."))
     outcome = await settings_mod.apply(
         _registry(request),
         device.id,
         changes,
-        settings_form.field_labels(schema),
+        settings_form.field_labels(schema, lang),
         owner=role == "owner",
     )
     if not outcome.ok:
@@ -702,7 +705,7 @@ async def delete_account(
     """Roadmap #10: deletes the account at once, unpairs its cameras, removes their images."""
     await _limit_account(request, user)
     if not await verify_secret_async(user.password_hash, body.password):
-        raise HTTPException(400, "Das Passwort stimmt nicht.")
+        raise HTTPException(400, tr("Das Passwort stimmt nicht.", "The password is not right."))
     device_ids = await accounts.delete_account(db, user)
     await db.commit()
     await finish_deletion(request, device_ids)

@@ -48,6 +48,20 @@ PLANETS = {
     "uranus": "Uranus",
     "neptune": "Neptun",
 }
+# English names for the app in English (the German ones are in messier.json).
+PLANETS_EN = {key: key.capitalize() for key in PLANETS}
+MESSIER_EN = {
+    "M1": "Crab Nebula", "M6": "Butterfly Cluster", "M7": "Ptolemy Cluster",
+    "M8": "Lagoon Nebula", "M11": "Wild Duck Cluster", "M13": "Hercules Cluster",
+    "M16": "Eagle Nebula", "M17": "Omega Nebula", "M20": "Trifid Nebula",
+    "M24": "Sagittarius Star Cloud", "M27": "Dumbbell Nebula", "M31": "Andromeda Galaxy",
+    "M33": "Triangulum Galaxy", "M42": "Orion Nebula", "M44": "Beehive Cluster",
+    "M45": "Pleiades", "M51": "Whirlpool Galaxy", "M57": "Ring Nebula",
+    "M63": "Sunflower Galaxy", "M64": "Black Eye Galaxy", "M76": "Little Dumbbell Nebula",
+    "M81": "Bode's Galaxy", "M82": "Cigar Galaxy", "M83": "Southern Pinwheel Galaxy",
+    "M87": "Virgo A", "M97": "Owl Nebula", "M101": "Pinwheel Galaxy",
+    "M104": "Sombrero Galaxy",
+}  # fmt: skip
 
 
 @dataclass(frozen=True)
@@ -101,10 +115,13 @@ def _messier() -> dict[str, list[Any]]:
     return data
 
 
-def catalogue() -> list[SkyObject]:
-    """Planets first, then M1 … M110."""
-    items = [SkyObject(key, name, "planet", None) for key, name in PLANETS.items()]
+def catalogue(*, english: bool = False) -> list[SkyObject]:
+    """Planets first, then M1 … M110; names German, or English with ``english``."""
+    planets = PLANETS_EN if english else PLANETS
+    items = [SkyObject(key, name, "planet", None) for key, name in planets.items()]
     for key, (name, _, _, mag, kind) in _messier().items():
+        if english and name:
+            name = MESSIER_EN.get(key, name)
         label = f"{key} {name}" if name else key
         items.append(SkyObject(key, label, str(kind), float(mag) if mag is not None else None))
     return items

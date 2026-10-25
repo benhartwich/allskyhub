@@ -14,12 +14,14 @@ from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from allskyhub_server.devices.night_summary import summarize
+from allskyhub_server.i18n import english
 from allskyhub_server.models import Device, EventRecord, NightStat, SkySample
 
 # Nights this recent are recomputed on every pass (late events, late measurements).
 RECOMPUTE_DAYS = 3
 CLEAR_NIGHT_HOURS = 2.0
 MONTHS = ("Jan", "Feb", "Mär", "Apr", "Mai", "Jun", "Jul", "Aug", "Sep", "Okt", "Nov", "Dez")
+MONTHS_EN = ("Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec")
 
 
 async def refresh(db: AsyncSession, now: dt.datetime) -> int:
@@ -112,7 +114,7 @@ async def year(db: AsyncSession, device_id: str, year: int) -> Year:
             )
         )
     )
-    months = [Period(name) for name in MONTHS]
+    months = [Period(name) for name in (MONTHS_EN if english() else MONTHS)]
     total = Period(str(year))
     showers: dict[str, int] = {}
     for n in rows:

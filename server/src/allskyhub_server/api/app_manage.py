@@ -21,6 +21,7 @@ from allskyhub_server.api.app import AppUser
 from allskyhub_server.auth import ratelimit
 from allskyhub_server.devices import discord, public, queries, science, sharing, sqm_trend, stats
 from allskyhub_server.devices.queries import Role
+from allskyhub_server.i18n import tr
 from allskyhub_server.models import Device, User
 from allskyhub_server.web.deps import DbSession
 
@@ -199,6 +200,14 @@ async def statistics(db: DbSession, user: AppUser, device_id: str, year: int = 0
     )
 
 
+# The titles of science.EXPORTS for the English app (i18n.py).
+EXPORT_TITLES_EN = {
+    "meteors": "Meteors, one by one",
+    "meteors-hourly": "Meteors per hour",
+    "sqm": "Sky brightness per night",
+}
+
+
 class ExportItem(BaseModel):
     name: str
     title: str
@@ -209,7 +218,7 @@ class ExportItem(BaseModel):
 async def exports(db: DbSession, user: AppUser, device_id: str) -> list[ExportItem]:
     await _own(db, user, device_id)
     return [
-        ExportItem(name=name, title=title, filename=filename)
+        ExportItem(name=name, title=tr(title, EXPORT_TITLES_EN.get(name, title)), filename=filename)
         for name, (title, filename) in science.EXPORTS.items()
     ]
 
@@ -282,7 +291,7 @@ async def discord_put(
             }
         )
     except ValidationError:
-        raise HTTPException(400, discord.BAD_WEBHOOK) from None
+        raise HTTPException(400, tr(discord.BAD_WEBHOOK, discord.BAD_WEBHOOK_EN)) from None
     device.discord = config.model_dump()
     await db.commit()
     return _discord_state(device)
@@ -307,13 +316,22 @@ async def discord_test(request: Request, db: DbSession, user: AppUser, device_id
     except ratelimit.RateLimitedError as exc:
         raise HTTPException(
             429,
-            "Bitte ein paar Minuten warten, bevor du noch eine Testnachricht schickst.",
+            tr(
+                "Bitte ein paar Minuten warten, bevor du noch eine Testnachricht schickst.",
+                "Please wait a few minutes before you send another test message.",
+            ),
             {"Retry-After": str(exc.retry_after)},
         ) from None
     poster: discord.Discord = request.app.state.notifier.discord
     result = await poster.test(device) if discord.settings_of(device) else "gone"
     if result == "gone":
-        raise HTTPException(409, "Discord kennt diesen Webhook nicht (mehr).")
+        raise HTTPException(
+            409,
+            tr(
+                "Discord kennt diesen Webhook nicht (mehr).",
+                "Discord does not know this webhook (any more).",
+            ),
+        )
     if result != "ok":
-        raise HTTPException(502, "Discord war nicht erreichbar.")
+        raise HTTPException(502, tr("Discord war nicht erreichbar.", "Discord was not reachable."))
     return Response(status_code=204)

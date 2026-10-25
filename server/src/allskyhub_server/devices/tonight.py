@@ -18,6 +18,7 @@ import httpx
 
 from allskyhub_server.devices import astro, satellites
 from allskyhub_server.devices.refresh import Refreshing
+from allskyhub_server.i18n import tr
 
 FORECAST_URL = "https://api.open-meteo.com/v1/forecast"
 MAX_AGE_S = 3600
@@ -228,26 +229,43 @@ def _summary(
     zone: ZoneInfo,
 ) -> str:
     if night.dusk is None or night.dawn is None:
-        return "Heute wird es nicht astronomisch dunkel."
+        return tr(
+            "Heute wird es nicht astronomisch dunkel.",
+            "It does not get astronomically dark tonight.",
+        )
     if not any(h.clouds is not None for h in hours):
-        return "Keine Wolkenvorhersage verfügbar."
+        return tr("Keine Wolkenvorhersage verfügbar.", "No cloud forecast available.")
     if best is None:
         if all(h.clouds is not None and h.clouds >= CLEAR_BELOW for h in hours):
-            return "Bewölkt, die ganze Nacht."
-        return "Klare Abschnitte nur bei hellem Mond."
-    text = f"Klar und dunkel von {_clock(best[0], zone)} bis {_clock(best[1], zone)} Uhr."
+            return tr("Bewölkt, die ganze Nacht.", "Cloudy all night.")
+        return tr("Klare Abschnitte nur bei hellem Mond.", "Clear spells only with a bright moon.")
+    start, end = _clock(best[0], zone), _clock(best[1], zone)
+    text = tr(
+        f"Klar und dunkel von {start} bis {end} Uhr.", f"Clear and dark from {start} to {end}."
+    )
     if night.moon_illumination >= BRIGHT_MOON and night.moonset and best[0] >= night.moonset:
-        text += f" Der Mond geht um {_clock(night.moonset, zone)} unter."
+        moonset = _clock(night.moonset, zone)
+        text += tr(f" Der Mond geht um {moonset} unter.", f" The moon sets at {moonset}.")
     return text
 
 
 def moon_phase_name(illumination: float, waxing: bool) -> str:
     if illumination < 0.03:
-        return "Neumond"
+        return tr("Neumond", "new moon")
     if illumination > 0.97:
-        return "Vollmond"
+        return tr("Vollmond", "full moon")
     if 0.4 <= illumination <= 0.6:
-        return "zunehmender Halbmond" if waxing else "abnehmender Halbmond"
+        if waxing:
+            return tr("zunehmender Halbmond", "first quarter")
+        return tr("abnehmender Halbmond", "last quarter")
     if illumination < 0.4:
-        return "zunehmende Sichel" if waxing else "abnehmende Sichel"
-    return "zunehmender Mond" if waxing else "abnehmender Mond"
+        return (
+            tr("zunehmende Sichel", "waxing crescent")
+            if waxing
+            else tr("abnehmende Sichel", "waning crescent")
+        )
+    return (
+        tr("zunehmender Mond", "waxing gibbous")
+        if waxing
+        else tr("abnehmender Mond", "waning gibbous")
+    )

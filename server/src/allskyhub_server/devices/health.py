@@ -16,6 +16,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from allskyhub_server.devices.tonight import ForecastCache
+from allskyhub_server.i18n import tr
 from allskyhub_server.models import Device, SkySample
 
 OFFLINE_AFTER = dt.timedelta(minutes=30)
@@ -36,9 +37,11 @@ class Problem:
 def _age(delta: dt.timedelta) -> str:
     minutes = int(delta.total_seconds() // 60)
     if minutes < 120:
-        return f"{minutes} Minuten"
+        return tr(f"{minutes} Minuten", f"{minutes} minutes")
     hours = minutes // 60
-    return f"{hours} Stunden" if hours < 48 else f"{hours // 24} Tagen"
+    if hours < 48:
+        return tr(f"{hours} Stunden", f"{hours} hours")
+    return tr(f"{hours // 24} Tagen", f"{hours // 24} days")
 
 
 def _when(value: object) -> dt.datetime | None:
@@ -62,11 +65,18 @@ def paused(device: Device) -> bool:
 
 
 # SPEC §7.11, §7.12: why a sensor gives no values.
-SENSOR_ERRORS = {
-    "not_found": "nicht gefunden, Anschluss und Adresse prüfen",
-    "no_interrupt": "die Interrupt-Leitung bleibt stumm, den GPIO-Pin prüfen",
-    "bad_data": "liefert unbrauchbare Werte",
-}
+def _sensor_error(code: str) -> str:
+    return {
+        "not_found": tr(
+            "nicht gefunden, Anschluss und Adresse prüfen",
+            "not found, check the wiring and the address",
+        ),
+        "no_interrupt": tr(
+            "die Interrupt-Leitung bleibt stumm, den GPIO-Pin prüfen",
+            "the interrupt line stays silent, check the GPIO pin",
+        ),
+        "bad_data": tr("liefert unbrauchbare Werte", "gives unusable values"),
+    }.get(code, code[:40])
 
 
 # SPEC §6.3 ``checks``: the camera's own check (§7). These three make the setup card; any
@@ -121,8 +131,14 @@ def check(device: Device, online: bool, now: dt.datetime) -> list[Problem]:
     if not online:
         seen = device.last_seen_at
         if seen is None or now - seen >= OFFLINE_AFTER:
-            since = f" seit {_age(now - seen)}" if seen else ""
-            problems.append(Problem("offline", "error", f"Die Kamera ist offline{since}."))
+            since = f" {tr('seit', 'for')} {_age(now - seen)}" if seen else ""
+            problems.append(
+                Problem(
+                    "offline",
+                    "error",
+                    tr(f"Die Kamera ist offline{since}.", f"The camera is offline{since}."),
+                )
+            )
         return problems  # the rest is about a running camera
 
     status: dict[str, Any] = device.last_status or {}
@@ -133,33 +149,86 @@ def check(device: Device, online: bool, now: dt.datetime) -> list[Problem]:
     captured = _when((device.last_frame or {}).get("captured_at"))
     # SPEC §4.1: the owner paused capture; missing pictures are expected then.
     if not paused(device) and (captured is None or now - captured > stale):
-        since = f" seit {_age(now - captured)}" if captured else ""
+        since = f" {tr('seit', 'for')} {_age(now - captured)}" if captured else ""
         problems.append(
-            Problem("no_frames", "error", f"Verbunden, aber keine neuen Bilder{since}.")
+            Problem(
+                "no_frames",
+                "error",
+                tr(
+                    f"Verbunden, aber keine neuen Bilder{since}.",
+                    f"Connected, but no new pictures{since}.",
+                ),
+            )
         )
 
     disk = status.get("disk_free_pct")
     if isinstance(disk, int | float) and disk < DISK_WARN:
         level = "error" if disk < DISK_ERROR else "warn"
-        problems.append(Problem("disk", level, f"Nur noch {round(disk)} % Speicher frei."))
+        problems.append(
+            Problem(
+                "disk",
+                level,
+                tr(
+                    f"Nur noch {round(disk)} % Speicher frei.",
+                    f"Only {round(disk)} % storage left.",
+                ),
+            )
+        )
     sensor = status.get("sensor_temp_c")
     if isinstance(sensor, int | float) and sensor >= SENSOR_HOT:
-        problems.append(Problem("sensor_hot", "warn", f"Sensor sehr warm: {round(sensor)} °C."))
+        problems.append(
+            Problem(
+                "sensor_hot",
+                "warn",
+                tr(
+                    f"Sensor sehr warm: {round(sensor)} °C.",
+                    f"Sensor very warm: {round(sensor)} °C.",
+                ),
+            )
+        )
     cpu = status.get("cpu_temp_c")
     if isinstance(cpu, int | float) and cpu >= CPU_HOT:
-        problems.append(Problem("cpu_hot", "warn", f"Prozessor sehr heiß: {round(cpu)} °C."))
+        problems.append(
+            Problem(
+                "cpu_hot",
+                "warn",
+                tr(
+                    f"Prozessor sehr heiß: {round(cpu)} °C.",
+                    f"Processor very hot: {round(cpu)} °C.",
+                ),
+            )
+        )
     if status.get("time_trusted") is False:
-        problems.append(Problem("clock", "warn", "Die Uhr der Kamera ist nicht synchronisiert."))
+        problems.append(
+            Problem(
+                "clock",
+                "warn",
+                tr(
+                    "Die Uhr der Kamera ist nicht synchronisiert.",
+                    "The camera's clock is not synchronized.",
+                ),
+            )
+        )
     update = cast(dict[str, Any], status.get("update") or {})
     if update.get("state") in ("failed", "rolled_back"):
-        problems.append(Problem("update", "warn", "Das letzte Software-Update ist fehlgeschlagen."))
-    for key, name in (("env", "Klimasensor"), ("lightning_sensor", "Blitzsensor")):
+        problems.append(
+            Problem(
+                "update",
+                "warn",
+                tr(
+                    "Das letzte Software-Update ist fehlgeschlagen.",
+                    "The last software update failed.",
+                ),
+            )
+        )
+    for key, name in (
+        ("env", tr("Klimasensor", "Weather sensor")),
+        ("lightning_sensor", tr("Blitzsensor", "Lightning sensor")),
+    ):
         part = status.get(key)  # SPEC §7.11, §7.12
         error = cast(dict[str, Any], part).get("error") if isinstance(part, dict) else None
         if isinstance(error, str) and error:
-            problems.append(
-                Problem(key, "warn", f"{name}: {SENSOR_ERRORS.get(error, error[:40])}.")
-            )
+            problems.append(Problem(key, "warn", f"{name}: {_sensor_error(error)}."))
     alpaca = status.get("alpaca_error")  # SPEC §6.3, §7.5
     if isinstance(alpaca, str) and alpaca:
         problems.append(Problem("alpaca", "warn", _alpaca_text(alpaca, settings)))
@@ -174,13 +243,20 @@ def check(device: Device, online: bool, now: dt.datetime) -> list[Problem]:
 def _alpaca_text(error: str, settings: dict[str, Any]) -> str:
     if error == "port_in_use":
         port = settings.get("alpaca_port")
-        which = f"Port {port}" if isinstance(port, int) else "Der Alpaca-Port"
-        return (
+        which = (
+            f"Port {port}" if isinstance(port, int) else tr("Der Alpaca-Port", "The Alpaca port")
+        )
+        return tr(
             f"Alpaca-Port belegt: {which} oder UDP 32227 wird schon von einem anderen "
             "Programm genutzt (etwa ASCOM Remote). In den Einstellungen einen anderen "
-            "Port wählen."
+            "Port wählen.",
+            f"Alpaca port in use: {which} or UDP 32227 is already used by another "
+            "program (such as ASCOM Remote). Choose another port in the settings.",
         )
-    return f"Die Alpaca-Schnittstelle meldet einen Fehler ({error[:40]})."
+    return tr(
+        f"Die Alpaca-Schnittstelle meldet einen Fehler ({error[:40]}).",
+        f"The Alpaca interface reports an error ({error[:40]}).",
+    )
 
 
 # Roadmap C12: the forecast says clear, the camera has seen next to nothing for this long.
@@ -208,8 +284,12 @@ def dome_hint(
     return Problem(
         "dome",
         "warn",
-        "Die Vorhersage meldet klaren Himmel, die Kamera sieht seit zwei Stunden fast "
-        "keine Sterne: Kuppel beschlagen, vereist oder verschmutzt?",
+        tr(
+            "Die Vorhersage meldet klaren Himmel, die Kamera sieht seit zwei Stunden fast "
+            "keine Sterne: Kuppel beschlagen, vereist oder verschmutzt?",
+            "The forecast says clear sky, but the camera has seen almost no stars for two "
+            "hours: is the dome fogged up, frosted or dirty?",
+        ),
     )
 
 

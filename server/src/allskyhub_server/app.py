@@ -41,6 +41,7 @@ from allskyhub_server.devices.satellites import TleCache
 from allskyhub_server.devices.space_weather import KpCache, OvationCache
 from allskyhub_server.devices.tonight import ForecastCache
 from allskyhub_server.devices.youtube import YouTube
+from allskyhub_server.i18n import LanguageMiddleware
 from allskyhub_server.mail.send import SmtpMailer
 from allskyhub_server.push.fcm import Sender
 from allskyhub_server.push.notify import Notifier
@@ -318,6 +319,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         release_out=settings.android_dir / "release",
     )
     app.add_middleware(CustomDomainMiddleware, hosts=app.state.hosts)
+    app.add_middleware(LanguageMiddleware)
     app.add_middleware(AccessLogMiddleware)
     _install_error_handlers(app)
 
@@ -345,6 +347,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(app_manage.router)
     app.include_router(app_widget.router)
     app.include_router(sky_view.router)
+    app.include_router(routes_admin.reload_router)  # last: it catches GET /admin/*
 
     @app.get("/healthz", include_in_schema=False)
     async def healthz() -> dict[str, str]:  # pyright: ignore[reportUnusedFunction]

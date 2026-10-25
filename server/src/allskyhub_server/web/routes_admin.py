@@ -17,7 +17,7 @@ from fastapi.responses import RedirectResponse, Response
 from sqlalchemy import func, select
 from starlette.routing import Match
 
-from allskyhub_server.admin import deploy
+from allskyhub_server.admin import appstore, deploy
 from allskyhub_server.admin import stores as admin_stores
 from allskyhub_server.auth import access_requests, ratelimit
 from allskyhub_server.auth.accounts import AccountError
@@ -158,6 +158,8 @@ async def page(
             "android_key": stores.vault.has("android_upload"),
             "screenshots": len(stores.screenshots()),
             "listing": stores.listing_state(),
+            "appstore": appstore.state(stores),
+            "appstore_shots": {loc: len(appstore.screenshots(loc)) for loc in appstore.LOCALES},
             "uploaded_screenshots": stores.screenshot_dir.is_dir()
             and any(stores.screenshot_dir.iterdir()),
             "build_url": admin_stores.build_url,

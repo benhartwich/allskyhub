@@ -27,5 +27,5 @@ app/.flutter-plugins*
 .DS_Store
 .dev/
 
-# Store screenshots come out here; the chosen ones go to store/play/screenshots.
-app/test/store/shots/
+# Store screenshots come out here; the chosen ones go to store/play and store/appstore.
+app/test/store/shots*/

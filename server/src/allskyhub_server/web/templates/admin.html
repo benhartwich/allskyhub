@@ -185,6 +185,25 @@
   </form>
   {% endif %}
 
+  {% if stores[1].meta %}
+  <h3>Store-Eintrag im App Store</h3>
+  <p class="muted small">Name, Untertitel, Stichwörter und Werbetext (<code>app/store/appstore</code>), die Beschreibung des Play-Eintrags, iPhone-Screenshots (Deutsch {{ appstore_shots['de-DE'] }}, Englisch {{ appstore_shots['en-US'] }}) und der neueste Build gehen an die iOS-Version in Vorbereitung. App-Datenschutz, Altersfreigabe, Kategorie, Preis und das Testkonto für die Prüfung nimmt Apple nur in App Store Connect selbst.</p>
+  {% if appstore %}
+  <p class="small"><strong>Letzte Übertragung</strong> <span class="muted">{{ appstore.at[:16] | replace('T', ' ') }} UTC</span>{% if appstore.running %} · läuft …{% endif %}</p>
+  {% if appstore.steps %}
+  <ul class="parts">
+    {% for step in appstore.steps %}
+    <li><strong class="{{ '' if step.state == 'ok' else 'warn' }}">{{ {'ok': '✓', 'warn': '!', 'fail': '✕'}[step.state] }} {{ step.title }}</strong><span>{{ step.text }}</span></li>
+    {% endfor %}
+  </ul>
+  {% endif %}
+  {% endif %}
+  <form method="post" action="/admin/stores-appstore" class="inline">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <button type="submit" class="secondary">App-Store-Eintrag übertragen</button>
+  </form>
+  {% endif %}
+
   <details>
     <summary>Zugänge hochladen</summary>
     <form method="post" action="/admin/stores/play" enctype="multipart/form-data" class="stack">

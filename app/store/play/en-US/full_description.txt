@@ -22,6 +22,4 @@ EASY TO SET UP
 
 You need an allskyhub camera and an account on allskyhub.org. Request access at allskyhub.org/zugang; the parts list and the guide are at allskyhub.org/hardware and allskyhub.org/allsky.
 
-The app is in German for now; English follows.
-
 allskyhub is open source: github.com/benhartwich/allskyhub

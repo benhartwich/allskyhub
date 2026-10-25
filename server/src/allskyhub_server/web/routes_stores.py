@@ -10,6 +10,7 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile
 from fastapi.responses import FileResponse, Response
 
+from allskyhub_server.admin import appstore
 from allskyhub_server.admin import stores as admin_stores
 from allskyhub_server.devices import youtube
 from allskyhub_server.web.deps import CurrentSession, DbSession, SettingsDep, csrf_protect
@@ -121,6 +122,21 @@ async def push_listing(
         request, db, session,
         notice="Übertragung zu Google Play gestartet; sie dauert gut eine Minute. Danach die "
         "Seite neu laden, das Ergebnis steht unter „Store-Eintrag bei Google Play“.",
+    )  # fmt: skip
+
+
+@router.post("/admin/stores-appstore")
+async def push_appstore(
+    request: Request, db: DbSession, session: CurrentSession, settings: SettingsDep
+) -> Response:
+    admin_only(session, settings)
+    stores: admin_stores.Stores = request.app.state.stores
+    if not appstore.start(stores, session.user.email):
+        return await page(request, db, session, 409, error="Die Übertragung läuft noch.")
+    return await page(
+        request, db, session,
+        notice="Übertragung zum App Store gestartet; sie dauert ein bis zwei Minuten. Danach "
+        "die Seite neu laden, das Ergebnis steht unter „Store-Eintrag im App Store“.",
     )  # fmt: skip
 
 

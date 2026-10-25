@@ -22,6 +22,15 @@
 	<true/>
 	<key>CFBundleDevelopmentRegion</key>
 	<string>$(DEVELOPMENT_LANGUAGE)</string>
+	<!-- Only HTTPS, exempt from export documentation: no question on every TestFlight upload. -->
+	<key>ITSAppUsesNonExemptEncryption</key>
+	<false/>
+	<!-- The App Store lists the app's languages from this (lib/l10n.dart). -->
+	<key>CFBundleLocalizations</key>
+	<array>
+		<string>de</string>
+		<string>en</string>
+	</array>
 	<key>CFBundleDisplayName</key>
 	<string>allskyhub</string>
 	<key>CFBundleExecutable</key>

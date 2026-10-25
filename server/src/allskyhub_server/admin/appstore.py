@@ -12,7 +12,7 @@ from __future__ import annotations
 import asyncio
 import hashlib
 import logging
-from collections.abc import Callable
+from collections.abc import Callable, Coroutine
 from pathlib import Path
 from typing import Any
 
@@ -45,6 +45,20 @@ PRIVACY_URL = "https://allskyhub.org/datenschutz"
 EDITABLE = frozenset(
     {"PREPARE_FOR_SUBMISSION", "DEVELOPER_REJECTED", "REJECTED", "METADATA_REJECTED"}
 )
+PRIMARY_CATEGORY = "WEATHER"
+SECONDARY_CATEGORY = "EDUCATION"  # astronomy
+_NONE = (
+    "alcoholTobaccoOrDrugUseOrReferences", "contests", "gamblingSimulated",
+    "gunsOrOtherWeapons", "horrorOrFearThemes", "matureOrSuggestiveThemes",
+    "medicalOrTreatmentInformation", "profanityOrCrudeHumor",
+    "sexualContentGraphicAndNudity", "sexualContentOrNudity", "violenceCartoonOrFantasy",
+    "violenceRealistic", "violenceRealisticProlongedGraphicOrSadistic",
+)  # fmt: skip
+_NO = (
+    "gambling", "unrestrictedWebAccess", "lootBox", "messagingAndChat", "parentalControls",
+    "ageAssurance", "userGeneratedContent", "advertising", "healthOrWellnessTopics",
+)  # fmt: skip
+AGE_RATING: dict[str, Any] = {**dict.fromkeys(_NONE, "NONE"), **dict.fromkeys(_NO, False)}
 TITLE = "App Store"
 STATE_FILE = "appstore.json"
 
@@ -171,6 +185,8 @@ async def push(
             f"Name {locale}",
         )
     report.add("Name und Untertitel", "ok", ", ".join(LOCALES))
+    await _soft(report, "Kategorie", _category(api, str(info["id"])))
+    await _soft(report, "Altersfreigabe", _age_rating(api, str(info["id"])))
 
     versions = await api.items(
         f"/apps/{app_id}/appStoreVersions", "Versionen", **{"filter[platform]": "IOS"}
@@ -261,9 +277,48 @@ async def push(
     report.add(
         "Noch in App Store Connect",
         "warn",
-        "App-Datenschutz, Altersfreigabe, Kategorie, Preis, Kontakt und Testkonto für "
-        "die Prüfung; dann „Zur Prüfung hinzufügen“.",
+        "App-Datenschutz, Preis und Länder, Kontakt und Testkonto für die Prüfung; dann "
+        "„Zur Prüfung hinzufügen“.",
     )
+
+
+async def _soft(report: Report, title: str, step: Coroutine[Any, Any, str]) -> None:
+    """A step whose failure leaves the rest standing; it can be done by hand."""
+    try:
+        report.add(title, "ok", await step)
+    except StoreError as exc:
+        report.add(title, "warn", f"{exc} Bitte in App Store Connect setzen.")
+
+
+async def _category(api: _Api, info: str) -> str:
+    body = {
+        "data": {
+            "type": "appInfos",
+            "id": info,
+            "relationships": {
+                "primaryCategory": _rel("appCategories", PRIMARY_CATEGORY),
+                "secondaryCategory": _rel("appCategories", SECONDARY_CATEGORY),
+            },
+        }
+    }
+    await api.call("PATCH", f"/appInfos/{info}", "Kategorie", body=body)
+    return f"{PRIMARY_CATEGORY}, {SECONDARY_CATEGORY}"
+
+
+async def _age_rating(api: _Api, info: str) -> str:
+    """Every question answered "none"/"no" (as for Google Play: no violence, no
+    purchases, no web browser, no chat, no feed of other people's content). Only the
+    questions Apple's declaration has right now are sent."""
+    found = _dict(
+        (await api.call("GET", f"/appInfos/{info}/ageRatingDeclaration", "Altersfreigabe")).get(
+            "data"
+        )
+    )
+    present = _dict(found.get("attributes"))
+    answers = {k: v for k, v in AGE_RATING.items() if k in present}
+    body = {"data": {"type": "ageRatingDeclarations", "id": found["id"], "attributes": answers}}
+    await api.call("PATCH", f"/ageRatingDeclarations/{found['id']}", "Altersfreigabe", body=body)
+    return f"{len(answers)} Fragen mit „keine“ beantwortet."
 
 
 async def _screenshots(api: _Api, localization: str, shots: list[Path], locale: str) -> None:

@@ -631,6 +631,12 @@ async def test_push_appstore(tmp_path: Path) -> None:
                     ]
                 }
             return httpx.Response(201, json={"data": data})
+        if method == "PATCH" and path == "/v1/ageRatingDeclarations/AGE":
+            # Only the questions Apple has; none that it does not know.
+            assert body["data"]["attributes"] == {"violenceRealistic": "NONE", "gambling": False}
+        if method == "PATCH" and path == "/v1/appInfos/INFO":
+            rel = body["data"]["relationships"]
+            assert rel["primaryCategory"]["data"]["id"] == "WEATHER"
         if method == "PATCH" and "/appScreenshots/" in path:
             assert body["data"]["attributes"]["uploaded"] is True
             assert len(body["data"]["attributes"]["sourceFileChecksum"]) == 32
@@ -663,6 +669,9 @@ async def test_push_appstore(tmp_path: Path) -> None:
             found = []
         elif path.endswith("/appScreenshots"):
             found = [{"id": "OLD"}]
+        elif path.endswith("/ageRatingDeclaration"):
+            attrs = {"violenceRealistic": None, "gambling": None, "somethingNew": None}
+            return httpx.Response(200, json={"data": {"id": "AGE", "attributes": attrs}})
         elif path == "/v1/builds":
             found = [
                 {"id": "B1", "attributes": {"version": "300", "usesNonExemptEncryption": None}}
@@ -681,6 +690,8 @@ async def test_push_appstore(tmp_path: Path) -> None:
     report = await appstore.push_report(hub)
     assert [(s.title, s.state) for s in report.steps] == [
         ("Name und Untertitel", "ok"),
+        ("Kategorie", "ok"),
+        ("Altersfreigabe", "ok"),
         ("Texte und Screenshots de-DE", "ok"),
         ("Texte und Screenshots en-US", "ok"),
         ("Build", "ok"),

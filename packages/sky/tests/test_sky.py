@@ -74,3 +74,11 @@ def test_sky_lines_are_directions_above_the_horizon() -> None:
     assert names["Pegasus"][0] > 40  # high in an October night
     # The same place in the sky as the image overlay uses.
     assert all(len(line) > 1 for line in sky.lines)
+
+
+def test_sky_lines_in_latin_for_english() -> None:
+    german = sky_lines(50.04, 10.39, AT).names
+    latin = sky_lines(50.04, 10.39, AT, latin=True).names
+    assert "Fuhrmann" in {n for n, _, _ in german}
+    assert "Auriga" in {n for n, _, _ in latin}
+    assert [(alt, az) for _, alt, az in german] == [(alt, az) for _, alt, az in latin]

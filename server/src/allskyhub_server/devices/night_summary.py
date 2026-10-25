@@ -16,6 +16,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from allskyhub_server.devices import events as events_mod
 from allskyhub_server.devices.event_text import EVENT_TITLES, meteor_summary, shower_name
 from allskyhub_server.devices.events import storm_key
+from allskyhub_server.i18n import english, tr
 from allskyhub_server.models import EventRecord, SkySample
 
 CLEAR_BELOW = 0.3  # cloud cover
@@ -53,28 +54,39 @@ class NightSummary:
         if self.overflights:
             parts.append(self.overflights)
         if self.clear_hours is not None:
+            hours = _num(self.clear_hours)
             parts.append(
-                "keine klare Stunde"
+                tr("keine klare Stunde", "no clear hour")
                 if self.clear_hours < 0.5
-                else f"{_num(self.clear_hours)} h klar"
+                else tr(f"{hours} h klar", f"{hours} h clear")
             )
         if self.best_sqm is not None:
-            parts.append(f"beste Himmelshelligkeit {_num(self.best_sqm, 2)} mag/″²")
-        return ", ".join(parts) if parts else "Keine Messungen aus dieser Nacht."
+            sqm = _num(self.best_sqm, 2)
+            parts.append(
+                tr(f"beste Himmelshelligkeit {sqm} mag/″²", f"best sky brightness {sqm} mag/″²")
+            )
+        if parts:
+            return ", ".join(parts)
+        return tr("Keine Messungen aus dieser Nacht.", "No measurements from this night.")
 
 
 def _num(value: float, digits: int = 1) -> str:
-    return f"{value:.{digits}f}".replace(".", ",")
+    text = f"{value:.{digits}f}"
+    return text if english() else text.replace(".", ",")
 
 
 def _plural(n: int, one: str, many: str) -> str:
     return f"{n} {one if n == 1 else many}"
 
 
-_OTHER_NAMES = {
-    "aurora": ("Polarlicht", "Polarlichter"),
-    "nlc": ("Leuchtende Nachtwolke", "Leuchtende Nachtwolken"),
-}
+def _other_names() -> dict[str, tuple[str, str]]:
+    return {
+        "aurora": (tr("Polarlicht", "aurora"), tr("Polarlichter", "auroras")),
+        "nlc": (
+            tr("Leuchtende Nachtwolke", "noctilucent cloud"),
+            tr("Leuchtende Nachtwolken", "noctilucent clouds"),
+        ),
+    }
 
 
 async def summarize(db: AsyncSession, device_id: str, night_id: str) -> NightSummary:
@@ -106,7 +118,7 @@ async def summarize(db: AsyncSession, device_id: str, night_id: str) -> NightSum
             shower = e.data.get("shower")
             name = shower_name(shower) if isinstance(shower, str) and shower else "sporadisch"
             summary.showers[name] = summary.showers.get(name, 0) + 1
-    for kind, (one, many) in _OTHER_NAMES.items():
+    for kind, (one, many) in _other_names().items():
         n = sum(e.kind == kind for e in events)
         if kind == "aurora":
             summary.aurora = n
@@ -115,7 +127,9 @@ async def summarize(db: AsyncSession, device_id: str, night_id: str) -> NightSum
     storms = {storm_key(e) or e.event_id for e in events if e.kind == "lightning"}
     summary.storms = len(storms)
     if storms:
-        summary.others.append(_plural(len(storms), "Gewitter", "Gewitter"))
+        summary.others.append(
+            _plural(len(storms), tr("Gewitter", "thunderstorm"), tr("Gewitter", "thunderstorms"))
+        )
     for kind in _BEST_ORDER:
         candidates = [e for e in events if e.kind == kind and e.has_thumb]
         if candidates:

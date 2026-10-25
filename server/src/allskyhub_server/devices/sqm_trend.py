@@ -18,6 +18,7 @@ from dataclasses import dataclass
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from allskyhub_server.i18n import english, tr
 from allskyhub_server.models import Device, NightStat
 from allskyhub_sky import astro
 
@@ -55,13 +56,27 @@ class Trend:
     @property
     def text(self) -> str:
         if self.per_year is None:
-            return "Für einen Trend braucht es Messungen über mindestens ein Jahr."
-        value = f"{abs(self.per_year):.2f}".replace(".", ",")
+            return tr(
+                "Für einen Trend braucht es Messungen über mindestens ein Jahr.",
+                "A trend needs measurements over at least a year.",
+            )
+        value = f"{abs(self.per_year):.2f}"
+        if not english():
+            value = value.replace(".", ",")
         if abs(self.per_year) < STEADY:
-            return f"Der Himmel ist gleich dunkel geblieben ({value} mag/″² pro Jahr)."
+            return tr(
+                f"Der Himmel ist gleich dunkel geblieben ({value} mag/″² pro Jahr).",
+                f"The sky has stayed equally dark ({value} mag/″² per year).",
+            )
         if self.per_year < 0:
-            return f"Der Himmel wird heller: {value} mag/″² pro Jahr mehr Lichtverschmutzung."
-        return f"Der Himmel wird dunkler: {value} mag/″² pro Jahr."
+            return tr(
+                f"Der Himmel wird heller: {value} mag/″² pro Jahr mehr Lichtverschmutzung.",
+                f"The sky is getting brighter: {value} mag/″² more light pollution per year.",
+            )
+        return tr(
+            f"Der Himmel wird dunkler: {value} mag/″² pro Jahr.",
+            f"The sky is getting darker: {value} mag/″² per year.",
+        )
 
     @property
     def latest(self) -> Month | None:

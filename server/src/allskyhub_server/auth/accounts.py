@@ -9,6 +9,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from allskyhub_server.auth.passwords import hash_secret_async, verify_secret_async
+from allskyhub_server.i18n import tr
 from allskyhub_server.models import User
 
 MIN_PASSWORD_LENGTH = 10
@@ -30,15 +31,27 @@ async def create_user(db: AsyncSession, email: str, password: str) -> User:
     """Create an account. The caller commits."""
     email = normalize_email(email)
     if "@" not in email or len(email) > 254:
-        raise AccountError("Bitte eine gültige E-Mail-Adresse angeben.")
+        raise AccountError(
+            tr("Bitte eine gültige E-Mail-Adresse angeben.", "Please enter a valid email address.")
+        )
     if len(password) < MIN_PASSWORD_LENGTH:
-        raise AccountError(f"Das Passwort braucht mindestens {MIN_PASSWORD_LENGTH} Zeichen.")
+        raise AccountError(
+            tr(
+                f"Das Passwort braucht mindestens {MIN_PASSWORD_LENGTH} Zeichen.",
+                f"The password needs at least {MIN_PASSWORD_LENGTH} characters.",
+            )
+        )
     user = User(email=email, password_hash=await hash_secret_async(password))
     try:
         async with db.begin_nested():
             db.add(user)
     except IntegrityError:
-        raise AccountError("Für diese E-Mail-Adresse gibt es schon ein Konto.") from None
+        raise AccountError(
+            tr(
+                "Für diese E-Mail-Adresse gibt es schon ein Konto.",
+                "There is already an account for this email address.",
+            )
+        ) from None
     return user
 
 
@@ -66,9 +79,16 @@ async def change_password(
     from allskyhub_server.models import AppToken, WebSession
 
     if not await verify_secret_async(user.password_hash, current):
-        raise AccountError("Das aktuelle Passwort stimmt nicht.")
+        raise AccountError(
+            tr("Das aktuelle Passwort stimmt nicht.", "The current password is not right.")
+        )
     if len(new) < MIN_PASSWORD_LENGTH:
-        raise AccountError(f"Das neue Passwort braucht mindestens {MIN_PASSWORD_LENGTH} Zeichen.")
+        raise AccountError(
+            tr(
+                f"Das neue Passwort braucht mindestens {MIN_PASSWORD_LENGTH} Zeichen.",
+                f"The new password needs at least {MIN_PASSWORD_LENGTH} characters.",
+            )
+        )
     user.password_hash = await hash_secret_async(new)
     sessions = delete(WebSession).where(WebSession.user_id == user.id)
     if keep_session is not None:
@@ -105,5 +125,7 @@ DEFAULT_EVENT_KEEP_DAYS = 30
 def set_event_keep_days(user: User, days: int) -> None:
     """The caller commits."""
     if days not in EVENT_KEEP_CHOICES:
-        raise AccountError("Diese Aufbewahrungsdauer gibt es nicht.")
+        raise AccountError(
+            tr("Diese Aufbewahrungsdauer gibt es nicht.", "This retention period does not exist.")
+        )
     user.event_keep_days = days

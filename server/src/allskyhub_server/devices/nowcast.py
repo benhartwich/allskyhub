@@ -28,6 +28,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from allskyhub_server.devices import fireball
 from allskyhub_server.devices.tonight import ForecastCache, Hour
+from allskyhub_server.i18n import tr
 from allskyhub_server.models import Device
 
 CLOUD_KM = 3.0
@@ -114,7 +115,20 @@ class Nowcast:
 
     @property
     def wind_text(self) -> str:
-        return f"Wind aus {fireball.heading(self.wind_from)}, {self.wind_kmh:.0f} km/h"
+        return tr(
+            f"Wind aus {fireball.heading(self.wind_from)}, {self.wind_kmh:.0f} km/h",
+            f"Wind from the {_english_point(self.wind_from)}, {self.wind_kmh:.0f} km/h",
+        )
+
+
+_ENGLISH_POINTS = (
+    "north", "northeast", "east", "southeast", "south", "southwest", "west", "northwest",
+)  # fmt: skip
+
+
+def _english_point(azimuth: float) -> str:
+    """The English of fireball.heading and fireball.compass, same rounding."""
+    return _ENGLISH_POINTS[round(azimuth / 45) % 8]
 
 
 def _wind(hours: list[Hour], now: dt.datetime) -> tuple[float, float] | None:
@@ -138,7 +152,7 @@ def _own_sources(cells: list[float | None], wind_from: float, kmh: float) -> lis
             continue
         mid = math.radians((low + high) / 2)
         km = CLOUD_KM / math.tan(mid)
-        out.append(Source(60 * km / kmh, value, "am eigenen Himmel"))
+        out.append(Source(60 * km / kmh, value, tr("am eigenen Himmel", "in the own sky")))
     return out
 
 
@@ -157,8 +171,12 @@ def _neighbour_sources(
         along, cross = km * math.cos(off), abs(km * math.sin(off))
         if along <= 0 or cross > CROSS_KM:
             continue
-        where = fireball.compass(fireball.bearing_deg(*place, *there))
-        out.append(Source(60 * along / kmh, cover, f"Kamera {km:.0f} km {where}"))
+        bearing = fireball.bearing_deg(*place, *there)
+        label = tr(
+            f"Kamera {km:.0f} km {fireball.compass(bearing)}",
+            f"camera {km:.0f} km {_english_point(bearing)}",
+        )
+        out.append(Source(60 * along / kmh, cover, label))
     return out
 
 
@@ -166,14 +184,20 @@ def _summary(cover: float, steps: list[Step]) -> str:
     if cover >= CLOUDY:
         gap = next((s for s in steps if s.cover <= CLEAR), None)
         if gap is not None:
-            return f"Es klart in etwa {gap.minutes} Minuten auf."
-        return "Keine Lücke in Sicht."
+            return tr(
+                f"Es klart in etwa {gap.minutes} Minuten auf.",
+                f"Clearing in about {gap.minutes} minutes.",
+            )
+        return tr("Keine Lücke in Sicht.", "No gap in sight.")
     if cover <= CLEAR:
         front = next((s for s in steps if s.cover >= CLOUDY), None)
         if front is not None:
-            return f"Wolken in etwa {front.minutes} Minuten."
-        return "Bleibt klar."
-    return "Wechselhaft."
+            return tr(
+                f"Wolken in etwa {front.minutes} Minuten.",
+                f"Clouds in about {front.minutes} minutes.",
+            )
+        return tr("Bleibt klar.", "Staying clear.")
+    return tr("Wechselhaft.", "Changeable.")
 
 
 def forecast(
@@ -192,7 +216,16 @@ def forecast(
         return None
     kmh, wind_from = wind
     if kmh < MIN_WIND_KMH:
-        return Nowcast(cover, kmh, wind_from, [], "Kaum Wind: die Wolken bleiben, wie sie sind.")
+        return Nowcast(
+            cover,
+            kmh,
+            wind_from,
+            [],
+            tr(
+                "Kaum Wind: die Wolken bleiben, wie sie sind.",
+                "Hardly any wind: the clouds stay as they are.",
+            ),
+        )
     sources = _own_sources(history.cells(device_id, now), wind_from, kmh)
     sources += _neighbour_sources(place, neighbours, wind_from, kmh)
     steps: list[Step] = []

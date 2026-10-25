@@ -20,6 +20,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from allskyhub_protocol import Observatory, PublicProfile, PublicSections, PublicState
 from allskyhub_server.devices import events
+from allskyhub_server.i18n import english, tr
 from allskyhub_server.models import Device, EventRecord, Frame, Product
 
 # Products shown publicly as images; the night's timelapse comes separately (night_video).
@@ -45,7 +46,7 @@ def profile(device: Device) -> PublicProfile:
 
 __all__ = ["PublicProfile", "PublicSections"]
 
-# German names of the profile fields for 422 answers (SPEC §6.8).
+# Names of the profile fields for 422 answers (SPEC §6.8), German and for the English app.
 FIELD_NAMES = {
     "title": "Titel",
     "location_label": "Ort",
@@ -59,24 +60,44 @@ FIELD_NAMES = {
     "enabled": "Öffentliche Seite",
     "on_home": "Startseite",
 }
+FIELD_NAMES_EN = {
+    "title": "Title",
+    "location_label": "Place",
+    "show_coordinates": "Show coordinates",
+    "camera": "Camera",
+    "lens": "Lens",
+    "computer": "Computer",
+    "owner": "Run by",
+    "notes": "Notes",
+    "sections": "Sections",
+    "enabled": "Public page",
+    "on_home": "Home page",
+}
 
 
 def describe_error(exc: ValidationError) -> str:
-    """One German sentence for the local UI, which shows it as it is (SPEC §6.8)."""
+    """One sentence for the local UI, which shows it as it is (SPEC §6.8): German, or
+    English for the English app (i18n.py)."""
+    names = FIELD_NAMES_EN if english() else FIELD_NAMES
     parts: list[str] = []
     for err in exc.errors():
         loc = [str(x) for x in err["loc"] if str(x) not in ("profile", "body")]
-        name = FIELD_NAMES.get(loc[0], loc[0]) if loc else "Eingabe"
+        name = names.get(loc[0], loc[0]) if loc else tr("Eingabe", "Input")
         if len(loc) > 1 and loc[0] == "sections":
-            name = f"Abschnitt {loc[1]}"
+            name = tr(f"Abschnitt {loc[1]}", f"Section {loc[1]}")
         kind = err["type"]
         if kind == "string_too_long":
             limit = (err.get("ctx") or {}).get("max_length")
-            parts.append(f"{name} ist zu lang (höchstens {limit} Zeichen)")
+            parts.append(
+                tr(
+                    f"{name} ist zu lang (höchstens {limit} Zeichen)",
+                    f"{name} is too long (at most {limit} characters)",
+                )
+            )
         elif kind == "extra_forbidden":
-            parts.append(f"{name} gibt es nicht")
+            parts.append(tr(f"{name} gibt es nicht", f"{name} does not exist"))
         else:
-            parts.append(f"{name} ist ungültig")
+            parts.append(tr(f"{name} ist ungültig", f"{name} is not valid"))
     return "; ".join(dict.fromkeys(parts)) + "."
 
 

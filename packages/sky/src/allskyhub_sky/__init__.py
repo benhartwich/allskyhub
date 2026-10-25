@@ -213,8 +213,11 @@ class SkyLines:
     names: list[tuple[str, float, float]]
 
 
-def sky_lines(lat: float, lon: float, at: dt.datetime, min_alt: float = -5.0) -> SkyLines:
-    """Lines cut below ``min_alt``, split every ``STEP_DEG`` like in ``overlay``."""
+def sky_lines(
+    lat: float, lon: float, at: dt.datetime, min_alt: float = -5.0, *, latin: bool = False
+) -> SkyLines:
+    """Lines cut below ``min_alt``, split every ``STEP_DEG`` like in ``overlay``. Names are
+    German, or with ``latin`` the IAU names English uses (Auriga for Fuhrmann)."""
     lst = sidereal_deg(at, lon)
 
     def here(ra: float, dec: float) -> tuple[float, float]:
@@ -245,8 +248,8 @@ def sky_lines(lat: float, lon: float, at: dt.datetime, min_alt: float = -5.0) ->
             if len(piece) > 1:
                 lines.append(piece)
     names = [
-        (name, *here(ra, dec))
-        for name, ra, dec, rank in catalogue["names"].values()
+        (catalogue["latin"][key] if latin else name, *here(ra, dec))
+        for key, (name, ra, dec, rank) in catalogue["names"].items()
         if rank <= LABEL_MAX_RANK
     ]
     return SkyLines(lines, [n for n in names if n[1] >= min_alt])

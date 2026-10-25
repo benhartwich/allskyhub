@@ -192,3 +192,12 @@ async def test_admin_sees_all_cameras_without_pictures(
     assert "Update fehlgeschlagen" in section
     assert "0 von 1 online" in section
     assert "<img" not in section
+
+
+async def test_reloading_after_a_form_leads_back_to_the_page(client: httpx.AsyncClient) -> None:
+    """The admin forms answer with the page; a reload then asks for the form's address."""
+    r = await client.get("/admin/access/01a1730e-3fda-7b6d-8eee-951c53d08de5/invite")
+    assert r.status_code == 303
+    assert r.headers["location"] == "/admin"
+    assert (await client.get("/admin/plus")).headers["location"] == "/admin"
+    assert (await client.get("/admin/nothing-here")).status_code == 404

@@ -1,4 +1,5 @@
-"""German labels for detections (SPEC §6.4), for the web UI."""
+"""German labels for detections (SPEC §6.4), for the web UI; the parts the app API returns
+also in English (i18n.py)."""
 
 from __future__ import annotations
 
@@ -6,6 +7,7 @@ import datetime as dt
 from typing import Any, cast
 
 from allskyhub_server.devices import lightning_li
+from allskyhub_server.i18n import english, tr
 from allskyhub_server.models import EventRecord
 
 EVENT_TITLES = {
@@ -26,7 +28,8 @@ _AXES = (
 )
 
 
-# Agent shower names (SPEC §6.4, IMO) in German; unknown names pass through.
+# Agent shower names (SPEC §6.4, IMO) in German; English keeps the IMO names, and unknown
+# names pass through.
 SHOWER_NAMES = {
     "Quadrantids": "Quadrantiden",
     "Lyrids": "Lyriden",
@@ -41,7 +44,7 @@ SHOWER_NAMES = {
 
 
 def shower_name(name: str) -> str:
-    return SHOWER_NAMES.get(name, name)
+    return name if english() else SHOWER_NAMES.get(name, name)
 
 
 def shower_text(data: dict[str, Any]) -> str | None:
@@ -74,10 +77,11 @@ def meteor_summary(events: list[EventRecord]) -> str | None:
             sporadic += 1
     parts = [f"{n} {name}" for name, n in sorted(showers.items(), key=lambda kv: -kv[1])]
     if sporadic:
-        parts.append(f"{sporadic} sporadisch")
+        parts.append(f"{sporadic} {tr('sporadisch', 'sporadic')}")
     if unknown and (showers or sporadic):
-        parts.append(f"{unknown} ohne Radiant")
-    total = f"{len(meteors)} Meteor{'' if len(meteors) == 1 else 'e'}"
+        parts.append(f"{unknown} {tr('ohne Radiant', 'without radiant')}")
+    one = len(meteors) == 1
+    total = f"{len(meteors)} {tr('Meteor' if one else 'Meteore', 'meteor' if one else 'meteors')}"
     return f"{total}: {', '.join(parts)}" if parts else total
 
 

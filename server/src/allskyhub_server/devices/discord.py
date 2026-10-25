@@ -75,6 +75,11 @@ BAD_WEBHOOK = (
     "https://discord.com/api/webhooks/ (in Discord: Servereinstellungen → Integrationen → "
     "Webhooks → Webhook-URL kopieren)."
 )
+BAD_WEBHOOK_EN = (
+    "This is not a Discord webhook address. It starts with "
+    "https://discord.com/api/webhooks/ (in Discord: Server Settings → Integrations → "
+    "Webhooks → Copy Webhook URL)."
+)
 
 
 def settings_of(device: Device) -> DiscordSettings | None:

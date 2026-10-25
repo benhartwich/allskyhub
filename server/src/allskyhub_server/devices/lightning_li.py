@@ -40,6 +40,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from allskyhub_server.devices import fireball
 from allskyhub_server.devices.connections import ConnectionRegistry
+from allskyhub_server.i18n import english, tr
 from allskyhub_server.models import Device, EventRecord, LiFlash, LiGranule
 
 log = logging.getLogger(__name__)
@@ -65,6 +66,7 @@ TIMEOUT_S = 60.0
 PAGE = 100
 # Pointing in German: N, NO, O, …
 DIRECTIONS = ("N", "NO", "O", "SO", "S", "SW", "W", "NW")
+DIRECTIONS_EN = ("N", "NE", "E", "SE", "S", "SW", "W", "NW")
 
 
 @dataclass(frozen=True)
@@ -269,7 +271,7 @@ async def covered(db: AsyncSession, start: dt.datetime, end: dt.datetime) -> boo
 
 
 def direction(bearing: float) -> str:
-    return DIRECTIONS[round(bearing / 45) % 8]
+    return (DIRECTIONS_EN if english() else DIRECTIONS)[round(bearing / 45) % 8]
 
 
 async def nearest(
@@ -324,12 +326,19 @@ def summary(event: EventRecord) -> str | None:
     if event.kind != "lightning":
         return None
     if event.li_checked_at is None:
-        return "ungeprüft"
+        return tr("ungeprüft", "not checked")
     if event.li_km is None or event.li_bearing_deg is None:
         toward = _toward(event)
-        where = f" Richtung {direction(toward)}" if toward is not None else ""
-        return f"keine Blitze im Umkreis von {REACH_KM:.0f} km{where}"
-    return f"Blitze in {event.li_km:.0f} km Richtung {direction(event.li_bearing_deg)}"
+        where = f" {tr('Richtung', 'towards')} {direction(toward)}" if toward is not None else ""
+        return tr(
+            f"keine Blitze im Umkreis von {REACH_KM:.0f} km{where}",
+            f"no flashes within {REACH_KM:.0f} km{where}",
+        )
+    toward = direction(event.li_bearing_deg)
+    return tr(
+        f"Blitze in {event.li_km:.0f} km Richtung {toward}",
+        f"flashes {event.li_km:.0f} km away towards {toward}",
+    )
 
 
 @dataclass(frozen=True)

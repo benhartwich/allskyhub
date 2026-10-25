@@ -25,6 +25,7 @@ from allskyhub_server.devices import (
 )
 from allskyhub_server.devices.connections import ConnectionRegistry
 from allskyhub_server.devices.tonight import ForecastCache
+from allskyhub_server.i18n import english, tr
 from allskyhub_server.models import Device, User
 from allskyhub_server.web.deps import DbSession
 from allskyhub_sky.objects import catalogue
@@ -215,7 +216,10 @@ class TargetPlan(BaseModel):
 @router.get("/targets")
 async def targets(user: AppUser) -> list[TargetItem]:
     """The objects to choose from: planets, then M1 … M110."""
-    return [TargetItem(key=o.key, label=o.label, kind=o.kind, mag=o.mag) for o in catalogue()]
+    return [
+        TargetItem(key=o.key, label=o.label, kind=o.kind, mag=o.mag)
+        for o in catalogue(english=english())
+    ]
 
 
 @router.get("/cameras/{device_id}/target")
@@ -226,7 +230,7 @@ async def target_plan(
     device = await _own(db, user, device_id)
     chosen = target.find(key)
     if chosen is None:
-        raise HTTPException(404, "Dieses Objekt kenne ich nicht.")
+        raise HTTPException(404, tr("Dieses Objekt kenne ich nicht.", "Unknown object."))
     settings: dict[str, Any] = (device.last_status or {}).get("settings") or {}
     lat, lon = settings.get("latitude"), settings.get("longitude")
     hours: list[tonight.Hour] = []
@@ -235,7 +239,13 @@ async def target_plan(
         hours = await forecast.get(float(lat), float(lon))
     found = target.plan(chosen, device.last_status, hours, dt.datetime.now(dt.UTC))
     if found is None:
-        raise HTTPException(409, "Die Kamera kennt ihren Standort noch nicht.")
+        raise HTTPException(
+            409,
+            tr(
+                "Die Kamera kennt ihren Standort noch nicht.",
+                "The camera does not know its location yet.",
+            ),
+        )
     best = found.best
     return TargetPlan(
         key=chosen.key,
@@ -248,7 +258,7 @@ async def target_plan(
         cloud_cover=found.now.cloud_cover,
         cloud_source=found.now.source,
         verdict=found.now.verdict,
-        verdict_text=target.VERDICT_TEXT[found.now.verdict],
+        verdict_text=target.verdict_text(found.now.verdict),
         best_start=best[0] if best else None,
         best_end=best[1] if best else None,
         hours=[
@@ -260,7 +270,7 @@ async def target_plan(
                 clouds=h.clouds,
                 moon_near=h.moon_near,
                 verdict=h.verdict,
-                verdict_text=target.VERDICT_TEXT[h.verdict],
+                verdict_text=target.verdict_text(h.verdict),
             )
             for h in found.hours
         ],

@@ -121,6 +121,7 @@ main() {
         "$build" "$version" "$commit" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$size" "$sha" "$name" \
         | answer_stdin "$OUT" latest.json
     # The three newest APKs stay, so a download that started before still finishes.
+    # shellcheck disable=SC2012  # our own file names: no spaces or newlines
     ls -1t "$OUT"/allskyhub-test-*.apk | tail -n +4 | xargs -r rm -f
     echo "$tree" > "$BASE/last-tree"
     echo "Published $name ($size bytes)"
@@ -169,6 +170,7 @@ PY
     printf '{"build": %d, "version": "%s", "commit": "%s", "built_at": "%s", "size": %d, "file": "%s"}\n' \
         "$build" "$version" "$commit" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$(stat -c %s "$aab")" "$name" \
         | answer_stdin "$RELEASE" latest.json
+    # shellcheck disable=SC2012  # our own file names: no spaces or newlines
     ls -1t "$RELEASE"/allskyhub-*.aab | tail -n +4 | xargs -r rm -f
     echo "$name gebaut ($(stat -c %s "$aab") Bytes). Hochladen zu Google Play …"
 

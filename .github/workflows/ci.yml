@@ -47,6 +47,16 @@ jobs:
       - run: uv run pytest -q -rs
       - run: uvx --from 'reuse[charset-normalizer]' reuse lint
 
+  # Shell scripts: the deploy and backup scripts run as root on the hub, image/build.sh
+  # builds the Pi image. ShellCheck comes with the runner image.
+  shell:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262  # v4
+      - run: shellcheck --version
+      - run: git ls-files -z '*.sh' | xargs -0 -n1 bash -n
+      - run: git ls-files -z '*.sh' | xargs -0 shellcheck
+
   # Flutter app (app/): format, analyze, test. Native builds: app-build.yml.
   app:
     runs-on: ubuntu-24.04

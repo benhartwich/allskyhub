@@ -79,8 +79,8 @@ main() {
         || fail "Migration (der Hub läuft weiter mit der alten Version)"
     say "Neustart"
     run systemctl restart allskyhub-server || fail "Neustart"
-    local i version=""
-    for i in $(seq 1 30); do
+    local version=""
+    for _ in $(seq 1 30); do
         version=$(curl -fsS --max-time 3 "$HUB_URL/healthz" 2>/dev/null \
             | sed -n 's/.*"version": *"\([0-9a-f]*\)".*/\1/p') || true
         [[ $version == "${sha:0:7}" ]] && break

@@ -24,5 +24,6 @@ gunzip -c "$tmp" | grep "CREATE TABLE public.user_account" >/dev/null || {
 chmod 0640 "$tmp"
 mv "$tmp" "$OUT"
 ln -sfn "$(basename "$OUT")" "$DIR/allskyhub-latest.sql.gz"
+# shellcheck disable=SC2012  # our own file names: no spaces or newlines
 ls -1t "$DIR"/allskyhub-????-??-??.sql.gz | tail -n +"$((KEEP + 1))" | xargs -r rm --
 echo "allskyhub-db-backup: $(du -h "$OUT" | cut -f1) written to $OUT"

@@ -3,10 +3,14 @@ import 'package:flutter/services.dart';
 import 'package:share_plus/share_plus.dart';
 
 import '../api/hub_client.dart';
+import '../l10n.dart';
 
 String _describe(Object e) => e is HubException
     ? e.message
-    : 'Keine Verbindung zum Hub. Bitte später noch einmal versuchen.';
+    : tr(
+        'Keine Verbindung zum Hub. Bitte später noch einmal versuchen.',
+        'No connection to the hub. Please try again later.',
+      );
 
 /// Roadmap C10: the owner shares the camera with existing accounts, to look (`viewer`) or
 /// also to change settings and mark detections (`admin`).
@@ -21,7 +25,10 @@ class SharingScreen extends StatefulWidget {
 }
 
 class _SharingScreenState extends State<SharingScreen> {
-  static const roles = {'viewer': 'Ansehen', 'admin': 'Verwalten'};
+  static Map<String, String> get roles => {
+    'viewer': tr('Ansehen', 'View'),
+    'admin': tr('Verwalten', 'Manage'),
+  };
 
   final _email = TextEditingController();
   String _role = 'viewer';
@@ -86,13 +93,17 @@ class _SharingScreenState extends State<SharingScreen> {
     final theme = Theme.of(context);
     final members = _members;
     return Scaffold(
-      appBar: AppBar(title: const Text('Teilen')),
+      appBar: AppBar(title: Text(tr('Teilen', 'Share'))),
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
           Text(
-            'Teile ${widget.camera.name} mit Familie oder Verein. Die Person '
-            'braucht ein eigenes Konto bei allskyhub.',
+            tr(
+              'Teile ${widget.camera.name} mit Familie oder Verein. Die Person '
+                  'braucht ein eigenes Konto bei allskyhub.',
+              'Share ${widget.camera.name} with family or your club. The person '
+                  'needs their own allskyhub account.',
+            ),
             style: theme.textTheme.bodyMedium,
           ),
           const SizedBox(height: 16),
@@ -101,9 +112,9 @@ class _SharingScreenState extends State<SharingScreen> {
             controller: _email,
             keyboardType: TextInputType.emailAddress,
             autocorrect: false,
-            decoration: const InputDecoration(
-              labelText: 'E-Mail-Adresse',
-              border: OutlineInputBorder(),
+            decoration: InputDecoration(
+              labelText: tr('E-Mail-Adresse', 'Email address'),
+              border: const OutlineInputBorder(),
             ),
             onSubmitted: (_) => _add(),
           ),
@@ -119,15 +130,21 @@ class _SharingScreenState extends State<SharingScreen> {
           const SizedBox(height: 4),
           Text(
             _role == 'admin'
-                ? 'Darf auch Einstellungen ändern und Erkennungen markieren.'
-                : 'Sieht Bilder, Nächte und Erkennungen.',
+                ? tr(
+                    'Darf auch Einstellungen ändern und Erkennungen markieren.',
+                    'Can also change settings and label detections.',
+                  )
+                : tr(
+                    'Sieht Bilder, Nächte und Erkennungen.',
+                    'Sees pictures, nights and detections.',
+                  ),
             style: theme.textTheme.bodySmall,
           ),
           const SizedBox(height: 12),
           FilledButton(
             key: const Key('share-add'),
             onPressed: _busy ? null : _add,
-            child: const Text('Hinzufügen'),
+            child: Text(tr('Hinzufügen', 'Add')),
           ),
           if (_error case final error?)
             Padding(
@@ -139,7 +156,10 @@ class _SharingScreenState extends State<SharingScreen> {
               ),
             ),
           const SizedBox(height: 24),
-          Text('Geteilt mit', style: theme.textTheme.titleMedium),
+          Text(
+            tr('Geteilt mit', 'Shared with'),
+            style: theme.textTheme.titleMedium,
+          ),
           if (members == null)
             const Padding(
               padding: EdgeInsets.all(16),
@@ -148,7 +168,10 @@ class _SharingScreenState extends State<SharingScreen> {
           else if (members.isEmpty)
             Padding(
               padding: const EdgeInsets.symmetric(vertical: 8),
-              child: Text('Noch niemand.', style: theme.textTheme.bodySmall),
+              child: Text(
+                tr('Noch niemand.', 'Nobody yet.'),
+                style: theme.textTheme.bodySmall,
+              ),
             )
           else
             for (final m in members)
@@ -157,7 +180,7 @@ class _SharingScreenState extends State<SharingScreen> {
                 title: Text(m.email),
                 subtitle: Text(roles[m.role] ?? m.role),
                 trailing: IconButton(
-                  tooltip: 'Nicht mehr teilen',
+                  tooltip: tr('Nicht mehr teilen', 'Stop sharing'),
                   icon: const Icon(Icons.person_remove_outlined),
                   onPressed: _busy ? null : () => _remove(m),
                 ),
@@ -185,24 +208,42 @@ class PublicPageScreen extends StatefulWidget {
 }
 
 class _PublicPageScreenState extends State<PublicPageScreen> {
-  static const texts = {
-    'title': 'Titel',
-    'location_label': 'Ort',
-    'camera': 'Kamera',
-    'lens': 'Objektiv',
-    'computer': 'Rechner',
-    'owner': 'Betrieben von',
-    'notes': 'Notizen',
+  static Map<String, String> get texts => {
+    'title': tr('Titel', 'Title'),
+    'location_label': tr('Ort', 'Location'),
+    'camera': tr('Kamera', 'Camera'),
+    'lens': tr('Objektiv', 'Lens'),
+    'computer': tr('Rechner', 'Computer'),
+    'owner': tr('Betrieben von', 'Run by'),
+    'notes': tr('Notizen', 'Notes'),
   };
-  static const sections = {
-    'live': 'Aktuelles Bild',
-    'loop': 'Die letzte Stunde als Loop',
-    'events': 'Meteore, Polarlicht und Blitze',
-    'sky': 'Himmelsqualität (Wolken, SQM, Sterne)',
-    'aurora': 'Polarlicht-Aussichten (Kp-Index)',
-    'archive': 'Nachtarchiv mit Keogramm, Sternspuren und Zeitraffer',
-    'observatory': 'Was das Teleskop gerade aufnimmt (N.I.N.A.)',
-    'aircraft': 'Flugzeuge über dem aktuellen Bild (Daten: adsb.lol)',
+  static Map<String, String> get sections => {
+    'live': tr('Aktuelles Bild', 'Current picture'),
+    'loop': tr('Die letzte Stunde als Loop', 'The last hour as a loop'),
+    'events': tr(
+      'Meteore, Polarlicht und Blitze',
+      'Meteors, aurora and lightning',
+    ),
+    'sky': tr(
+      'Himmelsqualität (Wolken, SQM, Sterne)',
+      'Sky quality (clouds, SQM, stars)',
+    ),
+    'aurora': tr(
+      'Polarlicht-Aussichten (Kp-Index)',
+      'Aurora outlook (Kp index)',
+    ),
+    'archive': tr(
+      'Nachtarchiv mit Keogramm, Sternspuren und Zeitraffer',
+      'Night archive with keogram, star trails and timelapse',
+    ),
+    'observatory': tr(
+      'Was das Teleskop gerade aufnimmt (N.I.N.A.)',
+      'What the telescope is imaging (N.I.N.A.)',
+    ),
+    'aircraft': tr(
+      'Flugzeuge über dem aktuellen Bild (Daten: adsb.lol)',
+      'Aircraft over the current picture (data: adsb.lol)',
+    ),
   };
 
   final _fields = {for (final key in texts.keys) key: TextEditingController()};
@@ -273,9 +314,15 @@ class _PublicPageScreenState extends State<PublicPageScreen> {
       );
       if (mounted) setState(() => _take(state));
       _show(switch (enabled) {
-        true => 'Die Seite ist jetzt öffentlich.',
-        false => 'Die Seite ist abgeschaltet, der Link gilt nicht mehr.',
-        null => 'Gespeichert.',
+        true => tr(
+          'Die Seite ist jetzt öffentlich.',
+          'The page is public now.',
+        ),
+        false => tr(
+          'Die Seite ist abgeschaltet, der Link gilt nicht mehr.',
+          'The page is switched off; the link no longer works.',
+        ),
+        null => tr('Gespeichert.', 'Saved.'),
       });
     } on Exception catch (e) {
       _show(_describe(e), error: true);
@@ -289,7 +336,7 @@ class _PublicPageScreenState extends State<PublicPageScreen> {
     final theme = Theme.of(context);
     final state = _state;
     return Scaffold(
-      appBar: AppBar(title: const Text('Öffentliche Seite')),
+      appBar: AppBar(title: Text(tr('Öffentliche Seite', 'Public page'))),
       body: state == null
           ? Center(
               child: _message == null
@@ -302,9 +349,12 @@ class _PublicPageScreenState extends State<PublicPageScreen> {
                 SwitchListTile(
                   key: const Key('public-enabled'),
                   contentPadding: EdgeInsets.zero,
-                  title: const Text('Öffentlich zeigen'),
-                  subtitle: const Text(
-                    'Jeder mit dem Link sieht, was du unten auswählst.',
+                  title: Text(tr('Öffentlich zeigen', 'Show publicly')),
+                  subtitle: Text(
+                    tr(
+                      'Jeder mit dem Link sieht, was du unten auswählst.',
+                      'Anyone with the link sees what you choose below.',
+                    ),
                   ),
                   value: state.enabled,
                   onChanged: _busy ? null : (on) => _save(enabled: on),
@@ -315,11 +365,11 @@ class _PublicPageScreenState extends State<PublicPageScreen> {
                     contentPadding: EdgeInsets.zero,
                     title: SelectableText(url),
                     trailing: IconButton(
-                      tooltip: 'Link kopieren',
+                      tooltip: tr('Link kopieren', 'Copy link'),
                       icon: const Icon(Icons.copy),
                       onPressed: () async {
                         await Clipboard.setData(ClipboardData(text: url));
-                        _show('Link kopiert.');
+                        _show(tr('Link kopiert.', 'Link copied.'));
                       },
                     ),
                   ),
@@ -335,7 +385,10 @@ class _PublicPageScreenState extends State<PublicPageScreen> {
                     ),
                   ),
                 const SizedBox(height: 8),
-                Text('Was die Seite zeigt', style: theme.textTheme.titleMedium),
+                Text(
+                  tr('Was die Seite zeigt', 'What the page shows'),
+                  style: theme.textTheme.titleMedium,
+                ),
                 for (final MapEntry(:key, :value) in sections.entries)
                   CheckboxListTile(
                     key: Key('section-$key'),
@@ -348,10 +401,15 @@ class _PublicPageScreenState extends State<PublicPageScreen> {
                 CheckboxListTile(
                   key: const Key('show-coordinates'),
                   contentPadding: EdgeInsets.zero,
-                  title: const Text(
-                    'Koordinaten zeigen und auf der Kamerakarte erscheinen',
+                  title: Text(
+                    tr(
+                      'Koordinaten zeigen und auf der Kamerakarte erscheinen',
+                      'Show coordinates and appear on the camera map',
+                    ),
                   ),
-                  subtitle: const Text('Auf etwa 10 km gerundet.'),
+                  subtitle: Text(
+                    tr('Auf etwa 10 km gerundet.', 'Rounded to about 10 km.'),
+                  ),
                   value: _profile['show_coordinates'] as bool? ?? false,
                   onChanged: (on) => setState(
                     () => _profile['show_coordinates'] = on ?? false,
@@ -360,15 +418,26 @@ class _PublicPageScreenState extends State<PublicPageScreen> {
                 CheckboxListTile(
                   key: const Key('on-home'),
                   contentPadding: EdgeInsets.zero,
-                  title: const Text('Auf der Startseite von allskyhub zeigen'),
-                  subtitle: const Text(
-                    'Titel, Ort und aktuelles Bild, mit Link zur Seite.',
+                  title: Text(
+                    tr(
+                      'Auf der Startseite von allskyhub zeigen',
+                      'Show on the allskyhub home page',
+                    ),
+                  ),
+                  subtitle: Text(
+                    tr(
+                      'Titel, Ort und aktuelles Bild, mit Link zur Seite.',
+                      'Title, location and current picture, linked to the page.',
+                    ),
                   ),
                   value: _onHome,
                   onChanged: (on) => setState(() => _onHome = on ?? false),
                 ),
                 const SizedBox(height: 16),
-                Text('Über die Kamera', style: theme.textTheme.titleMedium),
+                Text(
+                  tr('Über die Kamera', 'About the camera'),
+                  style: theme.textTheme.titleMedium,
+                ),
                 const SizedBox(height: 8),
                 for (final MapEntry(:key, :value) in texts.entries)
                   Padding(
@@ -392,7 +461,7 @@ class _PublicPageScreenState extends State<PublicPageScreen> {
                 FilledButton(
                   key: const Key('public-save'),
                   onPressed: _busy ? null : _save,
-                  child: const Text('Speichern'),
+                  child: Text(tr('Speichern', 'Save')),
                 ),
               ],
             ),
@@ -480,13 +549,17 @@ class _ExportScreenState extends State<ExportScreen> {
     final theme = Theme.of(context);
     final items = _items;
     return Scaffold(
-      appBar: AppBar(title: const Text('Exporte')),
+      appBar: AppBar(title: Text(tr('Exporte', 'Exports'))),
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
           Text(
-            'Tabellen (CSV) mit Zeiten in UTC, zum Weitergeben an '
-            'Tabellenkalkulation, IMO oder Globe at Night.',
+            tr(
+              'Tabellen (CSV) mit Zeiten in UTC, zum Weitergeben an '
+                  'Tabellenkalkulation, IMO oder Globe at Night.',
+              'Tables (CSV) with times in UTC, to pass on to a spreadsheet, '
+                  'the IMO or Globe at Night.',
+            ),
             style: theme.textTheme.bodyMedium,
           ),
           if (_error case final error?)
@@ -605,18 +678,21 @@ class _DiscordScreenState extends State<DiscordScreen> {
       summary: _summary,
     );
     if (mounted) setState(() => _take(state));
-    return 'Gespeichert.';
+    return tr('Gespeichert.', 'Saved.');
   });
 
   Future<void> _test() => _run(() async {
     await widget.client.testDiscord(widget.camera.id);
-    return 'Testnachricht gesendet. Schau in deinen Discord-Kanal.';
+    return tr(
+      'Testnachricht gesendet. Schau in deinen Discord-Kanal.',
+      'Test message sent. Have a look in your Discord channel.',
+    );
   });
 
   Future<void> _remove() => _run(() async {
     final state = await widget.client.removeDiscord(widget.camera.id);
     if (mounted) setState(() => _take(state));
-    return 'Discord getrennt.';
+    return tr('Discord getrennt.', 'Discord disconnected.');
   });
 
   @override
@@ -635,17 +711,26 @@ class _DiscordScreenState extends State<DiscordScreen> {
               padding: const EdgeInsets.all(16),
               children: [
                 Text(
-                  'Meteore, Polarlicht und die Nacht am Morgen in einem '
-                  'Discord-Kanal, mit Bild. In Discord: Servereinstellungen → '
-                  'Integrationen → Webhooks → Webhook-URL kopieren.',
+                  tr(
+                    'Meteore, Polarlicht und die Nacht am Morgen in einem '
+                        'Discord-Kanal, mit Bild. In Discord: Servereinstellungen → '
+                        'Integrationen → Webhooks → Webhook-URL kopieren.',
+                    'Meteors, aurora and the night in the morning in a Discord '
+                        'channel, with a picture. In Discord: Server Settings → '
+                        'Integrations → Webhooks → Copy Webhook URL.',
+                  ),
                   style: theme.textTheme.bodyMedium,
                 ),
                 if (state.broken)
                   Padding(
                     padding: const EdgeInsets.only(top: 12),
                     child: Text(
-                      'Discord kennt diesen Webhook nicht mehr. Bitte eine neue '
-                      'Adresse eintragen.',
+                      tr(
+                        'Discord kennt diesen Webhook nicht mehr. Bitte eine neue '
+                            'Adresse eintragen.',
+                        'Discord no longer knows this webhook. Please enter a new '
+                            'address.',
+                      ),
                       style: TextStyle(color: theme.colorScheme.error),
                     ),
                   ),
@@ -656,10 +741,10 @@ class _DiscordScreenState extends State<DiscordScreen> {
                   keyboardType: TextInputType.url,
                   autocorrect: false,
                   decoration: InputDecoration(
-                    labelText: 'Webhook-Adresse',
+                    labelText: tr('Webhook-Adresse', 'Webhook address'),
                     helperText: state.webhook == null
                         ? null
-                        : '${state.webhook} (leer lassen = behalten)',
+                        : '${state.webhook} ${tr('(leer lassen = behalten)', '(leave empty to keep it)')}',
                     helperMaxLines: 2,
                     border: const OutlineInputBorder(),
                   ),
@@ -678,7 +763,9 @@ class _DiscordScreenState extends State<DiscordScreen> {
                 CheckboxListTile(
                   key: const Key('discord-summary'),
                   contentPadding: EdgeInsets.zero,
-                  title: const Text('Die Nacht am Morgen'),
+                  title: Text(
+                    tr('Die Nacht am Morgen', 'The night, in the morning'),
+                  ),
                   value: _summary,
                   onChanged: (on) => setState(() => _summary = on ?? false),
                 ),
@@ -696,19 +783,21 @@ class _DiscordScreenState extends State<DiscordScreen> {
                 FilledButton(
                   key: const Key('discord-save'),
                   onPressed: _busy ? null : _save,
-                  child: const Text('Speichern'),
+                  child: Text(tr('Speichern', 'Save')),
                 ),
                 if (state.configured) ...[
                   const SizedBox(height: 8),
                   OutlinedButton(
                     key: const Key('discord-test'),
                     onPressed: _busy ? null : _test,
-                    child: const Text('Testnachricht senden'),
+                    child: Text(
+                      tr('Testnachricht senden', 'Send a test message'),
+                    ),
                   ),
                   TextButton(
                     key: const Key('discord-remove'),
                     onPressed: _busy ? null : _remove,
-                    child: const Text('Discord trennen'),
+                    child: Text(tr('Discord trennen', 'Disconnect Discord')),
                   ),
                 ],
               ],
@@ -758,17 +847,25 @@ class _NetworkScreenState extends State<NetworkScreen> {
     final theme = Theme.of(context);
     final on = _on;
     return Scaffold(
-      appBar: AppBar(title: const Text('Kameranetz')),
+      appBar: AppBar(title: Text(tr('Kameranetz', 'Camera network'))),
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
           Text(
-            'Sehen deine Kamera und die Kamera eines anderen Teilnehmers '
-            'denselben Meteor, berechnet der Hub aus beiden Blickwinkeln seine '
-            'Bahn und Höhe. Beide Besitzer sehen sie bei ihrem Ereignis. Dafür '
-            'rechnet der Hub mit den genauen Standorten, und aus gemeinsamen '
-            'Meteoren lässt sich ungefähr ablesen, wo die andere Kamera steht. '
-            'Deine eigenen Kameras gleicht der Hub immer miteinander ab.',
+            tr(
+              'Sehen deine Kamera und die Kamera eines anderen Teilnehmers '
+                  'denselben Meteor, berechnet der Hub aus beiden Blickwinkeln seine '
+                  'Bahn und Höhe. Beide Besitzer sehen sie bei ihrem Ereignis. Dafür '
+                  'rechnet der Hub mit den genauen Standorten, und aus gemeinsamen '
+                  'Meteoren lässt sich ungefähr ablesen, wo die andere Kamera steht. '
+                  'Deine eigenen Kameras gleicht der Hub immer miteinander ab.',
+              "When your camera and another member's camera see the same meteor, "
+                  'the hub works out its path and height from both views. Both '
+                  'owners see it with their event. For this the hub uses the exact '
+                  'locations, and shared meteors give a rough idea of where the '
+                  'other camera is. Your own cameras are always matched with '
+                  'each other.',
+            ),
             style: theme.textTheme.bodyMedium,
           ),
           const SizedBox(height: 8),
@@ -778,7 +875,9 @@ class _NetworkScreenState extends State<NetworkScreen> {
             SwitchListTile(
               key: const Key('network-switch'),
               contentPadding: EdgeInsets.zero,
-              title: const Text('Am Kameranetz teilnehmen'),
+              title: Text(
+                tr('Am Kameranetz teilnehmen', 'Join the camera network'),
+              ),
               value: on,
               onChanged: (value) =>
                   _run(() => widget.client.setNetwork(widget.camera.id, value)),

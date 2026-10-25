@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
 
 import 'design.dart';
+import 'l10n.dart';
 import 'api/hub_client.dart';
 import 'api/session_store.dart';
 import 'screens/cameras_screen.dart';
@@ -69,6 +71,9 @@ class _AllskyAppState extends State<AllskyApp> {
       title: 'allskyhub',
       debugShowCheckedModeBanner: false,
       theme: skyTheme(),
+      locale: appLocale,
+      supportedLocales: const [Locale('de'), Locale('en')],
+      localizationsDelegates: GlobalMaterialLocalizations.delegates,
       home: _loading
           ? const Scaffold(body: Center(child: CircularProgressIndicator()))
           : client == null

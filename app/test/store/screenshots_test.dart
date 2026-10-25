@@ -5,6 +5,8 @@
 //   flutter test test/store --update-goldens --dart-define=STORE_SCREENSHOTS=true
 //
 // They land in test/store/shots/; copy them to store/play/screenshots/ for the listing.
+// With --dart-define=STORE_LANG=en the app speaks English and they land in
+// test/store/shots-en/, for store/play/en-US/screenshots/.
 // The fonts come from the Flutter SDK (Roboto, Material icons) and, for symbols Roboto
 // lacks, DejaVu Sans where the system has it (the flutter container does).
 
@@ -15,6 +17,7 @@ import 'dart:math' as math;
 
 import 'package:allskyhub_app/api/hub_client.dart';
 import 'package:allskyhub_app/design.dart';
+import 'package:allskyhub_app/l10n.dart';
 import 'package:allskyhub_app/screens/camera_screen.dart';
 import 'package:allskyhub_app/screens/cameras_screen.dart';
 import 'package:allskyhub_app/screens/event_screens.dart';
@@ -28,6 +31,7 @@ import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 
 const _run = bool.fromEnvironment('STORE_SCREENSHOTS');
+const _english = String.fromEnvironment('STORE_LANG') == 'en';
 const _size = Size(1080, 2160); // 2:1, the longest Google Play takes
 const _ratio = 3.0;
 final _here = Directory('test/store');
@@ -506,7 +510,7 @@ Future<void> _shot(
   await tester.pump(const Duration(milliseconds: 300));
   await expectLater(
     find.byType(MaterialApp),
-    matchesGoldenFile('shots/$name.png'),
+    matchesGoldenFile('${_english ? 'shots-en' : 'shots'}/$name.png'),
   );
   await tester.pumpWidget(const SizedBox()); // stops timers
   await tester.pump(const Duration(seconds: 5));
@@ -515,6 +519,7 @@ Future<void> _shot(
 void main() {
   setUpAll(() async {
     if (!_run) return;
+    appEnglish = _english;
     HttpOverrides.global = _Pictures();
     await _fonts();
   });

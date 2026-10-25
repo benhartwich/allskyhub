@@ -5,6 +5,7 @@ import 'dart:async';
 
 import 'package:flutter/foundation.dart';
 
+import '../l10n.dart';
 import 'camera_setup.dart';
 import 'hub_client.dart';
 
@@ -90,8 +91,10 @@ class OnboardingController extends ChangeNotifier {
       } on NotACameraException {
         _set(
           OnboardingPhase.failed,
-          error:
-              'Unter dieser Adresse antwortet keine eingerichtete allskyhub-Kamera.',
+          error: tr(
+            'Unter dieser Adresse antwortet keine eingerichtete allskyhub-Kamera.',
+            'No set-up allskyhub camera answers at this address.',
+          ),
         );
         return;
       } on Exception {
@@ -106,8 +109,10 @@ class OnboardingController extends ChangeNotifier {
       if (!sameHub(current.hubUrl, hub.baseUrl)) {
         _set(
           OnboardingPhase.failed,
-          error:
-              'Die Kamera ist mit einem anderen Hub verbunden (${current.hubUrl}).',
+          error: tr(
+            'Die Kamera ist mit einem anderen Hub verbunden (${current.hubUrl}).',
+            'The camera is connected to another hub (${current.hubUrl}).',
+          ),
         );
         return;
       }
@@ -120,7 +125,10 @@ class OnboardingController extends ChangeNotifier {
         if (camera == null) {
           _set(
             OnboardingPhase.failed,
-            error: 'Die Kamera ist bereits mit einem anderen Konto gekoppelt.',
+            error: tr(
+              'Die Kamera ist bereits mit einem anderen Konto gekoppelt.',
+              'The camera is already paired with another account.',
+            ),
           );
         } else {
           _set(OnboardingPhase.done);

@@ -1,12 +1,15 @@
 // The camera's settings form (SPEC §6.9): built from `settings_schema` like on the web
 // (server devices/settings_form.py), checked here first, checked again by the camera.
 
+import '../l10n.dart';
 import '../platform/location.dart';
 
-/// A schema text: a plain string or `{de, en}`; German is the fallback.
+/// A schema text: a plain string or `{de, en}`, in the app's language; German is the
+/// fallback.
 String _text(Object? value) => switch (value) {
   String s => s,
-  Map<String, dynamic> m => (m['de'] as String?) ?? '',
+  Map<String, dynamic> m =>
+    (m[appLocale.languageCode] as String?) ?? (m['de'] as String?) ?? '',
   _ => '',
 };
 
@@ -58,33 +61,39 @@ final List<SettingField> fallbackSchema = [
     {
       'key': 'location',
       'type': 'location',
-      'label': 'Standort',
-      'group': 'Standort',
+      'label': {'de': 'Standort', 'en': 'Location'},
+      'group': {'de': 'Standort', 'en': 'Location'},
     },
     {
       'key': 'timezone',
       'type': 'string',
-      'label': 'Zeitzone',
-      'group': 'Standort',
+      'label': {'de': 'Zeitzone', 'en': 'Time zone'},
+      'group': {'de': 'Standort', 'en': 'Location'},
       'max_length': 64,
     },
     {
       'key': 'camera',
       'type': 'choice',
-      'label': 'Kamera',
-      'group': 'Kamera',
+      'label': {'de': 'Kamera', 'en': 'Camera'},
+      'group': {'de': 'Kamera', 'en': 'Camera'},
       'choices': [
-        {'value': 'auto', 'label': 'Automatisch erkennen'},
+        {
+          'value': 'auto',
+          'label': {'de': 'Automatisch erkennen', 'en': 'Detect automatically'},
+        },
         {'value': 'zwo-asi678mc', 'label': 'ZWO ASI678MC'},
         {'value': 'rpi-hq', 'label': 'Raspberry Pi HQ Camera'},
-        {'value': 'sim', 'label': 'Simulation (Test)'},
+        {
+          'value': 'sim',
+          'label': {'de': 'Simulation (Test)', 'en': 'Simulation (test)'},
+        },
       ],
     },
     {
       'key': 'day_delay_s',
       'type': 'number',
-      'label': 'Pause am Tag',
-      'group': 'Aufnahme',
+      'label': {'de': 'Pause am Tag', 'en': 'Pause by day'},
+      'group': {'de': 'Aufnahme', 'en': 'Capture'},
       'unit': 's',
       'min': 0,
       'max': 3600,
@@ -92,8 +101,8 @@ final List<SettingField> fallbackSchema = [
     {
       'key': 'night_delay_s',
       'type': 'number',
-      'label': 'Pause in der Nacht',
-      'group': 'Aufnahme',
+      'label': {'de': 'Pause in der Nacht', 'en': 'Pause at night'},
+      'group': {'de': 'Aufnahme', 'en': 'Capture'},
       'unit': 's',
       'min': 0,
       'max': 3600,
@@ -125,7 +134,7 @@ class SettingsInput {
 String _fmt(double v) => v == v.roundToDouble() ? '${v.round()}' : '$v';
 
 /// The keys that differ from the camera's values (SPEC §6.5: only changes are sent), or a
-/// German error. Empty fields stay unchanged; a nullable field emptied becomes null.
+/// error in the app's language. Empty fields stay unchanged; a nullable field emptied becomes null.
 (Map<String, Object?>?, String?) schemaChanges(
   List<SettingField> schema,
   Map<String, dynamic> current,
@@ -141,7 +150,13 @@ String _fmt(double v) => v == v.roundToDouble() ? '${v.round()}' : '$v';
         if (lat.trim().isEmpty && lon.trim().isEmpty) continue;
         final location = CameraLocation.tryParse(lat, lon);
         if (location == null) {
-          return (null, 'Bitte Breite und Länge als gültige Zahlen angeben.');
+          return (
+            null,
+            tr(
+              'Bitte Breite und Länge als gültige Zahlen angeben.',
+              'Please enter latitude and longitude as valid numbers.',
+            ),
+          );
         }
         if (location.latitude != current['latitude'] ||
             location.longitude != current['longitude']) {
@@ -171,8 +186,8 @@ String _fmt(double v) => v == v.roundToDouble() ? '${v.round()}' : '$v';
         if (f.numeric) {
           final value = parseNumber(text);
           final range = [
-            if (f.min != null) 'ab ${_fmt(f.min!)}',
-            if (f.max != null) 'bis ${_fmt(f.max!)}',
+            if (f.min != null) tr('ab ${_fmt(f.min!)}', 'from ${_fmt(f.min!)}'),
+            if (f.max != null) tr('bis ${_fmt(f.max!)}', 'to ${_fmt(f.max!)}'),
           ].join(' ');
           final unit = f.unit == null ? '' : ' ${f.unit}';
           if (value == null ||
@@ -182,14 +197,23 @@ String _fmt(double v) => v == v.roundToDouble() ? '${v.round()}' : '$v';
             final hint = range.isEmpty ? '' : ' $range$unit';
             return (
               null,
-              '${f.label}: bitte eine ${f.type == 'int' ? 'ganze ' : ''}Zahl$hint.',
+              tr(
+                '${f.label}: bitte eine ${f.type == 'int' ? 'ganze ' : ''}Zahl$hint.',
+                '${f.label}: please enter a ${f.type == 'int' ? 'whole ' : ''}number$hint.',
+              ),
             );
           }
           final number = f.type == 'int' ? value.round() : value;
           if (number != current[key]) changes[key] = number;
         } else {
           if (f.maxLength != null && text.length > f.maxLength!) {
-            return (null, '${f.label}: höchstens ${f.maxLength} Zeichen.');
+            return (
+              null,
+              tr(
+                '${f.label}: höchstens ${f.maxLength} Zeichen.',
+                '${f.label}: at most ${f.maxLength} characters.',
+              ),
+            );
           }
           if (text != current[key]) changes[key] = text;
         }

@@ -21,6 +21,7 @@ import 'package:sensors_plus/sensors_plus.dart';
 
 import '../api/hub_client.dart';
 import '../design.dart';
+import '../l10n.dart';
 
 typedef Vec = ({double x, double y, double z});
 
@@ -127,7 +128,9 @@ class SensorPoseSource implements PoseSource {
   }
 }
 
-const _names = ['N', 'NO', 'O', 'SO', 'S', 'SW', 'W', 'NW'];
+List<String> get _names => appEnglish
+    ? const ['N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW']
+    : const ['N', 'NO', 'O', 'SO', 'S', 'SW', 'W', 'NW'];
 
 String compassName(double az) => _names[((az + 22.5) % 360 ~/ 45)];
 
@@ -242,7 +245,12 @@ class _SkyViewScreenState extends State<SkyViewScreen>
       if (mounted) setState(() => _error = e.message);
     } on Exception {
       if (mounted) {
-        setState(() => _error = 'Keine Verbindung zum Hub.');
+        setState(
+          () => _error = tr(
+            'Keine Verbindung zum Hub.',
+            'No connection to the hub.',
+          ),
+        );
       }
     }
   }
@@ -261,7 +269,7 @@ class _SkyViewScreenState extends State<SkyViewScreen>
     ];
     return Scaffold(
       backgroundColor: Sky.bg,
-      appBar: AppBar(title: const Text('Himmel')),
+      appBar: AppBar(title: Text(tr('Himmel', 'Sky'))),
       body: Stack(
         children: [
           if (ar)
@@ -308,23 +316,23 @@ class _SkyViewScreenState extends State<SkyViewScreen>
                 if (widget.useCamera && !_camFailed)
                   FilterChip(
                     key: const Key('sky-toggle-camera'),
-                    label: const Text('Kamerabild'),
+                    label: Text(tr('Kamerabild', 'Camera view')),
                     selected: _showCamera,
                     onSelected: (v) => setState(() => _showCamera = v),
                   ),
                 FilterChip(
-                  label: const Text('Sternbilder'),
+                  label: Text(tr('Sternbilder', 'Constellations')),
                   selected: _showLines,
                   onSelected: (v) => setState(() => _showLines = v),
                 ),
                 FilterChip(
-                  label: const Text('Meteore'),
+                  label: Text(tr('Meteore', 'Meteors')),
                   selected: _showMeteors,
                   onSelected: (v) => setState(() => _showMeteors = v),
                 ),
                 FilterChip(
                   key: const Key('sky-toggle-overflights'),
-                  label: const Text('Überflüge'),
+                  label: Text(tr('Überflüge', 'Overflights')),
                   selected: _showOverflights,
                   onSelected: (v) => setState(() => _showOverflights = v),
                 ),
@@ -342,7 +350,7 @@ class _SkyViewScreenState extends State<SkyViewScreen>
                   Row(
                     children: [
                       Text(
-                        'Bildwinkel',
+                        tr('Bildwinkel', 'Field of view'),
                         style: theme.textTheme.bodySmall?.copyWith(
                           shadows: shadow,
                         ),
@@ -361,15 +369,27 @@ class _SkyViewScreenState extends State<SkyViewScreen>
                 Text(
                   _error ??
                       (_noSensors
-                          ? 'Dieses Telefon meldet keine Lage- oder Kompasssensoren.'
+                          ? tr(
+                              'Dieses Telefon meldet keine Lage- oder Kompasssensoren.',
+                              'This phone reports no motion or compass sensors.',
+                            )
                           : data == null
-                          ? 'Lädt …'
+                          ? tr('Lädt …', 'Loading …')
                           : looking == null
-                          ? 'Halte das Telefon in Richtung Himmel.'
-                          : 'Blick nach ${compassName(looking.az)} '
-                                '(${looking.az.round()}°), '
-                                '${looking.alt.round()}° hoch. Letzte 12 Stunden: '
-                                'Meteore violett, Satelliten blau, Flugzeuge gelb.'),
+                          ? tr(
+                              'Halte das Telefon in Richtung Himmel.',
+                              'Hold the phone up to the sky.',
+                            )
+                          : tr(
+                              'Blick nach ${compassName(looking.az)} '
+                                  '(${looking.az.round()}°), '
+                                  '${looking.alt.round()}° hoch. Letzte 12 Stunden: '
+                                  'Meteore violett, Satelliten blau, Flugzeuge gelb.',
+                              'Looking ${compassName(looking.az)} '
+                                  '(${looking.az.round()}°), '
+                                  '${looking.alt.round()}° up. Last 12 hours: '
+                                  'meteors violet, satellites blue, aircraft yellow.',
+                            )),
                   key: const Key('sky-hint'),
                   textAlign: TextAlign.center,
                   style: theme.textTheme.bodyMedium?.copyWith(
@@ -470,7 +490,8 @@ class SkyPainter extends CustomPainter {
     _line(canvas, size, [
       for (var az = 0.0; az <= 360; az += 5) (alt: 0.0, az: az),
     ], horizon);
-    for (final (i, name) in ['N', 'O', 'S', 'W'].indexed) {
+    for (final (i, name)
+        in (appEnglish ? ['N', 'E', 'S', 'W'] : ['N', 'O', 'S', 'W']).indexed) {
       final at = _at((alt: 2.0, az: i * 90.0), size);
       if (at != null) {
         _text(

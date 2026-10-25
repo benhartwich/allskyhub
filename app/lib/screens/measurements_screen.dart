@@ -9,6 +9,7 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 
 import '../api/hub_client.dart';
+import '../l10n.dart';
 
 class _Line {
   const _Line(this.key, this.label, this.unit, this.color, {this.digits = 0});
@@ -50,35 +51,61 @@ const _cpu = Color(0xFFFF7A93);
 const _disk = Color(0xFF8FE3FF);
 const _moon = Color(0xFFE6E9F5);
 
-const _panels = [
-  _Panel('Himmelshelligkeit (mag/″², ↑ dunkler)', 'sky', [
-    _Line('sqm', 'Himmelshelligkeit', 'mag/″²', _sqm, digits: 2),
-  ], moon: true),
+List<_Panel> get _panels => [
   _Panel(
-    'Bewölkung und Sterne',
+    tr(
+      'Himmelshelligkeit (mag/″², ↑ dunkler)',
+      'Sky brightness (mag/″², ↑ darker)',
+    ),
     'sky',
-    [_Line('cloud', 'Bewölkung', '%', _clouds)],
-    fixed: (0, 100),
-    right: _Line('stars', 'Sterne', '', _stars),
+    [
+      _Line(
+        'sqm',
+        tr('Himmelshelligkeit', 'Sky brightness'),
+        'mag/″²',
+        _sqm,
+        digits: 2,
+      ),
+    ],
+    moon: true,
   ),
   _Panel(
-    'Belichtung (s, log) und Gain',
-    'status',
-    [_Line('exposure', 'Belichtung', 's', _exposure, digits: 3)],
-    log: true,
-    right: _Line('gain', 'Gain', '', _gain),
+    tr('Bewölkung und Sterne', 'Cloud cover and stars'),
+    'sky',
+    [_Line('cloud', tr('Bewölkung', 'Cloud cover'), '%', _clouds)],
+    fixed: (0, 100),
+    right: _Line('stars', tr('Sterne', 'Stars'), '', _stars),
   ),
-  _Panel('Temperaturen und Speicher', 'status', [
-    _Line('sensor', 'Sensor', '°C', _sensor, digits: 1),
-    _Line('cpu', 'Prozessor', '°C', _cpu),
-  ], right: _Line('disk', 'Speicher frei', '%', _disk)),
+  _Panel(
+    tr('Belichtung (s, log) und Gain', 'Exposure (s, log) and gain'),
+    'status',
+    [
+      _Line(
+        'exposure',
+        tr('Belichtung', 'Exposure'),
+        's',
+        _exposure,
+        digits: 3,
+      ),
+    ],
+    log: true,
+    right: const _Line('gain', 'Gain', '', _gain),
+  ),
+  _Panel(
+    tr('Temperaturen und Speicher', 'Temperatures and storage'),
+    'status',
+    [
+      const _Line('sensor', 'Sensor', '°C', _sensor, digits: 1),
+      _Line('cpu', tr('Prozessor', 'Processor'), '°C', _cpu),
+    ],
+    right: _Line('disk', tr('Speicher frei', 'Storage free'), '%', _disk),
+  ),
 ];
 
 /// The ranges offered, like on the web: one night or the last hours.
 const rangeHours = [24, 72, 168, 720];
 
 String _two(int v) => v.toString().padLeft(2, '0');
-const _weekdays = ['Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa', 'So'];
 
 DateTime _local(double ts) =>
     DateTime.fromMillisecondsSinceEpoch((ts * 1000).round()).toLocal();
@@ -90,7 +117,10 @@ String _clock(double ts) {
 
 String _day(double ts) {
   final t = _local(ts);
-  return '${_weekdays[t.weekday - 1]} ${t.day}.${t.month}.';
+  final weekday = weekdaysShort[t.weekday - 1];
+  return appEnglish
+      ? '$weekday ${dayMonth(t)}'
+      : '$weekday ${t.day}.${t.month}.';
 }
 
 String number(double? v, int digits) {
@@ -98,7 +128,7 @@ String number(double? v, int digits) {
   final text = digits >= 3
       ? v.toStringAsPrecision(3)
       : v.toStringAsFixed(digits);
-  return text.replaceAll('.', ',');
+  return appEnglish ? text : text.replaceAll('.', ',');
 }
 
 String nightTitle(String id) {
@@ -108,7 +138,10 @@ String nightTitle(String id) {
     int.parse(id.substring(6, 8)),
   );
   final next = day.add(const Duration(days: 1));
-  return 'Nacht ${day.day}./${next.day}.${next.month}.${next.year}';
+  return tr(
+    'Nacht ${day.day}./${next.day}.${next.month}.${next.year}',
+    'Night of ${dayMonth(day)} – ${dayMonth(next)} ${next.year}',
+  );
 }
 
 String shiftNight(String id, int days) {
@@ -175,7 +208,12 @@ class _MeasurementsScreenState extends State<MeasurementsScreen> {
       }
     } on Exception {
       if (mounted) {
-        setState(() => _error = 'Die Messdaten konnten nicht geladen werden.');
+        setState(
+          () => _error = tr(
+            'Die Messdaten konnten nicht geladen werden.',
+            'The measurements could not be loaded.',
+          ),
+        );
       }
     } finally {
       if (mounted) setState(() => _loading = false);
@@ -198,7 +236,7 @@ class _MeasurementsScreenState extends State<MeasurementsScreen> {
     final data = _data;
     final night = _currentNight;
     return Scaffold(
-      appBar: AppBar(title: const Text('Messdaten')),
+      appBar: AppBar(title: Text(tr('Messdaten', 'Measurements'))),
       body: ListView(
         padding: const EdgeInsets.fromLTRB(12, 8, 12, 24),
         children: [
@@ -209,7 +247,7 @@ class _MeasurementsScreenState extends State<MeasurementsScreen> {
             children: [
               IconButton(
                 key: const Key('night-before'),
-                tooltip: 'Nacht davor',
+                tooltip: tr('Nacht davor', 'Night before'),
                 onPressed: night == null || _loading
                     ? null
                     : () => _load(night: shiftNight(night, -1)),
@@ -217,13 +255,13 @@ class _MeasurementsScreenState extends State<MeasurementsScreen> {
               ),
               ChoiceChip(
                 key: const Key('range-night'),
-                label: const Text('Nacht'),
+                label: Text(tr('Nacht', 'Night')),
                 selected: data?.night != null,
                 onSelected: (_) => _load(night: night),
               ),
               IconButton(
                 key: const Key('night-after'),
-                tooltip: 'Nacht danach',
+                tooltip: tr('Nacht danach', 'Night after'),
                 onPressed: night == null || _loading
                     ? null
                     : () => _load(night: shiftNight(night, 1)),
@@ -232,7 +270,9 @@ class _MeasurementsScreenState extends State<MeasurementsScreen> {
               for (final h in rangeHours)
                 ChoiceChip(
                   key: Key('range-$h'),
-                  label: Text(h == 24 ? '24 h' : '${h ~/ 24} Tage'),
+                  label: Text(
+                    h == 24 ? '24 h' : tr('${h ~/ 24} Tage', '${h ~/ 24} days'),
+                  ),
                   selected: data?.hours == h,
                   onSelected: (_) => _load(hours: h),
                 ),
@@ -246,9 +286,15 @@ class _MeasurementsScreenState extends State<MeasurementsScreen> {
                     ? nightTitle(data.night!)
                     : '${_day(data.from)} ${_clock(data.from)} – ${_day(data.to)} ${_clock(data.to)}',
                 if (data.moonIllumination != null)
-                  'Mond ${(data.moonIllumination! * 100).round()} % beleuchtet',
+                  tr(
+                    'Mond ${(data.moonIllumination! * 100).round()} % beleuchtet',
+                    'Moon ${(data.moonIllumination! * 100).round()} % lit',
+                  ),
                 if (data.bucketSeconds > 0)
-                  'Mittelwerte über ${data.bucketSeconds ~/ 60} min',
+                  tr(
+                    'Mittelwerte über ${data.bucketSeconds ~/ 60} min',
+                    'Averages over ${data.bucketSeconds ~/ 60} min',
+                  ),
               ].join(' · '),
               key: const Key('series-meta'),
               style: theme.textTheme.bodySmall,
@@ -273,9 +319,14 @@ class _MeasurementsScreenState extends State<MeasurementsScreen> {
                 ),
           const SizedBox(height: 12),
           Text(
-            'Zeiten in der Ortszeit dieses Telefons. Hintergrund von hell nach dunkel: Tag, '
-            'Dämmerung, Nacht; gestrichelt die Mondhöhe. Die Himmelshelligkeit ist ein '
-            'Näherungswert aus dem Kamerabild, solange die Kamera nicht kalibriert ist.',
+            tr(
+              'Zeiten in der Ortszeit dieses Telefons. Hintergrund von hell nach dunkel: Tag, '
+                  'Dämmerung, Nacht; gestrichelt die Mondhöhe. Die Himmelshelligkeit ist ein '
+                  'Näherungswert aus dem Kamerabild, solange die Kamera nicht kalibriert ist.',
+              'Times in this phone\'s local time. Background from light to dark: day, '
+                  'twilight, night; dashed: the moon\'s altitude. The sky brightness is an '
+                  'estimate from the camera picture until the camera is calibrated.',
+            ),
             style: theme.textTheme.bodySmall,
           ),
         ],

@@ -5,26 +5,45 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 
 import '../api/hub_client.dart';
+import '../l10n.dart';
 
-const eventTitles = {
-  'meteor': 'Meteor',
-  'lightning': 'Blitz',
-  'aurora': 'Polarlicht',
-  'nlc': 'Leuchtende Nachtwolken',
-  'satellite': 'Satellit',
-  'clouds': 'Wolken',
-  'sky_quality': 'Himmelsqualität',
-};
+Map<String, String> get eventTitles => appEnglish
+    ? const {
+        'meteor': 'Meteor',
+        'lightning': 'Lightning',
+        'aurora': 'Aurora',
+        'nlc': 'Noctilucent clouds',
+        'satellite': 'Satellite',
+        'clouds': 'Clouds',
+        'sky_quality': 'Sky quality',
+      }
+    : const {
+        'meteor': 'Meteor',
+        'lightning': 'Blitz',
+        'aurora': 'Polarlicht',
+        'nlc': 'Leuchtende Nachtwolken',
+        'satellite': 'Satellit',
+        'clouds': 'Wolken',
+        'sky_quality': 'Himmelsqualität',
+      };
 
 // SPEC §6.4: direction_deg is the trail's axis in the image (0..180, 0 = up), no sense of travel.
-const _axes = [
-  'senkrecht',
-  'diagonal, oben rechts – unten links',
-  'waagrecht',
-  'diagonal, oben links – unten rechts',
-];
+List<String> get _axes => appEnglish
+    ? const [
+        'vertical',
+        'diagonal, top right – bottom left',
+        'horizontal',
+        'diagonal, top left – bottom right',
+      ]
+    : const [
+        'senkrecht',
+        'diagonal, oben rechts – unten links',
+        'waagrecht',
+        'diagonal, oben links – unten rechts',
+      ];
 
-// Agent shower names (SPEC §6.4, IMO) in German; unknown names pass through.
+// Agent shower names (SPEC §6.4, IMO) in German; English keeps the IMO names, and unknown
+// names pass through.
 const showerNames = {
   'Quadrantids': 'Quadrantiden',
   'Lyrids': 'Lyriden',
@@ -37,7 +56,7 @@ const showerNames = {
   'Ursids': 'Ursiden',
 };
 
-String showerName(String name) => showerNames[name] ?? name;
+String showerName(String name) => appEnglish ? name : showerNames[name] ?? name;
 
 /// SPEC §6.4 `shower` by `shower_match`: a radiant match is certain, a date match (also
 /// events without `shower_match`) only a guess; null when there is nothing to say.
@@ -47,9 +66,14 @@ String? showerText(Map<String, dynamic> data) {
       ? data['shower_match']
       : 'date';
   final named = shower is String && shower.isNotEmpty;
-  if (match == 'radiant') return named ? showerName(shower) : 'sporadisch';
+  if (match == 'radiant') {
+    return named ? showerName(shower) : tr('sporadisch', 'sporadic');
+  }
   if (match == 'date' && named) {
-    return 'vielleicht ${showerName(shower)} (nur nach Datum)';
+    return tr(
+      'vielleicht ${showerName(shower)} (nur nach Datum)',
+      'maybe ${showerName(shower)} (by date only)',
+    );
   }
   return null;
 }
@@ -78,17 +102,22 @@ String? meteorSummary(List<SkyEvent> events) {
     ..sort((a, b) => b.value.compareTo(a.value));
   final parts = [
     for (final e in sorted) '${e.value} ${e.key}',
-    if (sporadic > 0) '$sporadic sporadisch',
+    if (sporadic > 0) tr('$sporadic sporadisch', '$sporadic sporadic'),
     if (unknown > 0 && (showers.isNotEmpty || sporadic > 0))
-      '$unknown ohne Radiant',
+      tr('$unknown ohne Radiant', '$unknown without radiant'),
   ];
-  final total = '${meteors.length} Meteor${meteors.length == 1 ? '' : 'e'}';
+  final total = tr(
+    '${meteors.length} Meteor${meteors.length == 1 ? '' : 'e'}',
+    '${meteors.length} meteor${meteors.length == 1 ? '' : 's'}',
+  );
   return parts.isEmpty ? total : '$total: ${parts.join(', ')}';
 }
 
-const _compassPoints = ['N', 'NO', 'O', 'SO', 'S', 'SW', 'W', 'NW'];
+List<String> get _compassPoints => appEnglish
+    ? const ['N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW']
+    : const ['N', 'NO', 'O', 'SO', 'S', 'SW', 'W', 'NW'];
 
-/// Azimuth (0 = north, clockwise) as one of eight German compass points.
+/// Azimuth (0 = north, clockwise) as one of eight compass points.
 String compassPoint(num azimuth) =>
     _compassPoints[((azimuth % 360) / 45).round() % 8];
 
@@ -96,32 +125,47 @@ String _two(int n) => n.toString().padLeft(2, '0');
 
 String eventTime(DateTime t) {
   final l = t.toLocal();
-  return '${_two(l.day)}.${_two(l.month)}. ${_two(l.hour)}:${_two(l.minute)}:${_two(l.second)}';
+  return '${dayMonth(l)} ${eventClock(t)}:${_two(l.second)}';
 }
 
-/// German label/value rows for an event's `data`; meteor keys per SPEC §6.4, other keys raw.
+/// Hour and minute of an event.
+String eventClock(DateTime t) {
+  final l = t.toLocal();
+  return '${_two(l.hour)}:${_two(l.minute)}';
+}
+
+/// Label/value rows for an event's `data`; meteor keys per SPEC §6.4, other keys raw.
 List<(String, String)> eventRows(SkyEvent event) {
   final rows = <(String, String)>[
-    ('Zeit', eventTime(event.start)),
-    ('Sicherheit', '${(event.confidence * 100).round()} %'),
+    (tr('Zeit', 'Time'), eventTime(event.start)),
+    (tr('Sicherheit', 'Confidence'), '${(event.confidence * 100).round()} %'),
   ];
   final seconds = event.end.difference(event.start).inMilliseconds / 1000;
-  if (seconds > 0) rows.add(('Dauer', '${seconds.toStringAsFixed(1)} s'));
+  if (seconds > 0) {
+    rows.add((tr('Dauer', 'Duration'), '${seconds.toStringAsFixed(1)} s'));
+  }
   final data = Map<String, dynamic>.of(event.data);
   if (event.kind == 'meteor') {
     final length = data.remove('length_px');
-    if (length is num) rows.add(('Spurlänge', '${length.round()} px'));
+    if (length is num) {
+      rows.add((tr('Spurlänge', 'Trail length'), '${length.round()} px'));
+    }
     final peak = data.remove('peak');
-    if (peak is num) rows.add(('Helligkeit', '${(peak * 100).round()} %'));
+    if (peak is num) {
+      rows.add((tr('Helligkeit', 'Brightness'), '${(peak * 100).round()} %'));
+    }
     final frames = data.remove('frames');
-    if (frames is num) rows.add(('Bilder', '${frames.round()}'));
+    if (frames is num) rows.add((tr('Bilder', 'Frames'), '${frames.round()}'));
     final direction = data.remove('direction_deg');
     if (direction is num) {
       final axis = ((direction % 180) / 45).round() % 4;
-      rows.add(('Richtung', '${direction.round()}° (${_axes[axis]})'));
+      rows.add((
+        tr('Richtung', 'Direction'),
+        '${direction.round()}° (${_axes[axis]})',
+      ));
     }
     final shower = showerText(data);
-    if (shower != null) rows.add(('Meteorstrom', shower));
+    if (shower != null) rows.add((tr('Meteorstrom', 'Meteor shower'), shower));
     data
       ..remove('shower')
       ..remove('shower_match');
@@ -129,42 +173,66 @@ List<(String, String)> eventRows(SkyEvent event) {
   if (event.kind == 'lightning') {
     final area = data.remove('area_frac');
     if (area is num) {
-      rows.add(('Erhellter Himmel', '${(area * 100).round()} %'));
+      rows.add((
+        tr('Erhellter Himmel', 'Sky lit up'),
+        '${(area * 100).round()} %',
+      ));
     }
     final peak = data.remove('peak');
-    if (peak is num) rows.add(('Aufhellung', '${(peak * 100).round()} %'));
+    if (peak is num) {
+      rows.add((tr('Aufhellung', 'Brightening'), '${(peak * 100).round()} %'));
+    }
     final flashes = data.remove('storm_flashes');
-    if (flashes is num) rows.add(('Blitze in 30 Min.', '${flashes.round()}'));
+    if (flashes is num) {
+      rows.add((
+        tr('Blitze in 30 Min.', 'Flashes in 30 min'),
+        '${flashes.round()}',
+      ));
+    }
     data.remove('storm');
   }
   if (event.kind == 'aurora' || event.kind == 'nlc') {
     final index = data.remove('peak_index');
-    if (index is num) rows.add(('Stärke', '${index.round()} %'));
+    if (index is num) {
+      rows.add((tr('Stärke', 'Strength'), '${index.round()} %'));
+    }
     final green = data.remove('green');
-    if (green is num) rows.add(('Grünanteil', green.toStringAsFixed(0)));
+    if (green is num) {
+      rows.add((tr('Grünanteil', 'Green share'), green.toStringAsFixed(0)));
+    }
     final blue = data.remove('blue');
-    if (blue is num) rows.add(('Blauanteil', blue.toStringAsFixed(0)));
+    if (blue is num) {
+      rows.add((tr('Blauanteil', 'Blue share'), blue.toStringAsFixed(0)));
+    }
     final frames = data.remove('frames');
-    if (frames is num) rows.add(('Bilder', '${frames.round()}'));
+    if (frames is num) rows.add((tr('Bilder', 'Frames'), '${frames.round()}'));
     // Image-relative (0 = up), not a compass bearing: no N/E/S/W without calibration.
     final direction = data.remove('direction_deg');
     if (direction is num) {
-      rows.add(('Bildrichtung', '${direction.round() % 360}°'));
+      rows.add((
+        tr('Bildrichtung', 'Direction in the image'),
+        '${direction.round() % 360}°',
+      ));
     }
-    if (data.remove('ongoing') == true) rows.add(('Status', 'läuft noch'));
+    if (data.remove('ongoing') == true) {
+      rows.add(('Status', tr('läuft noch', 'ongoing')));
+    }
   }
   data.remove('image_rev');
   // With a calibrated camera (SPEC §4.8) the agent adds the real direction on the sky.
   final azimuth = data.remove('azimuth_deg');
   if (azimuth is num) {
     rows.add((
-      'Himmelsrichtung',
+      tr('Himmelsrichtung', 'Bearing'),
       '${azimuth.round() % 360}° (${compassPoint(azimuth)})',
     ));
   }
   final altitude = data.remove('altitude_deg');
   if (altitude is num) {
-    rows.add(('Höhe über dem Horizont', '${altitude.round()}°'));
+    rows.add((
+      tr('Höhe über dem Horizont', 'Height above the horizon'),
+      '${altitude.round()}°',
+    ));
   }
   for (final entry in data.entries) {
     if (entry.value != null) rows.add((entry.key, '${entry.value}'));
@@ -214,8 +282,10 @@ List<Object> groupStorms(List<SkyEvent> events) {
   return items;
 }
 
-String _stormLabel(StormGroup storm) =>
-    '${storm.flashes.length} Blitz${storm.flashes.length == 1 ? '' : 'e'}';
+String _stormLabel(StormGroup storm) => tr(
+  '${storm.flashes.length} Blitz${storm.flashes.length == 1 ? '' : 'e'}',
+  '${storm.flashes.length} flash${storm.flashes.length == 1 ? '' : 'es'}',
+);
 
 void _openStorm(
   BuildContext context,
@@ -308,7 +378,12 @@ class _EventsScreenState extends State<EventsScreen> {
         _error = null;
       });
     } on Exception {
-      setState(() => _error = 'Die Ereignisse konnten nicht geladen werden.');
+      setState(
+        () => _error = tr(
+          'Die Ereignisse konnten nicht geladen werden.',
+          'The events could not be loaded.',
+        ),
+      );
     } finally {
       if (mounted) setState(() => _loading = false);
     }
@@ -319,13 +394,13 @@ class _EventsScreenState extends State<EventsScreen> {
     final items = groupStorms(_events);
     return Scaffold(
       appBar: AppBar(
-        title: Text('Ereignisse · ${widget.camera.name}'),
+        title: Text('${tr('Ereignisse', 'Events')} · ${widget.camera.name}'),
         actions: [
           IconButton(
             key: const Key('show-all'),
             tooltip: _showAll
-                ? 'Aussortierte ausblenden'
-                : 'Aussortierte zeigen',
+                ? tr('Aussortierte ausblenden', 'Hide rejected')
+                : tr('Aussortierte zeigen', 'Show rejected'),
             icon: Icon(_showAll ? Icons.filter_alt_off : Icons.filter_alt),
             onPressed: _toggleAll,
           ),
@@ -337,7 +412,10 @@ class _EventsScreenState extends State<EventsScreen> {
                 padding: const EdgeInsets.all(32),
                 child: Text(
                   _error ??
-                      'Noch keine Ereignisse. Erkennt die Kamera einen Meteor, erscheint er hier.',
+                      tr(
+                        'Noch keine Ereignisse. Erkennt die Kamera einen Meteor, erscheint er hier.',
+                        'No events yet. When the camera detects a meteor, it shows up here.',
+                      ),
                   textAlign: TextAlign.center,
                 ),
               ),
@@ -372,10 +450,10 @@ class _EventsScreenState extends State<EventsScreen> {
                           ),
                         ),
                       ),
-                      title: const Text('Gewitter'),
+                      title: Text(tr('Gewitter', 'Thunderstorm')),
                       subtitle: Text(
                         '${_stormLabel(item)} · ${eventTime(item.start)}–'
-                        '${eventTime(item.end).substring(7, 12)}',
+                        '${eventClock(item.end)}',
                       ),
                       onTap: () => _openStorm(
                         context,
@@ -399,11 +477,11 @@ class _EventsScreenState extends State<EventsScreen> {
                     title: Text(eventTitles[event.kind] ?? event.kind),
                     subtitle: Text(
                       '${eventTime(event.start)} · ${(event.confidence * 100).round()} %'
-                      '${event.ongoing ? ' · läuft noch' : ''}'
+                      '${event.ongoing ? ' · ${tr('läuft noch', 'ongoing')}' : ''}'
                       '${event.label == 'false_positive'
-                          ? ' · aussortiert'
+                          ? ' · ${tr('aussortiert', 'rejected')}'
                           : event.label == 'confirmed'
-                          ? ' · bestätigt'
+                          ? ' · ${tr('bestätigt', 'confirmed')}'
                           : ''}',
                     ),
                     onTap: () =>
@@ -442,7 +520,7 @@ class EventStrip extends StatelessWidget {
               context,
               key: item.key,
               event: item.cover,
-              label: 'Gewitter · ${_stormLabel(item)}',
+              label: '${tr('Gewitter', 'Thunderstorm')} · ${_stormLabel(item)}',
               onTap: () => _openStorm(context, client, cameraId, item),
             )
           else
@@ -452,7 +530,7 @@ class EventStrip extends StatelessWidget {
               event: item,
               label:
                   '${eventTitles[item.kind] ?? item.kind} '
-                  '${eventTime(item.start).substring(7, 12)}',
+                  '${eventClock(item.start)}',
               onTap: () => _open(context, client, cameraId, item),
             ),
       ],
@@ -518,7 +596,7 @@ class StormScreen extends StatelessWidget {
     final flashes = [...storm.flashes]
       ..sort((a, b) => a.start.compareTo(b.start));
     return Scaffold(
-      appBar: AppBar(title: const Text('Gewitter')),
+      appBar: AppBar(title: Text(tr('Gewitter', 'Thunderstorm'))),
       body: ListView(
         padding: const EdgeInsets.all(8),
         children: [
@@ -526,7 +604,7 @@ class StormScreen extends StatelessWidget {
             padding: const EdgeInsets.all(8),
             child: Text(
               '${_stormLabel(storm)} · ${eventTime(storm.start)}–'
-              '${eventTime(storm.end).substring(7, 12)}',
+              '${eventClock(storm.end)}',
             ),
           ),
           GridView.count(
@@ -601,8 +679,13 @@ class _EventScreenState extends State<EventScreen> {
     } on Exception {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Die Markierung konnte nicht gespeichert werden.'),
+          SnackBar(
+            content: Text(
+              tr(
+                'Die Markierung konnte nicht gespeichert werden.',
+                'The label could not be saved.',
+              ),
+            ),
           ),
         );
       }
@@ -617,8 +700,11 @@ class _EventScreenState extends State<EventScreen> {
         ? Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Text(
-                'Stimmt die Erkennung? Deine Antwort hilft, sie zu verbessern.',
+              Text(
+                tr(
+                  'Stimmt die Erkennung? Deine Antwort hilft, sie zu verbessern.',
+                  'Is this detection right? Your answer helps to improve it.',
+                ),
               ),
               const SizedBox(height: 8),
               Wrap(
@@ -627,12 +713,15 @@ class _EventScreenState extends State<EventScreen> {
                   FilledButton(
                     key: const Key('confirm'),
                     onPressed: _saving ? null : () => _setLabel('confirmed'),
-                    child: const Text('Echt'),
+                    child: Text(tr('Echt', 'Real')),
                   ),
                   PopupMenuButton<String>(
                     key: const Key('false-positive'),
                     enabled: !_saving,
-                    tooltip: 'Kein $title, sondern …',
+                    tooltip: tr(
+                      'Kein $title, sondern …',
+                      'No ${title.toLowerCase()} but …',
+                    ),
                     onSelected: (reason) =>
                         _setLabel('false_positive', reason: reason),
                     itemBuilder: (_) => [
@@ -646,7 +735,9 @@ class _EventScreenState extends State<EventScreen> {
                     child: IgnorePointer(
                       child: OutlinedButton(
                         onPressed: _saving ? null : () {},
-                        child: Text('Kein $title …'),
+                        child: Text(
+                          tr('Kein $title …', 'No ${title.toLowerCase()} …'),
+                        ),
                       ),
                     ),
                   ),
@@ -659,20 +750,20 @@ class _EventScreenState extends State<EventScreen> {
               Expanded(
                 child: Text(
                   _label == 'false_positive' && _auto
-                      ? 'Automatisch als „kein $title“ markiert: '
-                            '${labelReasons[_reason] ?? 'Fehlalarm'}'
+                      ? '${tr('Automatisch als „kein $title“ markiert', 'Automatically marked as “no ${title.toLowerCase()}”')}: '
+                            '${labelReasons[_reason] ?? tr('Fehlalarm', 'false alarm')}'
                             '${_detail == null ? '' : ' $_detail'}.'
                       : _label == 'false_positive'
-                      ? 'Als „kein $title“ markiert'
+                      ? '${tr('Als „kein $title“ markiert', 'Marked as “no ${title.toLowerCase()}”')}'
                             '${labelReasons[_reason] == null ? '' : ' (${labelReasons[_reason]})'}.'
-                      : 'Als echt bestätigt.',
+                      : tr('Als echt bestätigt.', 'Confirmed as real.'),
                   style: const TextStyle(fontWeight: FontWeight.w600),
                 ),
               ),
               TextButton(
                 key: const Key('clear-label'),
                 onPressed: _saving ? null : () => _setLabel(null),
-                child: const Text('Markierung entfernen'),
+                child: Text(tr('Markierung entfernen', 'Remove label')),
               ),
             ],
           ),
@@ -702,7 +793,12 @@ class _EventScreenState extends State<EventScreen> {
           return;
         }
         if (mounted && _note == null) {
-          setState(() => _note = 'Vollbild wird von der Kamera geholt …');
+          setState(
+            () => _note = tr(
+              'Vollbild wird von der Kamera geholt …',
+              'Fetching the full picture from the camera …',
+            ),
+          );
         }
         await Future<void>.delayed(widget.pollInterval);
       }
@@ -710,7 +806,10 @@ class _EventScreenState extends State<EventScreen> {
       if (mounted) {
         setState(
           () => _note = e.statusCode == 404
-              ? 'Das Vollbild ist nicht verfügbar (Kamera offline oder Bild gelöscht).'
+              ? tr(
+                  'Das Vollbild ist nicht verfügbar (Kamera offline oder Bild gelöscht).',
+                  'The full picture is not available (camera offline or picture deleted).',
+                )
               : null,
         );
       }

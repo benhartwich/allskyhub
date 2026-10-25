@@ -3,6 +3,7 @@
 import 'package:flutter/material.dart';
 
 import '../api/hub_client.dart';
+import '../l10n.dart';
 
 class SkySeries {
   const SkySeries(
@@ -28,7 +29,7 @@ class SkySeries {
 
 final skySeries = [
   SkySeries(
-    'Bewölkung',
+    tr('Bewölkung', 'Cloud cover'),
     '%',
     (s) => s.cloudCover == null ? null : s.cloudCover! * 100,
     0,
@@ -36,7 +37,7 @@ final skySeries = [
     const Color(0xFFA3ABC4),
   ),
   SkySeries(
-    'Himmelshelligkeit',
+    tr('Himmelshelligkeit', 'Sky brightness'),
     'mag/″²',
     (s) => s.sqmMag,
     16,
@@ -45,7 +46,7 @@ final skySeries = [
     decimals: 2,
   ),
   SkySeries(
-    'Sterne',
+    tr('Sterne', 'Stars'),
     '',
     (s) => s.stars?.toDouble(),
     0,
@@ -103,7 +104,7 @@ class SkyCharts extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
-                '${series.title} · zuletzt ${values.last.toStringAsFixed(series.decimals)}'
+                '${series.title} · ${tr('zuletzt', 'latest')} ${decimal(values.last, series.decimals)}'
                 '${series.unit.isEmpty ? '' : ' ${series.unit}'}',
                 style: theme.textTheme.bodySmall,
               ),
@@ -134,7 +135,10 @@ class SkyCharts extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text('Himmel in dieser Nacht', style: theme.textTheme.titleSmall),
+          Text(
+            tr('Himmel in dieser Nacht', 'Sky this night'),
+            style: theme.textTheme.titleSmall,
+          ),
           ...charts,
         ],
       ),

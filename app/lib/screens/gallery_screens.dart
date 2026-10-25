@@ -8,17 +8,16 @@ import 'measurements_screen.dart';
 import 'product_screens.dart';
 import 'sky_charts.dart';
 import 'zoomable.dart';
-
-const _weekdays = ['Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa', 'So'];
+import '../l10n.dart';
 
 String _two(int n) => n.toString().padLeft(2, '0');
 
-/// "Di 06.10. → Mi 07.10.": a night spans two dates (SPEC §4.5 night id = evening).
+/// "Di 06.10. → Mi 07.10." ("Tue 6 Oct → Wed 7 Oct"): a night spans two dates (SPEC §4.5
+/// night id = evening).
 String nightTitle(Night night) {
   final evening = night.evening;
   final morning = evening.add(const Duration(days: 1));
-  String day(DateTime d) =>
-      '${_weekdays[d.weekday - 1]} ${_two(d.day)}.${_two(d.month)}.';
+  String day(DateTime d) => '${weekdaysShort[d.weekday - 1]} ${dayMonth(d)}';
   return '${day(evening)} → ${day(morning)}';
 }
 
@@ -27,13 +26,20 @@ String nightSubtitle(Night night) {
   final first = night.first;
   final last = night.last;
   return [
-    if (night.frames > 0) '${night.frames} Bilder',
+    if (night.frames > 0)
+      tr('${night.frames} Bilder', '${night.frames} pictures'),
     if (first != null && last != null) '${clock(first)}–${clock(last)}',
     if (night.products > 0)
-      '${night.products} Produkt${night.products == 1 ? '' : 'e'}',
-    if (night.sky > 0) 'Himmelsdaten',
+      tr(
+        '${night.products} Produkt${night.products == 1 ? '' : 'e'}',
+        '${night.products} product${night.products == 1 ? '' : 's'}',
+      ),
+    if (night.sky > 0) tr('Himmelsdaten', 'Sky data'),
     if (night.events > 0)
-      '${night.events} Ereignis${night.events == 1 ? '' : 'se'}',
+      tr(
+        '${night.events} Ereignis${night.events == 1 ? '' : 'se'}',
+        '${night.events} event${night.events == 1 ? '' : 's'}',
+      ),
   ].join(' · ');
 }
 
@@ -68,7 +74,9 @@ class _NightsScreenState extends State<NightsScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: Text('Galerie · ${widget.camera.name}')),
+      appBar: AppBar(
+        title: Text('${tr('Galerie', 'Gallery')} · ${widget.camera.name}'),
+      ),
       body: RefreshIndicator(
         onRefresh: _reload,
         child: FutureBuilder<List<Night>>(
@@ -76,7 +84,10 @@ class _NightsScreenState extends State<NightsScreen> {
           builder: (context, snapshot) {
             if (snapshot.hasError) {
               return _Message(
-                'Die Galerie konnte nicht geladen werden.',
+                tr(
+                  'Die Galerie konnte nicht geladen werden.',
+                  'The gallery could not be loaded.',
+                ),
                 onRetry: _reload,
               );
             }
@@ -85,9 +96,13 @@ class _NightsScreenState extends State<NightsScreen> {
               return const Center(child: CircularProgressIndicator());
             }
             if (nights.isEmpty) {
-              return const _Message(
-                'Noch keine Bilder im Archiv. Der Hub sammelt etwa jede Minute ein Vorschaubild, '
-                'solange die Kamera verbunden ist.',
+              return _Message(
+                tr(
+                  'Noch keine Bilder im Archiv. Der Hub sammelt etwa jede Minute ein Vorschaubild, '
+                      'solange die Kamera verbunden ist.',
+                  'No pictures in the archive yet. The hub collects a preview about every '
+                      'minute while the camera is connected.',
+                ),
               );
             }
             return ListView.separated(
@@ -158,7 +173,12 @@ class _NightScreenState extends State<NightScreen> {
         future: _frames,
         builder: (context, snapshot) {
           if (snapshot.hasError) {
-            return const _Message('Die Bilder konnten nicht geladen werden.');
+            return _Message(
+              tr(
+                'Die Bilder konnten nicht geladen werden.',
+                'The pictures could not be loaded.',
+              ),
+            );
           }
           final frames = snapshot.data;
           if (frames == null) {
@@ -194,7 +214,12 @@ class _NightScreenState extends State<NightScreen> {
                           child: TextButton.icon(
                             key: const Key('night-measurements'),
                             icon: const Icon(Icons.show_chart),
-                            label: const Text('Alle Messdaten dieser Nacht'),
+                            label: Text(
+                              tr(
+                                'Alle Messdaten dieser Nacht',
+                                'All measurements of this night',
+                              ),
+                            ),
                             onPressed: () => Navigator.of(context).push(
                               MaterialPageRoute<void>(
                                 builder: (_) => MeasurementsScreen(
@@ -352,9 +377,17 @@ class _FrameViewerState extends State<FrameViewer> {
     },
     caption: (i) {
       final frame = widget.frames[i];
-      return '${frame.mode == 'night' ? 'Nacht' : 'Tag'} · ${exposure(frame.exposureUs)}'
-          ' · Gain ${frame.gain.round()} · Sonne ${frame.sunElevation.toStringAsFixed(1)}°'
-          '${frame.hasFull ? '' : '\nNur Vorschau: das Vollbild ist nicht mehr im Archiv.'}';
+      final mode = frame.mode == 'night'
+          ? tr('Nacht', 'Night')
+          : tr('Tag', 'Day');
+      final sun = frame.sunElevation.toStringAsFixed(1);
+      final previewOnly = tr(
+        '\nNur Vorschau: das Vollbild ist nicht mehr im Archiv.',
+        '\nPreview only: the full picture is no longer in the archive.',
+      );
+      return '$mode · ${exposure(frame.exposureUs)}'
+          ' · Gain ${frame.gain.round()} · ${tr('Sonne', 'Sun')} $sun°'
+          '${frame.hasFull ? '' : previewOnly}';
     },
   );
 }
@@ -398,7 +431,7 @@ class _Message extends StatelessWidget {
         Center(
           child: TextButton(
             onPressed: onRetry,
-            child: const Text('Erneut versuchen'),
+            child: Text(tr('Erneut versuchen', 'Try again')),
           ),
         ),
     ],

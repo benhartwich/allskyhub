@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import '../design.dart';
 
 import '../api/hub_client.dart';
+import '../l10n.dart';
 import '../platform/location.dart';
 import '../platform/sky_widget.dart';
 import 'camera_settings_screen.dart';
@@ -87,20 +88,32 @@ class _CameraScreenState extends State<CameraScreen> {
     final ok = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        title: Text(owner ? 'Kamera entfernen?' : 'Kamera verlassen?'),
+        title: Text(
+          owner
+              ? tr('Kamera entfernen?', 'Remove camera?')
+              : tr('Kamera verlassen?', 'Leave camera?'),
+        ),
         content: Text(
           owner
-              ? 'Die Kamera wird von deinem Konto getrennt und zeigt danach einen neuen Kopplungscode.'
-              : 'Du siehst die Kamera danach nicht mehr, bis sie wieder mit dir geteilt wird.',
+              ? tr(
+                  'Die Kamera wird von deinem Konto getrennt und zeigt danach einen neuen Kopplungscode.',
+                  'The camera is unpaired from your account and then shows a new pairing code.',
+                )
+              : tr(
+                  'Du siehst die Kamera danach nicht mehr, bis sie wieder mit dir geteilt wird.',
+                  'You will no longer see the camera until it is shared with you again.',
+                ),
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context, false),
-            child: const Text('Abbrechen'),
+            child: Text(tr('Abbrechen', 'Cancel')),
           ),
           FilledButton(
             onPressed: () => Navigator.pop(context, true),
-            child: Text(owner ? 'Entfernen' : 'Verlassen'),
+            child: Text(
+              owner ? tr('Entfernen', 'Remove') : tr('Verlassen', 'Leave'),
+            ),
           ),
         ],
       ),
@@ -117,7 +130,12 @@ class _CameraScreenState extends State<CameraScreen> {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(
-              e is HubException ? e.message : 'Keine Verbindung zum Hub.',
+              e is HubException
+                  ? e.message
+                  : tr(
+                      'Keine Verbindung zum Hub.',
+                      'No connection to the hub.',
+                    ),
             ),
           ),
         );
@@ -135,14 +153,26 @@ class _CameraScreenState extends State<CameraScreen> {
     String text;
     try {
       text = switch (await _widget.show(widget.client, _camera)) {
-        WidgetResult.placed => 'Das Widget zeigt jetzt ${_camera.name}.',
-        WidgetResult.asked => 'Bestätige, um das Widget abzulegen.',
-        WidgetResult.manual =>
+        WidgetResult.placed => tr(
+          'Das Widget zeigt jetzt ${_camera.name}.',
+          'The widget now shows ${_camera.name}.',
+        ),
+        WidgetResult.asked => tr(
+          'Bestätige, um das Widget abzulegen.',
+          'Confirm to place the widget.',
+        ),
+        WidgetResult.manual => tr(
           'Lange auf den Startbildschirm drücken, „Widgets“ wählen und '
               'allskyhub ablegen.',
+          'Long-press the home screen, choose “Widgets” and place '
+              'allskyhub.',
+        ),
       };
     } on Exception {
-      text = 'Das hat nicht geklappt. Bitte später noch einmal versuchen.';
+      text = tr(
+        'Das hat nicht geklappt. Bitte später noch einmal versuchen.',
+        'That did not work. Please try again later.',
+      );
     }
     messenger.showSnackBar(SnackBar(content: Text(text)));
   }
@@ -187,7 +217,7 @@ class _CameraScreenState extends State<CameraScreen> {
         actions: [
           if (_camera.canChange)
             IconButton(
-              tooltip: 'Einstellungen',
+              tooltip: tr('Einstellungen', 'Settings'),
               icon: const Icon(Icons.settings_outlined),
               onPressed: () => _open(
                 () => CameraSettingsScreen(
@@ -199,7 +229,9 @@ class _CameraScreenState extends State<CameraScreen> {
             ),
           IconButton(
             key: const Key('remove-camera'),
-            tooltip: _camera.isOwner ? 'Entfernen' : 'Verlassen',
+            tooltip: _camera.isOwner
+                ? tr('Entfernen', 'Remove')
+                : tr('Verlassen', 'Leave'),
             icon: Icon(_camera.isOwner ? Icons.delete_outline : Icons.logout),
             onPressed: _remove,
           ),
@@ -216,8 +248,11 @@ class _CameraScreenState extends State<CameraScreen> {
                   ? Center(
                       child: Text(
                         _camera.online
-                            ? 'Warte auf das erste Bild …'
-                            : 'Noch kein Bild.',
+                            ? tr(
+                                'Warte auf das erste Bild …',
+                                'Waiting for the first picture …',
+                              )
+                            : tr('Noch kein Bild.', 'No picture yet.'),
                       ),
                     )
                   : GestureDetector(
@@ -230,8 +265,11 @@ class _CameraScreenState extends State<CameraScreen> {
                         headers: widget.client.authHeaders,
                         fit: BoxFit.contain,
                         gaplessPlayback: true,
-                        errorBuilder: (_, _, _) =>
-                            const Center(child: Text('Bild nicht verfügbar')),
+                        errorBuilder: (_, _, _) => Center(
+                          child: Text(
+                            tr('Bild nicht verfügbar', 'Picture not available'),
+                          ),
+                        ),
                       ),
                     ),
             ),
@@ -253,7 +291,10 @@ class _CameraScreenState extends State<CameraScreen> {
                 if (image != null)
                   Expanded(
                     child: Text(
-                      'Bild ${formatAge(image)}',
+                      tr(
+                        'Bild ${formatAge(image)}',
+                        'Picture ${formatAge(image)}',
+                      ),
                       style: theme.textTheme.bodySmall,
                     ),
                   ),
@@ -296,7 +337,10 @@ class _CameraScreenState extends State<CameraScreen> {
                     ),
                   if (_camera.status.isEmpty)
                     Text(
-                      'Die Kamera hat noch keinen Status gemeldet.',
+                      tr(
+                        'Die Kamera hat noch keinen Status gemeldet.',
+                        'The camera has not reported its status yet.',
+                      ),
                       style: theme.textTheme.bodySmall,
                     ),
                 ],
@@ -318,7 +362,10 @@ class _CameraScreenState extends State<CameraScreen> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text('Letzte Nacht', style: theme.textTheme.titleMedium),
+                      Text(
+                        tr('Letzte Nacht', 'Last night'),
+                        style: theme.textTheme.titleMedium,
+                      ),
                       const SizedBox(height: 6),
                       Text(line),
                     ],
@@ -335,7 +382,7 @@ class _CameraScreenState extends State<CameraScreen> {
                 OutlinedButton.icon(
                   key: const Key('open-measurements'),
                   icon: const Icon(Icons.show_chart),
-                  label: const Text('Messdaten'),
+                  label: Text(tr('Messdaten', 'Measurements')),
                   onPressed: () => _open(
                     () => MeasurementsScreen(
                       client: widget.client,
@@ -347,7 +394,7 @@ class _CameraScreenState extends State<CameraScreen> {
                 OutlinedButton.icon(
                   key: const Key('open-stats'),
                   icon: const Icon(Icons.bar_chart),
-                  label: const Text('Statistik'),
+                  label: Text(tr('Statistik', 'Statistics')),
                   onPressed: () => _open(
                     () => StatsScreen(client: widget.client, camera: _camera),
                   ),
@@ -355,7 +402,7 @@ class _CameraScreenState extends State<CameraScreen> {
                 OutlinedButton.icon(
                   key: const Key('open-sky-view'),
                   icon: const Icon(Icons.explore_outlined),
-                  label: const Text('Himmel'),
+                  label: Text(tr('Himmel', 'Sky')),
                   onPressed: () => _open(
                     () => SkyViewScreen(client: widget.client, camera: _camera),
                   ),
@@ -363,7 +410,7 @@ class _CameraScreenState extends State<CameraScreen> {
                 OutlinedButton.icon(
                   key: const Key('open-target'),
                   icon: const Icon(Icons.travel_explore),
-                  label: const Text('Ziel frei?'),
+                  label: Text(tr('Ziel frei?', 'Target clear?')),
                   onPressed: () => _open(
                     () => TargetScreen(client: widget.client, camera: _camera),
                   ),
@@ -372,13 +419,13 @@ class _CameraScreenState extends State<CameraScreen> {
                   OutlinedButton.icon(
                     key: const Key('as-widget'),
                     icon: const Icon(Icons.widgets_outlined),
-                    label: const Text('Als Widget'),
+                    label: Text(tr('Als Widget', 'As widget')),
                     onPressed: _showAsWidget,
                   ),
                 OutlinedButton.icon(
                   key: const Key('open-exports'),
                   icon: const Icon(Icons.download_outlined),
-                  label: const Text('Exporte'),
+                  label: Text(tr('Exporte', 'Exports')),
                   onPressed: () => _open(
                     () => ExportScreen(client: widget.client, camera: _camera),
                   ),
@@ -387,7 +434,7 @@ class _CameraScreenState extends State<CameraScreen> {
                   OutlinedButton.icon(
                     key: const Key('open-sharing'),
                     icon: const Icon(Icons.group_outlined),
-                    label: const Text('Teilen'),
+                    label: Text(tr('Teilen', 'Share')),
                     onPressed: () => _open(
                       () =>
                           SharingScreen(client: widget.client, camera: _camera),
@@ -405,7 +452,7 @@ class _CameraScreenState extends State<CameraScreen> {
                   OutlinedButton.icon(
                     key: const Key('open-network'),
                     icon: const Icon(Icons.hub_outlined),
-                    label: const Text('Kameranetz'),
+                    label: Text(tr('Kameranetz', 'Camera network')),
                     onPressed: () => _open(
                       () =>
                           NetworkScreen(client: widget.client, camera: _camera),
@@ -414,7 +461,7 @@ class _CameraScreenState extends State<CameraScreen> {
                   OutlinedButton.icon(
                     key: const Key('open-public'),
                     icon: const Icon(Icons.public),
-                    label: const Text('Öffentliche Seite'),
+                    label: Text(tr('Öffentliche Seite', 'Public page')),
                     onPressed: () => _open(
                       () => PublicPageScreen(
                         client: widget.client,
@@ -448,12 +495,16 @@ class _HealthCard extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('Zustand', style: theme.textTheme.titleMedium),
+            Text(tr('Zustand', 'Health'), style: theme.textTheme.titleMedium),
             const SizedBox(height: 8),
             if (health.isEmpty)
-              const Text(
-                'Alles in Ordnung: verbunden, neue Bilder, genug Speicher, '
-                'Temperaturen und Uhr unauffällig.',
+              Text(
+                tr(
+                  'Alles in Ordnung: verbunden, neue Bilder, genug Speicher, '
+                      'Temperaturen und Uhr unauffällig.',
+                  'All fine: connected, new pictures, enough storage, '
+                      'temperatures and clock normal.',
+                ),
               ),
             for (final item in health)
               Padding(
@@ -506,21 +557,36 @@ class _NowcastCard extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('Die nächste Stunde', style: theme.textTheme.titleMedium),
+            Text(
+              tr('Die nächste Stunde', 'The next hour'),
+              style: theme.textTheme.titleMedium,
+            ),
             const SizedBox(height: 6),
-            Text('Jetzt ${percent(nowcast.cover)} Wolken. ${nowcast.summary}'),
+            Text(
+              tr(
+                'Jetzt ${percent(nowcast.cover)} Wolken. ${nowcast.summary}',
+                'Now ${percent(nowcast.cover)} clouds. ${nowcast.summary}',
+              ),
+            ),
             for (final step in nowcast.steps)
               Padding(
                 padding: const EdgeInsets.only(top: 4),
                 child: Text(
-                  'in ${step.minutes} Min.: etwa ${percent(step.cover)} '
-                  '(${step.label})',
+                  tr(
+                    'in ${step.minutes} Min.: etwa ${percent(step.cover)} '
+                        '(${step.label})',
+                    'in ${step.minutes} min: about ${percent(step.cover)} '
+                        '(${step.label})',
+                  ),
                   style: theme.textTheme.bodySmall,
                 ),
               ),
             const SizedBox(height: 6),
             Text(
-              '${nowcast.wind} in etwa 3 km Höhe',
+              tr(
+                '${nowcast.wind} in etwa 3 km Höhe',
+                '${nowcast.wind} at about 3 km altitude',
+              ),
               style: theme.textTheme.bodySmall?.copyWith(
                 color: theme.colorScheme.onSurfaceVariant,
               ),
@@ -548,7 +614,10 @@ class _TonightCard extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('Heute Nacht', style: theme.textTheme.titleMedium),
+            Text(
+              tr('Heute Nacht', 'Tonight'),
+              style: theme.textTheme.titleMedium,
+            ),
             const SizedBox(height: 6),
             Text(tonight.summary),
             if (tonight.hours.isNotEmpty) ...[
@@ -592,9 +661,14 @@ class _TonightCard extends StatelessWidget {
             ],
             const SizedBox(height: 8),
             Text(
-              'Sonne unter ${_hm(tonight.sunset)}, auf ${_hm(tonight.sunrise)} · '
-              'dunkel ${_hm(tonight.dusk)}–${_hm(tonight.dawn)}\n'
-              'Mond: ${tonight.moonPhase}, ${(tonight.moonIllumination * 100).round()} % beleuchtet',
+              tr(
+                'Sonne unter ${_hm(tonight.sunset)}, auf ${_hm(tonight.sunrise)} · '
+                    'dunkel ${_hm(tonight.dusk)}–${_hm(tonight.dawn)}\n'
+                    'Mond: ${tonight.moonPhase}, ${(tonight.moonIllumination * 100).round()} % beleuchtet',
+                'Sunset ${_hm(tonight.sunset)}, sunrise ${_hm(tonight.sunrise)} · '
+                    'dark ${_hm(tonight.dusk)}–${_hm(tonight.dawn)}\n'
+                    'Moon: ${tonight.moonPhase}, ${(tonight.moonIllumination * 100).round()} % lit',
+              ),
               style: theme.textTheme.bodySmall,
             ),
           ],

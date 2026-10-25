@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../api/camera_setup.dart';
 import '../api/hub_client.dart';
 import '../api/onboarding.dart';
+import '../l10n.dart';
 
 /// Pairing without typing the code (SPEC §6.2): the phone is in the same Wi-Fi as the camera
 /// (or in its setup hotspot); the app reads the code from the camera and claims it.
@@ -60,8 +61,10 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
       if (base.host.isEmpty) throw const FormatException();
     } on FormatException {
       setState(
-        () => _inputError =
-            'Bitte die Adresse der Kamera angeben, z. B. 192.168.1.50.',
+        () => _inputError = tr(
+          'Bitte die Adresse der Kamera angeben, z. B. 192.168.1.50.',
+          'Please enter the camera\'s address, e.g. 192.168.1.50.',
+        ),
       );
       return;
     }
@@ -96,16 +99,21 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
       await showDialog<void>(
         context: context,
         builder: (context) => AlertDialog(
-          title: const Text('Standort fehlt'),
-          content: const Text(
-            'Die Kamera ist gekoppelt, kennt aber ihren Standort noch nicht und nimmt deshalb '
-            'noch nicht auf. Richte sie über ihr WLAN „allskyhub-…“ neu ein (dort fragt die App '
-            'nach dem Standort) oder trage ihn in der Einrichtungsdatei auf der SD-Karte ein.',
+          title: Text(tr('Standort fehlt', 'Location missing')),
+          content: Text(
+            tr(
+              'Die Kamera ist gekoppelt, kennt aber ihren Standort noch nicht und nimmt deshalb '
+                  'noch nicht auf. Richte sie über ihr WLAN „allskyhub-…“ neu ein (dort fragt die App '
+                  'nach dem Standort) oder trage ihn in der Einrichtungsdatei auf der SD-Karte ein.',
+              'The camera is paired but does not know its location yet, so it does not capture '
+                  'yet. Set it up again through its Wi-Fi "allskyhub-…" (the app asks for the '
+                  'location there) or enter it in the setup file on the SD card.',
+            ),
           ),
           actions: [
             FilledButton(
               onPressed: () => Navigator.pop(context),
-              child: const Text('Verstanden'),
+              child: Text(tr('Verstanden', 'Got it')),
             ),
           ],
         ),
@@ -123,7 +131,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
   Widget build(BuildContext context) {
     final controller = _controller;
     return Scaffold(
-      appBar: AppBar(title: const Text('Kamera einrichten')),
+      appBar: AppBar(title: Text(tr('Kamera einrichten', 'Set up camera'))),
       body: ListView(
         padding: const EdgeInsets.all(24),
         children: controller == null
@@ -134,9 +142,13 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
   }
 
   List<Widget> _form(BuildContext context) => [
-    const Text(
-      'Verbinde dein Handy mit demselben WLAN wie die Kamera und gib ihre Adresse ein. '
-      'Die App holt sich den Kopplungscode dann selbst.',
+    Text(
+      tr(
+        'Verbinde dein Handy mit demselben WLAN wie die Kamera und gib ihre Adresse ein. '
+            'Die App holt sich den Kopplungscode dann selbst.',
+        'Connect your phone to the same Wi-Fi as the camera and enter its address. '
+            'The app then fetches the pairing code itself.',
+      ),
     ),
     const SizedBox(height: 20),
     TextField(
@@ -145,7 +157,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
       keyboardType: TextInputType.url,
       autocorrect: false,
       decoration: InputDecoration(
-        labelText: 'Adresse der Kamera',
+        labelText: tr('Adresse der Kamera', 'Camera address'),
         hintText: '192.168.1.50',
         errorText: _inputError,
       ),
@@ -154,26 +166,37 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
     TextField(
       key: const Key('name'),
       controller: _name,
-      decoration: const InputDecoration(
-        labelText: 'Name der Kamera',
-        hintText: 'z. B. Garten',
+      decoration: InputDecoration(
+        labelText: tr('Name der Kamera', 'Camera name'),
+        hintText: tr('z. B. Garten', 'e.g. Garden'),
       ),
     ),
     const SizedBox(height: 20),
-    FilledButton(onPressed: _start, child: const Text('Verbinden')),
+    FilledButton(onPressed: _start, child: Text(tr('Verbinden', 'Connect'))),
   ];
 
   List<Widget> _progress(BuildContext context, OnboardingController c) {
     final code = c.info?.pairingCode;
     final text = switch (c.phase) {
-      OnboardingPhase.connecting => 'Suche die Kamera …',
-      OnboardingPhase.waitingForCode =>
+      OnboardingPhase.connecting => tr(
+        'Suche die Kamera …',
+        'Looking for the camera …',
+      ),
+      OnboardingPhase.waitingForCode => tr(
         'Kamera gefunden. Sie meldet sich beim Hub an …',
-      OnboardingPhase.claiming => 'Kopple die Kamera mit deinem Konto …',
-      OnboardingPhase.waitingForCamera =>
+        'Camera found. It is signing in to the hub …',
+      ),
+      OnboardingPhase.claiming => tr(
+        'Kopple die Kamera mit deinem Konto …',
+        'Pairing the camera with your account …',
+      ),
+      OnboardingPhase.waitingForCamera => tr(
         'Gekoppelt. Warte, bis die Kamera es bestätigt …',
-      OnboardingPhase.done => 'Fertig.',
-      OnboardingPhase.failed => c.error ?? 'Das Koppeln ist fehlgeschlagen.',
+        'Paired. Waiting for the camera to confirm …',
+      ),
+      OnboardingPhase.done => tr('Fertig.', 'Done.'),
+      OnboardingPhase.failed =>
+        c.error ?? tr('Das Koppeln ist fehlgeschlagen.', 'Pairing failed.'),
     };
     final failed = c.phase == OnboardingPhase.failed;
     return [
@@ -198,7 +221,11 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
       const SizedBox(height: 20),
       OutlinedButton(
         onPressed: _restart,
-        child: Text(failed ? 'Erneut versuchen' : 'Abbrechen'),
+        child: Text(
+          failed
+              ? tr('Erneut versuchen', 'Try again')
+              : tr('Abbrechen', 'Cancel'),
+        ),
       ),
     ];
   }

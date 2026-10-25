@@ -4,6 +4,7 @@
 
 import 'package:flutter/foundation.dart';
 
+import '../l10n.dart';
 import '../platform/location.dart';
 import '../platform/wifi_binding.dart';
 import 'setup_key.dart';
@@ -97,19 +98,31 @@ class SetupModeController extends ChangeNotifier {
       case JoinResult.unsupported:
         _set(
           SetupPhase.joinCameraNetwork,
-          error:
-              'Dieses Handy kann sich nicht aus der App verbinden. Verbinde dich in den '
-              'WLAN-Einstellungen mit „${wifi.ssid ?? 'allskyhub-…'}“'
-              '${wifi.key == null ? '' : ' (Schlüssel ${_shown(wifi.key!)})'} und tippe dann '
-              'auf „Ich bin verbunden“.',
+          error: tr(
+            'Dieses Handy kann sich nicht aus der App verbinden. Verbinde dich in den '
+                'WLAN-Einstellungen mit „${wifi.ssid ?? 'allskyhub-…'}“'
+                '${wifi.key == null ? '' : ' (Schlüssel ${_shown(wifi.key!)})'} und tippe dann '
+                'auf „Ich bin verbunden“.',
+            'This phone cannot connect from the app. In the Wi-Fi settings, join '
+                '"${wifi.ssid ?? 'allskyhub-…'}"'
+                '${wifi.key == null ? '' : ' (key ${_shown(wifi.key!)})'}, then tap '
+                '"I\'m connected".',
+          ),
         );
       case JoinResult.failed:
         _set(
           SetupPhase.joinCameraNetwork,
           error: wifi.open
-              ? 'Kein offenes Netz „allskyhub-…“ gefunden. Ist die Kamera eingeschaltet?'
-              : 'Verbindung fehlgeschlagen. Stimmt der Schlüssel, und ist die Kamera in '
-                    'der Nähe und eingeschaltet?',
+              ? tr(
+                  'Kein offenes Netz „allskyhub-…“ gefunden. Ist die Kamera eingeschaltet?',
+                  'No open network "allskyhub-…" found. Is the camera switched on?',
+                )
+              : tr(
+                  'Verbindung fehlgeschlagen. Stimmt der Schlüssel, und ist die Kamera in '
+                      'der Nähe und eingeschaltet?',
+                  'Could not connect. Is the key right, and is the camera nearby and '
+                      'switched on?',
+                ),
         );
     }
   }
@@ -128,9 +141,12 @@ class SetupModeController extends ChangeNotifier {
         await binding.unbind();
         _set(
           SetupPhase.joinCameraNetwork,
-          error:
-              'Die Kamera ist nicht im Einrichtungsmodus. Sie ist schon in einem WLAN – '
-              'nutze „Kamera im WLAN einrichten“.',
+          error: tr(
+            'Die Kamera ist nicht im Einrichtungsmodus. Sie ist schon in einem WLAN – '
+                'nutze „Kamera im WLAN einrichten“.',
+            'The camera is not in setup mode. It is already on a Wi-Fi – use '
+                '"Set up a camera on your Wi-Fi".',
+          ),
         );
         return;
       }
@@ -145,8 +161,10 @@ class SetupModeController extends ChangeNotifier {
       await binding.unbind();
       _set(
         SetupPhase.joinCameraNetwork,
-        error:
-            'Kamera nicht erreichbar. Ist dein Handy mit dem WLAN „allskyhub-…“ verbunden?',
+        error: tr(
+          'Kamera nicht erreichbar. Ist dein Handy mit dem WLAN „allskyhub-…“ verbunden?',
+          'Camera not reachable. Is your phone connected to the Wi-Fi "allskyhub-…"?',
+        ),
       );
     }
   }
@@ -158,7 +176,10 @@ class SetupModeController extends ChangeNotifier {
     } on Exception {
       _set(
         SetupPhase.chooseNetwork,
-        error: 'Die WLAN-Liste konnte nicht geladen werden.',
+        error: tr(
+          'Die WLAN-Liste konnte nicht geladen werden.',
+          'Could not load the list of Wi-Fi networks.',
+        ),
       );
     }
   }
@@ -173,7 +194,10 @@ class SetupModeController extends ChangeNotifier {
     if (!hub.baseUrl.startsWith('https://')) {
       _set(
         SetupPhase.chooseNetwork,
-        error: 'Die Hub-Adresse muss mit https:// beginnen (${hub.baseUrl}).',
+        error: tr(
+          'Die Hub-Adresse muss mit https:// beginnen (${hub.baseUrl}).',
+          'The hub address must start with https:// (${hub.baseUrl}).',
+        ),
       );
       return;
     }
@@ -191,8 +215,10 @@ class SetupModeController extends ChangeNotifier {
     } on Exception {
       _set(
         SetupPhase.chooseNetwork,
-        error:
-            'Die Kamera hat die WLAN-Daten nicht angenommen. Bitte erneut versuchen.',
+        error: tr(
+          'Die Kamera hat die WLAN-Daten nicht angenommen. Bitte erneut versuchen.',
+          'The camera did not accept the Wi-Fi details. Please try again.',
+        ),
       );
       return;
     }

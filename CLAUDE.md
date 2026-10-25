@@ -60,10 +60,11 @@ uv run pytest
 uv run ruff check . && uv run ruff format --check .
 uv run pyright
 uvx --from 'reuse[charset-normalizer]' reuse lint
+git ls-files -z '*.sh' | xargs -0 shellcheck
 uv run allskyhub-agent --sim --lat 50.04 --lon 10.39 run --frames 20 --data /tmp/ash
 ```
 
-Vor jedem Commit: Tests, ruff, pyright und `reuse lint` grün.
+Vor jedem Commit: Tests, ruff, pyright, `reuse lint` und (bei Shell-Skripten) ShellCheck grün.
 
 **numpy-Falle:** Die CI prüft auch Python 3.13 mit numpy 2.5. Deren Typangaben für `np.clip`, `np.stack`, `np.repeat`, `np.roll` und `np.frombuffer` sind für pyright strict „partially unknown“; lokal mit numpy 2.4 fällt das nicht auf. Stattdessen ufuncs (`np.minimum`/`np.maximum`), `np.empty` + Zuweisung bzw. `np.ndarray(..., buffer=...)` nehmen. Prüfen mit `tools/pyright-numpy25.sh`.
 

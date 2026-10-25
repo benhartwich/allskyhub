@@ -7,6 +7,7 @@ import '../api/setup_mode.dart';
 import '../platform/location.dart';
 import 'onboarding_screen.dart';
 import 'qr_scan_screen.dart';
+import '../l10n.dart';
 
 /// A new camera without network: set it up through its own Wi-Fi (SPEC §7.1), then pair.
 class SetupModeScreen extends StatefulWidget {
@@ -104,20 +105,33 @@ class _SetupModeScreenState extends State<SetupModeScreen> {
   Widget build(BuildContext context) {
     final errorStyle = TextStyle(color: Theme.of(context).colorScheme.error);
     return Scaffold(
-      appBar: AppBar(title: const Text('Neue Kamera einrichten')),
+      appBar: AppBar(
+        title: Text(tr('Neue Kamera einrichten', 'Set up a new camera')),
+      ),
       body: ListView(
         padding: const EdgeInsets.all(24),
         children: [
           ...switch (c.phase) {
             SetupPhase.joinCameraNetwork => _join(),
-            SetupPhase.connecting => _busy('Verbinde mit der Kamera …'),
-            SetupPhase.chooseNetwork => _choose(),
-            SetupPhase.sending => _busy('Sende die WLAN-Daten an die Kamera …'),
-            SetupPhase.searching => _busy(
-              'Verbinde dein Handy wieder mit deinem WLAN „${_network?.ssid ?? ''}“. '
-              'Die Kamera wählt sich jetzt dort ein; die App sucht sie …',
+            SetupPhase.connecting => _busy(
+              tr('Verbinde mit der Kamera …', 'Connecting to the camera …'),
             ),
-            SetupPhase.found => _busy('Kamera gefunden.'),
+            SetupPhase.chooseNetwork => _choose(),
+            SetupPhase.sending => _busy(
+              tr(
+                'Sende die WLAN-Daten an die Kamera …',
+                'Sending the Wi-Fi details to the camera …',
+              ),
+            ),
+            SetupPhase.searching => _busy(
+              tr(
+                'Verbinde dein Handy wieder mit deinem WLAN „${_network?.ssid ?? ''}“. '
+                    'Die Kamera wählt sich jetzt dort ein; die App sucht sie …',
+                'Connect your phone to your Wi-Fi "${_network?.ssid ?? ''}" again. '
+                    'The camera is joining it now; the app is looking for it …',
+              ),
+            ),
+            SetupPhase.found => _busy(tr('Kamera gefunden.', 'Camera found.')),
             SetupPhase.notFound => _notFound(),
           },
           if (c.error != null) ...[
@@ -143,9 +157,12 @@ class _SetupModeScreenState extends State<SetupModeScreen> {
     final wifi = parseWifiQr(code);
     if (wifi == null) {
       setState(
-        () => _keyProblem =
-            'Das ist kein WLAN-Code einer allskyhub-Kamera. Der Aufkleber zeigt '
-            'einen QR-Code mit „allskyhub-…“.',
+        () => _keyProblem = tr(
+          'Das ist kein WLAN-Code einer allskyhub-Kamera. Der Aufkleber zeigt '
+              'einen QR-Code mit „allskyhub-…“.',
+          'This is not the Wi-Fi code of an allskyhub camera. The sticker shows '
+              'a QR code with "allskyhub-…".',
+        ),
       );
       return;
     }
@@ -157,8 +174,10 @@ class _SetupModeScreenState extends State<SetupModeScreen> {
     final key = normalizeSetupKey(_setupKey.text);
     if (key == null) {
       setState(
-        () => _keyProblem =
-            'Der Schlüssel hat 12 Zeichen, etwa ABCD-EFGH-JKMN (ohne 0, 1, I, L, O).',
+        () => _keyProblem = tr(
+          'Der Schlüssel hat 12 Zeichen, etwa ABCD-EFGH-JKMN (ohne 0, 1, I, L, O).',
+          'The key has 12 characters, like ABCD-EFGH-JKMN (no 0, 1, I, L, O).',
+        ),
       );
       return;
     }
@@ -167,16 +186,22 @@ class _SetupModeScreenState extends State<SetupModeScreen> {
   }
 
   List<Widget> _join() => [
-    const Text(
-      'Schalte die Kamera ein und warte etwa eine Minute. Dann öffnet sie ihr eigenes '
-      'WLAN „allskyhub-…“, geschützt mit dem Einrichtungs-Schlüssel vom Aufkleber.',
+    Text(
+      tr(
+        'Schalte die Kamera ein und warte etwa eine Minute. Dann öffnet sie ihr eigenes '
+            'WLAN „allskyhub-…“, geschützt mit dem Einrichtungs-Schlüssel vom Aufkleber.',
+        'Switch the camera on and wait about a minute. It then opens its own '
+            'Wi-Fi "allskyhub-…", protected by the setup key on the sticker.',
+      ),
     ),
     const SizedBox(height: 16),
     FilledButton.icon(
       key: const Key('scan-qr'),
       onPressed: _scan,
       icon: const Icon(Icons.qr_code_scanner),
-      label: const Text('QR-Code auf der Kamera scannen'),
+      label: Text(
+        tr('QR-Code auf der Kamera scannen', 'Scan the QR code on the camera'),
+      ),
     ),
     const SizedBox(height: 16),
     TextField(
@@ -186,7 +211,10 @@ class _SetupModeScreenState extends State<SetupModeScreen> {
       autocorrect: false,
       enableSuggestions: false,
       decoration: InputDecoration(
-        labelText: 'Oder Einrichtungs-Schlüssel eintippen',
+        labelText: tr(
+          'Oder Einrichtungs-Schlüssel eintippen',
+          'Or type the setup key',
+        ),
         hintText: 'XXXX-XXXX-XXXX',
         errorText: _keyProblem,
         errorMaxLines: 3,
@@ -197,24 +225,34 @@ class _SetupModeScreenState extends State<SetupModeScreen> {
     OutlinedButton(
       key: const Key('join-typed'),
       onPressed: _typed,
-      child: const Text('Mit der Kamera verbinden'),
+      child: Text(tr('Mit der Kamera verbinden', 'Connect to the camera')),
     ),
     const SizedBox(height: 20),
     Text(
-      'Schon in den WLAN-Einstellungen mit „allskyhub-…“ verbunden (etwa über die '
-      'Kamera-App des Handys)? Meldet das Handy, das Netz habe kein Internet, bleib '
-      'trotzdem verbunden.',
+      tr(
+        'Schon in den WLAN-Einstellungen mit „allskyhub-…“ verbunden (etwa über die '
+            'Kamera-App des Handys)? Meldet das Handy, das Netz habe kein Internet, bleib '
+            'trotzdem verbunden.',
+        'Already connected to "allskyhub-…" in the Wi-Fi settings (for example with the '
+            'phone\'s camera app)? If the phone says the network has no internet, stay '
+            'connected anyway.',
+      ),
       style: Theme.of(context).textTheme.bodySmall,
     ),
     TextButton(
       key: const Key('joined-manually'),
       onPressed: c.connect,
-      child: const Text('Ich bin verbunden'),
+      child: Text(tr('Ich bin verbunden', 'I\'m connected')),
     ),
     TextButton(
       key: const Key('join-open'),
       onPressed: () => c.join(const SetupWifi()),
-      child: const Text('Kamera ohne Schlüssel (ältere Software)'),
+      child: Text(
+        tr(
+          'Kamera ohne Schlüssel (ältere Software)',
+          'Camera without a key (older software)',
+        ),
+      ),
     ),
   ];
 
@@ -222,12 +260,21 @@ class _SetupModeScreenState extends State<SetupModeScreen> {
     final info = c.info!;
     final outdated = c.outdatedCamera;
     return [
-      Text('Verbunden mit ${info.setupSsid}. In welches WLAN soll die Kamera?'),
+      Text(
+        tr(
+          'Verbunden mit ${info.setupSsid}. In welches WLAN soll die Kamera?',
+          'Connected to ${info.setupSsid}. Which Wi-Fi should the camera join?',
+        ),
+      ),
       if (outdated) ...[
         const SizedBox(height: 8),
         Text(
-          'Diese Kamera hat noch ein offenes Einrichtungs-WLAN: Bitte nach der '
-          'Einrichtung ihre Software aktualisieren.',
+          tr(
+            'Diese Kamera hat noch ein offenes Einrichtungs-WLAN: Bitte nach der '
+                'Einrichtung ihre Software aktualisieren.',
+            'This camera still has an open setup Wi-Fi: please update its '
+                'software after the setup.',
+          ),
           key: const Key('outdated-camera'),
           style: TextStyle(color: Theme.of(context).colorScheme.tertiary),
         ),
@@ -246,7 +293,9 @@ class _SetupModeScreenState extends State<SetupModeScreen> {
                 title: Text(n.ssid),
                 secondary: Icon(
                   n.secure ? Icons.lock_outline : Icons.lock_open,
-                  semanticLabel: n.secure ? 'verschlüsselt' : 'offen',
+                  semanticLabel: n.secure
+                      ? tr('verschlüsselt', 'encrypted')
+                      : tr('offen', 'open'),
                 ),
                 subtitle: LinearProgressIndicator(value: n.signal / 100),
               ),
@@ -256,7 +305,7 @@ class _SetupModeScreenState extends State<SetupModeScreen> {
       TextButton.icon(
         onPressed: c.refreshNetworks,
         icon: const Icon(Icons.refresh),
-        label: const Text('Liste aktualisieren'),
+        label: Text(tr('Liste aktualisieren', 'Refresh list')),
       ),
       if (_network?.secure ?? false)
         TextField(
@@ -264,9 +313,9 @@ class _SetupModeScreenState extends State<SetupModeScreen> {
           controller: _password,
           obscureText: true,
           onChanged: (_) => setState(() {}),
-          decoration: const InputDecoration(
-            labelText: 'WLAN-Passwort',
-            helperText: '8 bis 63 Zeichen',
+          decoration: InputDecoration(
+            labelText: tr('WLAN-Passwort', 'Wi-Fi password'),
+            helperText: tr('8 bis 63 Zeichen', '8 to 63 characters'),
           ),
         ),
       const SizedBox(height: 12),
@@ -280,8 +329,8 @@ class _SetupModeScreenState extends State<SetupModeScreen> {
               maxLength: 2,
               onChanged: (_) => setState(() {}),
               textCapitalization: TextCapitalization.characters,
-              decoration: const InputDecoration(
-                labelText: 'Land',
+              decoration: InputDecoration(
+                labelText: tr('Land', 'Country'),
                 counterText: '',
               ),
             ),
@@ -291,9 +340,9 @@ class _SetupModeScreenState extends State<SetupModeScreen> {
             child: TextField(
               key: const Key('name'),
               controller: _name,
-              decoration: const InputDecoration(
-                labelText: 'Name der Kamera',
-                hintText: 'z. B. Garten',
+              decoration: InputDecoration(
+                labelText: tr('Name der Kamera', 'Camera name'),
+                hintText: tr('z. B. Garten', 'e.g. Garden'),
               ),
             ),
           ),
@@ -310,7 +359,7 @@ class _SetupModeScreenState extends State<SetupModeScreen> {
                 password: _network!.secure ? _password.text : null,
                 country: _country.text.trim(),
               ),
-        child: const Text('Kamera verbinden'),
+        child: Text(tr('Kamera verbinden', 'Connect camera')),
       ),
     ];
   }
@@ -321,10 +370,16 @@ class _SetupModeScreenState extends State<SetupModeScreen> {
     void manual(String _) =>
         c.setLocation(CameraLocation.tryParse(_latitude.text, _longitude.text));
     return [
-      Text('Standort der Kamera', style: theme.textTheme.titleSmall),
+      Text(
+        tr('Standort der Kamera', 'Camera location'),
+        style: theme.textTheme.titleSmall,
+      ),
       const SizedBox(height: 4),
-      const Text(
-        'Die Kamera braucht ihren Standort für Sonnenstand und Tag/Nacht. Etwa 1 km genau genügt.',
+      Text(
+        tr(
+          'Die Kamera braucht ihren Standort für Sonnenstand und Tag/Nacht. Etwa 1 km genau genügt.',
+          'The camera needs its location for the sun and day/night. About 1 km is precise enough.',
+        ),
       ),
       const SizedBox(height: 8),
       OutlinedButton.icon(
@@ -333,8 +388,11 @@ class _SetupModeScreenState extends State<SetupModeScreen> {
         icon: const Icon(Icons.my_location),
         label: Text(
           c.locating
-              ? 'Standort wird bestimmt …'
-              : 'Standort des Handys übernehmen',
+              ? tr('Standort wird bestimmt …', 'Finding the location …')
+              : tr(
+                  'Standort des Handys übernehmen',
+                  'Use the phone\'s location',
+                ),
         ),
       ),
       if (problem != null) ...[
@@ -356,8 +414,8 @@ class _SetupModeScreenState extends State<SetupModeScreen> {
                 signed: true,
               ),
               onChanged: manual,
-              decoration: const InputDecoration(
-                labelText: 'Breite',
+              decoration: InputDecoration(
+                labelText: tr('Breite', 'Latitude'),
                 hintText: '50.04',
               ),
             ),
@@ -372,8 +430,8 @@ class _SetupModeScreenState extends State<SetupModeScreen> {
                 signed: true,
               ),
               onChanged: manual,
-              decoration: const InputDecoration(
-                labelText: 'Länge',
+              decoration: InputDecoration(
+                labelText: tr('Länge', 'Longitude'),
                 hintText: '10.39',
               ),
             ),
@@ -382,31 +440,49 @@ class _SetupModeScreenState extends State<SetupModeScreen> {
       ),
       if (c.timezone != null) ...[
         const SizedBox(height: 8),
-        Text('Zeitzone: ${c.timezone}', style: theme.textTheme.bodySmall),
+        Text(
+          tr('Zeitzone: ${c.timezone}', 'Time zone: ${c.timezone}'),
+          style: theme.textTheme.bodySmall,
+        ),
       ],
     ];
   }
 
   List<Widget> _notFound() => [
-    const Text('Die Kamera hat sich im WLAN noch nicht gemeldet.'),
+    Text(
+      tr(
+        'Die Kamera hat sich im WLAN noch nicht gemeldet.',
+        'The camera has not shown up on the Wi-Fi yet.',
+      ),
+    ),
     const SizedBox(height: 8),
     Text(
-      'Taucht wieder das Netz „${c.info?.setupSsid ?? 'allskyhub-…'}“ auf, konnte sie sich '
-      'nicht verbinden: dann noch einmal von vorn – die App zeigt den Grund an.',
+      tr(
+        'Taucht wieder das Netz „${c.info?.setupSsid ?? 'allskyhub-…'}“ auf, konnte sie sich '
+            'nicht verbinden: dann noch einmal von vorn – die App zeigt den Grund an.',
+        'If the network "${c.info?.setupSsid ?? 'allskyhub-…'}" shows up again, it could not '
+            'connect: start over, and the app shows the reason.',
+      ),
     ),
     const SizedBox(height: 16),
-    FilledButton(onPressed: c.search, child: const Text('Weiter suchen')),
+    FilledButton(
+      onPressed: c.search,
+      child: Text(tr('Weiter suchen', 'Keep searching')),
+    ),
     OutlinedButton(
       onPressed: c.restart,
-      child: const Text('Von vorn beginnen'),
+      child: Text(tr('Von vorn beginnen', 'Start over')),
     ),
     const SizedBox(height: 16),
     TextField(
       key: const Key('address'),
       controller: _address,
       keyboardType: TextInputType.url,
-      decoration: const InputDecoration(
-        labelText: 'Oder Adresse der Kamera eingeben',
+      decoration: InputDecoration(
+        labelText: tr(
+          'Oder Adresse der Kamera eingeben',
+          'Or enter the camera\'s address',
+        ),
         hintText: '192.168.1.50',
       ),
     ),
@@ -416,7 +492,7 @@ class _SetupModeScreenState extends State<SetupModeScreen> {
           _pair(cameraBaseUri(_address.text));
         }
       },
-      child: const Text('Mit dieser Adresse koppeln'),
+      child: Text(tr('Mit dieser Adresse koppeln', 'Pair with this address')),
     ),
   ];
 }

@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../design.dart';
 
 import '../api/hub_client.dart';
+import '../l10n.dart';
 
 String _clock(DateTime t) {
   final l = t.toLocal();
@@ -34,7 +35,10 @@ class _TargetScreenState extends State<TargetScreen> {
 
   String _describe(Object e) => e is HubException
       ? e.message
-      : 'Keine Verbindung zum Hub. Bitte später noch einmal versuchen.';
+      : tr(
+          'Keine Verbindung zum Hub. Bitte später noch einmal versuchen.',
+          'No connection to the hub. Please try again later.',
+        );
 
   Future<void> _loadItems() async {
     try {
@@ -79,13 +83,17 @@ class _TargetScreenState extends State<TargetScreen> {
     final items = _items;
     final plan = _plan;
     return Scaffold(
-      appBar: AppBar(title: const Text('Ziel frei?')),
+      appBar: AppBar(title: Text(tr('Ziel frei?', 'Target clear?'))),
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
           Text(
-            'Steht ein Objekt jetzt und in den nächsten Stunden hoch genug, im '
-            'Dunkeln und ohne Wolken?',
+            tr(
+              'Steht ein Objekt jetzt und in den nächsten Stunden hoch genug, im '
+                  'Dunkeln und ohne Wolken?',
+              'Is an object high enough, in the dark and free of clouds, now and '
+                  'in the next hours?',
+            ),
             style: theme.textTheme.bodyMedium,
           ),
           const SizedBox(height: 16),
@@ -97,7 +105,7 @@ class _TargetScreenState extends State<TargetScreen> {
               expandedInsets: EdgeInsets.zero,
               enableFilter: true,
               requestFocusOnTap: true,
-              label: const Text('Objekt'),
+              label: Text(tr('Objekt', 'Object')),
               menuHeight: 360,
               onSelected: _choose,
               dropdownMenuEntries: [
@@ -138,14 +146,21 @@ class _TargetScreenState extends State<TargetScreen> {
                       TextSpan(
                         children: [
                           TextSpan(
-                            text:
-                                'Jetzt: ${plan.alt.round()}° hoch im ${plan.direction}',
+                            text: tr(
+                              'Jetzt: ${plan.alt.round()}° hoch im ${plan.direction}',
+                              'Now: ${plan.alt.round()}° high in the ${plan.direction}',
+                            ),
                           ),
                           if (plan.cloudCover case final c?)
                             TextSpan(
                               text:
-                                  ' · die Kamera sieht ${(c * 100).round()} % Wolken'
-                                  '${plan.cloudSource.isEmpty ? '' : ' (${plan.cloudSource})'}',
+                                  tr(
+                                    ' · die Kamera sieht ${(c * 100).round()} % Wolken',
+                                    ' · the camera sees ${(c * 100).round()} % clouds',
+                                  ) +
+                                  (plan.cloudSource.isEmpty
+                                      ? ''
+                                      : ' (${plan.cloudSource})'),
                             ),
                           const TextSpan(text: ' · '),
                           TextSpan(
@@ -163,14 +178,18 @@ class _TargetScreenState extends State<TargetScreen> {
               ),
             ),
             const SizedBox(height: 16),
-            Text('Die nächsten Stunden', style: theme.textTheme.titleMedium),
+            Text(
+              tr('Die nächsten Stunden', 'The next hours'),
+              style: theme.textTheme.titleMedium,
+            ),
             for (final h in plan.hours)
               ListTile(
                 dense: true,
                 contentPadding: EdgeInsets.zero,
                 leading: Text(_clock(h.at)),
                 title: Text(
-                  h.verdictText + (h.moonNear ? ' · Mond nah' : ''),
+                  h.verdictText +
+                      (h.moonNear ? tr(' · Mond nah', ' · moon close') : ''),
                   style: TextStyle(
                     fontWeight: FontWeight.w600,
                     color: _color(context, h.verdict),
@@ -182,8 +201,12 @@ class _TargetScreenState extends State<TargetScreen> {
                 ),
               ),
             Text(
-              '„Zu tief“: unter 20°. „Zu hell“: Sonne höher als −12°. '
-              'Wolken: Vorhersage von Open-Meteo.',
+              tr(
+                '„Zu tief“: unter 20°. „Zu hell“: Sonne höher als −12°. '
+                    'Wolken: Vorhersage von Open-Meteo.',
+                '"Too low": below 20°. "Too bright": sun higher than −12°. '
+                    'Clouds: forecast from Open-Meteo.',
+              ),
               style: theme.textTheme.bodySmall,
             ),
           ],

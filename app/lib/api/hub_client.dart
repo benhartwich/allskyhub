@@ -6,6 +6,7 @@ import 'dart:typed_data';
 
 import 'package:http/http.dart' as http;
 
+import '../l10n.dart';
 import 'test_update.dart';
 
 export 'test_update.dart' show TestBuild;
@@ -14,11 +15,11 @@ export 'test_update.dart' show TestBuild;
 const defaultHubUrl = 'https://allskyhub.org';
 
 /// SPEC §6.4 Labels: why a detection is a false positive.
-const labelReasons = {
-  'aircraft': 'Flugzeug',
-  'satellite': 'Satellit',
-  'artifact': 'Bildfehler',
-  'other': 'Sonstiges',
+Map<String, String> get labelReasons => {
+  'aircraft': tr('Flugzeug', 'aircraft'),
+  'satellite': tr('Satellit', 'satellite'),
+  'artifact': tr('Bildfehler', 'image artifact'),
+  'other': tr('Sonstiges', 'other'),
 };
 
 class HubException implements Exception {
@@ -314,7 +315,8 @@ class HubClient {
   Future<dynamic> _sendUri(String method, Uri uri, {Object? body}) async {
     final request = http.Request(method, uri)
       ..headers.addAll(authHeaders)
-      ..headers['Accept'] = 'application/json';
+      ..headers['Accept'] = 'application/json'
+      ..headers['Accept-Language'] = appLocale.languageCode;
     if (body != null) {
       request.headers['Content-Type'] = 'application/json';
       request.body = jsonEncode(body);

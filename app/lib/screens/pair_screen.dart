@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../api/hub_client.dart';
+import '../l10n.dart';
 
 /// Pairing by code (SPEC §6.2 step 3). Reading the code from the camera's local setup API
 /// (SPEC §7) comes with the onboarding flow; typing it is the fallback.
@@ -40,11 +41,19 @@ class _PairScreenState extends State<PairScreen> {
     } on HubException catch (e) {
       setState(
         () => _error = e.statusCode == 429
-            ? 'Zu viele Versuche. Bitte später erneut versuchen.'
+            ? tr(
+                'Zu viele Versuche. Bitte später erneut versuchen.',
+                'Too many attempts. Please try again later.',
+              )
             : e.message,
       );
     } on Exception {
-      setState(() => _error = 'Der Hub ist nicht erreichbar.');
+      setState(
+        () => _error = tr(
+          'Der Hub ist nicht erreichbar.',
+          'Cannot reach the hub.',
+        ),
+      );
     } finally {
       if (mounted) setState(() => _busy = false);
     }
@@ -53,12 +62,15 @@ class _PairScreenState extends State<PairScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Kamera koppeln')),
+      appBar: AppBar(title: Text(tr('Kamera koppeln', 'Pair camera'))),
       body: ListView(
         padding: const EdgeInsets.all(24),
         children: [
-          const Text(
-            'Den Kopplungscode zeigt die Einrichtungsseite deiner Kamera im WLAN an.',
+          Text(
+            tr(
+              'Den Kopplungscode zeigt die Einrichtungsseite deiner Kamera im WLAN an.',
+              "Your camera's setup page on the Wi-Fi shows the pairing code.",
+            ),
           ),
           const SizedBox(height: 20),
           TextField(
@@ -67,8 +79,8 @@ class _PairScreenState extends State<PairScreen> {
             textCapitalization: TextCapitalization.characters,
             autocorrect: false,
             style: const TextStyle(fontSize: 24, letterSpacing: 4),
-            decoration: const InputDecoration(
-              labelText: 'Kopplungscode',
+            decoration: InputDecoration(
+              labelText: tr('Kopplungscode', 'Pairing code'),
               hintText: 'ABC-DEF',
             ),
           ),
@@ -76,9 +88,9 @@ class _PairScreenState extends State<PairScreen> {
           TextField(
             key: const Key('name'),
             controller: _name,
-            decoration: const InputDecoration(
-              labelText: 'Name der Kamera',
-              hintText: 'z. B. Garten',
+            decoration: InputDecoration(
+              labelText: tr('Name der Kamera', 'Camera name'),
+              hintText: tr('z. B. Garten', 'e.g. Garden'),
             ),
           ),
           if (_error != null) ...[
@@ -91,7 +103,9 @@ class _PairScreenState extends State<PairScreen> {
           const SizedBox(height: 20),
           FilledButton(
             onPressed: _busy ? null : _submit,
-            child: Text(_busy ? 'Koppeln …' : 'Koppeln'),
+            child: Text(
+              _busy ? tr('Koppeln …', 'Pairing …') : tr('Koppeln', 'Pair'),
+            ),
           ),
         ],
       ),

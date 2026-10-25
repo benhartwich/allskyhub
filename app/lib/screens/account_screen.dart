@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../api/hub_client.dart';
+import '../l10n.dart';
 
 /// Roadmap #10: change the password, delete the account.
 class AccountScreen extends StatefulWidget {
@@ -58,7 +59,7 @@ class _AccountScreenState extends State<AccountScreen> {
         'event_keep_days': days,
       });
       if (mounted) setState(() => _keepDays = saved.keepDays);
-      _show('Gespeichert.');
+      _show(tr('Gespeichert.', 'Saved.'));
     } on Exception catch (e) {
       if (mounted) setState(() => _keepDays = before);
       _show(_describe(e), error: true);
@@ -72,7 +73,7 @@ class _AccountScreenState extends State<AccountScreen> {
     try {
       final saved = await widget.client.updateAccountSettings({key: on});
       if (mounted) setState(() => _settings = saved);
-      _show('Gespeichert.');
+      _show(tr('Gespeichert.', 'Saved.'));
     } on Exception catch (e) {
       if (mounted) setState(() => _settings = before);
       _show(_describe(e), error: true);
@@ -103,17 +104,32 @@ class _AccountScreenState extends State<AccountScreen> {
 
   String _describe(Object e) => e is HubException
       ? (e.statusCode == 429
-            ? 'Zu viele Versuche. Bitte später erneut versuchen.'
+            ? tr(
+                'Zu viele Versuche. Bitte später erneut versuchen.',
+                'Too many attempts. Please try again later.',
+              )
             : e.message)
-      : 'Der Hub ist nicht erreichbar.';
+      : tr('Der Hub ist nicht erreichbar.', 'The hub cannot be reached.');
 
   Future<void> _changePassword() async {
     if (_new.text != _new2.text) {
-      _show('Die neuen Passwörter stimmen nicht überein.', error: true);
+      _show(
+        tr(
+          'Die neuen Passwörter stimmen nicht überein.',
+          'The new passwords do not match.',
+        ),
+        error: true,
+      );
       return;
     }
     if (_new.text.length < 10) {
-      _show('Das neue Passwort braucht mindestens 10 Zeichen.', error: true);
+      _show(
+        tr(
+          'Das neue Passwort braucht mindestens 10 Zeichen.',
+          'The new password needs at least 10 characters.',
+        ),
+        error: true,
+      );
       return;
     }
     setState(() => _busy = true);
@@ -123,7 +139,10 @@ class _AccountScreenState extends State<AccountScreen> {
         c.clear();
       }
       _show(
-        'Passwort geändert. Im Web und auf anderen Geräten bist du abgemeldet.',
+        tr(
+          'Passwort geändert. Im Web und auf anderen Geräten bist du abgemeldet.',
+          'Password changed. You are signed out on the web and on other devices.',
+        ),
       );
     } on Exception catch (e) {
       _show(_describe(e), error: true);
@@ -136,22 +155,28 @@ class _AccountScreenState extends State<AccountScreen> {
     final sure = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Konto endgültig löschen?'),
-        content: const Text(
-          'Deine Kameras werden entkoppelt, alle ihre Bilder, Nachtprodukte und öffentlichen '
-          'Seiten gelöscht. Das lässt sich nicht rückgängig machen.',
+        title: Text(
+          tr('Konto endgültig löschen?', 'Delete the account for good?'),
+        ),
+        content: Text(
+          tr(
+            'Deine Kameras werden entkoppelt, alle ihre Bilder, Nachtprodukte und öffentlichen '
+                'Seiten gelöscht. Das lässt sich nicht rückgängig machen.',
+            'Your cameras are unpaired, and all their pictures, night products and public '
+                'pages are deleted. This cannot be undone.',
+          ),
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context, false),
-            child: const Text('Abbrechen'),
+            child: Text(tr('Abbrechen', 'Cancel')),
           ),
           FilledButton(
             style: FilledButton.styleFrom(
               backgroundColor: Theme.of(context).colorScheme.error,
             ),
             onPressed: () => Navigator.pop(context, true),
-            child: const Text('Löschen'),
+            child: Text(tr('Löschen', 'Delete')),
           ),
         ],
       ),
@@ -173,7 +198,7 @@ class _AccountScreenState extends State<AccountScreen> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     return Scaffold(
-      appBar: AppBar(title: const Text('Konto')),
+      appBar: AppBar(title: Text(tr('Konto', 'Account'))),
       body: ListView(
         padding: const EdgeInsets.all(24),
         children: [
@@ -190,11 +215,18 @@ class _AccountScreenState extends State<AccountScreen> {
             const SizedBox(height: 16),
           ],
           if (_keepDays != null) ...[
-            Text('Ereignisse aufbewahren', style: theme.textTheme.titleMedium),
+            Text(
+              tr('Ereignisse aufbewahren', 'Keep events'),
+              style: theme.textTheme.titleMedium,
+            ),
             const SizedBox(height: 4),
-            const Text(
-              'Wie lange erkannte Meteore und andere Ereignisse gespeichert bleiben. '
-              'Bei mehr als 30 Tagen sichern wir auch jedes Bild in voller Größe.',
+            Text(
+              tr(
+                'Wie lange erkannte Meteore und andere Ereignisse gespeichert bleiben. '
+                    'Bei mehr als 30 Tagen sichern wir auch jedes Bild in voller Größe.',
+                'How long detected meteors and other events are kept. '
+                    'Beyond 30 days we also keep every picture in full size.',
+              ),
             ),
             RadioGroup<int>(
               groupValue: _keepDays,
@@ -203,10 +235,10 @@ class _AccountScreenState extends State<AccountScreen> {
               },
               child: Column(
                 children: [
-                  for (final (days, label) in const [
-                    (30, '30 Tage (Standard)'),
-                    (90, '90 Tage'),
-                    (365, '1 Jahr'),
+                  for (final (days, label) in [
+                    (30, tr('30 Tage (Standard)', '30 days (default)')),
+                    (90, tr('90 Tage', '90 days')),
+                    (365, tr('1 Jahr', '1 year')),
                   ])
                     RadioListTile<int>(
                       key: ValueKey('keep-$days'),
@@ -220,51 +252,85 @@ class _AccountScreenState extends State<AccountScreen> {
           ],
           if (_settings case final settings?
               when settings.pushAvailable || settings.mailAvailable) ...[
-            Text('Benachrichtigungen', style: theme.textTheme.titleMedium),
+            Text(
+              tr('Benachrichtigungen', 'Notifications'),
+              style: theme.textTheme.titleMedium,
+            ),
             const SizedBox(height: 4),
             Text(
               settings.pushAvailable
-                  ? 'Auf diesem Telefon${settings.mailAvailable ? ' und auf Wunsch per E-Mail' : ''}.'
-                  : 'Per E-Mail, wenn du das unten einschaltest.',
+                  ? tr(
+                      'Auf diesem Telefon${settings.mailAvailable ? ' und auf Wunsch per E-Mail' : ''}.',
+                      'On this phone${settings.mailAvailable ? ', and by e-mail if you like' : ''}.',
+                    )
+                  : tr(
+                      'Per E-Mail, wenn du das unten einschaltest.',
+                      'By e-mail, if you switch it on below.',
+                    ),
             ),
             for (final (key, title, subtitle) in [
               if (settings.pushAvailable)
                 (
                   'notify_events',
-                  'Neue Ereignisse',
-                  'z. B. Meteor, höchstens alle 10 Minuten pro Kamera, nur in der App',
+                  tr('Neue Ereignisse', 'New events'),
+                  tr(
+                    'z. B. Meteor, höchstens alle 10 Minuten pro Kamera, nur in der App',
+                    'e.g. a meteor, at most every 10 minutes per camera, in the app only',
+                  ),
                 ),
               (
                 'notify_offline',
-                'Probleme mit einer Kamera',
-                'offline, keine Bilder, Speicher fast voll, zu heiß, Uhr',
+                tr('Probleme mit einer Kamera', 'Problems with a camera'),
+                tr(
+                  'offline, keine Bilder, Speicher fast voll, zu heiß, Uhr',
+                  'offline, no pictures, storage almost full, too hot, clock',
+                ),
               ),
               (
                 'notify_aurora',
-                'Polarlicht',
-                'Kp hoch genug oder im Kameranetz gesichtet, und der Himmel über '
-                    'der Kamera klar',
+                tr('Polarlicht', 'Aurora'),
+                tr(
+                  'Kp hoch genug oder im Kameranetz gesichtet, und der Himmel über '
+                      'der Kamera klar',
+                  'Kp high enough or seen in the camera network, and a clear sky '
+                      'over the camera',
+                ),
               ),
               (
                 'notify_summary',
-                'Zusammenfassung der Nacht',
-                'morgens nach Sonnenaufgang',
+                tr('Zusammenfassung der Nacht', 'Summary of the night'),
+                tr(
+                  'morgens nach Sonnenaufgang',
+                  'in the morning after sunrise',
+                ),
               ),
               (
                 'notify_tonight',
-                'Heute Nacht klar',
-                'abends, wenn mindestens 2 Stunden klar und dunkel vorhergesagt sind',
+                tr('Heute Nacht klar', 'Clear tonight'),
+                tr(
+                  'abends, wenn mindestens 2 Stunden klar und dunkel vorhergesagt sind',
+                  'in the evening, when at least 2 clear and dark hours are forecast',
+                ),
               ),
               (
                 'notify_fireball',
-                'Feuerkugel mit möglichem Meteoritenfall',
-                'von zwei Kameras gesehen, in 300 km um deine Kameras',
+                tr(
+                  'Feuerkugel mit möglichem Meteoritenfall',
+                  'Fireball with a possible meteorite fall',
+                ),
+                tr(
+                  'von zwei Kameras gesehen, in 300 km um deine Kameras',
+                  'seen by two cameras, within 300 km of your cameras',
+                ),
               ),
               if (settings.mailAvailable)
                 (
                   'notify_by_mail',
-                  'Auch per E-Mail',
-                  'alles außer einzelnen Ereignissen',
+                  tr('Auch per E-Mail', 'By e-mail too'),
+                  tr(
+                    'alles außer einzelnen Ereignissen',
+                    'everything except single events',
+                  ),
                 ),
             ])
               if (settings.notify.containsKey(key))
@@ -278,47 +344,64 @@ class _AccountScreenState extends State<AccountScreen> {
                 ),
             const SizedBox(height: 24),
           ],
-          Text('Passwort ändern', style: theme.textTheme.titleMedium),
+          Text(
+            tr('Passwort ändern', 'Change password'),
+            style: theme.textTheme.titleMedium,
+          ),
           TextField(
             key: const Key('current'),
             controller: _current,
             obscureText: true,
             autofillHints: const [AutofillHints.password],
-            decoration: const InputDecoration(labelText: 'Aktuelles Passwort'),
+            decoration: InputDecoration(
+              labelText: tr('Aktuelles Passwort', 'Current password'),
+            ),
           ),
           TextField(
             key: const Key('new'),
             controller: _new,
             obscureText: true,
             autofillHints: const [AutofillHints.newPassword],
-            decoration: const InputDecoration(
-              labelText: 'Neues Passwort (mindestens 10 Zeichen)',
+            decoration: InputDecoration(
+              labelText: tr(
+                'Neues Passwort (mindestens 10 Zeichen)',
+                'New password (at least 10 characters)',
+              ),
             ),
           ),
           TextField(
             key: const Key('new2'),
             controller: _new2,
             obscureText: true,
-            decoration: const InputDecoration(
-              labelText: 'Neues Passwort wiederholen',
+            decoration: InputDecoration(
+              labelText: tr(
+                'Neues Passwort wiederholen',
+                'Repeat new password',
+              ),
             ),
           ),
           const SizedBox(height: 12),
           FilledButton(
             onPressed: _busy ? null : _changePassword,
-            child: const Text('Passwort ändern'),
+            child: Text(tr('Passwort ändern', 'Change password')),
           ),
           const SizedBox(height: 40),
-          Text('Konto löschen', style: theme.textTheme.titleMedium),
+          Text(
+            tr('Konto löschen', 'Delete account'),
+            style: theme.textTheme.titleMedium,
+          ),
           const SizedBox(height: 4),
-          const Text(
-            'Löscht dein Konto sofort, samt Kameras, Bildern und öffentlichen Seiten.',
+          Text(
+            tr(
+              'Löscht dein Konto sofort, samt Kameras, Bildern und öffentlichen Seiten.',
+              'Deletes your account right away, with cameras, pictures and public pages.',
+            ),
           ),
           TextField(
             key: const Key('delete-password'),
             controller: _deletePassword,
             obscureText: true,
-            decoration: const InputDecoration(labelText: 'Passwort'),
+            decoration: InputDecoration(labelText: tr('Passwort', 'Password')),
           ),
           const SizedBox(height: 12),
           OutlinedButton(
@@ -326,7 +409,7 @@ class _AccountScreenState extends State<AccountScreen> {
               foregroundColor: theme.colorScheme.error,
             ),
             onPressed: _busy ? null : _deleteAccount,
-            child: const Text('Konto löschen'),
+            child: Text(tr('Konto löschen', 'Delete account')),
           ),
         ],
       ),

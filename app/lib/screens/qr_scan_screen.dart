@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
 
+import '../l10n.dart';
+
 /// Reads the Wi-Fi QR code on the camera's label (SPEC §7.1) and answers its text.
 class QrScanScreen extends StatefulWidget {
   const QrScanScreen({super.key});
@@ -32,7 +34,7 @@ class _QrScanScreenState extends State<QrScanScreen> {
 
   @override
   Widget build(BuildContext context) => Scaffold(
-    appBar: AppBar(title: const Text('QR-Code scannen')),
+    appBar: AppBar(title: Text(tr('QR-Code scannen', 'Scan QR code'))),
     body: Stack(
       children: [
         MobileScanner(
@@ -42,21 +44,28 @@ class _QrScanScreenState extends State<QrScanScreen> {
             child: Padding(
               padding: const EdgeInsets.all(24),
               child: Text(
-                'Die Kamera des Handys ist nicht verfügbar. Tippe den Schlüssel vom '
-                'Aufkleber stattdessen ein.',
+                tr(
+                  'Die Kamera des Handys ist nicht verfügbar. Tippe den Schlüssel vom '
+                      'Aufkleber stattdessen ein.',
+                  "The phone's camera is not available. Type the key from the "
+                      'label instead.',
+                ),
                 textAlign: TextAlign.center,
               ),
             ),
           ),
         ),
-        const Align(
+        Align(
           alignment: Alignment.bottomCenter,
           child: Padding(
-            padding: EdgeInsets.all(24),
+            padding: const EdgeInsets.all(24),
             child: Text(
-              'Halte das Handy über den QR-Code auf dem Aufkleber der Kamera.',
+              tr(
+                'Halte das Handy über den QR-Code auf dem Aufkleber der Kamera.',
+                "Hold the phone over the QR code on the camera's label.",
+              ),
               textAlign: TextAlign.center,
-              style: TextStyle(
+              style: const TextStyle(
                 color: Colors.white,
                 shadows: [Shadow(blurRadius: 4)],
               ),

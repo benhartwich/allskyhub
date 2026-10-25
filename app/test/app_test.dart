@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:allskyhub_app/api/hub_client.dart';
 import 'package:allskyhub_app/api/session_store.dart';
 import 'package:allskyhub_app/api/camera_setup.dart';
+import 'package:allskyhub_app/l10n.dart';
 import 'package:allskyhub_app/main.dart';
 import 'package:allskyhub_app/screens/onboarding_screen.dart';
 import 'package:flutter/material.dart';
@@ -12,20 +13,23 @@ import 'package:http/testing.dart';
 
 import 'hub_client_test.dart' show cameraJson;
 
-MockClient fakeHub({List<Map<String, Object?>> cameras = const []}) =>
-    MockClient(
-      (request) async => switch (request.url.path) {
-        '/api/v1/auth/login' =>
-          jsonDecode(request.body)['password'] == 'right password'
-              ? http.Response(jsonEncode({'access_token': 'tok'}), 200)
-              : http.Response(
-                  jsonEncode({'detail': 'Wrong email or password'}),
-                  401,
-                ),
-        '/api/v1/cameras' => http.Response(jsonEncode(cameras), 200),
-        _ => http.Response('', 404),
-      },
-    );
+MockClient fakeHub({
+  List<Map<String, Object?>> cameras = const [],
+  void Function(http.Request)? seen,
+}) => MockClient((request) async {
+  seen?.call(request);
+  return switch (request.url.path) {
+    '/api/v1/auth/login' =>
+      jsonDecode(request.body)['password'] == 'right password'
+          ? http.Response(jsonEncode({'access_token': 'tok'}), 200)
+          : http.Response(
+              jsonEncode({'detail': 'Wrong email or password'}),
+              401,
+            ),
+    '/api/v1/cameras' => http.Response(jsonEncode(cameras), 200),
+    _ => http.Response('', 404),
+  };
+});
 
 Widget app(SessionStore store, MockClient hub) => AllskyApp(
   store: store,
@@ -55,6 +59,32 @@ void main() {
     expect(find.textContaining('Noch keine Kamera gekoppelt'), findsOneWidget);
     expect(store.session?.token, 'tok');
     expect(store.session?.hubUrl, defaultHubUrl);
+  });
+
+  testWidgets('speaks English, and asks the hub for English', (tester) async {
+    appEnglish = true;
+    addTearDown(() => appEnglish = false);
+    final languages = <String?>{};
+    await tester.pumpWidget(
+      app(
+        MemorySessionStore(),
+        fakeHub(seen: (r) => languages.add(r.headers['Accept-Language'])),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.enterText(find.byKey(const Key('email')), 'a@example.org');
+    await tester.enterText(find.byKey(const Key('password')), 'wrong');
+    await tester.tap(find.text('Sign in'));
+    await tester.pumpAndSettle();
+    expect(find.text('Wrong email address or password.'), findsOneWidget);
+
+    await tester.enterText(find.byKey(const Key('password')), 'right password');
+    await tester.tap(find.text('Sign in'));
+    await tester.pumpAndSettle();
+    expect(find.text('My cameras'), findsOneWidget);
+    expect(find.textContaining('No camera paired yet'), findsOneWidget);
+    expect(languages, {'en'});
   });
 
   testWidgets('restores the session and lists cameras', (tester) async {

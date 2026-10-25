@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../api/hub_client.dart';
+import '../l10n.dart';
 
 /// Roadmap C7: clear nights, sky brightness and detections per month, like the web page.
 class StatsScreen extends StatefulWidget {
@@ -37,7 +38,10 @@ class _StatsScreenState extends State<StatsScreen> {
         setState(
           () => _error = e is HubException
               ? e.message
-              : 'Keine Verbindung zum Hub. Bitte später noch einmal versuchen.',
+              : tr(
+                  'Keine Verbindung zum Hub. Bitte später noch einmal versuchen.',
+                  'No connection to the hub. Please try again later.',
+                ),
         );
       }
     }
@@ -47,7 +51,7 @@ class _StatsScreenState extends State<StatsScreen> {
   Widget build(BuildContext context) {
     final stats = _stats;
     return Scaffold(
-      appBar: AppBar(title: const Text('Statistik')),
+      appBar: AppBar(title: Text(tr('Statistik', 'Statistics'))),
       body: stats == null
           ? Center(
               child: _error == null
@@ -84,7 +88,10 @@ class _StatsScreenState extends State<StatsScreen> {
           Padding(
             padding: const EdgeInsets.symmetric(vertical: 24),
             child: Text(
-              'Für ${stats.year} gibt es noch keine Messungen.',
+              tr(
+                'Für ${stats.year} gibt es noch keine Messungen.',
+                'There are no measurements for ${stats.year} yet.',
+              ),
               key: const Key('stats-empty'),
               textAlign: TextAlign.center,
             ),
@@ -96,19 +103,33 @@ class _StatsScreenState extends State<StatsScreen> {
             runSpacing: 8,
             children: [
               _Figure(
-                'Klare Nächte',
-                '${total.clearNights} von ${total.nights}',
+                tr('Klare Nächte', 'Clear nights'),
+                tr(
+                  '${total.clearNights} von ${total.nights}',
+                  '${total.clearNights} of ${total.nights}',
+                ),
               ),
-              _Figure('Klare Stunden', total.clearHours.toStringAsFixed(0)),
+              _Figure(
+                tr('Klare Stunden', 'Clear hours'),
+                total.clearHours.toStringAsFixed(0),
+              ),
               if (total.bestSqm case final sqm?)
-                _Figure('Dunkelster Himmel', '${sqm.toStringAsFixed(2)} mag'),
-              _Figure('Meteore', '${total.meteors}'),
-              if (total.aurora > 0) _Figure('Polarlicht', '${total.aurora}'),
-              if (total.storms > 0) _Figure('Gewitter', '${total.storms}'),
+                _Figure(
+                  tr('Dunkelster Himmel', 'Darkest sky'),
+                  '${sqm.toStringAsFixed(2)} mag',
+                ),
+              _Figure(tr('Meteore', 'Meteors'), '${total.meteors}'),
+              if (total.aurora > 0)
+                _Figure(tr('Polarlicht', 'Aurora'), '${total.aurora}'),
+              if (total.storms > 0)
+                _Figure(tr('Gewitter', 'Thunderstorms'), '${total.storms}'),
             ],
           ),
           const SizedBox(height: 24),
-          Text('Klare Stunden pro Monat', style: theme.textTheme.titleMedium),
+          Text(
+            tr('Klare Stunden pro Monat', 'Clear hours per month'),
+            style: theme.textTheme.titleMedium,
+          ),
           const SizedBox(height: 12),
           SizedBox(
             height: 140,
@@ -140,17 +161,20 @@ class _StatsScreenState extends State<StatsScreen> {
             ),
           ),
           const SizedBox(height: 24),
-          Text('Monate', style: theme.textTheme.titleMedium),
+          Text(tr('Monate', 'Months'), style: theme.textTheme.titleMedium),
           SingleChildScrollView(
             scrollDirection: Axis.horizontal,
             child: DataTable(
               columnSpacing: 20,
-              columns: const [
-                DataColumn(label: Text('Monat')),
-                DataColumn(label: Text('Klar'), numeric: true),
-                DataColumn(label: Text('Stunden'), numeric: true),
-                DataColumn(label: Text('SQM'), numeric: true),
-                DataColumn(label: Text('Meteore'), numeric: true),
+              columns: [
+                DataColumn(label: Text(tr('Monat', 'Month'))),
+                DataColumn(label: Text(tr('Klar', 'Clear')), numeric: true),
+                DataColumn(label: Text(tr('Stunden', 'Hours')), numeric: true),
+                const DataColumn(label: Text('SQM'), numeric: true),
+                DataColumn(
+                  label: Text(tr('Meteore', 'Meteors')),
+                  numeric: true,
+                ),
               ],
               rows: [
                 for (final m in stats.months)
@@ -170,21 +194,27 @@ class _StatsScreenState extends State<StatsScreen> {
           if (stats.sqmTrendText.isNotEmpty) ...[
             const SizedBox(height: 24),
             Text(
-              'Himmelshelligkeit über die Jahre',
+              tr(
+                'Himmelshelligkeit über die Jahre',
+                'Sky brightness over the years',
+              ),
               style: theme.textTheme.titleMedium,
             ),
             const SizedBox(height: 6),
             Text(stats.sqmTrendText, key: const Key('sqm-trend')),
             if (stats.sqmMonths.isNotEmpty)
               Text(
-                'Zuletzt ${stats.sqmMonths.last.label}: '
+                '${tr('Zuletzt', 'Latest')} ${stats.sqmMonths.last.label}: '
                 '${stats.sqmMonths.last.sqm.toStringAsFixed(2)} mag/″²',
                 style: theme.textTheme.bodySmall,
               ),
           ],
           if (stats.showers.isNotEmpty) ...[
             const SizedBox(height: 24),
-            Text('Meteorströme', style: theme.textTheme.titleMedium),
+            Text(
+              tr('Meteorströme', 'Meteor showers'),
+              style: theme.textTheme.titleMedium,
+            ),
             for (final MapEntry(:key, :value) in stats.showers.entries)
               ListTile(
                 contentPadding: EdgeInsets.zero,

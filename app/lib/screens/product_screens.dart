@@ -6,13 +6,14 @@ import 'package:flutter/material.dart';
 import 'package:video_player/video_player.dart';
 
 import '../api/hub_client.dart';
+import '../l10n.dart';
 
-const productTitles = {
-  'keogram': 'Keogramm',
-  'startrails': 'Sternspuren',
-  'timelapse': 'Zeitraffer',
-  'day_timelapse': 'Zeitraffer am Tag',
-  'day_keogram': 'Keogramm am Tag',
+Map<String, String> get productTitles => {
+  'keogram': tr('Keogramm', 'Keogram'),
+  'startrails': tr('Sternspuren', 'Star trails'),
+  'timelapse': tr('Zeitraffer', 'Timelapse'),
+  'day_timelapse': tr('Zeitraffer am Tag', 'Daytime timelapse'),
+  'day_keogram': tr('Keogramm am Tag', 'Daytime keogram'),
 };
 
 String formatSize(int bytes) {
@@ -197,14 +198,23 @@ mixin _FetchesProduct<T extends StatefulWidget> on State<T> {
         ready = ok;
         error = ok
             ? null
-            : 'Die Kamera hat die Datei nicht rechtzeitig geliefert.';
+            : tr(
+                'Die Kamera hat die Datei nicht rechtzeitig geliefert.',
+                'The camera did not deliver the file in time.',
+              );
       });
     } on HubException catch (e) {
       if (!mounted) return;
       setState(
         () => error = e.statusCode == 404
-            ? 'Die Kamera ist offline. Die Datei kommt, sobald sie wieder verbunden ist.'
-            : 'Die Datei konnte nicht geladen werden (${e.statusCode}).',
+            ? tr(
+                'Die Kamera ist offline. Die Datei kommt, sobald sie wieder verbunden ist.',
+                'The camera is offline. The file comes as soon as it is connected again.',
+              )
+            : tr(
+                'Die Datei konnte nicht geladen werden (${e.statusCode}).',
+                'The file could not be loaded (${e.statusCode}).',
+              ),
       );
     }
   }
@@ -230,7 +240,10 @@ mixin _FetchesProduct<T extends StatefulWidget> on State<T> {
                 const CircularProgressIndicator(),
                 const SizedBox(height: 16),
                 Text(
-                  'Wird von der Kamera geholt … (${formatSize(product.size)})',
+                  tr(
+                    'Wird von der Kamera geholt … (${formatSize(product.size)})',
+                    'Fetching from the camera … (${formatSize(product.size)})',
+                  ),
                   textAlign: TextAlign.center,
                   style: const TextStyle(color: Colors.white70),
                 ),
@@ -342,7 +355,12 @@ class _TimelapseScreenState extends State<TimelapseScreen>
       await video.play();
     } on Exception {
       if (mounted) {
-        setState(() => error = 'Das Video konnte nicht abgespielt werden.');
+        setState(
+          () => error = tr(
+            'Das Video konnte nicht abgespielt werden.',
+            'The video could not be played.',
+          ),
+        );
       }
       return;
     }
@@ -364,7 +382,7 @@ class _TimelapseScreenState extends State<TimelapseScreen>
       appBar: AppBar(
         backgroundColor: Colors.black,
         foregroundColor: Colors.white,
-        title: const Text('Zeitraffer'),
+        title: Text(tr('Zeitraffer', 'Timelapse')),
       ),
       body: !playing || error != null
           ? (error == null && ready

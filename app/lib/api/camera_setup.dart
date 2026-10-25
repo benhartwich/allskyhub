@@ -4,6 +4,8 @@ import 'dart:convert';
 
 import 'package:http/http.dart' as http;
 
+import '../l10n.dart';
+
 /// Default port of the agent's local web server.
 const cameraSetupPort = 8080;
 
@@ -90,15 +92,25 @@ class WifiNetwork {
   final bool secure;
 }
 
-/// German text for `SetupInfo.lastError`.
+/// Text for `SetupInfo.lastError`, in the app's language.
 String? describeSetupError(String? code) => switch (code) {
   null => null,
-  'wifi_auth' =>
+  'wifi_auth' => tr(
     'Die Kamera konnte sich nicht anmelden. Ist das WLAN-Passwort richtig?',
-  'wifi_not_found' =>
+    'The camera could not sign in. Is the Wi-Fi password right?',
+  ),
+  'wifi_not_found' => tr(
     'Die Kamera hat das WLAN nicht gefunden. Steht sie in Reichweite?',
-  'no_internet' => 'Die Kamera ist im WLAN, kommt aber nicht ins Internet.',
-  _ => 'Die Kamera konnte sich nicht verbinden ($code).',
+    'The camera did not find the Wi-Fi. Is it within range?',
+  ),
+  'no_internet' => tr(
+    'Die Kamera ist im WLAN, kommt aber nicht ins Internet.',
+    'The camera is on the Wi-Fi but cannot reach the internet.',
+  ),
+  _ => tr(
+    'Die Kamera konnte sich nicht verbinden ($code).',
+    'The camera could not connect ($code).',
+  ),
 };
 
 /// The address answers, but not as a set-up allskyhub camera (404 on `/api/setup`: another

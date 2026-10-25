@@ -5,6 +5,7 @@ import '../api/discovery.dart';
 import '../api/hub_client.dart';
 import '../api/setup_mode.dart';
 import '../api/test_update.dart';
+import '../l10n.dart';
 import '../platform/location.dart';
 import '../platform/wifi_binding.dart';
 import 'account_screen.dart';
@@ -66,19 +67,31 @@ class _CamerasScreenState extends State<CamerasScreen> {
           children: [
             ListTile(
               leading: const Icon(Icons.add_circle_outline),
-              title: const Text('Neue Kamera einrichten'),
-              subtitle: const Text('Über das WLAN „allskyhub-…“ der Kamera'),
+              title: Text(tr('Neue Kamera einrichten', 'Set up a new camera')),
+              subtitle: Text(
+                tr(
+                  'Über das WLAN „allskyhub-…“ der Kamera',
+                  "Through the camera's Wi-Fi “allskyhub-…”",
+                ),
+              ),
               onTap: () => Navigator.pop(context, _PairWay.setupMode),
             ),
             ListTile(
               leading: const Icon(Icons.wifi),
-              title: const Text('Kamera ist schon im WLAN'),
-              subtitle: const Text('Die App holt sich den Code von der Kamera'),
+              title: Text(
+                tr('Kamera ist schon im WLAN', 'Camera is already on Wi-Fi'),
+              ),
+              subtitle: Text(
+                tr(
+                  'Die App holt sich den Code von der Kamera',
+                  'The app gets the code from the camera',
+                ),
+              ),
               onTap: () => Navigator.pop(context, _PairWay.lan),
             ),
             ListTile(
               leading: const Icon(Icons.pin),
-              title: const Text('Code eingeben'),
+              title: Text(tr('Code eingeben', 'Enter code')),
               onTap: () => Navigator.pop(context, _PairWay.code),
             ),
           ],
@@ -109,10 +122,10 @@ class _CamerasScreenState extends State<CamerasScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Meine Kameras'),
+        title: Text(tr('Meine Kameras', 'My cameras')),
         actions: [
           IconButton(
-            tooltip: 'Konto',
+            tooltip: tr('Konto', 'Account'),
             icon: const Icon(Icons.person_outline),
             onPressed: () => Navigator.of(context).push(
               MaterialPageRoute<void>(
@@ -124,7 +137,7 @@ class _CamerasScreenState extends State<CamerasScreen> {
             ),
           ),
           IconButton(
-            tooltip: 'Abmelden',
+            tooltip: tr('Abmelden', 'Sign out'),
             icon: const Icon(Icons.logout),
             onPressed: widget.onSignOut,
           ),
@@ -133,7 +146,7 @@ class _CamerasScreenState extends State<CamerasScreen> {
       floatingActionButton: FloatingActionButton.extended(
         onPressed: _pair,
         icon: const Icon(Icons.add),
-        label: const Text('Kamera koppeln'),
+        label: Text(tr('Kamera koppeln', 'Pair camera')),
       ),
       body: Column(
         children: [
@@ -158,7 +171,10 @@ class _CamerasScreenState extends State<CamerasScreen> {
               );
             }
             return _Message(
-              'Kameras konnten nicht geladen werden.',
+              tr(
+                'Kameras konnten nicht geladen werden.',
+                'Could not load the cameras.',
+              ),
               onRetry: _reload,
             );
           }
@@ -167,8 +183,11 @@ class _CamerasScreenState extends State<CamerasScreen> {
             return const Center(child: CircularProgressIndicator());
           }
           if (cameras.isEmpty) {
-            return const _Message(
-              'Noch keine Kamera gekoppelt. Schalte deine Kamera ein und tippe auf „Kamera koppeln“.',
+            return _Message(
+              tr(
+                'Noch keine Kamera gekoppelt. Schalte deine Kamera ein und tippe auf „Kamera koppeln“.',
+                'No camera paired yet. Switch your camera on and tap “Pair camera”.',
+              ),
             );
           }
           return ListView.separated(
@@ -247,7 +266,7 @@ class _CameraCard extends StatelessWidget {
                   children: [
                     TextButton.icon(
                       icon: const Icon(Icons.photo_library_outlined),
-                      label: const Text('Galerie'),
+                      label: Text(tr('Galerie', 'Gallery')),
                       onPressed: () => Navigator.of(context).push(
                         MaterialPageRoute<void>(
                           builder: (_) =>
@@ -257,7 +276,7 @@ class _CameraCard extends StatelessWidget {
                     ),
                     TextButton.icon(
                       icon: const Icon(Icons.auto_awesome),
-                      label: const Text('Ereignisse'),
+                      label: Text(tr('Ereignisse', 'Events')),
                       onPressed: () => Navigator.of(context).push(
                         MaterialPageRoute<void>(
                           builder: (_) =>
@@ -293,7 +312,7 @@ class _Message extends StatelessWidget {
           Center(
             child: TextButton(
               onPressed: onRetry,
-              child: const Text('Erneut versuchen'),
+              child: Text(tr('Erneut versuchen', 'Try again')),
             ),
           ),
       ],
@@ -318,14 +337,22 @@ class _UpdateBanner extends StatelessWidget {
           Icons.system_update,
           color: Theme.of(context).colorScheme.tertiary,
         ),
-        title: Text('Neue Testversion: Build ${update.build}'),
-        subtitle: const Text(
-          'Lädt die App im Browser; danach „Installieren“ antippen.',
+        title: Text(
+          tr(
+            'Neue Testversion: Build ${update.build}',
+            'New test version: build ${update.build}',
+          ),
+        ),
+        subtitle: Text(
+          tr(
+            'Lädt die App im Browser; danach „Installieren“ antippen.',
+            'Downloads the app in the browser; then tap “Install”.',
+          ),
         ),
         trailing: FilledButton(
           onPressed: () =>
               launchUrl(update.apk, mode: LaunchMode.externalApplication),
-          child: const Text('Laden'),
+          child: Text(tr('Laden', 'Download')),
         ),
       ),
     );

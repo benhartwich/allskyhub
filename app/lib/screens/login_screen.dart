@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../api/hub_client.dart';
+import '../l10n.dart';
 import '../main.dart';
 
 class LoginScreen extends StatefulWidget {
@@ -49,11 +50,22 @@ class _LoginScreenState extends State<LoginScreen> {
     } on HubException catch (e) {
       setState(
         () => _error = e.unauthorized
-            ? 'E-Mail-Adresse oder Passwort ist falsch.'
-            : 'Anmeldung fehlgeschlagen (${e.statusCode}).',
+            ? tr(
+                'E-Mail-Adresse oder Passwort ist falsch.',
+                'Wrong email address or password.',
+              )
+            : tr(
+                'Anmeldung fehlgeschlagen (${e.statusCode}).',
+                'Sign-in failed (${e.statusCode}).',
+              ),
       );
     } on Exception {
-      setState(() => _error = 'Der Hub ist nicht erreichbar.');
+      setState(
+        () => _error = tr(
+          'Der Hub ist nicht erreichbar.',
+          'Cannot reach the hub.',
+        ),
+      );
     } finally {
       if (mounted) setState(() => _busy = false);
     }
@@ -77,8 +89,11 @@ class _LoginScreenState extends State<LoginScreen> {
                       style: Theme.of(context).textTheme.headlineMedium,
                     ),
                     const SizedBox(height: 8),
-                    const Text(
-                      'Melde dich an, um deine Allsky-Kamera zu koppeln und ihre Bilder zu sehen.',
+                    Text(
+                      tr(
+                        'Melde dich an, um deine Allsky-Kamera zu koppeln und ihre Bilder zu sehen.',
+                        'Sign in to pair your all-sky camera and see its pictures.',
+                      ),
                     ),
                     const SizedBox(height: 24),
                     TextField(
@@ -86,8 +101,8 @@ class _LoginScreenState extends State<LoginScreen> {
                       controller: _email,
                       keyboardType: TextInputType.emailAddress,
                       autofillHints: const [AutofillHints.email],
-                      decoration: const InputDecoration(
-                        labelText: 'E-Mail-Adresse',
+                      decoration: InputDecoration(
+                        labelText: tr('E-Mail-Adresse', 'Email address'),
                       ),
                     ),
                     const SizedBox(height: 12),
@@ -96,7 +111,9 @@ class _LoginScreenState extends State<LoginScreen> {
                       controller: _password,
                       obscureText: true,
                       autofillHints: const [AutofillHints.password],
-                      decoration: const InputDecoration(labelText: 'Passwort'),
+                      decoration: InputDecoration(
+                        labelText: tr('Passwort', 'Password'),
+                      ),
                       onSubmitted: (_) => _submit(),
                     ),
                     if (_ownHub) ...[
@@ -105,8 +122,8 @@ class _LoginScreenState extends State<LoginScreen> {
                         key: const Key('hub'),
                         controller: _hub,
                         keyboardType: TextInputType.url,
-                        decoration: const InputDecoration(
-                          labelText: 'Hub-Adresse',
+                        decoration: InputDecoration(
+                          labelText: tr('Hub-Adresse', 'Hub address'),
                         ),
                       ),
                     ],
@@ -122,12 +139,18 @@ class _LoginScreenState extends State<LoginScreen> {
                     const SizedBox(height: 20),
                     FilledButton(
                       onPressed: _busy ? null : _submit,
-                      child: Text(_busy ? 'Anmelden …' : 'Anmelden'),
+                      child: Text(
+                        _busy
+                            ? tr('Anmelden …', 'Signing in …')
+                            : tr('Anmelden', 'Sign in'),
+                      ),
                     ),
                     TextButton(
                       onPressed: () => setState(() => _ownHub = !_ownHub),
                       child: Text(
-                        _ownHub ? 'allskyhub.org verwenden' : 'Eigener Hub',
+                        _ownHub
+                            ? tr('allskyhub.org verwenden', 'Use allskyhub.org')
+                            : tr('Eigener Hub', 'Own hub'),
                       ),
                     ),
                   ],

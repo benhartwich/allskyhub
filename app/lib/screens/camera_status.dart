@@ -1,14 +1,22 @@
 // The camera's status as label/value rows (SPEC §6.3 `status`, §4.4 `frame`).
 
-/// "gerade eben", "vor 3 Min.", "vor 2 Std.", "vor 4 Tagen".
+import '../l10n.dart';
+
+/// "gerade eben", "vor 3 Min.", "vor 2 Std.", "vor 4 Tagen" ("just now", "3 min ago" …).
 String formatAge(DateTime? time, {DateTime? now}) {
-  if (time == null) return 'nie';
+  if (time == null) return tr('nie', 'never');
   final seconds = (now ?? DateTime.now()).difference(time).inSeconds;
-  if (seconds < 60) return 'gerade eben';
-  if (seconds < 3600) return 'vor ${seconds ~/ 60} Min.';
-  if (seconds < 86400) return 'vor ${seconds ~/ 3600} Std.';
+  if (seconds < 60) return tr('gerade eben', 'just now');
+  if (seconds < 3600) {
+    return tr('vor ${seconds ~/ 60} Min.', '${seconds ~/ 60} min ago');
+  }
+  if (seconds < 86400) {
+    return tr('vor ${seconds ~/ 3600} Std.', '${seconds ~/ 3600} h ago');
+  }
   final days = seconds ~/ 86400;
-  return days == 1 ? 'vor 1 Tag' : 'vor $days Tagen';
+  return days == 1
+      ? tr('vor 1 Tag', '1 day ago')
+      : tr('vor $days Tagen', '$days days ago');
 }
 
 /// Exposure in seconds, or milliseconds for short daytime exposures.
@@ -35,33 +43,54 @@ List<StatusRow> statusRows({
   DateTime? now,
 }) {
   final rows = <StatusRow>[
-    StatusRow('Zuletzt gesehen', formatAge(lastSeen, now: now)),
+    StatusRow(
+      tr('Zuletzt gesehen', 'Last seen'),
+      formatAge(lastSeen, now: now),
+    ),
   ];
   if (status['capture_paused'] == true) {
     // SPEC §4.1: paused in the camera's local page.
-    rows.add(const StatusRow('Aufnahme', 'pausiert', warning: true));
+    rows.add(
+      StatusRow(
+        tr('Aufnahme', 'Capture'),
+        tr('pausiert', 'paused'),
+        warning: true,
+      ),
+    );
   }
   if (status['reboot_required'] == true) {
     // SPEC §8: system updates wait; the camera reboots by day on its own.
-    rows.add(const StatusRow('Neustart', 'tagsüber für Updates'));
+    rows.add(
+      StatusRow(
+        tr('Neustart', 'Restart'),
+        tr('tagsüber für Updates', 'by day, for updates'),
+      ),
+    );
   }
   final mode = status['mode'];
   if (mode is String) {
-    rows.add(StatusRow('Modus', mode == 'night' ? 'Nacht' : 'Tag'));
+    rows.add(
+      StatusRow(
+        tr('Modus', 'Mode'),
+        mode == 'night' ? tr('Nacht', 'Night') : tr('Tag', 'Day'),
+      ),
+    );
   }
   final exposure = status['exposure_us'];
   final gain = status['gain'];
   if (exposure is num) {
     rows.add(
       StatusRow(
-        'Belichtung',
+        tr('Belichtung', 'Exposure'),
         '${formatExposure(exposure)}${gain is num ? ', Gain ${gain.round()}' : ''}',
       ),
     );
   }
   final sun = frame['sun_elevation'];
   if (sun is num) {
-    rows.add(StatusRow('Sonnenhöhe', '${sun.toStringAsFixed(1)}°'));
+    rows.add(
+      StatusRow(tr('Sonnenhöhe', 'Sun altitude'), '${sun.toStringAsFixed(1)}°'),
+    );
   }
   final sensor = status['sensor_temp_c'];
   if (sensor is num) {
@@ -71,7 +100,7 @@ List<StatusRow> statusRows({
   if (cpu is num) {
     rows.add(
       StatusRow(
-        'Prozessor',
+        tr('Prozessor', 'Processor'),
         '${cpu.toStringAsFixed(1)} °C',
         warning: cpu >= 80,
       ),
@@ -80,7 +109,11 @@ List<StatusRow> statusRows({
   final disk = status['disk_free_pct'];
   if (disk is num) {
     rows.add(
-      StatusRow('Speicher frei', '${disk.round()} %', warning: disk < 10),
+      StatusRow(
+        tr('Speicher frei', 'Free storage'),
+        '${disk.round()} %',
+        warning: disk < 10,
+      ),
     );
   }
   final uptime = status['uptime_s'];
@@ -88,8 +121,10 @@ List<StatusRow> statusRows({
     final hours = uptime ~/ 3600;
     rows.add(
       StatusRow(
-        'Laufzeit',
-        hours >= 48 ? '${hours ~/ 24} Tage' : '$hours Std.',
+        tr('Laufzeit', 'Uptime'),
+        hours >= 48
+            ? tr('${hours ~/ 24} Tage', '${hours ~/ 24} days')
+            : tr('$hours Std.', '$hours h'),
       ),
     );
   }
@@ -100,10 +135,10 @@ List<StatusRow> statusRows({
     final rms = orientation['rms_deg'];
     rows.add(
       StatusRow(
-        'Ausrichtung',
-        'Norden bei $north°'
-            '${stars is int ? ' · $stars Sterne' : ''}'
-            '${rms is num ? ' · ±${rms.toStringAsFixed(1).replaceAll('.', ',')}°' : ''}',
+        tr('Ausrichtung', 'Orientation'),
+        '${tr('Norden bei $north°', 'North at $north°')}'
+        '${stars is int ? tr(' · $stars Sterne', ' · $stars stars') : ''}'
+        '${rms is num ? ' · ±${decimal(rms, 1)}°' : ''}',
       ),
     );
   }
@@ -115,32 +150,47 @@ List<StatusRow> statusRows({
     }
   }
   if (status['time_trusted'] == false) {
-    rows.add(const StatusRow('Uhrzeit', 'nicht synchronisiert', warning: true));
+    rows.add(
+      StatusRow(
+        tr('Uhrzeit', 'Clock'),
+        tr('nicht synchronisiert', 'not synchronized'),
+        warning: true,
+      ),
+    );
   }
   return rows;
 }
 
-const _updateStates = {
-  'up_to_date': 'aktuell',
-  'downloading': 'Update {v} wird geladen',
-  'waiting': 'Update {v} geladen, wird tagsüber installiert',
-  'installing': 'Update {v} wird installiert',
-  'installed': 'Update {v} installiert',
-  'rolled_back': 'Update {v} zurückgerollt',
-  'failed': 'Update {v} fehlgeschlagen',
+Map<String, String> get _updateStates => {
+  'up_to_date': tr('aktuell', 'up to date'),
+  'downloading': tr('Update {v} wird geladen', 'Downloading update {v}'),
+  'waiting': tr(
+    'Update {v} geladen, wird tagsüber installiert',
+    'Update {v} downloaded, installs by day',
+  ),
+  'installing': tr('Update {v} wird installiert', 'Installing update {v}'),
+  'installed': tr('Update {v} installiert', 'Update {v} installed'),
+  'rolled_back': tr('Update {v} zurückgerollt', 'Update {v} rolled back'),
+  'failed': tr('Update {v} fehlgeschlagen', 'Update {v} failed'),
 };
 
-const _updateCodes = {
-  'unhealthy': 'die neue Version lief nicht sauber',
-  'checksum': 'Prüfsumme falsch',
-  'download': 'Download fehlgeschlagen',
-  'bad_bundle': 'Paket beschädigt',
-  'bad_signature': 'Signatur ungültig',
-  'bad_manifest': 'Update-Beschreibung ungültig',
-  'no_space': 'zu wenig Speicher',
+Map<String, String> get _updateCodes => {
+  'unhealthy': tr(
+    'die neue Version lief nicht sauber',
+    'the new version did not run cleanly',
+  ),
+  'checksum': tr('Prüfsumme falsch', 'wrong checksum'),
+  'download': tr('Download fehlgeschlagen', 'download failed'),
+  'bad_bundle': tr('Paket beschädigt', 'package damaged'),
+  'bad_signature': tr('Signatur ungültig', 'invalid signature'),
+  'bad_manifest': tr(
+    'Update-Beschreibung ungültig',
+    'invalid update description',
+  ),
+  'no_space': tr('zu wenig Speicher', 'not enough storage'),
 };
 
-/// Roadmap #7 `status.update`: German text and whether it is a warning.
+/// Roadmap #7 `status.update`: the text and whether it is a warning.
 (String, bool)? updateLine(Map<String, dynamic> update) {
   final state = update['state'];
   final template = state is String ? _updateStates[state] : null;

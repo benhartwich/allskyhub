@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../api/hub_client.dart';
 import '../api/settings_schema.dart';
+import '../l10n.dart';
 import '../platform/location.dart';
 
 String _num(Object? v) =>
@@ -90,7 +91,12 @@ class _CameraSettingsScreenState extends State<CameraSettingsScreen> {
     _controllers['latitude']!.text = location.latitude.toStringAsFixed(2);
     _controllers['longitude']!.text = location.longitude.toStringAsFixed(2);
     if (timezone != null) _controllers['timezone']?.text = timezone;
-    _show('Standort des Handys übernommen. Zum Senden „Speichern“ tippen.');
+    _show(
+      tr(
+        'Standort des Handys übernommen. Zum Senden „Speichern“ tippen.',
+        "Took the phone's location. Tap “Save” to send it.",
+      ),
+    );
   }
 
   Future<void> _save() async {
@@ -103,7 +109,7 @@ class _CameraSettingsScreenState extends State<CameraSettingsScreen> {
       return;
     }
     if (changes!.isEmpty) {
-      _show('Nichts geändert.');
+      _show(tr('Nichts geändert.', 'Nothing changed.'));
       return;
     }
     setState(() => _busy = true);
@@ -114,12 +120,18 @@ class _CameraSettingsScreenState extends State<CameraSettingsScreen> {
       }
       _input.clear.clear();
       _show(
-        'Gespeichert. Die Kamera startet die Aufnahme neu und meldet sich gleich wieder.',
+        tr(
+          'Gespeichert. Die Kamera startet die Aufnahme neu und meldet sich gleich wieder.',
+          'Saved. The camera restarts capturing and will be back in a moment.',
+        ),
       );
     } on HubException catch (e) {
       _show(e.message, error: true);
     } on Exception {
-      _show('Der Hub ist nicht erreichbar.', error: true);
+      _show(
+        tr('Der Hub ist nicht erreichbar.', 'Cannot reach the hub.'),
+        error: true,
+      );
     } finally {
       if (mounted) setState(() => _busy = false);
     }
@@ -136,13 +148,18 @@ class _CameraSettingsScreenState extends State<CameraSettingsScreen> {
               key: const Key('use-phone'),
               onPressed: _busy ? null : _usePhoneLocation,
               icon: const Icon(Icons.my_location),
-              label: const Text('Standort des Handys übernehmen'),
+              label: Text(
+                tr(
+                  'Standort des Handys übernehmen',
+                  "Use the phone's location",
+                ),
+              ),
             ),
             Row(
               children: [
                 for (final (key, label) in [
-                  ('latitude', 'Breite'),
-                  ('longitude', 'Länge'),
+                  ('latitude', tr('Breite', 'Latitude')),
+                  ('longitude', tr('Länge', 'Longitude')),
                 ]) ...[
                   Expanded(
                     child: TextField(
@@ -175,7 +192,7 @@ class _CameraSettingsScreenState extends State<CameraSettingsScreen> {
           key: Key(f.key),
           isExpanded: true,
           initialValue: _input.choices[f.key],
-          hint: const Text('unverändert'),
+          hint: Text(tr('unverändert', 'unchanged')),
           decoration: InputDecoration(labelText: f.label, helperText: help),
           items: [
             for (final (value, label) in f.choices)
@@ -209,8 +226,11 @@ class _CameraSettingsScreenState extends State<CameraSettingsScreen> {
                 counterText: '',
                 hintText: f.writeOnly
                     ? (isSet
-                          ? 'gesetzt – leer lassen zum Behalten'
-                          : 'nicht gesetzt')
+                          ? tr(
+                              'gesetzt – leer lassen zum Behalten',
+                              'set – leave empty to keep',
+                            )
+                          : tr('nicht gesetzt', 'not set'))
                     : null,
               ),
             ),
@@ -219,7 +239,7 @@ class _CameraSettingsScreenState extends State<CameraSettingsScreen> {
                 key: Key('${f.key}-clear'),
                 contentPadding: EdgeInsets.zero,
                 controlAffinity: ListTileControlAffinity.leading,
-                title: Text('${f.label} löschen'),
+                title: Text(tr('${f.label} löschen', 'Clear ${f.label}')),
                 value: _input.clear.contains(f.key),
                 onChanged: (on) => setState(
                   () => on == true
@@ -241,7 +261,14 @@ class _CameraSettingsScreenState extends State<CameraSettingsScreen> {
       groups.putIfAbsent(f.group, () => []).add(f);
     }
     return Scaffold(
-      appBar: AppBar(title: Text('Einstellungen · ${widget.camera.name}')),
+      appBar: AppBar(
+        title: Text(
+          tr(
+            'Einstellungen · ${widget.camera.name}',
+            'Settings · ${widget.camera.name}',
+          ),
+        ),
+      ),
       body: ListView(
         padding: const EdgeInsets.fromLTRB(16, 16, 16, 32),
         children: [
@@ -249,7 +276,10 @@ class _CameraSettingsScreenState extends State<CameraSettingsScreen> {
             Padding(
               padding: const EdgeInsets.only(bottom: 16),
               child: Text(
-                'Die Kamera ist offline. Einstellungen gehen nur, wenn sie verbunden ist.',
+                tr(
+                  'Die Kamera ist offline. Einstellungen gehen nur, wenn sie verbunden ist.',
+                  'The camera is offline. Settings only work while it is connected.',
+                ),
                 style: TextStyle(color: theme.colorScheme.error),
               ),
             ),
@@ -290,7 +320,7 @@ class _CameraSettingsScreenState extends State<CameraSettingsScreen> {
           FilledButton(
             key: const Key('save'),
             onPressed: _busy || !online ? null : _save,
-            child: const Text('Speichern'),
+            child: Text(tr('Speichern', 'Save')),
           ),
         ],
       ),

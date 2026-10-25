@@ -4,6 +4,8 @@
 import 'package:flutter_timezone/flutter_timezone.dart';
 import 'package:geolocator/geolocator.dart';
 
+import '../l10n.dart';
+
 /// Where the camera stands. Rounded to two decimals (about 1 km): enough for the sun.
 class CameraLocation {
   CameraLocation(double latitude, double longitude)
@@ -95,12 +97,20 @@ class PlatformLocationSource implements LocationSource {
 }
 
 String describeLocationProblem(LocationProblem problem) => switch (problem) {
-  LocationProblem.serviceOff =>
+  LocationProblem.serviceOff => tr(
     'Die Standortdienste des Handys sind aus. Schalte sie ein oder gib die Koordinaten ein.',
-  LocationProblem.denied =>
+    'The phone\'s location services are off. Turn them on or enter the coordinates.',
+  ),
+  LocationProblem.denied => tr(
     'Ohne Freigabe kennt die App den Standort nicht. Gib die Koordinaten der Kamera ein.',
-  LocationProblem.deniedForever =>
+    'Without permission the app does not know the location. Enter the camera\'s coordinates.',
+  ),
+  LocationProblem.deniedForever => tr(
     'Der Standortzugriff ist in den Einstellungen gesperrt. Gib die Koordinaten der Kamera ein.',
-  LocationProblem.failed =>
+    'Location access is blocked in the settings. Enter the camera\'s coordinates.',
+  ),
+  LocationProblem.failed => tr(
     'Der Standort konnte nicht bestimmt werden. Gib die Koordinaten der Kamera ein.',
+    'Could not determine the location. Enter the camera\'s coordinates.',
+  ),
 };

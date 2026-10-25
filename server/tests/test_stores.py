@@ -16,7 +16,7 @@ from cryptography.hazmat.primitives.asymmetric.utils import encode_dss_signature
 from cryptography.hazmat.primitives.serialization import pkcs12
 from fastapi import FastAPI
 
-from allskyhub_server.admin import stores
+from allskyhub_server.admin import appstore, stores
 from allskyhub_server.settings import Settings
 from tests.helpers import PASSWORD, csrf_from, make_account
 
@@ -597,3 +597,112 @@ async def test_a_failing_listing_push_says_so(tmp_path: Path) -> None:
         await asyncio.sleep(0.01)
     assert state
     assert state["steps"][0]["text"] == "Interner Fehler, siehe Log des Hubs."
+
+
+async def test_push_appstore(tmp_path: Path) -> None:
+    """Texts, screenshots and the build to App Store Connect (admin/appstore.py)."""
+    calls: list[tuple[str, str]] = []
+    created: dict[str, list[dict[str, Any]]] = {}
+    shots: dict[str, int] = {}
+
+    def answer(request: httpx.Request) -> httpx.Response:
+        path, method = request.url.path, request.method
+        calls.append((method, path))
+        if request.url.host == "upload.example":
+            return httpx.Response(200)
+        assert request.headers["authorization"].startswith("Bearer ")
+        body: Any = json.loads(request.content) if request.content else None
+        if method == "POST":
+            kind = path.rsplit("/", 1)[1]
+            created.setdefault(kind, []).append(body["data"]["attributes"])
+            n = len(created[kind])
+            data: dict[str, Any] = {"id": f"{kind}-{n}", "attributes": body["data"]["attributes"]}
+            if kind == "appScreenshots":
+                size = body["data"]["attributes"]["fileSize"]
+                data["attributes"] = {
+                    "uploadOperations": [
+                        {
+                            "method": "PUT",
+                            "url": f"https://upload.example/{n}",
+                            "offset": 0,
+                            "length": size,
+                            "requestHeaders": [{"name": "Content-Type", "value": "image/png"}],
+                        }
+                    ]
+                }
+            return httpx.Response(201, json={"data": data})
+        if method == "PATCH" and "/appScreenshots/" in path:
+            assert body["data"]["attributes"]["uploaded"] is True
+            assert len(body["data"]["attributes"]["sourceFileChecksum"]) == 32
+            shots[path] = 1
+        if method in ("PATCH", "DELETE"):
+            return httpx.Response(
+                204 if method == "DELETE" or "relationships" in path else 200, json={"data": {}}
+            )
+        found: list[dict[str, Any]] = []
+        if path == "/v1/apps":
+            assert request.url.params["filter[bundleId]"] == stores.PACKAGE
+            found = [{"id": "APP"}]
+        elif path.endswith("/appInfos"):
+            found = [{"id": "INFO", "attributes": {"appStoreState": "PREPARE_FOR_SUBMISSION"}}]
+        elif path.endswith("/appInfoLocalizations"):
+            found = [{"id": "INFO-DE", "attributes": {"locale": "de-DE"}}]
+        elif path.endswith("/appStoreVersions"):
+            found = [
+                {
+                    "id": "V1",
+                    "attributes": {
+                        "versionString": "1.0",
+                        "appVersionState": "PREPARE_FOR_SUBMISSION",
+                    },
+                }
+            ]
+        elif path.endswith("/appStoreVersionLocalizations"):
+            found = [{"id": "VL-DE", "attributes": {"locale": "de-DE"}}]
+        elif path.endswith("/appScreenshotSets"):
+            found = []
+        elif path.endswith("/appScreenshots"):
+            found = [{"id": "OLD"}]
+        elif path == "/v1/builds":
+            found = [
+                {"id": "B1", "attributes": {"version": "300", "usesNonExemptEncryption": None}}
+            ]
+        return httpx.Response(200, json={"data": found})
+
+    hub = stores.Stores(
+        tmp_path / "store",
+        "benhartwich/allskyhub",
+        httpx.AsyncClient(transport=httpx.MockTransport(answer)),
+    )
+    report = await appstore.push_report(hub)
+    assert [(s.title, s.state) for s in report.steps] == [("App Store", "warn")]  # no key yet
+
+    hub.vault.put("asc", *stores.parse_asc(_p8(), "2X9R4HXF34", ISSUER), by="a")
+    report = await appstore.push_report(hub)
+    assert [(s.title, s.state) for s in report.steps] == [
+        ("Name und Untertitel", "ok"),
+        ("Texte und Screenshots de-DE", "ok"),
+        ("Texte und Screenshots en-US", "ok"),
+        ("Build", "ok"),
+        ("Noch in App Store Connect", "warn"),
+    ], report.steps
+    # German existed and was changed; English was made.
+    assert ("PATCH", "/v1/appInfoLocalizations/INFO-DE") in calls
+    assert [a["locale"] for a in created["appInfoLocalizations"]] == ["en-US"]
+    assert created["appInfoLocalizations"][0]["name"] == "allskyhub – All-Sky Camera"
+    for a in [*created["appInfoLocalizations"]]:
+        assert len(a["name"]) <= 30
+        assert len(a["subtitle"]) <= 30
+    assert [a["locale"] for a in created["appStoreVersionLocalizations"]] == ["en-US"]
+    english = created["appStoreVersionLocalizations"][0]
+    assert len(english["keywords"]) <= 100
+    assert len(english["promotionalText"]) <= 170
+    assert "German for now" not in english["description"]
+    assert {a["screenshotDisplayType"] for a in created["appScreenshotSets"]} == {"APP_IPHONE_67"}
+    per_language = len(appstore.screenshots("de-DE"))
+    assert per_language >= 3
+    assert len(created["appScreenshots"]) == len(shots) == 2 * per_language
+    assert calls.count(("DELETE", "/v1/appScreenshots/OLD")) == 2
+    assert ("PATCH", "/v1/builds/B1") in calls  # export compliance answered
+    assert ("PATCH", "/v1/appStoreVersions/V1/relationships/build") in calls
+    assert "appStoreVersions" not in created  # Apple's own 1.0 is used

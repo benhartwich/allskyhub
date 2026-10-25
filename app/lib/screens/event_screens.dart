@@ -234,6 +234,23 @@ List<(String, String)> eventRows(SkyEvent event) {
       '${altitude.round()}°',
     ));
   }
+  // SPEC §6.4: where a trail starts and ends on the sky (calibrated cameras).
+  for (final (key, de, en) in const [
+    ('start', 'Anfang', 'Start'),
+    ('end', 'Ende', 'End'),
+  ]) {
+    final alt = data.remove('${key}_altitude_deg');
+    final az = data.remove('${key}_azimuth_deg');
+    if (alt is num && az is num) {
+      rows.add((
+        tr(de, en),
+        tr(
+          '${alt.round()}° hoch, ${compassPoint(az)} (${az.round() % 360}°)',
+          '${alt.round()}° up, ${compassPoint(az)} (${az.round() % 360}°)',
+        ),
+      ));
+    }
+  }
   for (final entry in data.entries) {
     if (entry.value != null) rows.add((entry.key, '${entry.value}'));
   }

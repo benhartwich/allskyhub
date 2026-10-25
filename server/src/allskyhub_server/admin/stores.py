@@ -432,7 +432,13 @@ class Stores:
         self.release_out = release_out or RELEASE_OUT
         self.listing = LISTING
         self._listing_task: asyncio.Task[Report] | None = None
+        self.jobs: dict[str, asyncio.Task[Report]] = {}  # background pushes (appstore.py)
         self.screenshot_dir = root / "screenshots"
+
+    @property
+    def client(self) -> httpx.AsyncClient | None:
+        """The client given for tests, else None (each call makes its own)."""
+        return self._client
 
     def _http(self) -> httpx.AsyncClient:
         return self._client or httpx.AsyncClient(timeout=TIMEOUT)
@@ -508,7 +514,7 @@ class Stores:
 
     # App Store Connect
 
-    def _asc_auth(self) -> dict[str, str]:
+    def asc_auth(self) -> dict[str, str]:
         meta = self.vault.meta("asc") or {}
         now = int(time.time())
         token = jwt_es256(
@@ -523,7 +529,7 @@ class Stores:
         if not self.vault.has("asc"):
             report.add(title, "warn", "Noch nicht hochgeladen.")
             return
-        auth = self._asc_auth()
+        auth = self.asc_auth()
         r = await client.get(
             f"{ASC}/bundleIds", params={"filter[identifier]": PACKAGE}, headers=auth
         )
@@ -865,10 +871,12 @@ class Stores:
 
     # Store listing
 
-    def screenshots(self) -> list[Path]:
+    def screenshots(self, language: str | None = None) -> list[Path]:
         """The uploaded phone screenshots, else the repository's (made from the app with
-        sample data, app/test/store)."""
-        for folder in (self.screenshot_dir, self.listing / "screenshots"):
+        sample data, app/test/store): the language's own (``<language>/screenshots``), else
+        the shared ones."""
+        own = [self.listing / language / "screenshots"] if language else []
+        for folder in (self.screenshot_dir, *own, self.listing / "screenshots"):
             if folder.is_dir():
                 found = sorted(p for p in folder.iterdir() if p.suffix in (".png", ".jpg"))
                 if found:
@@ -982,8 +990,8 @@ class Stores:
         r = await client.put(f"{edit}/details", json=details, headers=auth)
         if r.status_code != 200:
             raise StoreError(f"Kontaktdaten abgelehnt ({_message(r)}).")
-        shots = self.screenshots()
         for language in LANGUAGES:
+            shots = self.screenshots(language)
             texts = self.listing_texts(language)
             r = await client.put(f"{edit}/listings/{language}", json=texts, headers=auth)
             if r.status_code != 200:
@@ -1017,7 +1025,7 @@ class Stores:
         r = await client.post(f"{edit}:commit", headers=auth)
         if r.status_code != 200:
             raise StoreError(f"Abschließen abgelehnt ({_message(r)}).")
-        if len(shots) < SCREENSHOTS[0]:
+        if any(len(self.screenshots(lang)) < SCREENSHOTS[0] for lang in LANGUAGES):
             report.add(
                 "Screenshots",
                 "warn",

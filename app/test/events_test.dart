@@ -103,6 +103,22 @@ void main() {
     expect(rows['extra'], '7');
   });
 
+  test('where a trail starts and ends on the sky (SPEC §6.4)', () {
+    final json = meteorJson('meteor-20261008T214512Z', '2026-10-08T21:45:12Z');
+    (json['data'] as Map<String, Object>).addAll(<String, Object>{
+      'start_altitude_deg': 62.0,
+      'start_azimuth_deg': 70.0,
+      'end_altitude_deg': 38.0,
+      'end_azimuth_deg': 30.0,
+    });
+    final rows = {
+      for (final (l, v) in eventRows(SkyEvent.fromJson(json))) l: v,
+    };
+    expect(rows['Anfang'], '62° hoch, O (70°)');
+    expect(rows['Ende'], '38° hoch, NO (30°)');
+    expect(rows.keys.where((k) => k.contains('_deg')), isEmpty);
+  });
+
   test('shower by shower_match (SPEC §6.4)', () {
     expect(
       showerText({'shower': 'Perseids', 'shower_match': 'radiant'}),

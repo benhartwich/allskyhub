@@ -5,8 +5,10 @@
 //   flutter test test/store --update-goldens --dart-define=STORE_SCREENSHOTS=true
 //
 // They land in test/store/shots/; copy them to store/play/screenshots/ for the listing.
-// With --dart-define=STORE_LANG=en the app speaks English and they land in
-// test/store/shots-en/, for store/play/en-US/screenshots/.
+// With --dart-define=STORE_LANG=en the app (and the sample hub) speaks English and they
+// land in test/store/shots-en/, for store/play/en-US/screenshots/. With
+// --dart-define=STORE_DEVICE=iphone they are 1290 × 2796 for the App Store and land in
+// test/store/shots-iphone(-en)/, for store/appstore/screenshots/<language>/.
 // The fonts come from the Flutter SDK (Roboto, Material icons) and, for symbols Roboto
 // lacks, DejaVu Sans where the system has it (the flutter container does).
 
@@ -32,7 +34,10 @@ import 'package:http/testing.dart';
 
 const _run = bool.fromEnvironment('STORE_SCREENSHOTS');
 const _english = String.fromEnvironment('STORE_LANG') == 'en';
-const _size = Size(1080, 2160); // 2:1, the longest Google Play takes
+const _iphone = String.fromEnvironment('STORE_DEVICE') == 'iphone';
+const _out = 'shots${_iphone ? '-iphone' : ''}${_english ? '-en' : ''}';
+// 2:1, the longest Google Play takes; the iPhone size Apple asks for (6.7" and 6.9").
+const _size = _iphone ? Size(1290, 2796) : Size(1080, 2160);
 const _ratio = 3.0;
 final _here = Directory('test/store');
 
@@ -74,8 +79,12 @@ Map<String, dynamic> _camera(String id, String name, {bool owner = true}) => {
 };
 
 final _cameras = [
-  _camera('sternwarte0000000000000000', 'Sternwarte'),
-  _camera('garten00000000000000000000', 'Garten am See', owner: false),
+  _camera('sternwarte0000000000000000', tr('Sternwarte', 'Observatory')),
+  _camera(
+    'garten00000000000000000000',
+    tr('Garten am See', 'Garden by the lake'),
+    owner: false,
+  ),
 ];
 
 Map<String, dynamic> _meteor(String id, String start, String shower) => {
@@ -106,7 +115,10 @@ final _overview = {
   'online': true,
   'health': <Object>[],
   'tonight': {
-    'summary': 'Klar und dunkel von 20:10 bis 05:40 Uhr.',
+    'summary': tr(
+      'Klar und dunkel von 20:10 bis 05:40 Uhr.',
+      'Clear and dark from 20:10 to 05:40.',
+    ),
     'sunset': '2026-10-14T16:31:00Z',
     'dusk': '2026-10-14T18:10:00Z',
     'dawn': '2026-10-15T03:43:00Z',
@@ -114,7 +126,7 @@ final _overview = {
     'moonrise': '2026-10-15T03:58:00Z',
     'moonset': null,
     'moon_illumination': 0.08,
-    'moon_phase': 'abnehmende Sichel',
+    'moon_phase': tr('abnehmende Sichel', 'waning crescent'),
     'best_start': '2026-10-14T18:10:00Z',
     'best_end': '2026-10-15T03:40:00Z',
     'hours': [
@@ -129,13 +141,13 @@ final _overview = {
   },
   'nowcast': {
     'cover': 0.04,
-    'summary': 'Bleibt klar.',
-    'wind': 'Wind aus Nordost, 8 km/h',
+    'summary': tr('Bleibt klar.', 'Stays clear.'),
+    'wind': tr('Wind aus Nordost, 8 km/h', 'Wind from the northeast, 8 km/h'),
     'steps': <Object>[],
   },
   'last_night': {
     'night_id': '20261013',
-    'line': '7 Meteore, 9 h klar',
+    'line': tr('7 Meteore, 9 h klar', '7 meteors, 9 h clear'),
     'meteors': 7,
     'clear_hours': 9.0,
     'best_sqm': 21.4,
@@ -278,7 +290,7 @@ HubClient _hub() => HubClient(
         _meteor('meteor-20261014T223012Z', '2026-10-14T22:30:12Z', ''),
       ];
     } else if (path.endsWith('/sky-view')) {
-      body = jsonDecode(File('${_here.path}/sky_view.json').readAsStringSync());
+      body = _skyView();
     } else if (path.endsWith('/series')) {
       body = _series();
     } else if (path.endsWith('/sky')) {
@@ -510,16 +522,16 @@ Future<void> _shot(
   await tester.pump(const Duration(milliseconds: 300));
   await expectLater(
     find.byType(MaterialApp),
-    matchesGoldenFile('${_english ? 'shots-en' : 'shots'}/$name.png'),
+    matchesGoldenFile('$_out/$name.png'),
   );
   await tester.pumpWidget(const SizedBox()); // stops timers
   await tester.pump(const Duration(seconds: 5));
 }
 
 void main() {
+  appEnglish = _english; // before the sample data below is built
   setUpAll(() async {
     if (!_run) return;
-    appEnglish = _english;
     HttpOverrides.global = _Pictures();
     await _fonts();
   });
@@ -588,4 +600,34 @@ void main() {
       ),
     );
   });
+}
+
+/// The sample sky view; in English with the names the hub sends then (Latin
+/// constellations, English planets and moon).
+Object? _skyView() {
+  final view =
+      jsonDecode(File('${_here.path}/sky_view.json').readAsStringSync())
+          as Map<String, dynamic>;
+  if (!_english) return view;
+  final data =
+      jsonDecode(
+            File(
+              '../packages/sky/src/allskyhub_sky/data/constellations.json',
+            ).readAsStringSync(),
+          )
+          as Map<String, dynamic>;
+  final names = data['names'] as Map<String, dynamic>;
+  final latin = data['latin'] as Map<String, dynamic>;
+  final english = <String, String>{
+    for (final key in names.keys)
+      (names[key] as List<dynamic>).first as String: latin[key] as String,
+    'Merkur': 'Mercury',
+    'Neptun': 'Neptune',
+    'Mond': 'Moon',
+  };
+  for (final o in view['objects'] as List<dynamic>) {
+    final item = o as Map<String, dynamic>;
+    item['label'] = english[item['label']] ?? item['label'];
+  }
+  return view;
 }

@@ -653,6 +653,11 @@ async def test_push_appstore(tmp_path: Path) -> None:
         if method == "PATCH" and path == "/v1/betaAppReviewDetails/APP":
             # Only what the beta details lack; their own contact e-mail stays.
             beta_contact.append(body["data"]["attributes"])
+            if version_state[0] == "REJECTED":
+                detail = "'s3cret-pass' is not a valid value for 'demoAccountPassword'"
+                return httpx.Response(
+                    422, json={"errors": [{"code": "ENTITY_ERROR", "detail": detail}]}
+                )
         if method == "PATCH" and "/appScreenshots/" in path:
             assert body["data"]["attributes"]["uploaded"] is True
             assert len(body["data"]["attributes"]["sourceFileChecksum"]) == 32
@@ -781,4 +786,12 @@ async def test_push_appstore(tmp_path: Path) -> None:
         "demoAccountRequired": True,
     }
     assert len(beta_contact) == 2
+    assert all("s3cret" not in s.text for s in report.steps)
+
+    # Apple refusing a copied value: its answer may quote it, so the report does not.
+    version_state[0] = "REJECTED"
+    report = await appstore.push_report(hub)
+    step = next(s for s in report.steps if s.title == "TestFlight-Prüfung")
+    assert step.state == "warn"
+    assert "HTTP 422" in step.text
     assert all("s3cret" not in s.text for s in report.steps)

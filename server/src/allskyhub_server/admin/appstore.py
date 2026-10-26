@@ -527,7 +527,15 @@ async def _beta_contact(api: _Api, app_id: str, version: str) -> None:
     if not missing or not beta.get("id"):
         return
     body = {"data": {"type": "betaAppReviewDetails", "id": beta["id"], "attributes": missing}}
-    await api.call("PATCH", f"/betaAppReviewDetails/{beta['id']}", "Beta-Prüfkontakt", body=body)
+    r = await api.client.request(
+        "PATCH", f"{ASC}/betaAppReviewDetails/{beta['id']}", json=body, headers=api.auth()
+    )
+    if r.status_code >= 300:
+        # Not Apple's text: it can quote the refused value (a phone number, the password).
+        raise StoreError(
+            f"Beta-Prüfkontakt: Apple lehnt ab (HTTP {r.status_code}), bitte in TestFlight → "
+            "Testinformationen prüfen."
+        )
 
 
 async def _screenshots(api: _Api, localization: str, shots: list[Path], locale: str) -> None:

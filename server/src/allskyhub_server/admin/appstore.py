@@ -493,6 +493,13 @@ async def _beta_review(
     try:
         await api.call("POST", "/betaAppReviewSubmissions", "Beta-Prüfung", body=body)
     except StoreError as exc:
+        if "already in beta review" in str(exc):
+            # One build per version at a time; once that one is through, later builds of
+            # the same version usually pass without a full review.
+            return (
+                "Ein früherer Build ist noch in der Beta-Prüfung; der Link gilt nach dessen "
+                "Freigabe. Danach noch einmal übertragen, dann kommt dieser Build nach."
+            )
         raise StoreError(
             f"{exc} Unter TestFlight → Testinformationen Kontakt und Testkonto eintragen, "
             "dann noch einmal übertragen."

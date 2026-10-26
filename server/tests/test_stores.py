@@ -604,6 +604,7 @@ async def test_push_appstore(tmp_path: Path) -> None:
     calls: list[tuple[str, str]] = []
     created: dict[str, list[dict[str, Any]]] = {}
     shots: dict[str, int] = {}
+    version_state = ["PREPARE_FOR_SUBMISSION"]
 
     def answer(request: httpx.Request) -> httpx.Response:
         path, method = request.url.path, request.method
@@ -670,7 +671,7 @@ async def test_push_appstore(tmp_path: Path) -> None:
                     "id": "V1",
                     "attributes": {
                         "versionString": "1.0",
-                        "appVersionState": "PREPARE_FOR_SUBMISSION",
+                        "appVersionState": version_state[0],
                     },
                 }
             ]
@@ -737,3 +738,22 @@ async def test_push_appstore(tmp_path: Path) -> None:
     assert ("PATCH", "/v1/builds/B1") in calls  # export compliance answered
     assert ("PATCH", "/v1/appStoreVersions/V1/relationships/build") in calls
     assert "appStoreVersions" not in created  # Apple's own 1.0 is used
+
+    # While Apple reviews 1.0 it stays as it is (no new version: Apple says 409), but the
+    # build still goes to the public TestFlight group.
+    version_state[0] = "WAITING_FOR_REVIEW"
+    calls.clear()
+    report = await appstore.push_report(hub)
+    assert [(s.title, s.state) for s in report.steps] == [
+        ("Name und Untertitel", "ok"),
+        ("Kategorie", "ok"),
+        ("Altersfreigabe", "ok"),
+        ("Version", "warn"),
+        ("Build", "ok"),
+        ("TestFlight-Link", "ok"),
+        ("TestFlight-Prüfung", "ok"),
+        ("Noch in App Store Connect", "warn"),
+    ], report.steps
+    assert "appStoreVersions" not in created
+    assert not [c for c in calls if "appStoreVersion" in c[1] and c[0] != "GET"]
+    assert ("POST", "/v1/betaGroups/betaGroups-2/relationships/builds") in calls

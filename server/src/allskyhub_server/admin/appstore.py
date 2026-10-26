@@ -47,6 +47,13 @@ PRIVACY_URL = "https://allskyhub.org/datenschutz"
 EDITABLE = frozenset(
     {"PREPARE_FOR_SUBMISSION", "DEVELOPER_REJECTED", "REJECTED", "METADATA_REJECTED"}
 )
+# Versions Apple has finished with; after them a new version can be made.
+RELEASED = frozenset(
+    {
+        "READY_FOR_SALE", "READY_FOR_DISTRIBUTION", "REMOVED_FROM_SALE",
+        "DEVELOPER_REMOVED_FROM_SALE", "REPLACED_WITH_NEW_VERSION",
+    }
+)  # fmt: skip
 PRIMARY_CATEGORY = "WEATHER"
 SECONDARY_CATEGORY = "EDUCATION"  # astronomy
 _NONE = (
@@ -202,7 +209,17 @@ async def push(
         f"/apps/{app_id}/appStoreVersions", "Versionen", **{"filter[platform]": "IOS"}
     )
     version = next((v for v in versions if _state(v) in EDITABLE), None)
-    if version is None:
+    # A version Apple is reviewing (or that waits for release) stays as it is; a new one
+    # can only be made once the last one is out (Apple answers 409 otherwise).
+    busy = next((v for v in versions if _state(v) not in EDITABLE | RELEASED), None)
+    if version is None and busy is not None:
+        report.add(
+            "Version",
+            "warn",
+            f"Version {_dict(busy.get('attributes')).get('versionString', '')} ist bei Apple "
+            f"({_state(busy)}); Texte, Screenshots und Build bleiben dort unverändert.",
+        )
+    elif version is None:
         body = {
             "data": {
                 "type": "appStoreVersions",
@@ -213,6 +230,65 @@ async def push(
         version = _dict(
             (await api.call("POST", "/appStoreVersions", "Version", body=body)).get("data")
         )
+    if version is not None:
+        await _version_texts(api, report, version, root, play)
+
+    builds = await api.items(
+        "/builds",
+        "Builds",
+        **{
+            "filter[app]": app_id,
+            "filter[processingState]": "VALID",
+            "filter[expired]": "false",
+            "sort": "-uploadedDate",
+            "limit": "1",
+        },
+    )
+    if builds:
+        build = builds[0]
+        if _dict(build.get("attributes")).get("usesNonExemptEncryption") is None:
+            body = {
+                "data": {
+                    "type": "builds",
+                    "id": build["id"],
+                    "attributes": {"usesNonExemptEncryption": False},
+                }
+            }
+            await api.call("PATCH", f"/builds/{build['id']}", "Verschlüsselung", body=body)
+        number = _dict(build.get("attributes")).get("version")
+        if version is not None:
+            await api.call(
+                "PATCH",
+                f"/appStoreVersions/{version['id']}/relationships/build",
+                "Build",
+                body=_rel("builds", str(build["id"])),
+            )
+            report.add("Build", "ok", f"Build {number} gewählt.")
+        else:
+            report.add("Build", "ok", f"Build {number} nur für TestFlight.")
+        await _soft(report, "TestFlight-Link", _public_group(api, app_id, str(build["id"])))
+        await _soft(
+            report, "TestFlight-Prüfung", _beta_review(api, app_id, str(build["id"]), root, play)
+        )
+    else:
+        report.add(
+            "Build",
+            "warn",
+            "Noch kein fertig verarbeiteter Build in TestFlight; "
+            "nach dem iOS-Release noch einmal übertragen.",
+        )
+    report.add(
+        "Noch in App Store Connect",
+        "warn",
+        "App-Datenschutz, Preis und Länder, Kontakt und Testkonto für die Prüfung; dann "
+        "„Zur Prüfung hinzufügen“.",
+    )
+
+
+async def _version_texts(
+    api: _Api, report: Report, version: dict[str, Any], root: Path, play: Path
+) -> None:
+    """Texts and screenshots of the version in preparation, in both languages."""
     version_id = str(version["id"])
     number = _dict(version.get("attributes")).get("versionString", VERSION)
 
@@ -247,53 +323,6 @@ async def push(
             "ok",
             f"Version {number}, {len(shots)} iPhone-Screenshots.",
         )
-
-    builds = await api.items(
-        "/builds",
-        "Builds",
-        **{
-            "filter[app]": app_id,
-            "filter[processingState]": "VALID",
-            "filter[expired]": "false",
-            "sort": "-uploadedDate",
-            "limit": "1",
-        },
-    )
-    if builds:
-        build = builds[0]
-        if _dict(build.get("attributes")).get("usesNonExemptEncryption") is None:
-            body = {
-                "data": {
-                    "type": "builds",
-                    "id": build["id"],
-                    "attributes": {"usesNonExemptEncryption": False},
-                }
-            }
-            await api.call("PATCH", f"/builds/{build['id']}", "Verschlüsselung", body=body)
-        await api.call(
-            "PATCH",
-            f"/appStoreVersions/{version_id}/relationships/build",
-            "Build",
-            body=_rel("builds", str(build["id"])),
-        )
-        report.add("Build", "ok", f"Build {_dict(build.get('attributes')).get('version')} gewählt.")
-        await _soft(report, "TestFlight-Link", _public_group(api, app_id, str(build["id"])))
-        await _soft(
-            report, "TestFlight-Prüfung", _beta_review(api, app_id, str(build["id"]), root, play)
-        )
-    else:
-        report.add(
-            "Build",
-            "warn",
-            "Noch kein fertig verarbeiteter Build in TestFlight; "
-            "nach dem iOS-Release noch einmal übertragen.",
-        )
-    report.add(
-        "Noch in App Store Connect",
-        "warn",
-        "App-Datenschutz, Preis und Länder, Kontakt und Testkonto für die Prüfung; dann "
-        "„Zur Prüfung hinzufügen“.",
-    )
 
 
 async def _soft(report: Report, title: str, step: Coroutine[Any, Any, str]) -> None:

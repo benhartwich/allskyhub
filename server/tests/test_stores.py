@@ -606,6 +606,7 @@ async def test_push_appstore(tmp_path: Path) -> None:
     shots: dict[str, int] = {}
     version_state = ["PREPARE_FOR_SUBMISSION"]
     beta_contact: list[dict[str, Any]] = []
+    busy_review: list[bool] = []
 
     def answer(request: httpx.Request) -> httpx.Response:
         path, method = request.url.path, request.method
@@ -614,6 +615,9 @@ async def test_push_appstore(tmp_path: Path) -> None:
             return httpx.Response(200)
         assert request.headers["authorization"].startswith("Bearer ")
         body: Any = json.loads(request.content) if request.content else None
+        if method == "POST" and path == "/v1/betaAppReviewSubmissions" and busy_review:
+            detail = "Another build in the same train is already in beta review."
+            return httpx.Response(422, json={"errors": [{"detail": detail}]})
         if method == "POST" and path.endswith("/relationships/builds"):
             assert body["data"] == [{"type": "builds", "id": "B1"}]
             return httpx.Response(204)
@@ -787,6 +791,13 @@ async def test_push_appstore(tmp_path: Path) -> None:
     }
     assert len(beta_contact) == 2
     assert all("s3cret" not in s.text for s in report.steps)
+
+    # An earlier build of the same version still in beta review: no error, just wait.
+    busy_review.append(True)
+    report = await appstore.push_report(hub)
+    step = next(s for s in report.steps if s.title == "TestFlight-Prüfung")
+    assert (step.state, "früherer Build" in step.text) == ("ok", True), step
+    busy_review.clear()
 
     # Apple refusing a copied value: its answer may quote it, so the report does not.
     version_state[0] = "REJECTED"

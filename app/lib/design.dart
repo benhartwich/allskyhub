@@ -227,8 +227,13 @@ class SkyBackground extends StatelessWidget {
   final Widget child;
 
   @override
-  Widget build(BuildContext context) =>
-      CustomPaint(painter: const _SkyPainter(), isComplex: true, child: child);
+  Widget build(BuildContext context) => CustomPaint(
+    painter: const _SkyPainter(),
+    isComplex: true,
+    // The sky reaches under the system bar at the bottom (Android's edge-to-edge, the
+    // iPhone's home indicator), the page itself stops above it.
+    child: SafeArea(top: false, left: false, right: false, child: child),
+  );
 }
 
 class _SkyPainter extends CustomPainter {

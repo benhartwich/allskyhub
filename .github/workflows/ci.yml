@@ -39,11 +39,14 @@ jobs:
         with:
           python-version: ${{ matrix.python }}
       - uses: astral-sh/setup-uv@07a047e608db84b3d8c06cd9a7c7dcc9c355c18e  # v10.3.2
-      # The hub renders timelapses with ffmpeg (roadmap C8); its tests skip without it.
-      # ubuntu-26.04 has no ffmpeg; a slow mirror once took 27 minutes here.
-      - run: command -v ffmpeg || (sudo apt-get -o Acquire::Retries=3 update && sudo apt-get -o Acquire::Retries=3 install -y --no-install-recommends ffmpeg)
-        timeout-minutes: 10
       - run: uv sync
+      # The hub renders timelapses with ffmpeg (roadmap C8); its tests skip without it.
+      # ubuntu-26.04 has no ffmpeg and its apt mirror crawled (27 minutes, then a timeout):
+      # the static build from PyPI instead, hashed in uv.lock (dev group, imageio-ffmpeg).
+      - run: |
+          mkdir -p ~/.local/bin && echo ~/.local/bin >> "$GITHUB_PATH"
+          uv run python -c "import imageio_ffmpeg, os; os.symlink(imageio_ffmpeg.get_ffmpeg_exe(), os.path.expanduser('~/.local/bin/ffmpeg'))"
+        timeout-minutes: 5
       - run: uv run ruff check .
       - run: uv run ruff format --check .
       - run: uv run pyright

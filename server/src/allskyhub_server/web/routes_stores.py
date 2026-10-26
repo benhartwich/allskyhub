@@ -106,7 +106,7 @@ async def upload_screenshots(
         return await page(request, db, session, 400, error=str(exc))
     return await page(
         request, db, session,
-        notice=f"{len(data)} Screenshots gespeichert. Jetzt „Store-Eintrag übertragen“.",
+        notice=f"{len(data)} Screenshots gespeichert. Jetzt „Android: Play-Eintrag übertragen“.",
     )  # fmt: skip
 
 
@@ -121,7 +121,7 @@ async def push_listing(
     return await page(
         request, db, session,
         notice="Übertragung zu Google Play gestartet; sie dauert gut eine Minute. Danach die "
-        "Seite neu laden, das Ergebnis steht unter „Store-Eintrag bei Google Play“.",
+        "Seite neu laden, das Ergebnis steht unter „Android: Eintrag bei Google Play“.",
     )  # fmt: skip
 
 
@@ -136,7 +136,7 @@ async def push_appstore(
     return await page(
         request, db, session,
         notice="Übertragung zum App Store gestartet; sie dauert ein bis zwei Minuten. Danach "
-        "die Seite neu laden, das Ergebnis steht unter „Store-Eintrag im App Store“.",
+        "die Seite neu laden, das Ergebnis steht unter „iOS: App Store und TestFlight“.",
     )  # fmt: skip
 
 

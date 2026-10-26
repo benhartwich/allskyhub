@@ -102,7 +102,7 @@
   <p class="muted small">„Einladen“ schickt den Einladungslink (14 Tage gültig) und den Link zu den ersten Schritten per E-Mail. „Ablehnen“ schickt nichts.</p>
 </section>
 <section class="card stack" id="stores">
-  <h2>App-Stores</h2>
+  <h2>Apps: Android und iOS</h2>
   {% if store_report %}
   <ul class="parts">
     {% for step in store_report.steps %}
@@ -128,7 +128,7 @@
   <p class="muted small">Prüft jeden Zugang, erzeugt die Signierschlüssel, legt die Bundle-ID {{ package }} bei Apple an, fügt das Repository in Codemagic hinzu und legt dort alle Schlüssel in die geschützte Variablengruppe <code>allskyhub_store</code>. Die Schlüssel stehen nur auf dem Server und werden nie wieder angezeigt.</p>
 
   {% if store_builds %}
-  <h3>Letzte Builds</h3>
+  <h3>Letzte Builds (Android und iOS)</h3>
   <ul class="commit-list">
     {% for b in store_builds %}
     {%- set url = build_url(b) %}
@@ -148,7 +148,7 @@
   {% endif %}
   {% if android_key or codemagic_app %}
   <div class="row-links">
-    {% for platform, name, ready in (('android', 'Android-Release bauen', android_key and not android_job.busy), ('ios', 'iOS-Release bauen', codemagic_app)) %}
+    {% for platform, name, ready in (('android', 'Android: Release bauen', android_key and not android_job.busy), ('ios', 'iOS: Release bauen', codemagic_app)) %}
     {% if ready %}
     <form method="post" action="/admin/stores-build" class="inline">
       <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
@@ -162,7 +162,7 @@
   {% endif %}
 
   {% if stores[0].meta %}
-  <h3>Store-Eintrag bei Google Play</h3>
+  <h3>Android: Eintrag bei Google Play</h3>
   <p class="muted small">Titel, Beschreibungen (Deutsch und Englisch), Icon, Grafik und Screenshots kommen aus dem Repository (<code>app/store/play</code>); die Screenshots dort sind aus der App mit Beispieldaten und simuliertem Himmel. Hier hochgeladene Screenshots ersetzen sie. Kontakt: support@webinx.eu, allskyhub.org. Screenshots: {{ screenshots or 'keine' }}{% if screenshots and not uploaded_screenshots %} aus dem Repository{% endif %}.</p>
   <form method="post" action="/admin/stores-screenshots" enctype="multipart/form-data" class="stack">
     <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
@@ -181,12 +181,12 @@
   {% endif %}
   <form method="post" action="/admin/stores-listing" class="inline">
     <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-    <button type="submit" class="secondary">Store-Eintrag übertragen</button>
+    <button type="submit" class="secondary">Android: Play-Eintrag übertragen</button>
   </form>
   {% endif %}
 
   {% if stores[1].meta %}
-  <h3>Store-Eintrag im App Store</h3>
+  <h3>iOS: App Store und TestFlight</h3>
   <p class="muted small">Name, Untertitel, Stichwörter und Werbetext (<code>app/store/appstore</code>), die Beschreibung des Play-Eintrags, iPhone-Screenshots (Deutsch {{ appstore_shots['de-DE'] }}, Englisch {{ appstore_shots['en-US'] }}) und der neueste Build gehen an die iOS-Version in Vorbereitung, dazu Kategorie und Altersfreigabe. Der Build kommt außerdem in die externe TestFlight-Gruppe „Öffentlich“ mit öffentlichem Link und zur Beta-Prüfung. App-Datenschutz, Preis sowie Kontakt und Testkonto für beide Prüfungen nimmt Apple nur in App Store Connect selbst.</p>
   {% if appstore %}
   <p class="small"><strong>Letzte Übertragung</strong> <span class="muted">{{ appstore.at[:16] | replace('T', ' ') }} UTC</span>{% if appstore.running %} · läuft …{% endif %}</p>
@@ -200,7 +200,7 @@
   {% endif %}
   <form method="post" action="/admin/stores-appstore" class="inline">
     <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-    <button type="submit" class="secondary">App-Store-Eintrag übertragen</button>
+    <button type="submit" class="secondary">iOS: App Store und TestFlight übertragen</button>
   </form>
   {% endif %}
 

@@ -605,6 +605,7 @@ async def test_push_appstore(tmp_path: Path) -> None:
     created: dict[str, list[dict[str, Any]]] = {}
     shots: dict[str, int] = {}
     version_state = ["PREPARE_FOR_SUBMISSION"]
+    beta_contact: list[dict[str, Any]] = []
 
     def answer(request: httpx.Request) -> httpx.Response:
         path, method = request.url.path, request.method
@@ -649,6 +650,14 @@ async def test_push_appstore(tmp_path: Path) -> None:
         if method == "PATCH" and path == "/v1/appInfos/INFO":
             rel = body["data"]["relationships"]
             assert rel["primaryCategory"]["data"]["id"] == "WEATHER"
+        if method == "PATCH" and path == "/v1/betaAppReviewDetails/APP":
+            # Only what the beta details lack; their own contact e-mail stays.
+            beta_contact.append(body["data"]["attributes"])
+            if version_state[0] == "REJECTED":
+                detail = "'s3cret-pass' is not a valid value for 'demoAccountPassword'"
+                return httpx.Response(
+                    422, json={"errors": [{"code": "ENTITY_ERROR", "detail": detail}]}
+                )
         if method == "PATCH" and "/appScreenshots/" in path:
             assert body["data"]["attributes"]["uploaded"] is True
             assert len(body["data"]["attributes"]["sourceFileChecksum"]) == 32
@@ -681,6 +690,18 @@ async def test_push_appstore(tmp_path: Path) -> None:
             found = []
         elif path.endswith("/appScreenshots"):
             found = [{"id": "OLD"}]
+        elif path.endswith("/appStoreReviewDetail"):
+            attrs = {
+                "contactEmail": "ben@example.org",
+                "contactPhone": "+49 1",
+                "demoAccountName": "reviewer@example.org",
+                "demoAccountPassword": "s3cret-pass",
+                "demoAccountRequired": True,
+            }
+            return httpx.Response(200, json={"data": {"id": "RD", "attributes": attrs}})
+        elif path.endswith("/betaAppReviewDetail"):
+            attrs = {"contactEmail": "beta@example.org", "demoAccountName": None}
+            return httpx.Response(200, json={"data": {"id": "APP", "attributes": attrs}})
         elif path.endswith("/ageRatingDeclaration"):
             attrs = {"violenceRealistic": None, "gambling": None, "somethingNew": None}
             return httpx.Response(200, json={"data": {"id": "AGE", "attributes": attrs}})
@@ -757,3 +778,20 @@ async def test_push_appstore(tmp_path: Path) -> None:
     assert "appStoreVersions" not in created
     assert not [c for c in calls if "appStoreVersion" in c[1] and c[0] != "GET"]
     assert ("POST", "/v1/betaGroups/betaGroups-2/relationships/builds") in calls
+    # The App Review's contact and test account filled the empty beta fields, both times.
+    assert beta_contact[-1] == {
+        "contactPhone": "+49 1",
+        "demoAccountName": "reviewer@example.org",
+        "demoAccountPassword": "s3cret-pass",
+        "demoAccountRequired": True,
+    }
+    assert len(beta_contact) == 2
+    assert all("s3cret" not in s.text for s in report.steps)
+
+    # Apple refusing a copied value: its answer may quote it, so the report does not.
+    version_state[0] = "REJECTED"
+    report = await appstore.push_report(hub)
+    step = next(s for s in report.steps if s.title == "TestFlight-Prüfung")
+    assert step.state == "warn"
+    assert "HTTP 422" in step.text
+    assert all("s3cret" not in s.text for s in report.steps)

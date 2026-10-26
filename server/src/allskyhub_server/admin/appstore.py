@@ -69,6 +69,11 @@ _NO = (
 )  # fmt: skip
 AGE_RATING: dict[str, Any] = {**dict.fromkeys(_NONE, "NONE"), **dict.fromkeys(_NO, False)}
 TITLE = "App Store"
+# Contact and test account, named alike in the App Review and the beta review details.
+REVIEW_FIELDS = (
+    "contactFirstName", "contactLastName", "contactPhone", "contactEmail",
+    "demoAccountName", "demoAccountPassword", "demoAccountRequired", "notes",
+)  # fmt: skip
 # The external TestFlight group with the public link (Benjamin, 2026-10-26).
 BETA_GROUP = "Öffentlich"
 WHAT_TO_TEST = {
@@ -267,8 +272,18 @@ async def push(
         else:
             report.add("Build", "ok", f"Build {number} nur für TestFlight.")
         await _soft(report, "TestFlight-Link", _public_group(api, app_id, str(build["id"])))
+        reviewed = version or busy
         await _soft(
-            report, "TestFlight-Prüfung", _beta_review(api, app_id, str(build["id"]), root, play)
+            report,
+            "TestFlight-Prüfung",
+            _beta_review(
+                api,
+                app_id,
+                str(build["id"]),
+                root,
+                play,
+                str(reviewed["id"]) if reviewed is not None else None,
+            ),
         )
     else:
         report.add(
@@ -423,10 +438,15 @@ async def _public_group(api: _Api, app_id: str, build: str) -> str:
     return str(link)
 
 
-async def _beta_review(api: _Api, app_id: str, build: str, root: Path, play: Path) -> str:
+async def _beta_review(
+    api: _Api, app_id: str, build: str, root: Path, play: Path, version: str | None
+) -> str:
     """Test information (description, what to test) and the build to Apple's beta review,
     which external testers need. The review contact and test account are Benjamin's to
-    enter (TestFlight → Testinformationen); without them Apple refuses the submission."""
+    enter; the ones he gave for the App Review of ``version`` are taken over where the
+    beta ones are empty (:func:`_beta_contact`); without them Apple refuses."""
+    if version is not None:
+        await _beta_contact(api, app_id, version)
     known = {
         str(_dict(x.get("attributes")).get("locale")): str(x["id"])
         for x in await api.items(f"/apps/{app_id}/betaAppLocalizations", "Testinformationen")
@@ -478,6 +498,44 @@ async def _beta_review(api: _Api, app_id: str, build: str, root: Path, play: Pat
             "dann noch einmal übertragen."
         ) from None
     return "Zur Beta-Prüfung eingereicht; der Link wird danach aktiv."
+
+
+async def _beta_contact(api: _Api, app_id: str, version: str) -> None:
+    """Copy the App Review contact and test account into the beta review details, field
+    by field where those are still empty. The values pass through, never into a report
+    or a log."""
+    review = _dict(
+        _dict(
+            (
+                await api.call(
+                    "GET", f"/appStoreVersions/{version}/appStoreReviewDetail", "Prüfkontakt"
+                )
+            ).get("data")
+        ).get("attributes")
+    )
+    beta = _dict(
+        (await api.call("GET", f"/apps/{app_id}/betaAppReviewDetail", "Beta-Prüfkontakt")).get(
+            "data"
+        )
+    )
+    have = _dict(beta.get("attributes"))
+    missing = {
+        k: review[k]
+        for k in REVIEW_FIELDS
+        if review.get(k) not in (None, "") and have.get(k) in (None, "")
+    }
+    if not missing or not beta.get("id"):
+        return
+    body = {"data": {"type": "betaAppReviewDetails", "id": beta["id"], "attributes": missing}}
+    r = await api.client.request(
+        "PATCH", f"{ASC}/betaAppReviewDetails/{beta['id']}", json=body, headers=api.auth()
+    )
+    if r.status_code >= 300:
+        # Not Apple's text: it can quote the refused value (a phone number, the password).
+        raise StoreError(
+            f"Beta-Prüfkontakt: Apple lehnt ab (HTTP {r.status_code}), bitte in TestFlight → "
+            "Testinformationen prüfen."
+        )
 
 
 async def _screenshots(api: _Api, localization: str, shots: list[Path], locale: str) -> None:
@@ -579,7 +637,10 @@ def start(stores: Stores, by: str) -> bool:
         steps = [{"title": x.title, "state": x.state, "text": x.text} for x in report.steps]
         stores.vault.write_json(STATE_FILE, {"at": _now(), "by": by, "steps": steps})
         log.info(
-            "app store listing pushed by %s: %s", by, [(x.title, x.state) for x in report.steps]
+            # With the texts: the public link and Apple's answers, nothing secret.
+            "app store listing pushed by %s: %s",
+            by,
+            [(x.title, x.state, x.text) for x in report.steps],
         )
         return report
 

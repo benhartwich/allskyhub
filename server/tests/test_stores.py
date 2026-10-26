@@ -612,11 +612,22 @@ async def test_push_appstore(tmp_path: Path) -> None:
             return httpx.Response(200)
         assert request.headers["authorization"].startswith("Bearer ")
         body: Any = json.loads(request.content) if request.content else None
+        if method == "POST" and path.endswith("/relationships/builds"):
+            assert body["data"] == [{"type": "builds", "id": "B1"}]
+            return httpx.Response(204)
         if method == "POST":
             kind = path.rsplit("/", 1)[1]
-            created.setdefault(kind, []).append(body["data"]["attributes"])
+            created.setdefault(kind, []).append(body["data"].get("attributes", {}))
             n = len(created[kind])
-            data: dict[str, Any] = {"id": f"{kind}-{n}", "attributes": body["data"]["attributes"]}
+            data: dict[str, Any] = {
+                "id": f"{kind}-{n}",
+                "attributes": body["data"].get("attributes", {}),
+            }
+            if kind == "betaGroups":
+                data["attributes"] = {
+                    **data["attributes"],
+                    "publicLink": "https://tf.example/join/X",
+                }
             if kind == "appScreenshots":
                 size = body["data"]["attributes"]["fileSize"]
                 data["attributes"] = {
@@ -695,8 +706,17 @@ async def test_push_appstore(tmp_path: Path) -> None:
         ("Texte und Screenshots de-DE", "ok"),
         ("Texte und Screenshots en-US", "ok"),
         ("Build", "ok"),
+        ("TestFlight-Link", "ok"),
+        ("TestFlight-Prüfung", "ok"),
         ("Noch in App Store Connect", "warn"),
     ], report.steps
+    # The public TestFlight group, made once, with the build in it and sent to review.
+    assert report.steps[6].text == "https://tf.example/join/X"
+    assert created["betaGroups"][0]["publicLinkEnabled"] is True
+    assert ("POST", "/v1/betaGroups/betaGroups-1/relationships/builds") in calls
+    assert [a["locale"] for a in created["betaAppLocalizations"]] == ["de-DE", "en-US"]
+    assert [a["locale"] for a in created["betaBuildLocalizations"]] == ["de-DE", "en-US"]
+    assert len(created["betaAppReviewSubmissions"]) == 1
     # German existed and was changed; English was made.
     assert ("PATCH", "/v1/appInfoLocalizations/INFO-DE") in calls
     assert [a["locale"] for a in created["appInfoLocalizations"]] == ["en-US"]

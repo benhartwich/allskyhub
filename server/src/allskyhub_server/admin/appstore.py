@@ -3,8 +3,9 @@
 Name, subtitle, keywords and promotional text (app/store/appstore), the description of
 the Play listing (app/store/play), the iPhone screenshots and the newest processed build
 go to the iOS version in preparation, through the App Store Connect API with the hub's
-key. Apple's API does not take the privacy answers, the age rating, the review contact
-with the test account or the price; those stay for App Store Connect itself.
+key. The build also goes to an external TestFlight group with a public link. Apple's API
+does not take the privacy answers, the review contact with the test account or the
+price; those stay for App Store Connect itself.
 """
 
 from __future__ import annotations
@@ -20,6 +21,7 @@ import httpx
 
 from allskyhub_server.admin.stores import (
     ASC,
+    CONTACT_EMAIL,
     LISTING,
     PACKAGE,
     UPLOAD_TIMEOUT,
@@ -60,6 +62,14 @@ _NO = (
 )  # fmt: skip
 AGE_RATING: dict[str, Any] = {**dict.fromkeys(_NONE, "NONE"), **dict.fromkeys(_NO, False)}
 TITLE = "App Store"
+# The external TestFlight group with the public link (Benjamin, 2026-10-26).
+BETA_GROUP = "Öffentlich"
+WHAT_TO_TEST = {
+    "de-DE": "Anmelden, eigene oder freigegebene Kameras ansehen, Bilder, Ereignisse und "
+    "die Vorhersage für heute Nacht. Rückmeldungen gern über TestFlight.",
+    "en-US": "Sign in, look at your own or shared cameras, pictures, events and tonight's "
+    "forecast. Feedback is welcome through TestFlight.",
+}
 STATE_FILE = "appstore.json"
 
 Auth = Callable[[], dict[str, str]]
@@ -267,6 +277,10 @@ async def push(
             body=_rel("builds", str(build["id"])),
         )
         report.add("Build", "ok", f"Build {_dict(build.get('attributes')).get('version')} gewählt.")
+        await _soft(report, "TestFlight-Link", _public_group(api, app_id, str(build["id"])))
+        await _soft(
+            report, "TestFlight-Prüfung", _beta_review(api, app_id, str(build["id"]), root, play)
+        )
     else:
         report.add(
             "Build",
@@ -319,6 +333,122 @@ async def _age_rating(api: _Api, info: str) -> str:
     body = {"data": {"type": "ageRatingDeclarations", "id": found["id"], "attributes": answers}}
     await api.call("PATCH", f"/ageRatingDeclarations/{found['id']}", "Altersfreigabe", body=body)
     return f"{len(answers)} Fragen mit „keine“ beantwortet."
+
+
+async def _public_group(api: _Api, app_id: str, build: str) -> str:
+    """The external group with the public link, the build added to it. The link works
+    once Apple's beta review has passed the build (:func:`_beta_review`)."""
+    groups = await api.items(f"/apps/{app_id}/betaGroups", "TestFlight-Gruppen")
+    group = next(
+        (
+            g
+            for g in groups
+            if _dict(g.get("attributes")).get("name") == BETA_GROUP
+            and not _dict(g.get("attributes")).get("isInternalGroup")
+        ),
+        None,
+    )
+    if group is None:
+        body = {
+            "data": {
+                "type": "betaGroups",
+                "attributes": {
+                    "name": BETA_GROUP,
+                    "publicLinkEnabled": True,
+                    "publicLinkLimitEnabled": False,
+                    "feedbackEnabled": True,
+                },
+                "relationships": {"app": _rel("apps", app_id)},
+            }
+        }
+        group = _dict(
+            (await api.call("POST", "/betaGroups", "TestFlight-Gruppe", body=body)).get("data")
+        )
+    elif not _dict(group.get("attributes")).get("publicLinkEnabled"):
+        body = {
+            "data": {
+                "type": "betaGroups",
+                "id": group["id"],
+                "attributes": {"publicLinkEnabled": True},
+            }
+        }
+        group = (
+            _dict(
+                (
+                    await api.call(
+                        "PATCH", f"/betaGroups/{group['id']}", "Öffentlicher Link", body=body
+                    )
+                ).get("data")
+            )
+            or group
+        )
+    await api.call(
+        "POST",
+        f"/betaGroups/{group['id']}/relationships/builds",
+        "Build in die TestFlight-Gruppe",
+        body={"data": [{"type": "builds", "id": build}]},
+    )
+    link = _dict(group.get("attributes")).get("publicLink")
+    if not link:
+        raise StoreError(f"Gruppe „{BETA_GROUP}“ ohne öffentlichen Link.")
+    return str(link)
+
+
+async def _beta_review(api: _Api, app_id: str, build: str, root: Path, play: Path) -> str:
+    """Test information (description, what to test) and the build to Apple's beta review,
+    which external testers need. The review contact and test account are Benjamin's to
+    enter (TestFlight → Testinformationen); without them Apple refuses the submission."""
+    known = {
+        str(_dict(x.get("attributes")).get("locale")): str(x["id"])
+        for x in await api.items(f"/apps/{app_id}/betaAppLocalizations", "Testinformationen")
+    }
+    for locale in LOCALES:
+        await api.upsert(
+            known.get(locale),
+            "betaAppLocalizations",
+            {
+                "description": texts(locale, root, play)["description"],
+                "feedbackEmail": CONTACT_EMAIL,
+                "marketingUrl": SUPPORT_URL,
+                "privacyPolicyUrl": PRIVACY_URL,
+            },
+            {"attributes": {"locale": locale}, "relationships": {"app": _rel("apps", app_id)}},
+            f"Testinformationen {locale}",
+        )
+    known = {
+        str(_dict(x.get("attributes")).get("locale")): str(x["id"])
+        for x in await api.items(f"/builds/{build}/betaBuildLocalizations", "Was testen")
+    }
+    for locale in LOCALES:
+        await api.upsert(
+            known.get(locale),
+            "betaBuildLocalizations",
+            {"whatsNew": WHAT_TO_TEST[locale]},
+            {"attributes": {"locale": locale}, "relationships": {"build": _rel("builds", build)}},
+            f"Was testen {locale}",
+        )
+    submitted = await api.items(
+        "/betaAppReviewSubmissions", "Beta-Prüfung", **{"filter[build]": build}
+    )
+    if submitted:
+        state = str(_dict(submitted[0].get("attributes")).get("betaReviewState") or "")
+        return {"APPROVED": "Freigegeben, der Link ist aktiv."}.get(
+            state, f"Bei Apple in Prüfung ({state or 'eingereicht'})."
+        )
+    body = {
+        "data": {
+            "type": "betaAppReviewSubmissions",
+            "relationships": {"build": _rel("builds", build)},
+        }
+    }
+    try:
+        await api.call("POST", "/betaAppReviewSubmissions", "Beta-Prüfung", body=body)
+    except StoreError as exc:
+        raise StoreError(
+            f"{exc} Unter TestFlight → Testinformationen Kontakt und Testkonto eintragen, "
+            "dann noch einmal übertragen."
+        ) from None
+    return "Zur Beta-Prüfung eingereicht; der Link wird danach aktiv."
 
 
 async def _screenshots(api: _Api, localization: str, shots: list[Path], locale: str) -> None:

@@ -187,7 +187,7 @@
 
   {% if stores[1].meta %}
   <h3>Store-Eintrag im App Store</h3>
-  <p class="muted small">Name, Untertitel, Stichwörter und Werbetext (<code>app/store/appstore</code>), die Beschreibung des Play-Eintrags, iPhone-Screenshots (Deutsch {{ appstore_shots['de-DE'] }}, Englisch {{ appstore_shots['en-US'] }}) und der neueste Build gehen an die iOS-Version in Vorbereitung. App-Datenschutz, Altersfreigabe, Kategorie, Preis und das Testkonto für die Prüfung nimmt Apple nur in App Store Connect selbst.</p>
+  <p class="muted small">Name, Untertitel, Stichwörter und Werbetext (<code>app/store/appstore</code>), die Beschreibung des Play-Eintrags, iPhone-Screenshots (Deutsch {{ appstore_shots['de-DE'] }}, Englisch {{ appstore_shots['en-US'] }}) und der neueste Build gehen an die iOS-Version in Vorbereitung, dazu Kategorie und Altersfreigabe. Der Build kommt außerdem in die externe TestFlight-Gruppe „Öffentlich“ mit öffentlichem Link und zur Beta-Prüfung. App-Datenschutz, Preis sowie Kontakt und Testkonto für beide Prüfungen nimmt Apple nur in App Store Connect selbst.</p>
   {% if appstore %}
   <p class="small"><strong>Letzte Übertragung</strong> <span class="muted">{{ appstore.at[:16] | replace('T', ' ') }} UTC</span>{% if appstore.running %} · läuft …{% endif %}</p>
   {% if appstore.steps %}

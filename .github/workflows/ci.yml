@@ -14,7 +14,7 @@ concurrency:
 
 jobs:
   check:
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     strategy:
       matrix:
         python: ["3.11", "3.13"]
@@ -33,11 +33,11 @@ jobs:
     env:
       ALLSKYHUB_SERVER_TEST_DATABASE_URL: postgresql://allskyhub:allskyhub@127.0.0.1:5432/allskyhub_test
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262  # v4
-      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065  # v5
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0  # v7.1.0
         with:
           python-version: ${{ matrix.python }}
-      - uses: astral-sh/setup-uv@d0cc045d04ccac9d8b7881df0226f9e82c39688e  # v6
+      - uses: astral-sh/setup-uv@07a047e608db84b3d8c06cd9a7c7dcc9c355c18e  # v10.3.2
       # The hub renders timelapses with ffmpeg (roadmap C8); its tests skip without it.
       - run: command -v ffmpeg || (sudo apt-get update && sudo apt-get install -y --no-install-recommends ffmpeg)
       - run: uv sync
@@ -50,22 +50,22 @@ jobs:
   # Shell scripts: the deploy and backup scripts run as root on the hub, image/build.sh
   # builds the Pi image. ShellCheck comes with the runner image.
   shell:
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262  # v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
       - run: shellcheck --version
       - run: git ls-files -z '*.sh' | xargs -0 -n1 bash -n
       - run: git ls-files -z '*.sh' | xargs -0 shellcheck
 
   # Flutter app (app/): format, analyze, test. Native builds: app-build.yml.
   app:
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     defaults:
       run:
         working-directory: app
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262  # v4
-      - uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2  # v2
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+      - uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2  # v2.23.0
         with:
           channel: stable
           cache: true

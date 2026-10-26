@@ -259,7 +259,7 @@ async def test_admin_uploads_keys_and_never_sees_them_again(
     monkeypatch.setattr(settings, "admin_emails", email)
     monkeypatch.setattr(app.state, "stores", stores.Stores(tmp_path, "benhartwich/allskyhub"))
     page = await client.get("/admin")
-    assert "App-Stores" in page.text
+    assert "Apps: Android und iOS" in page.text
     token = csrf_from(page.text)
     play = _play_json()
 
@@ -401,7 +401,7 @@ async def test_android_release_through_the_spool(
     assert (spool / "request").read_text() == f"{email}\n"
     assert hub.android_job().busy
     assert "angefordert" in r.text
-    assert "Android-Release bauen" not in r.text  # one at a time
+    assert "Android: Release bauen" not in r.text  # one at a time
     assert (await client.post("/admin/stores-build", data=build)).status_code == 400
 
     assert [p.name for p in spool.iterdir()] == ["request"]  # all the hub writes there

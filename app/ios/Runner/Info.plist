@@ -14,6 +14,8 @@
 	</array>
 	<key>NSLocationWhenInUseUsageDescription</key>
 	<string>Deine Kamera braucht ihren ungefähren Standort für Sonnenstand und Tag/Nacht.</string>
+	<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
+	<string>Deine Kamera braucht ihren ungefähren Standort für Sonnenstand und Tag/Nacht. Die App fragt ihn nur bei der Einrichtung ab, nie im Hintergrund.</string>
 	<key>NSCameraUsageDescription</key>
 	<string>Zum Scannen des WLAN-QR-Codes auf dem Aufkleber deiner Kamera und als Hintergrund der Himmelsansicht (AR). Bilder werden nicht gespeichert.</string>
 	<key>NSLocalNetworkUsageDescription</key>

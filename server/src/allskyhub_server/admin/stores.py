@@ -578,6 +578,7 @@ class Stores:
         ]  # fmt: skip
         if found:
             report.add("Bundle-ID", "ok", f"{package} ist bei Apple registriert.")
+            await self._push_capability(client, report, auth, str(found[0]["id"]), package)
         else:
             body = {
                 "data": {
@@ -602,6 +603,51 @@ class Stores:
             )
         else:
             report.add(title, "fail", _message(r))
+
+    async def _push_capability(
+        self,
+        client: httpx.AsyncClient,
+        report: Report,
+        auth: dict[str, str],
+        bundle_id: str,
+        package: str,
+    ) -> None:
+        """Push notifications for the bundle id (stage 5). Switching it on makes the App
+        Store provisioning profiles outdated: they are deleted, so the next release build
+        (fetch-signing-files --create) makes a new one with the capability."""
+        title = "Push-Benachrichtigungen"
+        r = await client.get(f"{ASC}/bundleIds/{bundle_id}/bundleIdCapabilities", headers=auth)
+        if r.status_code != 200:
+            report.add(title, "warn", f"Nicht prüfbar ({_message(r)}).")
+            return
+        kinds = {
+            _dict(c.get("attributes")).get("capabilityType")
+            for c in _list(_dict(r.json()).get("data"))
+        }
+        if "PUSH_NOTIFICATIONS" in kinds:
+            report.add(title, "ok", f"Für {package} eingeschaltet.")
+            return
+        body = {
+            "data": {
+                "type": "bundleIdCapabilities",
+                "attributes": {"capabilityType": "PUSH_NOTIFICATIONS"},
+                "relationships": {"bundleId": {"data": {"type": "bundleIds", "id": bundle_id}}},
+            }
+        }
+        r = await client.post(f"{ASC}/bundleIdCapabilities", json=body, headers=auth)
+        if r.status_code != 201:
+            report.add(title, "fail", f"Einschalten ging nicht ({_message(r)}).")
+            return
+        r = await client.get(f"{ASC}/bundleIds/{bundle_id}/profiles", headers=auth)
+        stale = [str(p["id"]) for p in _list(_dict(r.json()).get("data"))] if r.is_success else []
+        for profile in stale:
+            await client.delete(f"{ASC}/profiles/{profile}", headers=auth)
+        report.add(
+            title,
+            "ok",
+            f"Für {package} eingeschaltet; {len(stale)} alte Profile gelöscht, der nächste "
+            "iOS-Build legt ein neues an.",
+        )
 
     # Codemagic
 

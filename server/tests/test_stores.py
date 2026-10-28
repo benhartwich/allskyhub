@@ -911,3 +911,39 @@ async def test_admin_page_offers_the_further_app(
     )
     assert r.status_code == 400
     assert "einrichten" in r.text
+
+
+async def test_push_capability_on_and_old_profiles_gone(tmp_path: Path) -> None:
+    """Stage 5: push for the bundle id; profiles made before it lack it and go."""
+    seen: list[tuple[str, str]] = []
+
+    def answer(request: httpx.Request) -> httpx.Response:
+        path = request.url.path
+        seen.append((request.method, path))
+        if path == "/v1/bundleIds":
+            attrs = {"identifier": "org.allskyhub.app"}
+            return httpx.Response(200, json={"data": [{"id": "B1", "attributes": attrs}]})
+        if path == "/v1/bundleIds/B1/bundleIdCapabilities":
+            caps = [{"attributes": {"capabilityType": "IN_APP_PURCHASE"}}]
+            return httpx.Response(200, json={"data": caps})
+        if path == "/v1/bundleIdCapabilities":
+            body = json.loads(request.content)
+            assert body["data"]["attributes"]["capabilityType"] == "PUSH_NOTIFICATIONS"
+            return httpx.Response(201, json={"data": {"id": "C1"}})
+        if path == "/v1/bundleIds/B1/profiles":
+            return httpx.Response(200, json={"data": [{"id": "P1"}, {"id": "P2"}]})
+        if path.startswith("/v1/profiles/"):
+            return httpx.Response(204)
+        if path == "/v1/apps":
+            return httpx.Response(200, json={"data": [{"id": "A1"}]})
+        return httpx.Response(404, json={"message": path})
+
+    client = httpx.AsyncClient(transport=httpx.MockTransport(answer))
+    hub = stores.Stores(tmp_path, "benhartwich/allskyhub", client)
+    hub.vault.put("asc", *stores.parse_asc(_p8(), "2X9R4HXF34", ISSUER), by="a")
+    report = await hub.setup("a")
+    step = next(s for s in report.steps if s.title == "Push-Benachrichtigungen")
+    assert step.state == "ok"
+    assert "2 alte Profile gelöscht" in step.text
+    assert ("DELETE", "/v1/profiles/P1") in seen
+    assert ("DELETE", "/v1/profiles/P2") in seen

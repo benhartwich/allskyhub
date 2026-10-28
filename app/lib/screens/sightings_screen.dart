@@ -14,6 +14,7 @@ import '../api/hub_client.dart';
 import '../design.dart';
 import '../l10n.dart';
 import '../platform/location.dart';
+import '../platform/push.dart';
 import 'camera_status.dart';
 import 'sky_view_screen.dart';
 
@@ -928,6 +929,7 @@ class _AlertsScreenState extends State<AlertsScreen> {
     try {
       final next = await widget.client.updateAlerts(change);
       if (mounted) setState(() => _alerts = next);
+      if (turningOn) unawaited(pushService.register(widget.client));
     } on HubException catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(

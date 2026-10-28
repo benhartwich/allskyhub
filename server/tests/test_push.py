@@ -19,6 +19,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from allskyhub_server.models import Device, PushToken, User
 from allskyhub_server.push.fcm import Message, Sender
 from allskyhub_server.push.notify import Notifier
+from allskyhub_server.settings import Settings
 from tests.fake_device import FakeDevice
 from tests.helpers import PASSWORD, owner_email
 from tests.test_events import meteor
@@ -256,3 +257,27 @@ async def test_privacy_and_account_page_with_push(
         user = await db.scalar(select(User).where(User.email == email))
         assert user is not None
         assert (user.notify_events, user.notify_offline) == (False, True)
+
+
+async def test_push_config_for_the_app(
+    app: FastAPI,
+    new_client: httpx.AsyncClient,
+    settings: Settings,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The app's Firebase registration comes from the hub (public identifiers)."""
+    assert (await new_client.get("/api/v1/push/config")).status_code == 404
+    sender = _ProjectSender()
+    app.state.notifier = Notifier(app.state.sessionmaker, sender)
+    assert (await new_client.get("/api/v1/push/config")).status_code == 404  # no app ids yet
+    monkeypatch.setattr(settings, "fcm_sender_id", "1234")
+    monkeypatch.setattr(settings, "fcm_android_app_id", "1:1234:android:abc")
+    monkeypatch.setattr(settings, "fcm_android_api_key", "AIza-android")
+    config = (await new_client.get("/api/v1/push/config")).json()
+    assert config["project_id"] == "allskyhub-test"
+    assert config["android_app_id"] == "1:1234:android:abc"
+    assert config["ios_app_id"] == ""
+
+
+class _ProjectSender(FakeSender):
+    project_id = "allskyhub-test"

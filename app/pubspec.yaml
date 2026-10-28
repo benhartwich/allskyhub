@@ -55,6 +55,8 @@ dependencies:
   timezone: ^0.11.2
   # A photo for an aurora report (stage 5): the system's picker, no file access of our own.
   image_picker: ^1.2.4
+  firebase_core: ^5.1.0
+  firebase_messaging: ^17.0.1
 
 dev_dependencies:
   flutter_test:

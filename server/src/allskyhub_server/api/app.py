@@ -661,6 +661,34 @@ async def put_settings(
     return _account_settings(request, user)
 
 
+class PushConfig(BaseModel):
+    """What the app needs to register with Firebase (public identifiers)."""
+
+    project_id: str
+    sender_id: str
+    android_app_id: str
+    android_api_key: str
+    ios_app_id: str
+    ios_api_key: str
+
+
+@router.get("/push/config")
+async def push_config(request: Request, settings: SettingsDep) -> PushConfig:
+    """404 while the hub cannot send push or the app's registration is not entered."""
+    sender = request.app.state.notifier._sender  # pyright: ignore[reportPrivateUsage]
+    project_id = getattr(sender, "project_id", None)
+    if not isinstance(project_id, str) or not settings.fcm_sender_id:
+        raise HTTPException(404)
+    return PushConfig(
+        project_id=project_id,
+        sender_id=settings.fcm_sender_id,
+        android_app_id=settings.fcm_android_app_id,
+        android_api_key=settings.fcm_android_api_key,
+        ios_app_id=settings.fcm_ios_app_id,
+        ios_api_key=settings.fcm_ios_api_key,
+    )
+
+
 @router.post("/push/tokens", status_code=204)
 async def register_push_token(body: PushTokenRequest, db: DbSession, user: AppUser) -> Response:
     """The app's FCM registration token (roadmap #6); a token moves to the current user."""

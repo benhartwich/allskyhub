@@ -14,6 +14,7 @@ import asyncio
 import hashlib
 import logging
 from collections.abc import Callable, Coroutine
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
@@ -25,6 +26,7 @@ from allskyhub_server.admin.stores import (
     LISTING,
     PACKAGE,
     UPLOAD_TIMEOUT,
+    OtherApp,
     Report,
     StoreError,
     Stores,
@@ -83,6 +85,56 @@ WHAT_TO_TEST = {
     "forecast. Feedback is welcome through TestFlight.",
 }
 STATE_FILE = "appstore.json"
+
+
+@dataclass(frozen=True)
+class Profile:
+    """What differs between the apps on the same accounts (stores.OTHER_APPS)."""
+
+    key: str
+    package: str
+    support_url: str
+    privacy_url: str
+    contact_email: str
+    categories: tuple[str, str]
+    version: str
+    what_to_test: dict[str, str]
+
+    @property
+    def state_file(self) -> str:
+        return STATE_FILE if self.key == "allskyhub" else f"appstore-{self.key}.json"
+
+    @property
+    def job(self) -> str:
+        return TITLE if self.key == "allskyhub" else f"{TITLE} {self.key}"
+
+
+ALLSKYHUB = Profile(
+    key="allskyhub",
+    package=PACKAGE,
+    support_url=SUPPORT_URL,
+    privacy_url=PRIVACY_URL,
+    contact_email=CONTACT_EMAIL,
+    categories=(PRIMARY_CATEGORY, SECONDARY_CATEGORY),
+    version=VERSION,
+    what_to_test=WHAT_TO_TEST,
+)
+
+
+def profile(app: OtherApp | None) -> Profile:
+    if app is None:
+        return ALLSKYHUB
+    return Profile(
+        key=app.key,
+        package=app.package,
+        support_url=app.website,
+        privacy_url=app.privacy_url,
+        contact_email=app.contact_email,
+        categories=app.categories,
+        version=app.version,
+        what_to_test=app.what_to_test,
+    )
+
 
 Auth = Callable[[], dict[str, str]]
 
@@ -173,12 +225,13 @@ async def push(
     report: Report,
     root: Path = APPSTORE,
     play: Path = LISTING,
+    p: Profile = ALLSKYHUB,
 ) -> None:
     api = _Api(client, auth)
-    apps = await api.items("/apps", "App", **{"filter[bundleId]": PACKAGE})
+    apps = await api.items("/apps", "App", **{"filter[bundleId]": p.package})
     if not apps:
         raise StoreError(
-            f"Die App fehlt in App Store Connect: Apps → + → Neue App, Bundle-ID {PACKAGE}."
+            f"Die App fehlt in App Store Connect: Apps → + → Neue App, Bundle-ID {p.package}."
         )
     app_id = str(apps[0]["id"])
 
@@ -199,7 +252,7 @@ async def push(
         await api.upsert(
             known.get(locale),
             "appInfoLocalizations",
-            {"name": t["name"], "subtitle": t["subtitle"], "privacyPolicyUrl": PRIVACY_URL},
+            {"name": t["name"], "subtitle": t["subtitle"], "privacyPolicyUrl": p.privacy_url},
             {
                 "attributes": {"locale": locale},
                 "relationships": {"appInfo": _rel("appInfos", str(info["id"]))},
@@ -207,7 +260,7 @@ async def push(
             f"Name {locale}",
         )
     report.add("Name und Untertitel", "ok", ", ".join(LOCALES))
-    await _soft(report, "Kategorie", _category(api, str(info["id"])))
+    await _soft(report, "Kategorie", _category(api, str(info["id"]), p))
     await _soft(report, "Altersfreigabe", _age_rating(api, str(info["id"])))
 
     versions = await api.items(
@@ -228,7 +281,7 @@ async def push(
         body = {
             "data": {
                 "type": "appStoreVersions",
-                "attributes": {"platform": "IOS", "versionString": VERSION},
+                "attributes": {"platform": "IOS", "versionString": p.version},
                 "relationships": {"app": _rel("apps", app_id)},
             }
         }
@@ -236,7 +289,7 @@ async def push(
             (await api.call("POST", "/appStoreVersions", "Version", body=body)).get("data")
         )
     if version is not None:
-        await _version_texts(api, report, version, root, play)
+        await _version_texts(api, report, version, root, play, p)
 
     builds = await api.items(
         "/builds",
@@ -283,6 +336,7 @@ async def push(
                 root,
                 play,
                 str(reviewed["id"]) if reviewed is not None else None,
+                p,
             ),
         )
     else:
@@ -301,11 +355,16 @@ async def push(
 
 
 async def _version_texts(
-    api: _Api, report: Report, version: dict[str, Any], root: Path, play: Path
+    api: _Api,
+    report: Report,
+    version: dict[str, Any],
+    root: Path,
+    play: Path,
+    p: Profile = ALLSKYHUB,
 ) -> None:
     """Texts and screenshots of the version in preparation, in both languages."""
     version_id = str(version["id"])
-    number = _dict(version.get("attributes")).get("versionString", VERSION)
+    number = _dict(version.get("attributes")).get("versionString", p.version)
 
     known = {
         str(_dict(x.get("attributes")).get("locale")): str(x["id"])
@@ -322,8 +381,8 @@ async def _version_texts(
                 "description": t["description"],
                 "keywords": t["keywords"],
                 "promotionalText": t["promotionalText"],
-                "supportUrl": SUPPORT_URL,
-                "marketingUrl": SUPPORT_URL,
+                "supportUrl": p.support_url,
+                "marketingUrl": p.support_url,
             },
             {
                 "attributes": {"locale": locale},
@@ -348,19 +407,20 @@ async def _soft(report: Report, title: str, step: Coroutine[Any, Any, str]) -> N
         report.add(title, "warn", f"{exc} Bitte in App Store Connect setzen.")
 
 
-async def _category(api: _Api, info: str) -> str:
+async def _category(api: _Api, info: str, p: Profile = ALLSKYHUB) -> str:
+    primary, secondary = p.categories
     body = {
         "data": {
             "type": "appInfos",
             "id": info,
             "relationships": {
-                "primaryCategory": _rel("appCategories", PRIMARY_CATEGORY),
-                "secondaryCategory": _rel("appCategories", SECONDARY_CATEGORY),
+                "primaryCategory": _rel("appCategories", primary),
+                "secondaryCategory": _rel("appCategories", secondary),
             },
         }
     }
     await api.call("PATCH", f"/appInfos/{info}", "Kategorie", body=body)
-    return f"{PRIMARY_CATEGORY}, {SECONDARY_CATEGORY}"
+    return f"{primary}, {secondary}"
 
 
 async def _age_rating(api: _Api, info: str) -> str:
@@ -439,7 +499,13 @@ async def _public_group(api: _Api, app_id: str, build: str) -> str:
 
 
 async def _beta_review(
-    api: _Api, app_id: str, build: str, root: Path, play: Path, version: str | None
+    api: _Api,
+    app_id: str,
+    build: str,
+    root: Path,
+    play: Path,
+    version: str | None,
+    p: Profile = ALLSKYHUB,
 ) -> str:
     """Test information (description, what to test) and the build to Apple's beta review,
     which external testers need. The review contact and test account are Benjamin's to
@@ -457,9 +523,9 @@ async def _beta_review(
             "betaAppLocalizations",
             {
                 "description": texts(locale, root, play)["description"],
-                "feedbackEmail": CONTACT_EMAIL,
-                "marketingUrl": SUPPORT_URL,
-                "privacyPolicyUrl": PRIVACY_URL,
+                "feedbackEmail": p.contact_email,
+                "marketingUrl": p.support_url,
+                "privacyPolicyUrl": p.privacy_url,
             },
             {"attributes": {"locale": locale}, "relationships": {"app": _rel("apps", app_id)}},
             f"Testinformationen {locale}",
@@ -472,7 +538,7 @@ async def _beta_review(
         await api.upsert(
             known.get(locale),
             "betaBuildLocalizations",
-            {"whatsNew": WHAT_TO_TEST[locale]},
+            {"whatsNew": p.what_to_test[locale]},
             {"attributes": {"locale": locale}, "relationships": {"build": _rel("builds", build)}},
             f"Was testen {locale}",
         )
@@ -609,14 +675,21 @@ async def _screenshots(api: _Api, localization: str, shots: list[Path], locale: 
         await api.call("PATCH", f"/appScreenshots/{shot['id']}", what, body=body)
 
 
-async def push_report(stores: Stores) -> Report:
+async def push_report(stores: Stores, app: OtherApp | None = None) -> Report:
     report = Report()
     if not stores.vault.has("asc"):
         report.add(TITLE, "warn", "Kein App-Store-Connect-Schlüssel hinterlegt.")
         return report
     client = stores.client or httpx.AsyncClient(timeout=UPLOAD_TIMEOUT)
     try:
-        await push(client, stores.asc_auth, report)
+        if app is None:
+            await push(client, stores.asc_auth, report)
+        else:
+            # A further app's texts and screenshots: store/ of its repository's main.
+            store = await stores.fetch_listing(client, app)
+            await push(
+                client, stores.asc_auth, report, store / "appstore", store / "play", profile(app)
+            )
     except StoreError as exc:
         report.add(TITLE, "fail", str(exc))
     except httpx.HTTPError as exc:
@@ -627,37 +700,40 @@ async def push_report(stores: Stores) -> Report:
     return report
 
 
-def start(stores: Stores, by: str) -> bool:
+def start(stores: Stores, by: str, app: OtherApp | None = None) -> bool:
     """Push in the background, like the Play listing; False while one still runs."""
-    task = stores.jobs.get(TITLE)
+    p = profile(app)
+    task = stores.jobs.get(p.job)
     if task is not None and not task.done():
         return False
-    stores.vault.write_json(STATE_FILE, {"at": _now(), "by": by, "running": True})
+    stores.vault.write_json(p.state_file, {"at": _now(), "by": by, "running": True})
 
     async def run() -> Report:
         try:
-            report = await push_report(stores)
+            report = await push_report(stores, app)
         except Exception:  # a bug, not Apple: say so instead of "restarted"
             log.exception("app store listing push failed")
             report = Report()
             report.add(TITLE, "fail", "Interner Fehler, siehe Log des Hubs.")
         steps = [{"title": x.title, "state": x.state, "text": x.text} for x in report.steps]
-        stores.vault.write_json(STATE_FILE, {"at": _now(), "by": by, "steps": steps})
+        stores.vault.write_json(p.state_file, {"at": _now(), "by": by, "steps": steps})
         log.info(
             # With the texts: the public link and Apple's answers, nothing secret.
-            "app store listing pushed by %s: %s",
+            "app store listing %s pushed by %s: %s",
+            p.key,
             by,
             [(x.title, x.state, x.text) for x in report.steps],
         )
         return report
 
-    stores.jobs[TITLE] = asyncio.create_task(run())
+    stores.jobs[p.job] = asyncio.create_task(run())
     return True
 
 
-def state(stores: Stores) -> dict[str, Any] | None:
-    found = stores.vault.read_json(STATE_FILE)
-    task = stores.jobs.get(TITLE)
+def state(stores: Stores, app: OtherApp | None = None) -> dict[str, Any] | None:
+    p = profile(app)
+    found = stores.vault.read_json(p.state_file)
+    task = stores.jobs.get(p.job)
     if found and found.get("running") and (task is None or task.done()):
         text = "Abgebrochen (der Hub wurde neu gestartet), bitte noch einmal übertragen."
         return {

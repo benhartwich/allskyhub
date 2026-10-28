@@ -117,6 +117,14 @@ class OtherApp:
     codemagic_name: str  # Codemagic names an app after its repository
     group: str
     workflow: str = "ios-release"
+    # Its store listings, from ``store/`` of the repository's main branch (layout as
+    # app/store here): contact, links, App Store categories and the first version.
+    contact_email: str = ""
+    website: str = ""
+    privacy_url: str = ""
+    categories: tuple[str, str] = ("", "")
+    version: str = "1.0.0"
+    what_to_test: dict[str, str] = field(default_factory=dict[str, str])
 
 
 OTHER_APPS = {
@@ -128,8 +136,47 @@ OTHER_APPS = {
         repo="benhartwich/bortle-app",
         codemagic_name="bortle-app",
         group="bortle_store",
+        contact_email="info@bortle.eu",
+        website="https://bortle.eu",
+        privacy_url="https://bortle.eu/privacy",
+        categories=("PHOTO_AND_VIDEO", "UTILITIES"),
+        version="0.2.0",
+        what_to_test={
+            "de-DE": "Anmelden bei bortle.eu oder dem eigenen Server, Sitzungen planen und "
+            "verfolgen. Rückmeldungen gern über TestFlight.",
+            "en-US": "Sign in to bortle.eu or your own server, plan and follow sessions. "
+            "Feedback is welcome through TestFlight.",
+        },
     ),
 }
+# A repository's store folder, downloaded for a listing push (codeload, no API quota).
+LISTING_TARBALL = "https://codeload.github.com/{repo}/tar.gz/refs/heads/main"
+LISTING_MAX_BYTES = 200_000_000
+
+
+def extract_listing(tarball: bytes, dest: Path) -> Path:
+    """Unpack only ``store/`` of a GitHub tarball into ``dest`` (replaced), with the
+    tarfile data filter: no links, devices or paths outside. Returns ``dest/store``."""
+    import io
+    import shutil
+    import tarfile
+
+    if dest.exists():
+        shutil.rmtree(dest)
+    dest.mkdir(parents=True)
+    with tarfile.open(fileobj=io.BytesIO(tarball), mode="r:gz") as tar:
+        members: list[tarfile.TarInfo] = []
+        for m in tar.getmembers():
+            parts = m.name.split("/", 1)  # "<repo>-<sha>/store/..."
+            if len(parts) == 2 and parts[1].startswith("store/") and (m.isfile() or m.isdir()):
+                m.name = parts[1]
+                members.append(m)
+        tar.extractall(dest, members=members, filter="data")
+    store = dest / "store"
+    if not store.is_dir():
+        raise StoreError("Im Repository fehlt der Ordner store/.")
+    return store
+
 
 KEY_ID = re.compile(r"^[A-Z0-9]{10}$")
 ISSUER_ID = re.compile(r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$")
@@ -1040,12 +1087,14 @@ class Stores:
 
     # Store listing
 
-    def screenshots(self, language: str | None = None) -> list[Path]:
+    def screenshots(self, language: str | None = None, root: Path | None = None) -> list[Path]:
         """The uploaded phone screenshots, else the repository's (made from the app with
         sample data, app/test/store): the language's own (``<language>/screenshots``), else
-        the shared ones."""
-        own = [self.listing / language / "screenshots"] if language else []
-        for folder in (self.screenshot_dir, *own, self.listing / "screenshots"):
+        the shared ones. With ``root`` (a further app's listing) only those."""
+        listing = root or self.listing
+        uploaded = [] if root is not None else [self.screenshot_dir]
+        own = [listing / language / "screenshots"] if language else []
+        for folder in (*uploaded, *own, listing / "screenshots"):
             if folder.is_dir():
                 found = sorted(p for p in folder.iterdir() if p.suffix in (".png", ".jpg"))
                 if found:
@@ -1075,8 +1124,8 @@ class Stores:
         for name, data in named:
             (self.screenshot_dir / name).write_bytes(data)
 
-    def listing_texts(self, language: str) -> dict[str, str]:
-        folder = self.listing / language
+    def listing_texts(self, language: str, root: Path | None = None) -> dict[str, str]:
+        folder = (root or self.listing) / language
         return {
             "language": language,
             "title": (folder / "title.txt").read_text().strip(),
@@ -1084,34 +1133,46 @@ class Stores:
             "fullDescription": (folder / "full_description.txt").read_text().strip(),
         }
 
-    def start_listing(self, by: str) -> bool:
+    def start_listing(self, by: str, other: OtherApp | None = None) -> bool:
         """Push the listing in the background (it takes longer than the proxy waits for a
-        page); False while one is still running. The result lands in ``listing.json``."""
-        if self._listing_task is not None and not self._listing_task.done():
+        page); False while one is still running. The result lands in ``listing.json``
+        (``listing-<app>.json`` for a further app)."""
+        name = f"listing-{other.key}.json" if other else "listing.json"
+        task = self.jobs.get(name) if other else self._listing_task
+        if task is not None and not task.done():
             return False
-        self.vault.write_json("listing.json", {"at": _now(), "by": by, "running": True})
+        self.vault.write_json(name, {"at": _now(), "by": by, "running": True})
 
         async def run() -> Report:
             try:
-                report = await self.push_listing()
+                report = await self.push_listing(other)
             except Exception:  # a bug, not Google: say so instead of "restarted"
                 log.exception("store listing push failed")
                 report = Report()
                 report.add("Store-Eintrag", "fail", "Interner Fehler, siehe Log des Hubs.")
             steps = [{"title": x.title, "state": x.state, "text": x.text} for x in report.steps]
-            self.vault.write_json("listing.json", {"at": _now(), "by": by, "steps": steps})
+            self.vault.write_json(name, {"at": _now(), "by": by, "steps": steps})
             log.info(
-                "store listing pushed by %s: %s", by, [(x.title, x.state) for x in report.steps]
+                "store listing %s pushed by %s: %s",
+                other.key if other else "allskyhub",
+                by,
+                [(x.title, x.state) for x in report.steps],
             )
             return report
 
-        self._listing_task = asyncio.create_task(run())
+        job = asyncio.create_task(run())
+        if other:
+            self.jobs[name] = job
+        else:
+            self._listing_task = job
         return True
 
-    def listing_state(self) -> dict[str, Any] | None:
+    def listing_state(self, other: OtherApp | None = None) -> dict[str, Any] | None:
         """The last push: ``running``, or its ``steps`` (title, state, text)."""
-        state = self.vault.read_json("listing.json")
-        alive = self._listing_task is not None and not self._listing_task.done()
+        name = f"listing-{other.key}.json" if other else "listing.json"
+        state = self.vault.read_json(name)
+        task = self.jobs.get(name) if other else self._listing_task
+        alive = task is not None and not task.done()
         if state and state.get("running") and not alive:  # the hub restarted meanwhile
             text = "Abgebrochen (der Hub wurde neu gestartet), bitte noch einmal übertragen."
             return {**state, "running": False, "steps": [
@@ -1119,7 +1180,7 @@ class Stores:
             ]}  # fmt: skip
         return state
 
-    async def push_listing(self) -> Report:
+    async def push_listing(self, other: OtherApp | None = None) -> Report:
         """Texts, icon, feature graphic and screenshots of every language to Play."""
         report = Report()
         if not self.vault.has("play"):
@@ -1127,7 +1188,7 @@ class Stores:
             return report
         client = self._client or httpx.AsyncClient(timeout=UPLOAD_TIMEOUT)
         try:
-            await self._push_listing(client, report)
+            await self._push_listing(client, report, other)
         except StoreError as exc:
             report.add("Store-Eintrag", "fail", str(exc))
         except httpx.HTTPError as exc:
@@ -1138,9 +1199,25 @@ class Stores:
             await self._close(client)
         return report
 
-    async def _push_listing(self, client: httpx.AsyncClient, report: Report) -> None:
+    async def fetch_listing(self, client: httpx.AsyncClient, app: OtherApp) -> Path:
+        """A further app's ``store/`` from its repository's main branch, fresh."""
+        r = await client.get(
+            LISTING_TARBALL.format(repo=app.repo), timeout=UPLOAD_TIMEOUT, follow_redirects=True
+        )
+        if r.status_code != 200 or len(r.content) > LISTING_MAX_BYTES:
+            raise StoreError(f"Store-Dateien von {app.repo} nicht ladbar ({r.status_code}).")
+        dest = self.vault.root / "listings" / app.key
+        return await asyncio.to_thread(extract_listing, r.content, dest)
+
+    async def _push_listing(
+        self, client: httpx.AsyncClient, report: Report, other: OtherApp | None = None
+    ) -> None:
         auth = {"Authorization": f"Bearer {await self._play_token(client)}"}
-        app = f"{PLAY}/applications/{PACKAGE}"
+        package = other.package if other else PACKAGE
+        root = (await self.fetch_listing(client, other)) / "play" if other else self.listing
+        email = other.contact_email if other else CONTACT_EMAIL
+        website = other.website if other else CONTACT_WEBSITE
+        app = f"{PLAY}/applications/{package}"
         r = await client.post(f"{app}/edits", headers=auth)
         if r.status_code == 404:
             raise StoreError(
@@ -1150,24 +1227,24 @@ class Stores:
         if r.status_code != 200:
             raise StoreError(f"Bearbeitung nicht möglich ({_message(r)}).")
         edit = f"{app}/edits/{_dict(r.json())['id']}"
-        upload = f"{PLAY_UPLOAD}/applications/{PACKAGE}/edits/{_dict(r.json())['id']}"
+        upload = f"{PLAY_UPLOAD}/applications/{package}/edits/{_dict(r.json())['id']}"
         details = {
             "defaultLanguage": LANGUAGES[0],
-            "contactEmail": CONTACT_EMAIL,
-            "contactWebsite": CONTACT_WEBSITE,
+            "contactEmail": email,
+            "contactWebsite": website,
         }
         r = await client.put(f"{edit}/details", json=details, headers=auth)
         if r.status_code != 200:
             raise StoreError(f"Kontaktdaten abgelehnt ({_message(r)}).")
         for language in LANGUAGES:
-            shots = self.screenshots(language)
-            texts = self.listing_texts(language)
+            shots = self.screenshots(language, root if other else None)
+            texts = self.listing_texts(language, root)
             r = await client.put(f"{edit}/listings/{language}", json=texts, headers=auth)
             if r.status_code != 200:
                 raise StoreError(f"Texte {language} abgelehnt ({_message(r)}).")
             images: list[tuple[str, Path]] = [
-                ("icon", self.listing / "icon.png"),
-                ("featureGraphic", self.listing / language / "feature.png"),
+                ("icon", root / "icon.png"),
+                ("featureGraphic", root / language / "feature.png"),
                 *(("phoneScreenshots", p) for p in shots),
             ]
             for kind in dict.fromkeys(k for k, _ in images):
@@ -1194,7 +1271,10 @@ class Stores:
         r = await client.post(f"{edit}:commit", headers=auth)
         if r.status_code != 200:
             raise StoreError(f"Abschließen abgelehnt ({_message(r)}).")
-        if any(len(self.screenshots(lang)) < SCREENSHOTS[0] for lang in LANGUAGES):
+        if any(
+            len(self.screenshots(lang, root if other else None)) < SCREENSHOTS[0]
+            for lang in LANGUAGES
+        ):
             report.add(
                 "Screenshots",
                 "warn",

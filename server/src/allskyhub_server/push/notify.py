@@ -115,7 +115,9 @@ class Notifier:
         return value if isinstance(value, str) else None
 
     def set_sender(self, sender: PushSender | None) -> None:
-        """A new service account from the admin page takes effect at once."""
+        """A new service account from the admin page takes effect at once. In this worker
+        only: the hub runs with ``--workers 1``; with more, the others would see a new key
+        only after a restart (the same holds for the Turnstile keys)."""
         self._sender = sender
 
     @property

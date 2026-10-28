@@ -101,6 +101,31 @@
   {% endif %}
   <p class="muted small">„Einladen“ schickt den Einladungslink (14 Tage gültig) und den Link zu den ersten Schritten per E-Mail. „Ablehnen“ schickt nichts.</p>
 </section>
+<section class="card stack" id="fotos">
+  <h2>Polarlicht-Fotos zur Freigabe</h2>
+  {% if aurora_photos %}
+  <ul class="parts">
+    {% for r in aurora_photos %}
+    <li>
+      <img src="/admin/aurora-photos/{{ r.id }}.jpg" alt="Polarlicht-Foto" loading="lazy" style="max-width: 100%; border-radius: 8px">
+      <span class="muted small">{{ r.created_at | localtime }} · {{ '%.1f' | format(r.lat) }}°, {{ '%.1f' | format(r.lon) }}° · Name: {{ r.author or 'anonym' }}{% if r.flags %} · {{ r.flags }}× gemeldet{% endif %}</span>
+      <span class="part-links">
+        {% for action, label, cls in (('approve', 'Freigeben', 'small'), ('reject', 'Ablehnen und löschen', 'secondary small')) %}
+        <form method="post" action="/admin/aurora-photos/{{ r.id }}" class="inline">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+          <input type="hidden" name="action" value="{{ action }}">
+          <button type="submit" class="{{ cls }}">{{ label }}</button>
+        </form>
+        {% endfor %}
+      </span>
+    </li>
+    {% endfor %}
+  </ul>
+  {% else %}
+  <p class="muted">Keine Fotos offen.</p>
+  {% endif %}
+  <p class="muted small">Fotos aus der App („Polarlicht gesehen?“) erscheinen erst nach der Freigabe, mit Name und CC BY 4.0. Dreimal als unpassend gemeldete Fotos kommen hierher zurück.</p>
+</section>
 <section class="card stack" id="stores">
   <h2>Apps: Android und iOS</h2>
   {% if store_report %}

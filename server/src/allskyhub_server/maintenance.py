@@ -14,15 +14,17 @@ from allskyhub_protocol import EventVariant, FrameVariant
 from allskyhub_server.auth import access_requests, password_reset, reporters
 from allskyhub_server.auth.accounts import DEFAULT_EVENT_KEEP_DAYS
 from allskyhub_server.auth.sessions import IDLE_TIMEOUT
-from allskyhub_server.devices import camera_map, renders, stats
+from allskyhub_server.devices import camera_map, renders, sightings, stats
 from allskyhub_server.devices.images import ImageStore
 from allskyhub_server.models import (
     AircraftPass,
     AppToken,
+    AuroraReport,
     Device,
     DeviceNonce,
     DeviceToken,
     EventRecord,
+    FireballReport,
     Frame,
     Invitation,
     PairingCode,
@@ -78,6 +80,16 @@ async def purge(
     await db.execute(
         delete(SkyReport).where(SkyReport.at < now - dt.timedelta(days=camera_map.REPORT_DAYS))
     )
+    # Sightings by eye (stage 5) go after a year too, aurora photos with them.
+    year_ago = now - dt.timedelta(days=365)
+    await db.execute(delete(FireballReport).where(FireballReport.seen_at < year_ago))
+    old = list(await db.scalars(select(AuroraReport.id).where(AuroraReport.seen_at < year_ago)))
+    for report_id in old:
+        await asyncio.to_thread(sightings.delete_photo, settings.data_dir / "sightings", report_id)
+    if old:
+        await db.execute(delete(AuroraReport).where(AuroraReport.id.in_(old)))
+    await db.flush()
+    await sightings.sweep(db, settings.data_dir / "sightings")
     await access_requests.purge(db, now)
     await _purge_frames(db, store, settings, now)
     # Roadmap H9: the day's aircraft go with the night's other data.

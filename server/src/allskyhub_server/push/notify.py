@@ -24,6 +24,7 @@ from allskyhub_server.devices import (
     fireball,
     health,
     night_summary,
+    sightings,
     space_weather,
     tonight,
 )
@@ -33,7 +34,14 @@ from allskyhub_server.devices.event_text import EVENT_TITLES
 from allskyhub_server.devices.events import storm_key
 from allskyhub_server.devices.tonight import ForecastCache
 from allskyhub_server.mail.send import Mail, Mailer
-from allskyhub_server.models import Device, EventRecord, MeteorPair, PushToken, User
+from allskyhub_server.models import (
+    AuroraReport,
+    Device,
+    EventRecord,
+    MeteorPair,
+    PushToken,
+    User,
+)
 from allskyhub_server.push.fcm import Message
 
 log = logging.getLogger(__name__)
@@ -67,6 +75,8 @@ AURORA_NET_MIN_INDEX = 5
 # close to the fall area hear of it.
 FIREBALL_SAME = dt.timedelta(seconds=30)
 FIREBALL_RADIUS_KM = 300.0
+# Stage 5: aurora seen by people near the alert place, at most this often per account.
+AURORA_NEAR_QUIET = dt.timedelta(hours=2)
 
 
 class PushSender(Protocol):
@@ -90,6 +100,8 @@ class Notifier:
         self.base_url = ""
         # Set by the app: the owner's Discord channel (roadmap H5).
         self.discord: Discord | None = None
+        # Set by the app: who approves aurora photos (settings.admins).
+        self.admins: frozenset[str] = frozenset()
 
     @property
     def enabled(self) -> bool:
@@ -353,6 +365,33 @@ class Notifier:
                     if user.id not in best or km < best[user.id][0]:
                         best[user.id] = (km, place, device, user)
                 when = pair.at.astimezone(_zone()).strftime("%H:%M")
+                # Stage 5: people with fireball alerts around their chosen place.
+                near_users = await db.scalars(
+                    select(User).where(
+                        User.notify_fireball_near.is_(True), User.alert_lat.is_not(None)
+                    )
+                )
+                for user in near_users:
+                    if user.id in best or user.alert_lat is None or user.alert_lon is None:
+                        continue
+                    here = (user.alert_lat, user.alert_lon)
+                    km = fireball.distance_km(*here, *mid)
+                    if km > user.alert_radius_km:
+                        continue
+                    where = fireball.compass(fireball.bearing_deg(*here, *mid))
+                    await self._deliver(
+                        db,
+                        user,
+                        Message(
+                            title="Feuerkugel in deiner Nähe",
+                            body=(
+                                f"Um {when} Uhr, vermessen von den Kameras: Ende in "
+                                f"{area.end_km:.0f} km Höhe, etwa {km:.0f} km {where} von dir."
+                            ),
+                            data=_data("fireball_near", f"/feuerkugeln/{pair.id}", str(pair.id)),
+                        ),
+                        by_mail=False,
+                    )
                 for km, place, device, user in best.values():
                     where = fireball.compass(fireball.bearing_deg(*place, *mid))
                     await self._deliver(
@@ -570,6 +609,117 @@ class Notifier:
                     ),
                 )
 
+    async def aurora_near(self, report_id: uuid.UUID) -> None:
+        """Stage 5: a person reports aurora; tell those whose alert place is within their
+        radius, at most once per ``AURORA_NEAR_QUIET``. Push only."""
+        if self._sender is None:
+            return
+        now = _now()
+        try:
+            async with self._maker() as db:
+                report = await db.get(AuroraReport, report_id)
+                if report is None:
+                    return
+                users = await db.scalars(
+                    select(User).where(
+                        User.notify_aurora_near.is_(True),
+                        User.alert_lat.is_not(None),
+                        User.id != report.user_id,
+                    )
+                )
+                for user in users:
+                    if user.alert_lat is None or user.alert_lon is None:
+                        continue
+                    if user.aurora_near_at and now - user.aurora_near_at < AURORA_NEAR_QUIET:
+                        continue
+                    here = (user.alert_lat, user.alert_lon)
+                    if sightings.distance_km(here, (report.lat, report.lon)) > user.alert_radius_km:
+                        continue
+                    found = await sightings.aurora_near(
+                        db, here, now - dt.timedelta(hours=1), user.alert_radius_km
+                    )
+                    eye = sum(r.naked_eye for r, _ in found)
+                    nearest = sightings.step_km(
+                        found[0][1] if found else 0, sightings.AURORA_STEP_KM
+                    )
+                    user.aurora_near_at = now
+                    await db.commit()
+                    body = (
+                        f"{len(found)} Meldung{'en' if len(found) != 1 else ''} im Umkreis, "
+                        f"die nächste bis {nearest} km entfernt"
+                        + (f", {eye} mit bloßem Auge" if eye else ", auf Fotos")
+                        + ". Schau Richtung Pol!"
+                    )
+                    await self._deliver(
+                        db,
+                        user,
+                        Message(
+                            title="Polarlicht gesichtet",
+                            body=body,
+                            data=_data("aurora_near", "/sightings/aurora", str(report.id)),
+                        ),
+                        by_mail=False,
+                    )
+        except Exception:
+            log.exception("push: aurora sighting failed")
+
+    async def photo_to_review(self, report_id: uuid.UUID) -> None:
+        """A mail to the admins: an aurora photo waits for approval."""
+        if self.mailer is None or not self._mail or not self.admins:
+            return
+        base = self.base_url.rstrip("/")
+        for to in sorted(self.admins):
+            await self.mailer.send(
+                Mail(
+                    to=to,
+                    subject="allskyhub: Polarlicht-Foto zur Freigabe",
+                    body=f"Ein Foto aus der App wartet auf Freigabe:\n\n{base}/admin#fotos\n",
+                )
+            )
+
+    async def check_clear_here(self, now: dt.datetime | None = None) -> None:
+        """Stage 5, like ``check_tonight`` but at the app's alert place: once per night,
+        in the evening, when the forecast has a clear, dark stretch there."""
+        if self._sender is None or self.forecast is None:
+            return
+        now = now or _now()
+        async with self._maker() as db:
+            users = list(
+                await db.scalars(
+                    select(User).where(
+                        User.notify_clear_here.is_(True), User.alert_lat.is_not(None)
+                    )
+                )
+            )
+            for user in users:
+                if user.alert_lat is None or user.alert_lon is None:
+                    continue
+                lat, lon = user.alert_lat, user.alert_lon
+                zone = tonight.zone_for(user.alert_tz)
+                result = tonight.build(now, lat, lon, zone, await self.forecast.get(lat, lon))
+                night = result.night
+                if night.sunset is None:
+                    continue
+                night_id = night.sunset.astimezone(zone).strftime("%Y%m%d")
+                if user.clear_here_night == night_id or now < night.sunset - TONIGHT_BEFORE_SUNSET:
+                    continue
+                user.clear_here_night = night_id
+                await db.commit()
+                if night.dusk is None or now > night.dusk or result.best is None:
+                    continue
+                if result.best[1] - result.best[0] < TONIGHT_MIN_CLEAR:
+                    continue
+                await self._deliver(
+                    db,
+                    user,
+                    Message(
+                        title="Heute Nacht klar bei dir",
+                        body=result.summary,
+                        data=_data("clear_night", "/sky", night_id),
+                    ),
+                    by_mail=False,
+                )
+
     async def check_offline_mail(
         self, registry: ConnectionRegistry, now: dt.datetime | None = None
     ) -> None:
@@ -632,7 +782,17 @@ class Notifier:
                 await self.check_tonight()
             except Exception:
                 log.exception("push: evening notice failed")
+            try:
+                await self.check_clear_here()
+            except Exception:
+                log.exception("push: evening notice at the alert place failed")
             await asyncio.sleep(OFFLINE_CHECK.total_seconds())
+
+
+def _data(kind: str, path: str, id_: str) -> dict[str, str]:
+    """Data of the newer messages, the convention shared with bortle's app: what it is,
+    where it opens in the app, what replaces an earlier one, when it was sent."""
+    return {"kind": kind, "path": path, "id": id_, "sent_at": _now().isoformat()}
 
 
 def _clear_and_dark(device: Device, now: dt.datetime) -> bool:

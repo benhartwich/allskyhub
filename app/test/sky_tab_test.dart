@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:allskyhub_app/api/hub_client.dart';
 import 'package:allskyhub_app/api/place_store.dart';
 import 'package:allskyhub_app/platform/location.dart';
+import 'package:allskyhub_app/platform/reminders.dart';
 import 'package:allskyhub_app/screens/sky_screen.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -23,6 +24,38 @@ class _Here implements LocationSource {
 
   @override
   Future<String?> timezone() async => 'Europe/Vienna';
+}
+
+class _Reminders implements Reminders {
+  final ids = <int>{};
+  final bodies = <int, String?>{};
+  bool allowed = true;
+
+  @override
+  Future<Set<int>> pending() async => {...ids};
+
+  @override
+  Future<bool> remind(CalendarItem item, {String? forecast}) async {
+    if (!allowed || reminderTime(item) == null) return false;
+    ids.add(reminderId(item));
+    bodies[reminderId(item)] = forecast;
+    return true;
+  }
+
+  @override
+  Future<void> forget(CalendarItem item) async => ids.remove(reminderId(item));
+
+  @override
+  Future<void> refresh(
+    List<CalendarItem> items,
+    Map<DateTime, String> forecasts,
+  ) async {
+    for (final i in items) {
+      if (ids.contains(reminderId(i))) {
+        bodies[reminderId(i)] = forecasts[nightOf(i)];
+      }
+    }
+  }
 }
 
 Map<String, Object?> _hour(String at, int clouds, {bool good = false}) => {
@@ -143,9 +176,15 @@ void main() {
     addTearDown(tester.view.reset);
     final seen = <Uri>[];
     final places = MemoryPlaceStore();
+    final reminders = _Reminders();
     await tester.pumpWidget(
       MaterialApp(
-        home: SkyScreen(client: _hub(seen), places: places, location: _Here()),
+        home: SkyScreen(
+          client: _hub(seen),
+          places: places,
+          location: _Here(),
+          reminders: reminders,
+        ),
       ),
     );
     await tester.pumpAndSettle();
@@ -177,6 +216,16 @@ void main() {
     await tester.tap(find.byKey(const Key('filter-shower')));
     await tester.pumpAndSettle();
     expect(find.text('Vollmond'), findsNothing);
+
+    // The bell: remembered on the phone, tapped again forgotten.
+    final bell = find.byIcon(Icons.notifications_none);
+    await tester.tap(bell.first);
+    await tester.pumpAndSettle();
+    expect(reminders.ids, hasLength(1));
+    expect(find.byIcon(Icons.notifications_active), findsOneWidget);
+    await tester.tap(find.byIcon(Icons.notifications_active));
+    await tester.pumpAndSettle();
+    expect(reminders.ids, isEmpty);
   });
 
   testWidgets('the night table, and a refused location is explained', (
@@ -189,6 +238,7 @@ void main() {
           client: _hub([]),
           places: MemoryPlaceStore(const SkyPlace.here()),
           location: here,
+          reminders: _Reminders(),
         ),
       ),
     );
@@ -211,5 +261,25 @@ void main() {
       findsOneWidget,
     );
     expect(find.text('25'), findsNWidgets(2)); // wind per hour
+  });
+
+  test('reminders fire at 18:00 for all-day events, else 30 min before', () {
+    CalendarItem item(String at, bool allDay) => CalendarItem.fromJson({
+      'kind': 'shower',
+      'at': at,
+      'all_day': allDay,
+      'title': 'x',
+      'text': 'y',
+    });
+    final now = DateTime(2026, 10, 1);
+    final day = reminderTime(item('2026-11-17T21:00:00Z', true), now: now)!;
+    expect((day.hour, day.minute), (18, 0));
+    final pass = item('2026-11-17T19:00:00Z', false);
+    expect(
+      reminderTime(pass, now: now),
+      pass.at.toLocal().subtract(const Duration(minutes: 30)),
+    );
+    expect(reminderTime(pass, now: DateTime(2027)), isNull);
+    expect(reminderId(pass), reminderId(item('2026-11-17T19:00:00Z', false)));
   });
 }

@@ -10,6 +10,7 @@ import '../api/place_store.dart';
 import '../design.dart';
 import '../l10n.dart';
 import '../platform/location.dart';
+import '../platform/reminders.dart';
 import 'gallery_screens.dart' show clock;
 import 'public_camera_screen.dart';
 import 'sky_calendar_screen.dart';
@@ -26,11 +27,13 @@ class SkyScreen extends StatefulWidget {
     required this.client,
     required this.places,
     required this.location,
+    required this.reminders,
   });
 
   final HubClient client;
   final PlaceStore places;
   final LocationSource location;
+  final Reminders reminders;
 
   @override
   State<SkyScreen> createState() => _SkyScreenState();
@@ -75,7 +78,12 @@ class _SkyScreenState extends State<SkyScreen> {
     final calendar = widget.client
         .publicCalendar(lat, lon, tz: _tz)
         .catchError((Object _) => <CalendarItem>[]);
-    return (label: label, sky: await sky, calendar: await calendar);
+    final loaded = (label: label, sky: await sky, calendar: await calendar);
+    // Pending reminders get the newest forecast (best effort).
+    widget.reminders
+        .refresh(loaded.calendar, forecasts(loaded.sky))
+        .catchError((Object _) {});
+    return loaded;
   }
 
   Future<void> _reload() async {
@@ -149,6 +157,7 @@ class _SkyScreenState extends State<SkyScreen> {
                 return _Sky(
                   client: widget.client,
                   data: data,
+                  reminders: widget.reminders,
                   onChoose: _choose,
                 );
               },
@@ -226,15 +235,23 @@ String weekday(DateTime day) {
   return (appEnglish ? en : de)[day.weekday - 1];
 }
 
+/// Evening → summary of the forecast nights, for reminders.
+Map<DateTime, String> forecasts(SkyForecast sky) => {
+  for (final n in sky.nights)
+    DateTime(n.evening.year, n.evening.month, n.evening.day): n.summary,
+};
+
 class _Sky extends StatelessWidget {
   const _Sky({
     required this.client,
     required this.data,
+    required this.reminders,
     required this.onChoose,
   });
 
   final HubClient client;
   final _Loaded data;
+  final Reminders reminders;
   final VoidCallback onChoose;
 
   void _night(BuildContext context, int i) => Navigator.of(context).push(
@@ -401,7 +418,11 @@ class _Sky extends StatelessWidget {
             key: const Key('sky-calendar'),
             onTap: () => Navigator.of(context).push(
               MaterialPageRoute<void>(
-                builder: (_) => SkyCalendarScreen(items: data.calendar),
+                builder: (_) => SkyCalendarScreen(
+                  items: data.calendar,
+                  reminders: reminders,
+                  forecasts: forecasts(data.sky),
+                ),
               ),
             ),
             child: Padding(

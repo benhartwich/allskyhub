@@ -40,7 +40,21 @@ log = logging.getLogger(__name__)
 
 APPSTORE = LISTING.parent / "appstore"
 LOCALES = ("de-DE", "en-US")  # the first is the primary language chosen when creating the app
-VERSION = "1.0.0"  # app/pubspec.yaml, for a first version Apple has not made itself
+
+
+def app_version(pubspec: Path = LISTING.parents[1] / "pubspec.yaml") -> str:
+    """The app's version (``version: 1.1.0+1`` in app/pubspec.yaml), for the App Store
+    version the push makes when none is in preparation: each update needs a new one."""
+    try:
+        for line in pubspec.read_text().splitlines():
+            if line.startswith("version:"):
+                return line.split(":", 1)[1].strip().split("+", 1)[0]
+    except OSError:
+        pass
+    return "1.0.0"
+
+
+VERSION = app_version()
 # 1290 x 2796 (app/test/store, STORE_DEVICE=iphone): Apple's 6.7" and 6.9" iPhone set.
 DISPLAY_TYPE = "APP_IPHONE_67"
 SUPPORT_URL = "https://allskyhub.org"
@@ -350,7 +364,7 @@ async def push(
         "Noch in App Store Connect",
         "warn",
         "App-Datenschutz, Preis und Länder, Kontakt und Testkonto für die Prüfung; dann "
-        "„Zur Prüfung hinzufügen“.",
+        "hier „zur Prüfung einreichen“.",
     )
 
 
@@ -694,6 +708,97 @@ async def push_report(stores: Stores, app: OtherApp | None = None) -> Report:
         report.add(TITLE, "fail", str(exc))
     except httpx.HTTPError as exc:
         report.add(TITLE, "fail", f"Apple nicht erreichbar ({type(exc).__name__}).")
+    finally:
+        if client is not stores.client:
+            await client.aclose()
+    return report
+
+
+async def submit(client: httpx.AsyncClient, auth: Auth, report: Report, p: Profile) -> None:
+    """The version in preparation, with the build the listing push chose, to Apple's App
+    Store review (a review submission with that version as its item). Apple names what is
+    still missing (privacy, price, review contact) in its answer."""
+    api = _Api(client, auth)
+    apps = await api.items("/apps", "App", **{"filter[bundleId]": p.package})
+    if not apps:
+        raise StoreError(f"Die App {p.package} fehlt in App Store Connect.")
+    app_id = str(apps[0]["id"])
+    versions = await api.items(
+        f"/apps/{app_id}/appStoreVersions", "Versionen", **{"filter[platform]": "IOS"}
+    )
+    version = next((v for v in versions if _state(v) in EDITABLE), None)
+    if version is None:
+        busy = next((v for v in versions if _state(v) not in RELEASED), None)
+        if busy is not None:
+            name = _dict(busy.get("attributes")).get("versionString", "")
+            report.add("Prüfung", "ok", f"Version {name} ist schon bei Apple ({_state(busy)}).")
+            return
+        raise StoreError("Keine Version in Vorbereitung; erst „App Store übertragen“.")
+    name = _dict(version.get("attributes")).get("versionString", "")
+    build = _dict(
+        (await api.call("GET", f"/appStoreVersions/{version['id']}/build", "Build")).get("data")
+    )
+    if not build:
+        raise StoreError(
+            f"Version {name} hat noch keinen Build; erst iOS-Release bauen, dann übertragen."
+        )
+    number = _dict(build.get("attributes")).get("version", "")
+    open_ = await api.items(
+        f"/apps/{app_id}/reviewSubmissions",
+        "Einreichungen",
+        **{"filter[platform]": "IOS", "filter[state]": "READY_FOR_REVIEW"},
+    )
+    if open_:
+        submission = str(open_[0]["id"])
+    else:
+        body = {
+            "data": {
+                "type": "reviewSubmissions",
+                "attributes": {"platform": "IOS"},
+                "relationships": {"app": _rel("apps", app_id)},
+            }
+        }
+        submission = str(
+            _dict(
+                (await api.call("POST", "/reviewSubmissions", "Einreichung", body=body)).get("data")
+            )["id"]
+        )
+    items = await api.items(f"/reviewSubmissions/{submission}/items", "Einreichung")
+    has = any(
+        _dict(_dict(_dict(i.get("relationships")).get("appStoreVersion")).get("data")).get("id")
+        == version["id"]
+        for i in items
+    )
+    if not has:
+        body = {
+            "data": {
+                "type": "reviewSubmissionItems",
+                "relationships": {
+                    "reviewSubmission": _rel("reviewSubmissions", submission),
+                    "appStoreVersion": _rel("appStoreVersions", str(version["id"])),
+                },
+            }
+        }
+        await api.call("POST", "/reviewSubmissionItems", "Version zur Einreichung", body=body)
+    body = {
+        "data": {"type": "reviewSubmissions", "id": submission, "attributes": {"submitted": True}}
+    }
+    await api.call("PATCH", f"/reviewSubmissions/{submission}", "Einreichen", body=body)
+    report.add("Prüfung", "ok", f"Version {name} mit Build {number} ist zur Prüfung eingereicht.")
+
+
+async def submit_report(stores: Stores, app: OtherApp | None = None) -> Report:
+    report = Report()
+    if not stores.vault.has("asc"):
+        report.add(TITLE, "warn", "Kein App-Store-Connect-Schlüssel hinterlegt.")
+        return report
+    client = stores.client or httpx.AsyncClient(timeout=UPLOAD_TIMEOUT)
+    try:
+        await submit(client, stores.asc_auth, report, profile(app))
+    except StoreError as exc:
+        report.add("Prüfung", "fail", str(exc))
+    except httpx.HTTPError as exc:
+        report.add("Prüfung", "fail", f"Apple nicht erreichbar ({type(exc).__name__}).")
     finally:
         if client is not stores.client:
             await client.aclose()

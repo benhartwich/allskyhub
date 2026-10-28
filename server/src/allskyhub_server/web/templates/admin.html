@@ -267,6 +267,16 @@
     {% endif %}
     {% endfor %}
   </div>
+  <div class="row-links">
+    {% for store, label in (('play', other.title ~ ': Android zur Prüfung einreichen'), ('appstore', other.title ~ ': iOS zur Prüfung einreichen')) %}
+    <form method="post" action="/admin/stores-review" class="inline">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+      <input type="hidden" name="app" value="{{ other.key }}">
+      <input type="hidden" name="store" value="{{ store }}">
+      <button type="submit">{{ label }}</button>
+    </form>
+    {% endfor %}
+  </div>
   {% for name, result in (('Google Play', other_play), ('App Store', other_ios)) %}
   {% if result %}
   <p class="small"><strong>{{ other.title }} · {{ name }}</strong> <span class="muted">{{ result.at[:16] | replace('T', ' ') }} UTC</span>{% if result.running %} · läuft …{% endif %}</p>
@@ -303,6 +313,12 @@
     <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
     <button type="submit" class="secondary">Android: Play-Eintrag übertragen</button>
   </form>
+  <form method="post" action="/admin/stores-review" class="inline">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <input type="hidden" name="store" value="play">
+    <button type="submit">Android: zur Prüfung einreichen</button>
+  </form>
+  <p class="muted small">Nimmt die neueste Version aus dem internen Test in die Produktion; Google prüft sie und veröffentlicht sie danach.</p>
   {% endif %}
 
   {% if stores[1].meta %}
@@ -322,6 +338,12 @@
     <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
     <button type="submit" class="secondary">iOS: App Store und TestFlight übertragen</button>
   </form>
+  <form method="post" action="/admin/stores-review" class="inline">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <input type="hidden" name="store" value="appstore">
+    <button type="submit">iOS: zur Prüfung einreichen</button>
+  </form>
+  <p class="muted small">Reicht die Version in Vorbereitung mit dem gewählten Build bei Apple ein; vorher übertragen. Was Apple noch fehlt, steht dann hier.</p>
   {% endif %}
 
   <details>

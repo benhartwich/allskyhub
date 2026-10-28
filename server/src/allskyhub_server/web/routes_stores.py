@@ -5,6 +5,7 @@ Uploads need the password again, like a deploy. Nothing a page shows comes from 
 
 from __future__ import annotations
 
+import logging
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile
@@ -19,6 +20,7 @@ from allskyhub_server.web.deps import CurrentSession, DbSession, SettingsDep, cs
 from allskyhub_server.web.routes_admin import admin_only, confirmed, page
 
 router = APIRouter(dependencies=[Depends(csrf_protect)])
+log = logging.getLogger(__name__)
 
 WRONG_PASSWORD = "Das Passwort stimmt nicht."  # noqa: S105 - the message
 
@@ -284,6 +286,35 @@ async def other_app(
         else f"{other.title}: iOS-Release bei Codemagic gestartet."
     )
     return await page(request, db, session, notice=notice)
+
+
+@router.post("/admin/stores-review")
+async def submit_review(
+    request: Request,
+    db: DbSession,
+    session: CurrentSession,
+    settings: SettingsDep,
+    store: Annotated[str, Form(max_length=16)],
+    app: Annotated[str, Form(max_length=32)] = "",
+) -> Response:
+    """Submit to the stores' review: Apple's App Store, Google Play's production."""
+    admin_only(session, settings)
+    other = admin_stores.OTHER_APPS.get(app) if app else None
+    if (app and other is None) or store not in ("appstore", "play"):
+        return await page(request, db, session, 400, error="Unbekannte App oder Store.")
+    stores: admin_stores.Stores = request.app.state.stores
+    if store == "play":
+        report = await stores.submit_play(other.package if other else admin_stores.PACKAGE)
+    else:
+        report = await appstore.submit_report(stores, other)
+    log.info(
+        "review %s %s submitted by %s: %s",
+        store,
+        app or "allskyhub",
+        session.user.email,
+        [(x.title, x.state, x.text) for x in report.steps],
+    )
+    return await page(request, db, session, store_report=report)
 
 
 @router.post("/admin/stores-build")

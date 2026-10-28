@@ -7,6 +7,12 @@
 # integration in the Codemagic UI is needed. Android store builds run on the hub's own
 # server (deploy/android/README.md).
 # The check workflow needs none of that.
+#
+# SECURITY: builds start only by hand (hub admin or Codemagic UI). No `triggering`, never a
+# pull_request trigger: this repository is public, and a build of a fork's pull request
+# with allskyhub_store would expose the team-wide App Store Connect key and the
+# distribution certificate key (bortle_store holds the same). Changing this needs
+# Benjamin's explicit approval.
 
 definitions:
   flutter: &flutter

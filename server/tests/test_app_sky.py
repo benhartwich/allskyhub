@@ -116,3 +116,46 @@ async def test_privacy_policy_names_the_sky_tab(new_client: httpx.AsyncClient) -
     page = (await new_client.get("/datenschutz")).text
     assert "Himmel in der App" in page
     assert "Open-Meteo" in page
+
+
+def test_eclipses_and_planets_at_known_dates() -> None:
+    from allskyhub_server.devices import sky_events
+
+    u = dt.UTC
+    # 12 Aug 2026: total in Spain, partial in Vienna, night in Sydney.
+    new_moon = dt.datetime(2026, 8, 12, 17, 37, tzinfo=u)
+    madrid = sky_events.solar_eclipse(new_moon, 40.4, -3.7)
+    assert madrid is not None
+    assert abs(madrid.at - dt.datetime(2026, 8, 12, 18, 30, tzinfo=u)) < dt.timedelta(minutes=20)
+    assert sky_events.solar_eclipse(new_moon, 48.2, 16.4) is not None
+    assert sky_events.solar_eclipse(new_moon, -33.9, 151.2) is None
+    # A new moon without an eclipse.
+    assert sky_events.solar_eclipse(dt.datetime(2026, 11, 9, 7, 2, tzinfo=u), 48.2, 16.4) is None
+    # 3 Mar 2026: total lunar eclipse at 11:33 UTC, seen in America, not in Europe.
+    full = dt.datetime(2026, 3, 3, 11, 38, tzinfo=u)
+    la = sky_events.lunar_eclipse(full, 34.0, -118.2)
+    assert la is not None
+    assert la.depth == "umbral"
+    assert sky_events.lunar_eclipse(full, 48.2, 16.4) is None
+    assert sky_events.lunar_eclipse(dt.datetime(2026, 10, 26, 4, 12, tzinfo=u), 48.2, 16.4) is None
+    # Late October 2026: Saturn in the evening sky, Jupiter in the morning.
+    found = {
+        w.key: w
+        for w in sky_events.planets(
+            dt.datetime(2026, 10, 28, 15, 50, tzinfo=u),
+            dt.datetime(2026, 10, 29, 5, 40, tzinfo=u),
+            48.1,
+            14.4,
+        )
+    }
+    assert found["saturn"].start.hour < 18
+    assert found["jupiter"].start.hour < 3
+    assert "venus" not in found or found["venus"].altitude < 30
+
+
+async def test_sky_lists_tonights_planets(new_client: httpx.AsyncClient) -> None:
+    sky = (await new_client.get("/api/v1/public/sky", params={"lat": 48.1, "lon": 14.4})).json()
+    assert isinstance(sky["planets"], list)
+    for p in sky["planets"]:
+        assert p["key"] in ("mercury", "venus", "mars", "jupiter", "saturn")
+        assert p["altitude"] >= 10

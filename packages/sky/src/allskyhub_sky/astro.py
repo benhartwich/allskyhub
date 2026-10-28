@@ -113,6 +113,12 @@ def moon_altitude(t: dt.datetime, lat: float, lon: float) -> float:
     return geo - parallax * _cos(geo)
 
 
+def moon_ecliptic_latitude(t: dt.datetime) -> float:
+    """The moon's ecliptic latitude (degrees): near 0 at a new or full moon means an
+    eclipse (about a quarter degree accurate, like the position)."""
+    return _moon_ecliptic(_days(t))[1]
+
+
 def moon_illumination(t: dt.datetime) -> float:
     """Illuminated fraction of the disc, 0 (new) to 1 (full)."""
     d = _days(t)

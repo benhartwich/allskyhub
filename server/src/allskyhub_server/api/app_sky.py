@@ -14,6 +14,7 @@ import asyncio
 import datetime as dt
 import math
 from typing import Annotated, Any, Literal
+from zoneinfo import ZoneInfo
 
 from fastapi import APIRouter, HTTPException, Query, Request
 from fastapi.responses import JSONResponse
@@ -21,10 +22,18 @@ from pydantic import BaseModel
 from sqlalchemy import select
 
 from allskyhub_server.auth import ratelimit
-from allskyhub_server.devices import astro, public, satellites, showers, space_weather, tonight
+from allskyhub_server.devices import (
+    astro,
+    public,
+    satellites,
+    showers,
+    sky_events,
+    space_weather,
+    tonight,
+)
 from allskyhub_server.devices.space_weather import KpCache
 from allskyhub_server.devices.tonight import ForecastCache, Tonight
-from allskyhub_server.i18n import tr
+from allskyhub_server.i18n import english, tr
 from allskyhub_server.models import Device, SkySample
 from allskyhub_server.web.deps import DbSession, SettingsDep, client_ip
 
@@ -36,6 +45,7 @@ NEARBY_KM = 60.0
 # A camera's measurement counts as "now" for this long.
 NEARBY_MAX_AGE = dt.timedelta(minutes=20)
 CALENDAR_DAYS = 60
+MEETING_DAYS = 30
 PASS_NIGHTS = 2
 SERIES_HOURS = (6, 24, 72)
 SERIES_MAX_POINTS = 1500
@@ -98,6 +108,18 @@ class SkyPass(BaseModel):
     end_azimuth: float
 
 
+class SkyPlanet(BaseModel):
+    """A naked-eye planet tonight: up at least 10° while the sun is 6° down."""
+
+    key: str
+    name: str
+    start: dt.datetime
+    end: dt.datetime
+    best: dt.datetime
+    altitude: float
+    azimuth: float
+
+
 class Nearby(BaseModel):
     """What the nearest public camera measures now: measured, not forecast."""
 
@@ -117,10 +139,21 @@ class Sky(BaseModel):
     aurora: Aurora | None
     passes: list[SkyPass]
     nearby: Nearby | None
+    planets: list[SkyPlanet] = []
 
 
 class CalendarItem(BaseModel):
-    kind: Literal["shower", "new_moon", "full_moon", "aurora", "pass", "good_night"]
+    kind: Literal[
+        "shower",
+        "new_moon",
+        "full_moon",
+        "aurora",
+        "pass",
+        "good_night",
+        "moon_planet",
+        "lunar_eclipse",
+        "solar_eclipse",
+    ]
     at: dt.datetime
     all_day: bool
     title: str
@@ -313,6 +346,26 @@ async def _nights(
     return nights, {h.at: h for h in forecast}
 
 
+async def _planets(t: Tonight, lat: float, lon: float) -> list[SkyPlanet]:
+    n = t.night
+    if n.sunset is None or n.sunrise is None:
+        return []
+    found = await asyncio.to_thread(sky_events.planets, n.sunset, n.sunrise, lat, lon)
+    en = english()
+    return [
+        SkyPlanet(
+            key=w.key,
+            name=sky_events.planet_name(w.key, en),
+            start=w.start,
+            end=w.end,
+            best=w.best,
+            altitude=round(w.altitude),
+            azimuth=round(w.azimuth),
+        )
+        for w in found
+    ]
+
+
 @router.get("/sky")
 async def sky(
     request: Request, db: DbSession, settings: SettingsDep, lat: Lat, lon: Lon, tz: Zone = ""
@@ -331,6 +384,7 @@ async def sky(
             aurora=await _aurora(request, lat),
             passes=await _passes(request, lat, lon, nights[:1], now),
             nearby=await _nearby(db, (lat, lon), now),
+            planets=await _planets(nights[0][1], lat, lon),
         )
     )
 
@@ -360,6 +414,90 @@ def moon_phases(start: dt.datetime, days: int) -> list[tuple[MoonKind, dt.dateti
         if start <= at < start + dt.timedelta(days=days):
             found.append((kind, at))
     return found
+
+
+def _sky_items(
+    phases: list[tuple[MoonKind, dt.datetime]],
+    now: dt.datetime,
+    lat: float,
+    lon: float,
+    zone: ZoneInfo,
+) -> list[CalendarItem]:
+    """Eclipses and the moon meeting bright planets (sky_events), for the calendar."""
+    items: list[CalendarItem] = []
+    for kind, at in phases:
+        eclipse = (
+            sky_events.lunar_eclipse(at, lat, lon)
+            if kind == "full_moon"
+            else sky_events.solar_eclipse(at, lat, lon)
+        )
+        if eclipse is None:
+            continue
+        clock = at.astimezone(zone).strftime("%H:%M")
+        if eclipse.kind == "lunar":
+            umbral = eclipse.depth == "umbral"
+            items.append(
+                CalendarItem(
+                    kind="lunar_eclipse",
+                    at=eclipse.at,
+                    all_day=False,
+                    title=tr("Mondfinsternis", "Lunar eclipse")
+                    if umbral
+                    else tr("Halbschatten-Mondfinsternis", "Penumbral lunar eclipse"),
+                    text=tr(
+                        f"Am größten gegen {clock} Uhr, wenn der Mond bei dir über dem "
+                        "Horizont steht. Mit bloßem Auge gut zu sehen.",
+                        f"Greatest around {clock}, when the moon is above your horizon. "
+                        "Easy to see with the naked eye.",
+                    )
+                    if umbral
+                    else tr(
+                        f"Gegen {clock} Uhr wird der Mond leicht grau; kaum zu bemerken.",
+                        f"Around {clock} the moon turns slightly grey; hard to notice.",
+                    ),
+                )
+            )
+        else:
+            clock = eclipse.at.astimezone(zone).strftime("%H:%M")
+            items.append(
+                CalendarItem(
+                    kind="solar_eclipse",
+                    at=eclipse.at,
+                    all_day=False,
+                    title=tr("Sonnenfinsternis", "Solar eclipse"),
+                    text=tr(
+                        f"Bei dir am stärksten gegen {clock} Uhr. Nie ohne "
+                        "Sonnenfinsternis-Brille in die Sonne schauen!",
+                        f"Strongest where you are around {clock}. Never look at the sun "
+                        "without eclipse glasses!",
+                    ),
+                )
+            )
+    nights: list[tuple[dt.datetime, dt.datetime]] = []
+    day = now.astimezone(zone).date()
+    for i in range(MEETING_DAYS):
+        evening = dt.datetime.combine(day + dt.timedelta(days=i), dt.time(18), zone)
+        nights.append(
+            (evening.astimezone(dt.UTC), (evening + dt.timedelta(hours=12)).astimezone(dt.UTC))
+        )
+    en = english()
+    for m in sky_events.moon_meetings(nights, lat, lon):
+        if m.at < now:
+            continue
+        name = sky_events.planet_name(m.key, en)
+        items.append(
+            CalendarItem(
+                kind="moon_planet",
+                at=m.at,
+                all_day=False,
+                title=tr(f"Mond bei {name}", f"Moon near {name}"),
+                text=tr(
+                    f"Nur {m.degrees:.0f}° auseinander, ein schönes Paar am Himmel.",
+                    f"Only {m.degrees:.0f}° apart, a fine pair in the sky.",
+                ),
+            )
+        )
+    return items
 
 
 def _direction(az: float) -> str:
@@ -405,7 +543,9 @@ async def calendar(
                 )
             )
 
-    for kind, at in moon_phases(now, CALENDAR_DAYS):
+    phases = moon_phases(now, CALENDAR_DAYS)
+    items += await asyncio.to_thread(_sky_items, phases, now, lat, lon, zone)
+    for kind, at in phases:
         full = kind == "full_moon"
         items.append(
             CalendarItem(

@@ -1369,7 +1369,11 @@ class SkyForecast {
         for (final p in json['passes'] as List<dynamic>? ?? const [])
           SkyPass.fromJson(p as Map<String, dynamic>),
       ],
-      nearby = json['nearby'] as Map<String, dynamic>?;
+      nearby = json['nearby'] as Map<String, dynamic>?,
+      planets = [
+        for (final p in json['planets'] as List<dynamic>? ?? const [])
+          SkyPlanet.fromJson(p as Map<String, dynamic>),
+      ];
 
   final double lat;
   final double lon;
@@ -1384,6 +1388,28 @@ class SkyForecast {
   /// The nearest public camera's sky now: slug, title, distance_km, at, cloud_cover,
   /// sqm_mag; null without one within 60 km.
   final Map<String, dynamic>? nearby;
+
+  /// Naked-eye planets tonight (empty from older hubs).
+  final List<SkyPlanet> planets;
+}
+
+class SkyPlanet {
+  SkyPlanet.fromJson(Map<String, dynamic> json)
+    : key = json['key'] as String,
+      name = json['name'] as String,
+      start = DateTime.parse(json['start'] as String),
+      end = DateTime.parse(json['end'] as String),
+      best = DateTime.parse(json['best'] as String),
+      altitude = (json['altitude'] as num).toDouble(),
+      azimuth = (json['azimuth'] as num).toDouble();
+
+  final String key;
+  final String name;
+  final DateTime start;
+  final DateTime end;
+  final DateTime best;
+  final double altitude;
+  final double azimuth;
 }
 
 class CalendarItem {
@@ -1394,7 +1420,8 @@ class CalendarItem {
       title = json['title'] as String,
       text = json['text'] as String? ?? '';
 
-  /// `shower`, `new_moon`, `full_moon`, `aurora`, `pass`, `good_night`.
+  /// `shower`, `new_moon`, `full_moon`, `aurora`, `pass`, `good_night`, `moon_planet`,
+  /// `lunar_eclipse`, `solar_eclipse`.
   final String kind;
   final DateTime at;
   final bool allDay;

@@ -201,3 +201,25 @@ async def test_reloading_after_a_form_leads_back_to_the_page(client: httpx.Async
     assert r.headers["location"] == "/admin"
     assert (await client.get("/admin/plus")).headers["location"] == "/admin"
     assert (await client.get("/admin/nothing-here")).status_code == 404
+
+
+async def test_github_limit_is_named() -> None:
+    """The anonymous limit is shared by the whole server: say so, with the reset time."""
+
+    def limited(request: httpx.Request) -> httpx.Response:
+        headers = {"x-ratelimit-remaining": "0", "x-ratelimit-reset": "1793191305"}
+        return httpx.Response(403, headers=headers, json={"message": "rate limit"})
+
+    client = httpx.AsyncClient(transport=httpx.MockTransport(limited))
+    github = deploy.GitHub("benhartwich/allskyhub", client)
+    with pytest.raises(deploy.DeployError, match=r"Abrufgrenze .* wieder ab 12:41 UTC"):
+        await github.upstream(None)
+
+    def down(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(502)
+
+    github = deploy.GitHub(
+        "benhartwich/allskyhub", httpx.AsyncClient(transport=httpx.MockTransport(down))
+    )
+    with pytest.raises(deploy.DeployError, match="nicht erreichbar"):
+        await github.upstream(None)

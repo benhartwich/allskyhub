@@ -146,6 +146,7 @@ async def page(
             "youtube_redirect": youtube.redirect_uri(request.app.state.settings.base_url),
             "store_builds": await stores.recent_builds(),
             "codemagic_app": (stores.vault.meta("codemagic") or {}).get("app_id"),
+            "other_apps": [(a, stores.other_app_id(a)) for a in admin_stores.OTHER_APPS.values()],
             "android_job": stores.android_job(),
             "android_states": {
                 "requested": "angefordert",

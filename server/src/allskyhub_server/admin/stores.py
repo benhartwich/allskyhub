@@ -99,8 +99,8 @@ OBSOLETE = frozenset(
 class OtherApp:
     """A further iOS app of the same developer accounts (Benjamin, 2026-10-28: one App
     Store Connect key and one Codemagic token for all). The hub registers its bundle id,
-    adds its repository to Codemagic and fills its variable group with the same keys, so
-    the keys never leave the hub."""
+    adds its repository to Codemagic and fills its variable group with the same keys:
+    nobody uploads them again, and they go only to Codemagic, as secure variables."""
 
     key: str
     title: str

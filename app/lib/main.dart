@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 
@@ -7,6 +9,7 @@ import 'api/hub_client.dart';
 import 'api/place_store.dart';
 import 'api/session_store.dart';
 import 'platform/location.dart';
+import 'platform/push.dart';
 import 'platform/reminders.dart';
 import 'screens/cameras_screen.dart';
 import 'screens/explore_screen.dart';
@@ -69,6 +72,9 @@ class _AllskyAppState extends State<AllskyApp> {
           : widget.clientFor(session.hubUrl, session.token);
       _loading = false;
     });
+    // Keep this phone's push token fresh if permission was given before (never asks).
+    final client = _client;
+    if (client != null) unawaited(pushService.register(client, ask: false));
   }
 
   Future<void> _signedIn(HubClient client) async {
@@ -85,6 +91,8 @@ class _AllskyAppState extends State<AllskyApp> {
   );
 
   Future<void> _signOut() async {
+    final client = _client;
+    if (client != null) await pushService.unregister(client);
     try {
       await _client?.logout();
     } on Exception {

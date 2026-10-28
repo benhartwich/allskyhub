@@ -48,6 +48,14 @@ class Settings(BaseSettings):
     # Push (roadmap #6): the Firebase service account JSON. Unset: push is off, nothing is
     # sent to Google and the privacy policy does not mention it.
     fcm_service_account_file: Path | None = None
+    # The app's own Firebase registration (Firebase console → project settings → your apps):
+    # public identifiers, also inside every app build, handed to the app at runtime so the
+    # builds need no Firebase files. Empty: the app does not register for push.
+    fcm_sender_id: str = ""
+    fcm_android_app_id: str = ""
+    fcm_android_api_key: str = ""
+    fcm_ios_app_id: str = ""
+    fcm_ios_api_key: str = ""
     # E-mail (roadmap #15): off while smtp_host is empty. Submission with STARTTLS.
     smtp_host: str = ""
     smtp_port: int = 587

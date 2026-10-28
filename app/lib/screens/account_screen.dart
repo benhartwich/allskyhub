@@ -1,7 +1,10 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import '../api/hub_client.dart';
 import '../l10n.dart';
+import '../platform/push.dart';
 
 /// Roadmap #10: change the password, delete the account.
 class AccountScreen extends StatefulWidget {
@@ -73,6 +76,10 @@ class _AccountScreenState extends State<AccountScreen> {
     try {
       final saved = await widget.client.updateAccountSettings({key: on});
       if (mounted) setState(() => _settings = saved);
+      // Switching a push notification on registers this phone (asks for permission).
+      if (on && key != 'notify_by_mail') {
+        unawaited(pushService.register(widget.client));
+      }
       _show(tr('Gespeichert.', 'Saved.'));
     } on Exception catch (e) {
       if (mounted) setState(() => _settings = before);

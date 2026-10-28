@@ -19,9 +19,11 @@ import httpx
 from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from allskyhub_server.admin.stores import Vault
 from allskyhub_server.auth.accounts import MIN_PASSWORD_LENGTH, AccountError, normalize_email
 from allskyhub_server.auth.passwords import hash_secret_async
 from allskyhub_server.models import EmailConfirmation, User
+from allskyhub_server.settings import Settings
 
 KIND = "reporter"
 TTL = dt.timedelta(days=2)
@@ -98,11 +100,19 @@ async def purge(db: AsyncSession, now: dt.datetime) -> None:
 
 
 class Turnstile:
-    """Cloudflare Turnstile's server-side check of the widget's token."""
+    """Cloudflare Turnstile's server-side check of the widget's token. From the settings
+    or the admin's vault (admin/stores.py); the sign-up is off without both keys."""
 
-    def __init__(self, secret: str, client: httpx.AsyncClient | None = None) -> None:
+    def __init__(
+        self, secret: str, site_key: str = "", client: httpx.AsyncClient | None = None
+    ) -> None:
         self._secret = secret
+        self.site_key = site_key
         self._client = client
+
+    @property
+    def enabled(self) -> bool:
+        return bool(self._secret and self.site_key)
 
     async def verify(self, token: str, ip: str) -> bool:
         if not token or len(token) > 2048:
@@ -118,3 +128,14 @@ class Turnstile:
         finally:
             if self._client is None:
                 await client.aclose()
+
+
+def turnstile_from(settings: Settings, vault: Vault) -> Turnstile:
+    """The sign-up's keys from the settings, else from the admin page's vault."""
+    if settings.turnstile_secret:
+        return Turnstile(settings.turnstile_secret, settings.turnstile_site_key)
+    meta = vault.meta("turnstile")
+    if meta is None:
+        return Turnstile("", "")
+    secret = vault.secret("turnstile", "Melder-Registrierung").decode()
+    return Turnstile(secret, str(meta.get("site_key", "")))

@@ -81,8 +81,15 @@ TITLES = {
     "android_upload": "Android-Upload-Schlüssel",
     "ios_certificate": "Schlüssel des iOS-Zertifikats",
     "youtube": "YouTube-OAuth-Client",
+    "fcm": "Firebase-Dienstkonto (Push)",
+    "turnstile": "Cloudflare Turnstile",
 }
-UPLOADED = ("play", "asc", "codemagic", "youtube")
+UPLOADED = ("play", "asc", "codemagic", "youtube", "fcm", "turnstile")
+# The app's own Firebase registration (public identifiers, not in the vault's secrets).
+FCM_APP_FIELDS = ("sender_id", "android_app_id", "android_api_key", "ios_app_id", "ios_api_key")
+FCM_APP_FILE = "fcm_app.json"
+FCM_ID = re.compile(r"^[A-Za-z0-9:._-]{1,200}$")
+TURNSTILE_KEY = re.compile(r"^[A-Za-z0-9_-]{10,200}$")
 # Variables an earlier version put into the Codemagic group, for the Android builds there.
 OBSOLETE = frozenset(
     {
@@ -255,6 +262,42 @@ def parse_asc(p8: bytes, key_id: str, issuer_id: str) -> tuple[bytes, dict[str, 
     if not isinstance(key, ec.EllipticCurvePrivateKey):
         raise StoreError("Die .p8-Datei enthält keinen App-Store-Connect-Schlüssel.")
     return p8.strip() + b"\n", {"key_id": key_id, "issuer_id": issuer_id}
+
+
+def parse_fcm(raw: bytes) -> tuple[bytes, dict[str, Any]]:
+    """The Firebase service account that sends push (Cloud Messaging)."""
+    try:
+        info = json.loads(raw)
+    except ValueError:
+        raise StoreError("Das ist keine JSON-Datei.") from None
+    data = cast(dict[str, Any], info) if isinstance(info, dict) else {}
+    if data.get("type") != "service_account":
+        raise StoreError("Bitte den JSON-Schlüssel eines Dienstkontos hochladen.")
+    try:
+        _rsa_key(str(data["private_key"]).encode())
+        project, email = str(data["project_id"]), str(data["client_email"])
+    except (KeyError, StoreError, ValueError):
+        raise StoreError(
+            "Im Schlüssel fehlt etwas (project_id, client_email, private_key)."
+        ) from None
+    return raw, {"project_id": project, "client_email": email}
+
+
+def parse_turnstile(site_key: str, secret: str) -> tuple[bytes, dict[str, Any]]:
+    site_key, secret = site_key.strip(), secret.strip()
+    if not TURNSTILE_KEY.match(site_key) or not TURNSTILE_KEY.match(secret):
+        raise StoreError("Site-Key und Secret-Key bitte aus dem Turnstile-Widget kopieren.")
+    return secret.encode(), {"site_key": site_key}
+
+
+def parse_fcm_app(fields: dict[str, str]) -> dict[str, str]:
+    out = {k: fields.get(k, "").strip() for k in FCM_APP_FIELDS}
+    for key, value in out.items():
+        if value and not FCM_ID.match(value):
+            raise StoreError(f"{key} sieht nicht richtig aus.")
+    if not out["sender_id"]:
+        raise StoreError("Die Sender-ID fehlt.")
+    return out
 
 
 def parse_codemagic(token: str) -> tuple[bytes, dict[str, Any]]:
@@ -578,6 +621,7 @@ class Stores:
         ]  # fmt: skip
         if found:
             report.add("Bundle-ID", "ok", f"{package} ist bei Apple registriert.")
+            await self._push_capability(client, report, auth, str(found[0]["id"]), package)
         else:
             body = {
                 "data": {
@@ -602,6 +646,51 @@ class Stores:
             )
         else:
             report.add(title, "fail", _message(r))
+
+    async def _push_capability(
+        self,
+        client: httpx.AsyncClient,
+        report: Report,
+        auth: dict[str, str],
+        bundle_id: str,
+        package: str,
+    ) -> None:
+        """Push notifications for the bundle id (stage 5). Switching it on makes the App
+        Store provisioning profiles outdated: they are deleted, so the next release build
+        (fetch-signing-files --create) makes a new one with the capability."""
+        title = "Push-Benachrichtigungen"
+        r = await client.get(f"{ASC}/bundleIds/{bundle_id}/bundleIdCapabilities", headers=auth)
+        if r.status_code != 200:
+            report.add(title, "warn", f"Nicht prüfbar ({_message(r)}).")
+            return
+        kinds = {
+            _dict(c.get("attributes")).get("capabilityType")
+            for c in _list(_dict(r.json()).get("data"))
+        }
+        if "PUSH_NOTIFICATIONS" in kinds:
+            report.add(title, "ok", f"Für {package} eingeschaltet.")
+            return
+        body = {
+            "data": {
+                "type": "bundleIdCapabilities",
+                "attributes": {"capabilityType": "PUSH_NOTIFICATIONS"},
+                "relationships": {"bundleId": {"data": {"type": "bundleIds", "id": bundle_id}}},
+            }
+        }
+        r = await client.post(f"{ASC}/bundleIdCapabilities", json=body, headers=auth)
+        if r.status_code != 201:
+            report.add(title, "fail", f"Einschalten ging nicht ({_message(r)}).")
+            return
+        r = await client.get(f"{ASC}/bundleIds/{bundle_id}/profiles", headers=auth)
+        stale = [str(p["id"]) for p in _list(_dict(r.json()).get("data"))] if r.is_success else []
+        for profile in stale:
+            await client.delete(f"{ASC}/profiles/{profile}", headers=auth)
+        report.add(
+            title,
+            "ok",
+            f"Für {package} eingeschaltet; {len(stale)} alte Profile gelöscht, der nächste "
+            "iOS-Build legt ein neues an.",
+        )
 
     # Codemagic
 

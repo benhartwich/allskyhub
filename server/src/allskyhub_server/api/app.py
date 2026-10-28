@@ -24,6 +24,7 @@ from allskyhub_protocol import (
     SetSettingsArgs,
     invalid_settings,
 )
+from allskyhub_server.admin import stores as admin_stores
 from allskyhub_server.auth import accounts, app_tokens, ratelimit
 from allskyhub_server.auth.passwords import verify_secret_async
 from allskyhub_server.auth.tokens import hash_token
@@ -659,6 +660,33 @@ async def put_settings(
         user.notify_by_mail = body.notify_by_mail
     await db.commit()
     return _account_settings(request, user)
+
+
+class PushConfig(BaseModel):
+    """What the app needs to register with Firebase (public identifiers)."""
+
+    project_id: str
+    sender_id: str
+    android_app_id: str
+    android_api_key: str
+    ios_app_id: str
+    ios_api_key: str
+
+
+@router.get("/push/config")
+async def push_config(request: Request, settings: SettingsDep) -> PushConfig:
+    """404 while the hub cannot send push or the app's registration is not entered."""
+    project_id = request.app.state.notifier.project_id
+    # From the admin page (admin/stores.py, fcm_app.json), else the settings.
+    stores: admin_stores.Stores = request.app.state.stores
+    stored: dict[str, Any] = stores.vault.read_json(admin_stores.FCM_APP_FILE) or {}
+    ids = {
+        key: str(stored.get(key) or getattr(settings, f"fcm_{key}"))
+        for key in admin_stores.FCM_APP_FIELDS
+    }
+    if project_id is None or not ids["sender_id"]:
+        raise HTTPException(404)
+    return PushConfig(project_id=project_id, **ids)
 
 
 @router.post("/push/tokens", status_code=204)

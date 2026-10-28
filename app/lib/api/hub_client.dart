@@ -1743,3 +1743,47 @@ extension Sightings on HubClient {
       await _send('PUT', '/account/alerts', body: changes)
           as Map<String, dynamic>;
 }
+
+/// The hub's Firebase identifiers for the app (public; `GET /api/v1/push/config`).
+class PushConfig {
+  PushConfig.fromJson(Map<String, dynamic> json)
+    : projectId = json['project_id'] as String,
+      senderId = json['sender_id'] as String,
+      androidAppId = json['android_app_id'] as String? ?? '',
+      androidApiKey = json['android_api_key'] as String? ?? '',
+      iosAppId = json['ios_app_id'] as String? ?? '',
+      iosApiKey = json['ios_api_key'] as String? ?? '';
+
+  final String projectId;
+  final String senderId;
+  final String androidAppId;
+  final String androidApiKey;
+  final String iosAppId;
+  final String iosApiKey;
+}
+
+extension Push on HubClient {
+  /// Null while the hub has no push (404).
+  Future<PushConfig?> pushConfig() async {
+    try {
+      return PushConfig.fromJson(
+        await _send('GET', '/push/config') as Map<String, dynamic>,
+      );
+    } on HubException catch (e) {
+      if (e.statusCode == 404) return null;
+      rethrow;
+    }
+  }
+
+  Future<void> registerPushToken(String token, String platform) => _send(
+    'POST',
+    '/push/tokens',
+    body: {'token': token, 'platform': platform},
+  );
+
+  Future<void> unregisterPushToken(String token, String platform) => _send(
+    'POST',
+    '/push/tokens/delete',
+    body: {'token': token, 'platform': platform},
+  );
+}

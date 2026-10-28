@@ -911,3 +911,97 @@ async def test_admin_page_offers_the_further_app(
     )
     assert r.status_code == 400
     assert "einrichten" in r.text
+
+
+async def test_push_capability_on_and_old_profiles_gone(tmp_path: Path) -> None:
+    """Stage 5: push for the bundle id; profiles made before it lack it and go."""
+    seen: list[tuple[str, str]] = []
+
+    def answer(request: httpx.Request) -> httpx.Response:
+        path = request.url.path
+        seen.append((request.method, path))
+        if path == "/v1/bundleIds":
+            attrs = {"identifier": "org.allskyhub.app"}
+            return httpx.Response(200, json={"data": [{"id": "B1", "attributes": attrs}]})
+        if path == "/v1/bundleIds/B1/bundleIdCapabilities":
+            caps = [{"attributes": {"capabilityType": "IN_APP_PURCHASE"}}]
+            return httpx.Response(200, json={"data": caps})
+        if path == "/v1/bundleIdCapabilities":
+            body = json.loads(request.content)
+            assert body["data"]["attributes"]["capabilityType"] == "PUSH_NOTIFICATIONS"
+            return httpx.Response(201, json={"data": {"id": "C1"}})
+        if path == "/v1/bundleIds/B1/profiles":
+            return httpx.Response(200, json={"data": [{"id": "P1"}, {"id": "P2"}]})
+        if path.startswith("/v1/profiles/"):
+            return httpx.Response(204)
+        if path == "/v1/apps":
+            return httpx.Response(200, json={"data": [{"id": "A1"}]})
+        return httpx.Response(404, json={"message": path})
+
+    client = httpx.AsyncClient(transport=httpx.MockTransport(answer))
+    hub = stores.Stores(tmp_path, "benhartwich/allskyhub", client)
+    hub.vault.put("asc", *stores.parse_asc(_p8(), "2X9R4HXF34", ISSUER), by="a")
+    report = await hub.setup("a")
+    step = next(s for s in report.steps if s.title == "Push-Benachrichtigungen")
+    assert step.state == "ok"
+    assert "2 alte Profile gelöscht" in step.text
+    assert ("DELETE", "/v1/profiles/P1") in seen
+    assert ("DELETE", "/v1/profiles/P2") in seen
+
+
+async def test_admin_enters_push_and_turnstile(
+    app: FastAPI,
+    client: httpx.AsyncClient,
+    new_client: httpx.AsyncClient,
+    settings: Settings,
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    """Benjamin, 2026-10-28: Firebase and Turnstile from the admin page, at once."""
+    from allskyhub_server.push.notify import Notifier
+
+    email = await make_account(client)
+    monkeypatch.setattr(settings, "admin_emails", email)
+    monkeypatch.setattr(app.state, "stores", stores.Stores(tmp_path, "benhartwich/allskyhub"))
+    app.state.notifier = Notifier(app.state.sessionmaker, None)
+    page = await client.get("/admin")
+    assert "Push und Melder-Registrierung" in page.text
+    token = csrf_from(page.text)
+    assert (await new_client.get("/api/v1/push/config")).status_code == 404
+    assert (await new_client.get("/melden/konto")).status_code == 404
+
+    account = _play_json()  # a service account like Firebase's
+    r = await client.post(
+        "/admin/stores/fcm",
+        data={"csrf_token": token, "password": PASSWORD},
+        files={"file": ("firebase.json", account, "application/json")},
+    )
+    assert "Push-Nachrichten senden" in r.text
+    assert "PRIVATE KEY" not in r.text
+    assert app.state.notifier.enabled
+    r = await client.post(
+        "/admin/stores-fcm-app",
+        data={"csrf_token": token, "sender_id": "1234", "android_app_id": "1:1234:android:ab",
+              "android_api_key": "AIzaSyA-android"},
+    )  # fmt: skip
+    assert "Kennungen der App gespeichert" in r.text
+    config = (await new_client.get("/api/v1/push/config")).json()
+    assert (config["project_id"], config["sender_id"]) == ("allskyhub-store", "1234")
+    assert config["android_api_key"] == "AIzaSyA-android"
+    bad = await client.post(
+        "/admin/stores-fcm-app", data={"csrf_token": token, "sender_id": "<script>"}
+    )
+    assert bad.status_code == 400
+
+    r = await client.post(
+        "/admin/stores/turnstile",
+        data={"csrf_token": token, "password": PASSWORD, "site_key": "0x4AAAAAAAsite",
+              "token": "0x4AAAAAAAsecret-value"},
+    )  # fmt: skip
+    assert "Melder-Registrierung (/melden/konto) ist offen" in r.text
+    assert "0x4AAAAAAAsecret-value" not in r.text
+    assert "0x4AAAAAAAsite" in r.text  # the public site key shows
+    signup = await new_client.get("/melden/konto")
+    assert signup.status_code == 200
+    assert 'data-sitekey="0x4AAAAAAAsite"' in signup.text
+    assert stores.TITLES["fcm"] in (await client.get("/admin")).text

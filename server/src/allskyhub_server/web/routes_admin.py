@@ -132,6 +132,13 @@ async def page(
             "update_states": UPDATE_STATES,
             "repo": settings.deploy_repo,
             "access_requests": await access_requests.open_requests(db),
+            "fcm_app": stores.vault.read_json(admin_stores.FCM_APP_FILE) or {},
+            "fcm_meta": stores.vault.meta("fcm"),
+            "push_on": request.app.state.notifier.enabled,
+            "push_from_settings": settings.fcm_service_account_file is not None,
+            "turnstile_meta": stores.vault.meta("turnstile"),
+            "turnstile_on": request.app.state.turnstile.enabled,
+            "turnstile_from_settings": bool(settings.turnstile_secret),
             "aurora_photos": list(
                 await db.scalars(
                     select(AuroraReport)

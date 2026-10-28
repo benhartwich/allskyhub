@@ -3,6 +3,7 @@ import 'dart:typed_data';
 
 import 'package:allskyhub_app/api/hub_client.dart';
 import 'package:allskyhub_app/platform/location.dart';
+import 'package:allskyhub_app/platform/push.dart';
 import 'package:allskyhub_app/screens/sightings_screen.dart';
 import 'package:allskyhub_app/screens/sky_view_screen.dart';
 import 'package:flutter/material.dart';
@@ -194,6 +195,9 @@ void main() {
   testWidgets('alerts: switching one on sends the place and zone', (
     tester,
   ) async {
+    final push = NoPush();
+    pushService = push;
+    addTearDown(() => pushService = FirebasePush());
     final seen = <http.Request>[];
     await tester.pumpWidget(
       MaterialApp(
@@ -211,5 +215,6 @@ void main() {
       'lon': 14.29,
       'tz': 'Europe/Vienna',
     });
+    expect(push.registered, 1); // the phone registers for push
   });
 }

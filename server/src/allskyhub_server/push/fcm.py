@@ -41,8 +41,16 @@ class Message:
 class Sender:
     """Sends to FCM registration tokens; tells which tokens are no longer valid."""
 
-    def __init__(self, service_account_file: Path, client: httpx.AsyncClient | None = None):
-        info = cast(dict[str, Any], json.loads(service_account_file.read_text()))
+    def __init__(
+        self, service_account: Path | bytes, client: httpx.AsyncClient | None = None
+    ) -> None:
+        """The service account JSON as a file (settings) or its bytes (the admin's vault)."""
+        raw = (
+            service_account.read_text()
+            if isinstance(service_account, Path)
+            else service_account.decode()
+        )
+        info = cast(dict[str, Any], json.loads(raw))
         self.project_id = str(info["project_id"])
         self._email = str(info["client_email"])
         key = serialization.load_pem_private_key(str(info["private_key"]).encode(), None)

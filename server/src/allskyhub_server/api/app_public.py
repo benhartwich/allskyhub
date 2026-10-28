@@ -44,7 +44,8 @@ class PublicCamera(BaseModel):
     # Rounded to 0.1° and only when the owner shows the place (public.coordinates).
     lat: float | None
     lon: float | None
-    online: bool
+    # Like the facts: only with the live image public, else None (the page shows neither).
+    online: bool | None
     # None when there is no picture or the owner does not show the live image.
     image_at: dt.datetime | None
     night: bool | None  # from the latest frame's mode
@@ -123,15 +124,16 @@ def _camera(device: Device, registry: ConnectionRegistry) -> dict[str, Any]:
     profile = public.profile(device)
     coords = public.coordinates(device)
     mode = (device.last_frame or {}).get("mode")
+    live = profile.sections.live
     return {
         "slug": slug,
         "title": public.title(device),
         "place": profile.location_label,
         "lat": coords[0] if coords else None,
         "lon": coords[1] if coords else None,
-        "online": registry.is_online(device.id),
-        "image_at": device.latest_image_at if profile.sections.live else None,
-        "night": mode == "night" if isinstance(mode, str) else None,
+        "online": registry.is_online(device.id) if live else None,
+        "image_at": device.latest_image_at if live else None,
+        "night": mode == "night" if live and isinstance(mode, str) else None,
     }
 
 

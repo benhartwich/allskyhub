@@ -476,9 +476,12 @@ async def calendar(
 
 
 @router.get("/cameras/{slug}/sky-series")
-async def sky_series(db: DbSession, slug: str, hours: int = 24) -> JSONResponse:
+async def sky_series(
+    request: Request, db: DbSession, settings: SettingsDep, slug: str, hours: int = 24
+) -> JSONResponse:
     """The camera's measured sky over the last ``hours`` (6, 24 or 72), UTC, only when its
     public page shows the sky values."""
+    await _limit(request, settings)
     if hours not in SERIES_HOURS:
         raise HTTPException(422, f"hours must be one of {SERIES_HOURS}")
     device = await public.by_slug(db, slug)

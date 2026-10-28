@@ -90,6 +90,17 @@ HubClient _hub(List<Uri> seen) => HubClient(
               'cloud_cover': 0.2,
               'sqm_mag': 21.3,
             },
+            'planets': [
+              {
+                'key': 'saturn',
+                'name': 'Saturn',
+                'start': '2026-10-28T16:35:00Z',
+                'end': '2026-10-29T02:20:00Z',
+                'best': '2026-10-28T21:20:00Z',
+                'altitude': 43,
+                'azimuth': 182,
+              },
+            ],
           }),
         ),
         200,
@@ -170,6 +181,8 @@ void main() {
     expect(find.textContaining('Lanzenberg · 20 % Wolken'), findsOneWidget);
     expect(find.text('bei dir ab Kp 8'), findsOneWidget);
     expect(find.textContaining('Leoniden-Maximum'), findsOneWidget);
+    expect(find.textContaining('Saturn: '), findsOneWidget);
+    expect(find.textContaining('im Süden (43°)'), findsOneWidget);
 
     await tester.tap(find.byKey(const Key('sky-calendar')));
     await tester.pumpAndSettle();

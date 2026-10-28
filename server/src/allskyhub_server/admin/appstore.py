@@ -13,8 +13,9 @@ from __future__ import annotations
 import asyncio
 import hashlib
 import logging
+import re
 from collections.abc import Callable, Coroutine
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Any
 
@@ -42,16 +43,19 @@ APPSTORE = LISTING.parent / "appstore"
 LOCALES = ("de-DE", "en-US")  # the first is the primary language chosen when creating the app
 
 
-def app_version(pubspec: Path = LISTING.parents[1] / "pubspec.yaml") -> str:
+def app_version(pubspec: Path = LISTING.parents[1] / "pubspec.yaml", default: str = "1.0.0") -> str:
     """The app's version (``version: 1.1.0+1`` in app/pubspec.yaml), for the App Store
-    version the push makes when none is in preparation: each update needs a new one."""
+    version: Apple ties it to the build's CFBundleShortVersionString, and each update
+    needs a new one."""
     try:
         for line in pubspec.read_text().splitlines():
             if line.startswith("version:"):
-                return line.split(":", 1)[1].strip().split("+", 1)[0]
+                found = line.split(":", 1)[1].strip().split("+", 1)[0]
+                if re.fullmatch(r"\d+(\.\d+){0,2}", found):
+                    return found
     except OSError:
         pass
-    return "1.0.0"
+    return default
 
 
 VERSION = app_version()
@@ -303,6 +307,7 @@ async def push(
             (await api.call("POST", "/appStoreVersions", "Version", body=body)).get("data")
         )
     if version is not None:
+        await _soft(report, "Versionsnummer", _version_string(api, version, p.version))
         await _version_texts(api, report, version, root, play, p)
 
     builds = await api.items(
@@ -366,6 +371,24 @@ async def push(
         "App-Datenschutz, Preis und Länder, Kontakt und Testkonto für die Prüfung; dann "
         "hier „zur Prüfung einreichen“.",
     )
+
+
+async def _version_string(api: _Api, version: dict[str, Any], wanted: str) -> str:
+    """The version in preparation renamed to the app's (pubspec), e.g. "1.0" → "0.3.0"."""
+    attrs = _dict(version.get("attributes"))
+    now = str(attrs.get("versionString", ""))
+    if now == wanted:
+        return wanted
+    body = {
+        "data": {
+            "type": "appStoreVersions",
+            "id": version["id"],
+            "attributes": {"versionString": wanted},
+        }
+    }
+    await api.call("PATCH", f"/appStoreVersions/{version['id']}", "Versionsnummer", body=body)
+    attrs["versionString"] = wanted
+    return f"{now} → {wanted}"
 
 
 async def _version_texts(
@@ -701,9 +724,10 @@ async def push_report(stores: Stores, app: OtherApp | None = None) -> Report:
         else:
             # A further app's texts and screenshots: store/ of its repository's main.
             store = await stores.fetch_listing(client, app)
-            await push(
-                client, stores.asc_auth, report, store / "appstore", store / "play", profile(app)
-            )
+            # The version of its repository's pubspec.yaml, fetched with store/.
+            p = profile(app)
+            p = replace(p, version=app_version(store.parent / "pubspec.yaml", p.version))
+            await push(client, stores.asc_auth, report, store / "appstore", store / "play", p)
     except StoreError as exc:
         report.add(TITLE, "fail", str(exc))
     except httpx.HTTPError as exc:

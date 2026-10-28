@@ -26,12 +26,14 @@ import datetime as dt
 import json
 import logging
 import os
+import plistlib
 import re
 import secrets as _random
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, cast
+from xml.parsers.expat import ExpatError
 
 import httpx
 from cryptography import x509
@@ -127,6 +129,11 @@ class OtherApp:
     categories: tuple[str, str] = ("", "")
     version: str = "1.0.0"
     what_to_test: dict[str, str] = field(default_factory=dict[str, str])
+
+    @property
+    def fcm_file(self) -> str:
+        """Its Firebase identifiers (from the same google-services.json and plists)."""
+        return f"fcm_app_{self.key}.json"
 
     @property
     def android_upload(self) -> str:
@@ -352,6 +359,67 @@ def parse_fcm_app(fields: dict[str, str]) -> dict[str, str]:
             raise StoreError(f"{key} sieht nicht richtig aus.")
     if not out["sender_id"]:
         raise StoreError("Die Sender-ID fehlt.")
+    return out
+
+
+def parse_google_services(raw: bytes, package: str = PACKAGE) -> dict[str, str]:
+    """``google-services.json`` from the Firebase console: the project number and the
+    Android app's id and API key. It lists every Android app of the project (bortle's
+    too), so only ``package``'s entry counts."""
+    try:
+        data = json.loads(raw)
+    except ValueError:
+        raise StoreError("google-services.json ist keine JSON-Datei.") from None
+    root = cast(dict[str, Any], data) if isinstance(data, dict) else {}
+    sender = str(_dict(root.get("project_info")).get("project_number", ""))
+    for c in _list(root.get("client")):
+        info = _dict(c.get("client_info"))
+        if _dict(info.get("android_client_info")).get("package_name") != package:
+            continue
+        keys = _list(c.get("api_key"))
+        key = keys[0].get("current_key", "") if keys else ""
+        return {
+            "project_id": str(_dict(root.get("project_info")).get("project_id", "")),
+            "sender_id": sender,
+            "android_app_id": str(info.get("mobilesdk_app_id", "")),
+            "android_api_key": str(key),
+        }
+    raise StoreError(f"In google-services.json fehlt die Android-App {package}.")
+
+
+def parse_service_info(raw: bytes, package: str = PACKAGE) -> dict[str, str]:
+    """``GoogleService-Info.plist`` of the iOS app ``package`` from the Firebase console."""
+    try:
+        data: object = plistlib.loads(raw)
+    except (plistlib.InvalidFileException, ValueError, ExpatError):
+        raise StoreError("GoogleService-Info.plist ist keine Plist-Datei.") from None
+    info = _dict(data)
+    if info.get("BUNDLE_ID") != package:
+        raise StoreError(f"GoogleService-Info.plist gehört nicht zur iOS-App {package}.")
+    return {
+        "project_id": str(info.get("PROJECT_ID", "")),
+        "sender_id": str(info.get("GCM_SENDER_ID", "")),
+        "ios_app_id": str(info.get("GOOGLE_APP_ID", "")),
+        "ios_api_key": str(info.get("API_KEY", "")),
+    }
+
+
+def plist_package(raw: bytes) -> str:
+    """The bundle id a GoogleService-Info.plist belongs to ("" when unreadable)."""
+    try:
+        return str(_dict(plistlib.loads(raw)).get("BUNDLE_ID", ""))
+    except (plistlib.InvalidFileException, ValueError, ExpatError):
+        return ""
+
+
+def fcm_defines(app: OtherApp, ids: dict[str, Any] | None) -> dict[str, str]:
+    """A further app's Firebase identifiers as its build's ``--dart-define`` names
+    (``BORTLE_FCM_SENDER_ID`` …); public, like the files they come from."""
+    out: dict[str, str] = {}
+    for field_name in ("project_id", *FCM_APP_FIELDS):
+        value = str((ids or {}).get(field_name, ""))
+        if value and FCM_ID.match(value):
+            out[f"{app.key.upper()}_FCM_{field_name.upper()}"] = value
     return out
 
 
@@ -802,8 +870,15 @@ class Stores:
         return out
 
     async def _cm_group(
-        self, client: httpx.AsyncClient, app_id: str, report: Report, name: str = GROUP
+        self,
+        client: httpx.AsyncClient,
+        app_id: str,
+        report: Report,
+        name: str = GROUP,
+        public: dict[str, str] | None = None,
     ) -> None:
+        """The group's secure variables, plus ``public`` ones in plain sight (a further
+        app's Firebase identifiers for its --dart-define)."""
         auth = self._cm_auth("Codemagic-Gruppe")
         title = f"Codemagic-Gruppe {name}"
         r = await client.get(
@@ -860,9 +935,31 @@ class Stores:
             if r.status_code >= 300:
                 report.add(title, "fail", _message(r))
                 return
-        report.add(
-            title, "ok", f"{len(variables)} geheime Variablen hinterlegt: {', '.join(variables)}."
-        )
+        public = public or {}
+        for name, value in public.items():
+            if name in there:
+                r = await client.patch(
+                    f"{CODEMAGIC}/variable-groups/{group}/variables/{there[name]}",
+                    json={"value": value, "secure": False},
+                    headers=auth,
+                )
+                if r.status_code >= 300:
+                    report.add(title, "fail", f"{name}: {_message(r)}")
+                    return
+        plain = [{"name": k, "value": v} for k, v in public.items() if k not in there]
+        if plain:
+            r = await client.post(
+                f"{CODEMAGIC}/variable-groups/{group}/variables",
+                json={"secure": False, "variables": plain},
+                headers=auth,
+            )
+            if r.status_code >= 300:
+                report.add(title, "fail", _message(r))
+                return
+        text = f"{len(variables)} geheime Variablen hinterlegt: {', '.join(variables)}."
+        if public:
+            text += f" Dazu öffentlich: {', '.join(public)}."
+        report.add(title, "ok", text)
 
     # The whole round
 
@@ -927,7 +1024,8 @@ class Stores:
                 app_id = await self._cm_app(client, report, app.codemagic_name, app.repo)
                 if app_id:
                     self.vault.update_meta("codemagic", **{f"{app.key}_app_id": app_id})
-                    await self._cm_group(client, app_id, report, app.group)
+                    public = fcm_defines(app, self.vault.read_json(app.fcm_file))
+                    await self._cm_group(client, app_id, report, app.group, public)
             except httpx.HTTPError as exc:
                 report.add("Codemagic", "fail", f"{type(exc).__name__}")
         finally:

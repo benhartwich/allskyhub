@@ -89,7 +89,7 @@ class SkyPhotos:
                         return None
                     chunks.append(chunk)
                 return b"".join(chunks)
-        except httpx.HTTPError as exc:
+        except (httpx.HTTPError, ValueError) as exc:  # ValueError: a broken Content-Length
             log.info("sky photo failed", extra={"key": key, "error": str(exc)})
             return None
 

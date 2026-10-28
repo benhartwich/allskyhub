@@ -1324,6 +1324,63 @@ async def test_submit_to_apple_review(tmp_path: Path) -> None:
     assert "noch keinen Build" in report.steps[0].text
 
 
+async def test_withdraw_an_outdated_waiting_version(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Benjamin, 2026-10-28: 1.0 waited for review with an old build while 1.1.0 was built;
+    submitting takes 1.0 back so the push can rename it and attach the new build."""
+    monkeypatch.setattr(appstore, "WITHDRAW_PAUSE", 0)
+    seen: list[tuple[str, str, Any]] = []
+    state: dict[str, Any] = {"version": "WAITING_FOR_REVIEW", "polls": 0, "name": "1.0"}
+
+    def answer(request: httpx.Request) -> httpx.Response:
+        path, method = request.url.path, request.method
+        body = json.loads(request.content) if request.content else None
+        seen.append((method, path, body))
+        version = {"id": "V1", "attributes": {
+            "versionString": state["name"], "appVersionState": state["version"]}}  # fmt: skip
+        if path == "/v1/apps":
+            return httpx.Response(200, json={"data": [{"id": "A1"}]})
+        if path == "/v1/apps/A1/appStoreVersions":
+            return httpx.Response(200, json={"data": [version]})
+        if path == "/v1/apps/A1/reviewSubmissions":
+            assert request.url.params["filter[state]"] == "WAITING_FOR_REVIEW"
+            return httpx.Response(200, json={"data": [{"id": "S0"}]})
+        if path == "/v1/reviewSubmissions/S0" and method == "PATCH":
+            return httpx.Response(200, json={"data": {"id": "S0"}})
+        if path == "/v1/appStoreVersions/V1":
+            state["polls"] += 1
+            if state["polls"] > 1:  # Apple hands it back a moment later
+                state["version"] = "DEVELOPER_REJECTED"
+            return httpx.Response(200, json={"data": version})
+        return httpx.Response(404)
+
+    hub = stores.Stores(
+        tmp_path / "store",
+        "benhartwich/allskyhub",
+        httpx.AsyncClient(transport=httpx.MockTransport(answer)),
+    )
+    hub.vault.put("asc", *stores.parse_asc(_p8(), "2X9R4HXF34", ISSUER), by="a")
+    report = await appstore.submit_report(hub)
+    assert [(s.title, s.state) for s in report.steps] == [(appstore.WITHDRAWN, "warn")]
+    assert f"Jetzt {appstore.VERSION} zum App Store übertragen" in report.steps[0].text
+    cancel = {"data": {"type": "reviewSubmissions", "id": "S0", "attributes": {"canceled": True}}}
+    assert ("PATCH", "/v1/reviewSubmissions/S0", cancel) in seen
+    assert state["polls"] == 3
+
+    # The current version waiting for review stays there; bortle's comes from its pubspec.
+    state.update(version="WAITING_FOR_REVIEW", polls=0, name="0.3.0")
+    listing = tmp_path / "store" / "listings" / "bortle"
+    listing.mkdir(parents=True)
+    (listing / "pubspec.yaml").write_text("name: bortle\nversion: 0.3.0+4\n")
+    seen.clear()
+    report = await appstore.submit_report(hub, stores.OTHER_APPS["bortle"])
+    assert [(s.state, s.text) for s in report.steps] == [
+        ("ok", "Version 0.3.0 ist schon bei Apple (WAITING_FOR_REVIEW).")
+    ]
+    assert not [m for m, _, _ in seen if m == "PATCH"]
+
+
 async def test_submit_to_play_production(tmp_path: Path) -> None:
     seen: list[tuple[str, str, Any]] = []
     draft_only = False

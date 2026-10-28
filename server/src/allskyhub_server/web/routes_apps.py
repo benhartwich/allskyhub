@@ -110,6 +110,8 @@ async def apps_action(
             else:
                 report = await appstore.submit_report(stores, other)
             apps.save_review(stores, other.key if other else "allskyhub", store, by, report)
+            if any(x.title == appstore.WITHDRAWN for x in report.steps):
+                appstore.start(stores, by, other)  # the waiting version now takes the new build
             log.info(
                 "review %s %s submitted by %s: %s", store, name, by,
                 [(x.title, x.state, x.text) for x in report.steps],

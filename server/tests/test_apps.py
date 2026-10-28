@@ -10,7 +10,7 @@ import httpx
 import pytest
 from fastapi import FastAPI
 
-from allskyhub_server.admin import apps, stores
+from allskyhub_server.admin import apps, appstore, stores
 from allskyhub_server.admin.stores import AndroidJob
 from allskyhub_server.settings import Settings
 from tests.helpers import csrf_from, make_account
@@ -84,6 +84,9 @@ def test_ios_steps() -> None:
         "steps": [{"title": "Prüfung", "state": "ok", "text": text}],
     }
     assert apps.ios_row(True, done, pushed, sent).tone == "done"
+    # An outdated version withdrawn from the queue: the push comes next, not a resubmission.
+    back = {**sent, "steps": [{"title": appstore.WITHDRAWN, "state": "warn", "text": "Zurück."}]}
+    assert apps.ios_row(True, done, pushed, back).action == "appstore"
 
 
 async def test_apps_page_and_actions(

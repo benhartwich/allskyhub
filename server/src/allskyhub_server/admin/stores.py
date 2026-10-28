@@ -1269,6 +1269,28 @@ class Stores:
         return report
 
     async def _submit_play(self, client: httpx.AsyncClient, package: str) -> tuple[str, str]:
+        # An app never published takes draft releases only; Google says so when the
+        # track is set or only at the commit, which spoils the edit: then once more.
+        for status in ("completed", "draft"):
+            code, refused = await self._production(client, package, status)
+            if not refused:
+                break
+        else:
+            raise StoreError("Google nimmt auch keinen Entwurf an.")
+        if status == "draft":
+            return "warn", (
+                f"Version {code} liegt als Entwurf in der Produktion. Die erste "
+                "Veröffentlichung gibt Google nur in der Play Console frei (Produktion → "
+                "Release prüfen → Einführen); vorher müssen dort alle Punkte unter „App "
+                "einrichten“ erledigt sein."
+            )
+        return "ok", f"Version {code} ist eingereicht und geht nach Googles Prüfung live."
+
+    async def _production(
+        self, client: httpx.AsyncClient, package: str, status: str
+    ) -> tuple[str, bool]:
+        """One edit: the internal test's newest version code to production with
+        ``status``. Returns the code and whether Google wants a draft instead."""
         auth = {"Authorization": f"Bearer {await self._play_token(client)}"}
         app = f"{PLAY}/applications/{package}"
         r = await client.post(f"{app}/edits", headers=auth)
@@ -1287,27 +1309,19 @@ class Stores:
         if not codes:
             raise StoreError("Im internen Test liegt noch keine Version; erst Release bauen.")
         code = str(max(codes))
-        release: dict[str, Any] = {"versionCodes": [code], "status": "completed"}
-        track = f"{app}/edits/{edit}/tracks/production"
-        body = {"track": "production", "releases": [release]}
-        r = await client.put(track, json=body, headers=auth)
-        if r.status_code == 400 and "draft" in r.text.lower():
-            # An app never published takes draft releases only.
-            release["status"] = "draft"
-            r = await client.put(track, json=body, headers=auth)
+        body = {"track": "production", "releases": [{"versionCodes": [code], "status": status}]}
+        r = await client.put(f"{app}/edits/{edit}/tracks/production", json=body, headers=auth)
+        if r.status_code == 400 and status != "draft" and "draft" in r.text.lower():
+            await client.delete(f"{app}/edits/{edit}", headers=auth)
+            return code, True
         if r.status_code != 200:
             raise StoreError(f"Produktion nicht gesetzt ({_message(r)}).")
         r = await client.post(f"{app}/edits/{edit}:commit", headers=auth)
+        if r.status_code == 400 and status != "draft" and "draft" in r.text.lower():
+            return code, True
         if r.status_code != 200:
             raise StoreError(f"Einreichen abgelehnt ({_message(r)}).")
-        if release["status"] == "draft":
-            return "warn", (
-                f"Version {code} liegt als Entwurf in der Produktion. Die erste "
-                "Veröffentlichung gibt Google nur in der Play Console frei (Produktion → "
-                "Release prüfen → Einführen); vorher müssen dort alle Punkte unter „App "
-                "einrichten“ erledigt sein."
-            )
-        return "ok", f"Version {code} ist eingereicht und geht nach Googles Prüfung live."
+        return code, False
 
     # Store listing
 

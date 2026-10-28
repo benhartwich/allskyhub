@@ -189,6 +189,9 @@ table.stats.target-hours th:nth-child(2) { text-align: left; }
 .map-dot.sqm-5 { fill: #d8392b; } .swatch.sqm-5 { background: #d8392b; }
 .map-dot.sqm-6 { fill: #f2f2f2; } .swatch.sqm-6 { background: #f2f2f2; }
 .map-dot.sqm-none { fill: #8a8f99; } .swatch.sqm-none { background: #8a8f99; }
+.leaflet-interactive.map-report { fill-opacity: .85; stroke: #04060f; }
+.map-report.sqm-1 { fill: #2846b8; } .map-report.sqm-2 { fill: #2f9e5b; } .map-report.sqm-3 { fill: #d4c62b; }
+.map-report.sqm-4 { fill: #ec8a1c; } .map-report.sqm-5 { fill: #d8392b; } .map-report.sqm-6 { fill: #f2f2f2; }
 .sqm-legend { list-style: none; padding: 0; margin: 8px 0 16px; display: flex; flex-wrap: wrap; gap: 6px 16px; font-size: .9em; }
 .sqm-legend li { display: flex; align-items: center; gap: 6px; }
 .sqm-legend .swatch { width: 12px; height: 12px; border-radius: 50%; border: 1px solid var(--line, #888); display: inline-block; }

@@ -375,6 +375,9 @@ async def camera_map(
             key: {"maxZoom": t.max_zoom, "credit": t.credit} for key, t in map_tiles.LAYERS.items()
         },
         "cameras": [c.as_json() for c in cameras],
+        "reports": [r.as_json() for r in await camera_map_mod.report_cells(db)]
+        if layer == "sqm"
+        else [],
     }
     return render(
         request,

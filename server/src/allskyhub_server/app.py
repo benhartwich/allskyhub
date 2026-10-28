@@ -22,10 +22,18 @@ from allskyhub_server import maintenance
 from allskyhub_server.admin.deploy import GitHub
 from allskyhub_server.admin.stores import Stores
 from allskyhub_server.api import app as app_api
-from allskyhub_server.api import app_manage, app_overview, app_public, app_sky, sky_view
+from allskyhub_server.api import (
+    app_manage,
+    app_overview,
+    app_public,
+    app_reports,
+    app_sky,
+    sky_view,
+)
 from allskyhub_server.api import device as device_api
 from allskyhub_server.api import widget as app_widget
 from allskyhub_server.auth.hub_keys import HubKeys
+from allskyhub_server.auth.reporters import Turnstile
 from allskyhub_server.billing import task as billing_task
 from allskyhub_server.billing.paddle import Paddle
 from allskyhub_server.db import create_engine, create_sessionmaker
@@ -63,6 +71,7 @@ from allskyhub_server.web import (
     routes_local,
     routes_plus,
     routes_public,
+    routes_report,
     routes_showers,
     routes_stores,
 )
@@ -308,6 +317,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         settings.data_dir / "tiles",
         httpx.AsyncClient(headers={"User-Agent": f"allskyhub ({settings.base_url})"}),
     )
+    app.state.turnstile = Turnstile(settings.turnstile_secret)
     app.state.sky_photos = SkyPhotos(
         settings.data_dir / "sky-photos",
         httpx.AsyncClient(headers={"User-Agent": f"allskyhub ({settings.base_url})"}),
@@ -331,6 +341,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.mount("/static/design", CachedStaticFiles(directory=DESIGN_DIR), name="design")
     app.mount("/static", CachedStaticFiles(directory=STATIC_DIR), name="static")
     app.include_router(routes_auth.router)
+    app.include_router(routes_report.router)
     app.include_router(routes_access.router)
     app.include_router(lang.router)
     app.include_router(routes_account.router)
@@ -353,6 +364,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(app_widget.router)
     app.include_router(app_public.router)
     app.include_router(app_sky.router)
+    app.include_router(app_reports.router)
     app.include_router(sky_view.router)
     app.include_router(routes_admin.reload_router)  # last: it catches GET /admin/*
 

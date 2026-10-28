@@ -70,6 +70,42 @@ class User(Base):
     notify_by_mail: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
     # Roadmap N7: when this account started its one free Plus month.
     plus_trial_at: Mapped[dt.datetime | None] = mapped_column(_tz())
+    # "owner" (cameras, the default) or "reporter": signed up on /melden/konto only to
+    # report the sky brightness from the app; cannot pair cameras (Benjamin, 2026-10-28).
+    kind: Mapped[str] = mapped_column(String(16), default="owner", server_default="owner")
+    created_at: Mapped[dt.datetime] = mapped_column(_tz(), server_default=func.now())
+
+
+class EmailConfirmation(Base):
+    """A reporter's sign-up link (SHA-256 of the token); the account stays inactive until
+    it is opened."""
+
+    __tablename__ = "email_confirmation"
+
+    token_hash: Mapped[bytes] = mapped_column(LargeBinary(32), primary_key=True)
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("user_account.id", ondelete="CASCADE"), index=True
+    )
+    expires_at: Mapped[dt.datetime] = mapped_column(_tz())
+
+
+class SkyReport(Base):
+    """The sky brightness as a person saw it (app "Himmelshelligkeit melden"): the
+    faintest stars in a constellation, at a place rounded to 0.1°."""
+
+    __tablename__ = "sky_report"
+
+    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid7)
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("user_account.id", ondelete="CASCADE"), index=True
+    )
+    at: Mapped[dt.datetime] = mapped_column(_tz(), index=True)
+    lat: Mapped[float] = mapped_column(Float)
+    lon: Mapped[float] = mapped_column(Float)
+    constellation: Mapped[str] = mapped_column(String(3))
+    limit_mag: Mapped[float] = mapped_column(Float)
+    sqm: Mapped[float] = mapped_column(Float)
+    clouds: Mapped[bool] = mapped_column(Boolean)
     created_at: Mapped[dt.datetime] = mapped_column(_tz(), server_default=func.now())
 
 

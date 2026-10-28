@@ -20,7 +20,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from allskyhub_server.devices import public
-from allskyhub_server.models import Device, NightStat
+from allskyhub_server.models import Device, NightStat, SkyReport
 
 SQM_DAYS = 60
 SQM_MIN_NIGHTS = 3
@@ -128,6 +128,45 @@ async def cameras(db: AsyncSession, now: dt.datetime | None = None) -> list[MapC
             )
         )
     return sorted(out, key=lambda c: c.title.lower())
+
+
+REPORT_DAYS = 365
+
+
+@dataclass(frozen=True)
+class ReportCell:
+    """Sky-brightness reports by eye (app, api/app_reports.py) in one 0.1° cell."""
+
+    lat: float
+    lon: float
+    sqm: float  # median
+    count: int
+
+    def as_json(self) -> dict[str, object]:
+        cls = next(name for low, name, _ in SQM_CLASSES if self.sqm >= low)
+        value = f"{self.sqm:.1f}".replace(".", ",")
+        people = "1 Meldung" if self.count == 1 else f"{self.count} Meldungen"
+        return {
+            "lat": self.lat, "lon": self.lon, "sqm": self.sqm, "sqm_class": cls,
+            "sqm_text": f"etwa {value} mag/″² · {people} mit bloßem Auge",
+        }  # fmt: skip
+
+
+async def report_cells(db: AsyncSession, now: dt.datetime | None = None) -> list[ReportCell]:
+    """Median of the reports without clouds of the last ``REPORT_DAYS`` days, per cell."""
+    since = (now or dt.datetime.now(dt.UTC)) - dt.timedelta(days=REPORT_DAYS)
+    rows = await db.execute(
+        select(SkyReport.lat, SkyReport.lon, SkyReport.sqm).where(
+            SkyReport.at >= since, SkyReport.clouds.is_(False)
+        )
+    )
+    cells: dict[tuple[float, float], list[float]] = {}
+    for lat, lon, sqm in rows.all():
+        cells.setdefault((round(lat, 1), round(lon, 1)), []).append(sqm)
+    return [
+        ReportCell(lat, lon, round(statistics.median(v), 2), len(v))
+        for (lat, lon), v in sorted(cells.items())
+    ]
 
 
 HOME_MAX = 12

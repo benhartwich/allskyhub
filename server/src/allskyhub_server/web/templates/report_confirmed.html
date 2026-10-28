@@ -1,0 +1,17 @@
+{% extends "base.html" %}
+{% block title %}Melder-Konto · allskyhub{% endblock %}
+{% block content %}
+<div class="auth">
+  {% if ok %}
+  <h1>Konto bestätigt</h1>
+  <div class="card stack">
+    <p>Danke! Melde dich jetzt in der allskyhub-App unter „Mitmachen → Himmelshelligkeit melden“ an.</p>
+  </div>
+  {% else %}
+  <h1>Link ungültig</h1>
+  <div class="card stack">
+    <p>Der Link ist abgelaufen oder wurde schon benutzt. <a href="/melden/konto">Neu anlegen</a></p>
+  </div>
+  {% endif %}
+</div>
+{% endblock %}

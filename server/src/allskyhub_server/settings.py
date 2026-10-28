@@ -78,6 +78,10 @@ class Settings(BaseSettings):
     # Data Store (a free account; key and secret of its API). Off while either is empty.
     eumetsat_key: str = ""
     eumetsat_secret: str = ""
+    # Reporter sign-up on /melden/konto (app "Himmelshelligkeit melden"), behind Cloudflare
+    # Turnstile. Off while either is empty (Benjamin enters them, 2026-10-28).
+    turnstile_site_key: str = ""
+    turnstile_secret: str = ""
 
     log_level: str = "INFO"
     log_format: Literal["json", "console"] = "json"
@@ -88,6 +92,10 @@ class Settings(BaseSettings):
         if not v.startswith(("postgresql://", "postgres://")):
             raise ValueError("database_url must start with postgresql://")
         return v
+
+    @property
+    def reporter_signup(self) -> bool:
+        return bool(self.turnstile_site_key and self.turnstile_secret)
 
     @property
     def lightning_li(self) -> bool:

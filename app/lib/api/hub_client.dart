@@ -1255,3 +1255,208 @@ extension PublicSky on HubClient {
   /// A path on the hub's website (`/sky/…`, `/start`) as a full URL.
   Uri site(String path) => Uri.parse(baseUrl).resolve(path);
 }
+
+/// One hour of a night on "Himmel" (hub `/api/v1/public/sky`, app_sky.py).
+class SkyHour {
+  SkyHour.fromJson(Map<String, dynamic> json)
+    : at = DateTime.parse(json['at'] as String),
+      clouds = json['clouds'] as int?,
+      low = json['low'] as int?,
+      mid = json['mid'] as int?,
+      high = json['high'] as int?,
+      rain = json['rain'] as int?,
+      windKmh = (json['wind_kmh'] as num?)?.toDouble(),
+      moonUp = json['moon_up'] as bool? ?? false,
+      good = json['good'] as bool? ?? false;
+
+  final DateTime at;
+  final int? clouds;
+  final int? low;
+  final int? mid;
+  final int? high;
+  final int? rain;
+  final double? windKmh;
+  final bool moonUp;
+  final bool good;
+}
+
+class SkyNight {
+  SkyNight.fromJson(Map<String, dynamic> json)
+    : evening = DateTime.parse(json['evening'] as String),
+      verdict = json['verdict'] as String,
+      summary = json['summary'] as String? ?? '',
+      sunset = _optionalDate(json['sunset']),
+      dusk = _optionalDate(json['dusk']),
+      dawn = _optionalDate(json['dawn']),
+      sunrise = _optionalDate(json['sunrise']),
+      moonrise = _optionalDate(json['moonrise']),
+      moonset = _optionalDate(json['moonset']),
+      moonIllumination = (json['moon_illumination'] as num?)?.toDouble() ?? 0,
+      moonPhase = json['moon_phase'] as String? ?? '',
+      bestStart = _optionalDate(json['best_start']),
+      bestEnd = _optionalDate(json['best_end']),
+      goodHours = json['good_hours'] as int? ?? 0,
+      hours = [
+        for (final h in json['hours'] as List<dynamic>? ?? const [])
+          SkyHour.fromJson(h as Map<String, dynamic>),
+      ];
+
+  /// The local date of the evening.
+  final DateTime evening;
+
+  /// `good`, `fair`, `cloudy`, `unknown` (no forecast) or `bright` (never dark).
+  final String verdict;
+  final String summary;
+  final DateTime? sunset;
+  final DateTime? dusk;
+  final DateTime? dawn;
+  final DateTime? sunrise;
+  final DateTime? moonrise;
+  final DateTime? moonset;
+  final double moonIllumination;
+  final String moonPhase;
+  final DateTime? bestStart;
+  final DateTime? bestEnd;
+  final int goodHours;
+  final List<SkyHour> hours;
+
+  int? get maxClouds {
+    final c = [for (final h in hours) ?h.clouds];
+    return c.isEmpty ? null : c.reduce((a, b) => a > b ? a : b);
+  }
+}
+
+class SkyPass {
+  SkyPass.fromJson(Map<String, dynamic> json)
+    : name = json['name'] as String,
+      start = DateTime.parse(json['start'] as String),
+      end = DateTime.parse(json['end'] as String),
+      maxAltitude = (json['max_altitude'] as num).toDouble(),
+      startAzimuth = (json['start_azimuth'] as num).toDouble(),
+      endAzimuth = (json['end_azimuth'] as num).toDouble();
+
+  final String name;
+  final DateTime start;
+  final DateTime end;
+  final double maxAltitude;
+  final double startAzimuth;
+  final double endAzimuth;
+}
+
+class SkyForecast {
+  SkyForecast.fromJson(Map<String, dynamic> json)
+    : lat = (json['lat'] as num).toDouble(),
+      lon = (json['lon'] as num).toDouble(),
+      nights = [
+        for (final n in json['nights'] as List<dynamic>)
+          SkyNight.fromJson(n as Map<String, dynamic>),
+      ],
+      kpNow = ((json['aurora'] as Map<String, dynamic>?)?['now'] as num?)
+          ?.toDouble(),
+      kpDays = [
+        for (final d
+            in ((json['aurora'] as Map<String, dynamic>?)?['days']
+                    as List<dynamic>? ??
+                const []))
+          (
+            day: DateTime.parse((d as Map<String, dynamic>)['day'] as String),
+            kp: (d['kp'] as num).toDouble(),
+          ),
+      ],
+      kpNeeded = ((json['aurora'] as Map<String, dynamic>?)?['needed'] as num?)
+          ?.toDouble(),
+      passes = [
+        for (final p in json['passes'] as List<dynamic>? ?? const [])
+          SkyPass.fromJson(p as Map<String, dynamic>),
+      ],
+      nearby = json['nearby'] as Map<String, dynamic>?;
+
+  final double lat;
+  final double lon;
+  final List<SkyNight> nights;
+  final double? kpNow;
+  final List<({DateTime day, double kp})> kpDays;
+
+  /// From this Kp on, aurora can show low in the poleward sky at this place.
+  final double? kpNeeded;
+  final List<SkyPass> passes;
+
+  /// The nearest public camera's sky now: slug, title, distance_km, at, cloud_cover,
+  /// sqm_mag; null without one within 60 km.
+  final Map<String, dynamic>? nearby;
+}
+
+class CalendarItem {
+  CalendarItem.fromJson(Map<String, dynamic> json)
+    : kind = json['kind'] as String,
+      at = DateTime.parse(json['at'] as String),
+      allDay = json['all_day'] as bool? ?? false,
+      title = json['title'] as String,
+      text = json['text'] as String? ?? '';
+
+  /// `shower`, `new_moon`, `full_moon`, `aurora`, `pass`, `good_night`.
+  final String kind;
+  final DateTime at;
+  final bool allDay;
+  final String title;
+  final String text;
+}
+
+/// A place from the hub's search (`/karte/suche`, Nominatim through the hub).
+class Place {
+  const Place(this.name, this.lat, this.lon);
+
+  factory Place.fromJson(Map<String, dynamic> json) => Place(
+    json['name'] as String,
+    (json['lat'] as num).toDouble(),
+    (json['lon'] as num).toDouble(),
+  );
+
+  final String name;
+  final double lat;
+  final double lon;
+
+  Map<String, Object> toJson() => {'name': name, 'lat': lat, 'lon': lon};
+}
+
+extension PublicSkyForecast on HubClient {
+  /// The place goes out rounded to 0.1° (about 10 km).
+  Map<String, String> _place(double lat, double lon, String? tz) => {
+    'lat': lat.toStringAsFixed(1),
+    'lon': lon.toStringAsFixed(1),
+    'tz': ?tz,
+  };
+
+  Future<SkyForecast> publicSky(double lat, double lon, {String? tz}) async =>
+      SkyForecast.fromJson(
+        await _sendUri('GET', _uri('/public/sky', _place(lat, lon, tz)))
+            as Map<String, dynamic>,
+      );
+
+  Future<List<CalendarItem>> publicCalendar(
+    double lat,
+    double lon, {
+    String? tz,
+  }) async {
+    final json =
+        await _sendUri('GET', _uri('/public/calendar', _place(lat, lon, tz)))
+            as Map<String, dynamic>;
+    return [
+      for (final i in json['items'] as List<dynamic>)
+        CalendarItem.fromJson(i as Map<String, dynamic>),
+    ];
+  }
+
+  Future<List<Place>> searchPlaces(String query) async {
+    final json = await _sendUri(
+      'GET',
+      Uri.parse(
+        baseUrl,
+      ).replace(path: '/karte/suche', queryParameters: {'q': query}),
+    );
+    return [
+      for (final p in json as List<dynamic>)
+        Place.fromJson(p as Map<String, dynamic>),
+    ];
+  }
+}

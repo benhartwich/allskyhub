@@ -12,7 +12,9 @@ from fastapi.responses import FileResponse, Response
 
 from allskyhub_server.admin import appstore
 from allskyhub_server.admin import stores as admin_stores
+from allskyhub_server.auth.reporters import turnstile_from
 from allskyhub_server.devices import youtube
+from allskyhub_server.push.fcm import Sender
 from allskyhub_server.web.deps import CurrentSession, DbSession, SettingsDep, csrf_protect
 from allskyhub_server.web.routes_admin import admin_only, confirmed, page
 
@@ -40,6 +42,7 @@ async def upload_store_key(
     token: Annotated[str, Form(max_length=1024)] = "",
     key_id: Annotated[str, Form(max_length=64)] = "",
     issuer_id: Annotated[str, Form(max_length=64)] = "",
+    site_key: Annotated[str, Form(max_length=200)] = "",
 ) -> Response:
     admin_only(session, settings)
     if kind not in admin_stores.UPLOADED:
@@ -50,10 +53,14 @@ async def upload_store_key(
     try:
         if kind == "codemagic":
             secret, meta = admin_stores.parse_codemagic(token)
+        elif kind == "turnstile":
+            secret, meta = admin_stores.parse_turnstile(site_key, token)
         elif file is None:
             raise admin_stores.StoreError("Bitte die Datei auswählen.")
         elif kind == "play":
             secret, meta = admin_stores.parse_play(await _read(file))
+        elif kind == "fcm":
+            secret, meta = admin_stores.parse_fcm(await _read(file))
         elif kind == "youtube":
             secret, meta = admin_stores.parse_youtube(
                 await _read(file), youtube.redirect_uri(settings.base_url)
@@ -65,9 +72,43 @@ async def upload_store_key(
     stores.vault.put(kind, secret, meta, session.user.email)
     if kind == "youtube":
         notice = "YouTube-OAuth-Client gespeichert. Besitzer können YouTube jetzt verbinden."
+    elif kind == "fcm":
+        # Takes effect at once, without a restart.
+        request.app.state.notifier.set_sender(Sender(secret))
+        notice = "Firebase-Dienstkonto gespeichert: Der Hub kann jetzt Push-Nachrichten senden."
+    elif kind == "turnstile":
+        request.app.state.turnstile = turnstile_from(settings, stores.vault)
+        notice = "Turnstile gespeichert: Die Melder-Registrierung (/melden/konto) ist offen."
     else:
         notice = f"{admin_stores.TITLES[kind]} gespeichert. Jetzt „Prüfen und einrichten“."
     return await page(request, db, session, notice=notice)
+
+
+@router.post("/admin/stores-fcm-app")
+async def fcm_app(
+    request: Request,
+    db: DbSession,
+    session: CurrentSession,
+    settings: SettingsDep,
+    sender_id: Annotated[str, Form(max_length=200)] = "",
+    android_app_id: Annotated[str, Form(max_length=200)] = "",
+    android_api_key: Annotated[str, Form(max_length=200)] = "",
+    ios_app_id: Annotated[str, Form(max_length=200)] = "",
+    ios_api_key: Annotated[str, Form(max_length=200)] = "",
+) -> Response:
+    """The app's Firebase registration: public identifiers, shown on the page."""
+    admin_only(session, settings)
+    stores: admin_stores.Stores = request.app.state.stores
+    try:
+        ids = admin_stores.parse_fcm_app(
+            {"sender_id": sender_id, "android_app_id": android_app_id,
+             "android_api_key": android_api_key, "ios_app_id": ios_app_id,
+             "ios_api_key": ios_api_key}
+        )  # fmt: skip
+    except admin_stores.StoreError as exc:
+        return await page(request, db, session, 400, error=str(exc))
+    stores.vault.write_json(admin_stores.FCM_APP_FILE, ids)
+    return await page(request, db, session, notice="Firebase-Kennungen der App gespeichert.")
 
 
 @router.get("/admin/stores-android/{name}")

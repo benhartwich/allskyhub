@@ -24,6 +24,7 @@ from allskyhub_protocol import (
     SetSettingsArgs,
     invalid_settings,
 )
+from allskyhub_server.admin import stores as admin_stores
 from allskyhub_server.auth import accounts, app_tokens, ratelimit
 from allskyhub_server.auth.passwords import verify_secret_async
 from allskyhub_server.auth.tokens import hash_token
@@ -675,18 +676,17 @@ class PushConfig(BaseModel):
 @router.get("/push/config")
 async def push_config(request: Request, settings: SettingsDep) -> PushConfig:
     """404 while the hub cannot send push or the app's registration is not entered."""
-    sender = request.app.state.notifier._sender  # pyright: ignore[reportPrivateUsage]
-    project_id = getattr(sender, "project_id", None)
-    if not isinstance(project_id, str) or not settings.fcm_sender_id:
+    project_id = request.app.state.notifier.project_id
+    # From the admin page (admin/stores.py, fcm_app.json), else the settings.
+    stores: admin_stores.Stores = request.app.state.stores
+    stored: dict[str, Any] = stores.vault.read_json(admin_stores.FCM_APP_FILE) or {}
+    ids = {
+        key: str(stored.get(key) or getattr(settings, f"fcm_{key}"))
+        for key in admin_stores.FCM_APP_FIELDS
+    }
+    if project_id is None or not ids["sender_id"]:
         raise HTTPException(404)
-    return PushConfig(
-        project_id=project_id,
-        sender_id=settings.fcm_sender_id,
-        android_app_id=settings.fcm_android_app_id,
-        android_api_key=settings.fcm_android_api_key,
-        ios_app_id=settings.fcm_ios_app_id,
-        ios_api_key=settings.fcm_ios_api_key,
-    )
+    return PushConfig(project_id=project_id, **ids)
 
 
 @router.post("/push/tokens", status_code=204)

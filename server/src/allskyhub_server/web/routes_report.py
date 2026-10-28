@@ -30,7 +30,7 @@ SIGNUP_PER_IP = (ratelimit.Limit(5, 3600), ratelimit.Limit(20, 86400))
 
 def _enabled(request: Request, settings: SettingsDep) -> Mailer:
     mailer: Mailer = request.app.state.mailer
-    if not settings.reporter_signup or not mailer.enabled:
+    if not request.app.state.turnstile.enabled or not mailer.enabled:
         raise HTTPException(404)
     return mailer
 
@@ -41,7 +41,7 @@ def _page(
     response = render(
         request,
         "report_signup.html",
-        {"site_key": settings.turnstile_site_key, **context},
+        {"site_key": request.app.state.turnstile.site_key, **context},
         status_code=status,
     )
     response.headers["Content-Security-Policy"] = SIGNUP_CSP

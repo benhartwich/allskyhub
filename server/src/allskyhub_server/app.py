@@ -34,7 +34,7 @@ from allskyhub_server.api import (
 from allskyhub_server.api import device as device_api
 from allskyhub_server.api import widget as app_widget
 from allskyhub_server.auth.hub_keys import HubKeys
-from allskyhub_server.auth.reporters import Turnstile
+from allskyhub_server.auth.reporters import turnstile_from
 from allskyhub_server.billing import task as billing_task
 from allskyhub_server.billing.paddle import Paddle
 from allskyhub_server.db import create_engine, create_sessionmaker
@@ -223,9 +223,13 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         cleanup = asyncio.create_task(
             maintenance.run_forever(app.state.sessionmaker, app.state.images, settings)
         )
+        # The service account from the settings, else from the admin page's vault.
+        vault = app.state.stores.vault
         sender = (
             Sender(settings.fcm_service_account_file)
             if settings.fcm_service_account_file is not None
+            else Sender(vault.secret("fcm", "Push-Versand"))
+            if vault.has("fcm")
             else None
         )
         app.state.notifier = Notifier(app.state.sessionmaker, sender)
@@ -319,7 +323,6 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         settings.data_dir / "tiles",
         httpx.AsyncClient(headers={"User-Agent": f"allskyhub ({settings.base_url})"}),
     )
-    app.state.turnstile = Turnstile(settings.turnstile_secret)
     app.state.sky_photos = SkyPhotos(
         settings.data_dir / "sky-photos",
         httpx.AsyncClient(headers={"User-Agent": f"allskyhub ({settings.base_url})"}),
@@ -335,6 +338,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         settings.deploy_repo,
         release_out=settings.android_dir / "release",
     )
+    app.state.turnstile = turnstile_from(settings, app.state.stores.vault)
     app.add_middleware(CustomDomainMiddleware, hosts=app.state.hosts)
     app.add_middleware(LanguageMiddleware)
     app.add_middleware(AccessLogMiddleware)

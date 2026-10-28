@@ -109,6 +109,16 @@ class Notifier:
         return self._sender is not None
 
     @property
+    def project_id(self) -> str | None:
+        """The Firebase project of the sender, for the app's registration."""
+        value = getattr(self._sender, "project_id", None)
+        return value if isinstance(value, str) else None
+
+    def set_sender(self, sender: PushSender | None) -> None:
+        """A new service account from the admin page takes effect at once."""
+        self._sender = sender
+
+    @property
     def _mail(self) -> bool:
         return self.mailer is not None and self.mailer.enabled
 

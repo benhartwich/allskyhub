@@ -81,8 +81,15 @@ TITLES = {
     "android_upload": "Android-Upload-Schlüssel",
     "ios_certificate": "Schlüssel des iOS-Zertifikats",
     "youtube": "YouTube-OAuth-Client",
+    "fcm": "Firebase-Dienstkonto (Push)",
+    "turnstile": "Cloudflare Turnstile",
 }
-UPLOADED = ("play", "asc", "codemagic", "youtube")
+UPLOADED = ("play", "asc", "codemagic", "youtube", "fcm", "turnstile")
+# The app's own Firebase registration (public identifiers, not in the vault's secrets).
+FCM_APP_FIELDS = ("sender_id", "android_app_id", "android_api_key", "ios_app_id", "ios_api_key")
+FCM_APP_FILE = "fcm_app.json"
+FCM_ID = re.compile(r"^[A-Za-z0-9:._-]{1,200}$")
+TURNSTILE_KEY = re.compile(r"^[A-Za-z0-9_-]{10,200}$")
 # Variables an earlier version put into the Codemagic group, for the Android builds there.
 OBSOLETE = frozenset(
     {
@@ -255,6 +262,42 @@ def parse_asc(p8: bytes, key_id: str, issuer_id: str) -> tuple[bytes, dict[str, 
     if not isinstance(key, ec.EllipticCurvePrivateKey):
         raise StoreError("Die .p8-Datei enthält keinen App-Store-Connect-Schlüssel.")
     return p8.strip() + b"\n", {"key_id": key_id, "issuer_id": issuer_id}
+
+
+def parse_fcm(raw: bytes) -> tuple[bytes, dict[str, Any]]:
+    """The Firebase service account that sends push (Cloud Messaging)."""
+    try:
+        info = json.loads(raw)
+    except ValueError:
+        raise StoreError("Das ist keine JSON-Datei.") from None
+    data = cast(dict[str, Any], info) if isinstance(info, dict) else {}
+    if data.get("type") != "service_account":
+        raise StoreError("Bitte den JSON-Schlüssel eines Dienstkontos hochladen.")
+    try:
+        _rsa_key(str(data["private_key"]).encode())
+        project, email = str(data["project_id"]), str(data["client_email"])
+    except (KeyError, StoreError, ValueError):
+        raise StoreError(
+            "Im Schlüssel fehlt etwas (project_id, client_email, private_key)."
+        ) from None
+    return raw, {"project_id": project, "client_email": email}
+
+
+def parse_turnstile(site_key: str, secret: str) -> tuple[bytes, dict[str, Any]]:
+    site_key, secret = site_key.strip(), secret.strip()
+    if not TURNSTILE_KEY.match(site_key) or not TURNSTILE_KEY.match(secret):
+        raise StoreError("Site-Key und Secret-Key bitte aus dem Turnstile-Widget kopieren.")
+    return secret.encode(), {"site_key": site_key}
+
+
+def parse_fcm_app(fields: dict[str, str]) -> dict[str, str]:
+    out = {k: fields.get(k, "").strip() for k in FCM_APP_FIELDS}
+    for key, value in out.items():
+        if value and not FCM_ID.match(value):
+            raise StoreError(f"{key} sieht nicht richtig aus.")
+    if not out["sender_id"]:
+        raise StoreError("Die Sender-ID fehlt.")
+    return out
 
 
 def parse_codemagic(token: str) -> tuple[bytes, dict[str, Any]]:

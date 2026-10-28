@@ -101,6 +101,48 @@
   {% endif %}
   <p class="muted small">„Einladen“ schickt den Einladungslink (14 Tage gültig) und den Link zu den ersten Schritten per E-Mail. „Ablehnen“ schickt nichts.</p>
 </section>
+<section class="card stack" id="push">
+  <h2>Push und Melder-Registrierung</h2>
+  <dl class="facts">
+    <dt>Push-Versand (Firebase)</dt>
+    <dd>{% if push_on %}an{% if push_from_settings %} <span class="muted small">(aus der Server-Einstellung)</span>{% elif fcm_meta %} · Projekt <code>{{ fcm_meta.project_id }}</code>{% endif %}{% else %}<span class="muted">aus</span>{% endif %}</dd>
+    <dt>Firebase-Kennungen der App</dt>
+    <dd>{% if fcm_app.sender_id %}Sender-ID <code>{{ fcm_app.sender_id }}</code> · Android {{ 'ja' if fcm_app.android_app_id else 'fehlt' }} · iOS {{ 'ja' if fcm_app.ios_app_id else 'fehlt' }}{% else %}<span class="muted">fehlen</span>{% endif %}</dd>
+    <dt>Melder-Registrierung (Turnstile)</dt>
+    <dd>{% if turnstile_on %}offen{% if turnstile_from_settings %} <span class="muted small">(aus der Server-Einstellung)</span>{% elif turnstile_meta %} · Site-Key <code>{{ turnstile_meta.site_key }}</code>{% endif %} · <a href="/melden/konto">/melden/konto</a>{% else %}<span class="muted">aus</span>{% endif %}</dd>
+  </dl>
+  <details>
+    <summary>Firebase und Turnstile eintragen</summary>
+    <form method="post" action="/admin/stores/fcm" enctype="multipart/form-data" class="stack">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+      <h3>{{ store_titles.fcm }}</h3>
+      <label>JSON-Schlüssel des Dienstkontos<input type="file" name="file" accept=".json,application/json" required></label>
+      <p class="muted small">Firebase-Konsole → Projekteinstellungen → Dienstkonten → Neuen privaten Schlüssel generieren. Wirkt sofort; wird nie wieder angezeigt.</p>
+      <label>Dein Passwort<input type="password" name="password" autocomplete="current-password" required></label>
+      <button type="submit" class="secondary">Hochladen</button>
+    </form>
+    <form method="post" action="/admin/stores-fcm-app" class="stack">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+      <h3>Firebase-Kennungen der App</h3>
+      <p class="muted small">Firebase-Konsole → Projekteinstellungen → Allgemein → Meine Apps: die Android- und die iOS-App <code>{{ package }}</code>. Öffentliche Kennungen (stehen auch in jeder App), die die App beim Start vom Hub holt. Für iOS in der Firebase-Konsole zusätzlich unter Cloud Messaging den APNs-Schlüssel hochladen.</p>
+      <label>Sender-ID (Projektnummer)<input name="sender_id" value="{{ fcm_app.sender_id or '' }}" required maxlength="200" autocomplete="off"></label>
+      <label>Android: App-ID<input name="android_app_id" value="{{ fcm_app.android_app_id or '' }}" maxlength="200" autocomplete="off" placeholder="1:…:android:…"></label>
+      <label>Android: API-Schlüssel<input name="android_api_key" value="{{ fcm_app.android_api_key or '' }}" maxlength="200" autocomplete="off" placeholder="AIza…"></label>
+      <label>iOS: App-ID<input name="ios_app_id" value="{{ fcm_app.ios_app_id or '' }}" maxlength="200" autocomplete="off" placeholder="1:…:ios:…"></label>
+      <label>iOS: API-Schlüssel<input name="ios_api_key" value="{{ fcm_app.ios_api_key or '' }}" maxlength="200" autocomplete="off" placeholder="AIza…"></label>
+      <button type="submit" class="secondary">Speichern</button>
+    </form>
+    <form method="post" action="/admin/stores/turnstile" class="stack">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+      <h3>{{ store_titles.turnstile }}</h3>
+      <p class="muted small">Cloudflare-Dashboard → Turnstile → Widget hinzufügen, Hostname <code>allskyhub.org</code>, Modus „Verwaltet“. Öffnet die Melder-Registrierung sofort.</p>
+      <label>Site-Key<input name="site_key" required maxlength="200" autocomplete="off"></label>
+      <label>Secret-Key<input type="password" name="token" required maxlength="200" autocomplete="off"></label>
+      <label>Dein Passwort<input type="password" name="password" autocomplete="current-password" required></label>
+      <button type="submit" class="secondary">Speichern</button>
+    </form>
+  </details>
+</section>
 <section class="card stack" id="fotos">
   <h2>Polarlicht-Fotos zur Freigabe</h2>
   {% if aurora_photos %}
@@ -143,7 +185,7 @@
       {%- if e.meta.key_id %}<br><span class="small">Key-ID <code>{{ e.meta.key_id }}</code></span>{% endif %}
       {%- if e.meta.sha256 %}<br><span class="small">SHA-256 <code>{{ e.meta.sha256 }}</code></span>{% endif %}
       {%- if e.meta.app_id %}<br><span class="small">Codemagic-App <code>{{ e.meta.app_id }}</code></span>{% endif %}
-    {%- else %}<span class="muted">{{ 'fehlt' if e.kind in ('play', 'asc', 'codemagic') else 'wird beim Einrichten erzeugt' }}</span>{% endif %}</dd>
+    {%- else %}<span class="muted">{{ 'fehlt' if e.kind in ('play', 'asc', 'codemagic', 'youtube', 'fcm', 'turnstile') else 'wird beim Einrichten erzeugt' }}</span>{% endif %}</dd>
     {% endfor %}
   </dl>
   <form method="post" action="/admin/stores-setup" class="inline">

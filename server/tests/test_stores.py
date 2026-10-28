@@ -947,3 +947,61 @@ async def test_push_capability_on_and_old_profiles_gone(tmp_path: Path) -> None:
     assert "2 alte Profile gelöscht" in step.text
     assert ("DELETE", "/v1/profiles/P1") in seen
     assert ("DELETE", "/v1/profiles/P2") in seen
+
+
+async def test_admin_enters_push_and_turnstile(
+    app: FastAPI,
+    client: httpx.AsyncClient,
+    new_client: httpx.AsyncClient,
+    settings: Settings,
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    """Benjamin, 2026-10-28: Firebase and Turnstile from the admin page, at once."""
+    from allskyhub_server.push.notify import Notifier
+
+    email = await make_account(client)
+    monkeypatch.setattr(settings, "admin_emails", email)
+    monkeypatch.setattr(app.state, "stores", stores.Stores(tmp_path, "benhartwich/allskyhub"))
+    app.state.notifier = Notifier(app.state.sessionmaker, None)
+    page = await client.get("/admin")
+    assert "Push und Melder-Registrierung" in page.text
+    token = csrf_from(page.text)
+    assert (await new_client.get("/api/v1/push/config")).status_code == 404
+    assert (await new_client.get("/melden/konto")).status_code == 404
+
+    account = _play_json()  # a service account like Firebase's
+    r = await client.post(
+        "/admin/stores/fcm",
+        data={"csrf_token": token, "password": PASSWORD},
+        files={"file": ("firebase.json", account, "application/json")},
+    )
+    assert "Push-Nachrichten senden" in r.text
+    assert "PRIVATE KEY" not in r.text
+    assert app.state.notifier.enabled
+    r = await client.post(
+        "/admin/stores-fcm-app",
+        data={"csrf_token": token, "sender_id": "1234", "android_app_id": "1:1234:android:ab",
+              "android_api_key": "AIzaSyA-android"},
+    )  # fmt: skip
+    assert "Kennungen der App gespeichert" in r.text
+    config = (await new_client.get("/api/v1/push/config")).json()
+    assert (config["project_id"], config["sender_id"]) == ("allskyhub-store", "1234")
+    assert config["android_api_key"] == "AIzaSyA-android"
+    bad = await client.post(
+        "/admin/stores-fcm-app", data={"csrf_token": token, "sender_id": "<script>"}
+    )
+    assert bad.status_code == 400
+
+    r = await client.post(
+        "/admin/stores/turnstile",
+        data={"csrf_token": token, "password": PASSWORD, "site_key": "0x4AAAAAAAsite",
+              "token": "0x4AAAAAAAsecret-value"},
+    )  # fmt: skip
+    assert "Melder-Registrierung (/melden/konto) ist offen" in r.text
+    assert "0x4AAAAAAAsecret-value" not in r.text
+    assert "0x4AAAAAAAsite" in r.text  # the public site key shows
+    signup = await new_client.get("/melden/konto")
+    assert signup.status_code == 200
+    assert 'data-sitekey="0x4AAAAAAAsite"' in signup.text
+    assert stores.TITLES["fcm"] in (await client.get("/admin")).text

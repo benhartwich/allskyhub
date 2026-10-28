@@ -24,6 +24,9 @@ DAY = dt.datetime(2026, 10, 28, 11, tzinfo=dt.UTC)
 
 
 class _Turnstile:
+    enabled = True
+    site_key = "site"
+
     async def verify(self, token: str, ip: str) -> bool:
         return token == "ok"  # noqa: S105
 

@@ -241,6 +241,7 @@ def _cmd_delete_user(args: argparse.Namespace) -> int:
     from sqlalchemy import select
 
     from allskyhub_server.auth.accounts import delete_account, normalize_email
+    from allskyhub_server.devices import sightings
     from allskyhub_server.devices.images import ImageStore
     from allskyhub_server.models import User
 
@@ -253,11 +254,14 @@ def _cmd_delete_user(args: argparse.Namespace) -> int:
         if not args.yes:
             print(f"Zum Löschen von {email} zusätzlich --yes angeben.", file=sys.stderr)
             return 2
+        photos = await sightings.photo_ids(db, user.id)
         device_ids = await delete_account(db, user)
         await db.commit()
         store = ImageStore(settings.image_dir)
         for device_id in device_ids:
             store.delete_device(device_id)
+        for report_id in photos:
+            sightings.delete_photo(settings.data_dir / "sightings", report_id)
         # Open camera connections end at their next token refresh (at most an hour).
         print(f"{email} gelöscht, {len(device_ids)} Kamera(s) entkoppelt.")
         return 0

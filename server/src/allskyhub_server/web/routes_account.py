@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import uuid
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, Form, HTTPException, Request
@@ -33,17 +34,19 @@ async def _limit(request: Request, user_id: object) -> None:
         ) from None
 
 
-async def finish_deletion(request: Request, device_ids: list[str]) -> None:
-    """After the commit: delete the cameras' files and close their connections."""
+async def finish_deletion(
+    request: Request, device_ids: list[str], photos: list[uuid.UUID] | None = None
+) -> None:
+    """After the commit: delete the cameras' files and close their connections, and the
+    account's aurora photos (``sightings.photo_ids`` before the deletion)."""
     store: ImageStore = request.app.state.images
     registry: ConnectionRegistry = request.app.state.connections
     for device_id in device_ids:
         await asyncio.to_thread(store.delete_device, device_id)
         await registry.close(device_id, CloseCode.UNPAIRED)
-    # The account's aurora photos: their rows went with it.
     settings: Settings = request.app.state.settings
-    async with request.app.state.sessionmaker() as db:
-        await sightings.sweep(db, settings.data_dir / "sightings")
+    for report_id in photos or []:
+        await asyncio.to_thread(sightings.delete_photo, settings.data_dir / "sightings", report_id)
 
 
 def _page(
@@ -122,9 +125,10 @@ async def delete_account(
         return _page(
             request, session, 400, error="Bitte das Passwort eingeben und das Löschen bestätigen."
         )
+    photos = await sightings.photo_ids(db, session.user.id)
     device_ids = await accounts.delete_account(db, session.user)
     await db.commit()
-    await finish_deletion(request, device_ids)
+    await finish_deletion(request, device_ids, photos)
     response = RedirectResponse("/", status_code=303)
     response.delete_cookie(settings.session_cookie_name, path="/")
     return response

@@ -329,3 +329,20 @@ async def test_no_huge_or_unknown_pictures(tmp_path: Path) -> None:
     Image.new("L", (8000, 7000)).save(big, "PNG")
     with pytest.raises(sightings.PhotoError):
         sightings.store_photo(tmp_path, uuid.uuid4(), big.getvalue())
+
+
+def test_the_sweep_leaves_fresh_files(tmp_path: Path) -> None:
+    """A photo is written before its report row is committed (review of #330)."""
+    import os
+    import time
+
+    from allskyhub_server.devices import sightings
+
+    fresh, old = tmp_path / f"{uuid.uuid4()}.jpg", tmp_path / f"{uuid.uuid4()}.jpg"
+    for path in (fresh, old):
+        path.write_bytes(b"x")
+    hour_ago = time.time() - 3600
+    os.utime(old, (hour_ago, hour_ago))
+    sightings._sweep_files(tmp_path, set())
+    assert fresh.exists()
+    assert not old.exists()

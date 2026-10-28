@@ -57,6 +57,16 @@ def _catalogue() -> dict[str, Any]:
     return data
 
 
+def constellations(*, latin: bool = False) -> dict[str, tuple[str, float, float]]:
+    """All 88: IAU abbreviation → (name, RA, Dec of the label point, J2000). Names German,
+    or with ``latin`` the IAU names."""
+    data = _catalogue()
+    return {
+        key: (str(data["latin"][key]) if latin else str(name), float(ra), float(dec))
+        for key, (name, ra, dec, _rank) in data["names"].items()
+    }
+
+
 def _julian(at: dt.datetime) -> float:
     return at.timestamp() / 86400.0 + 2440587.5
 

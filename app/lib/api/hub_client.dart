@@ -1085,6 +1085,14 @@ class TargetPlan {
 /// A direction in the sky: altitude and azimuth in degrees.
 typedef SkyDir = ({double alt, double az});
 
+typedef SkyObject = ({
+  String label,
+  String kind,
+  SkyDir dir,
+  String? key,
+  double? mag,
+});
+
 SkyDir _dir(List<dynamic> v) =>
     (alt: (v[0] as num).toDouble(), az: (v[1] as num).toDouble());
 
@@ -1104,6 +1112,9 @@ class SkyViewData {
               alt: (o['alt'] as num).toDouble(),
               az: (o['az'] as num).toDouble(),
             ),
+            // The public sky view's catalogue (search, object info); null otherwise.
+            key: o['key'] as String?,
+            mag: (o['mag'] as num?)?.toDouble(),
           ),
       ],
       meteors = [
@@ -1127,7 +1138,7 @@ class SkyViewData {
       ];
 
   final List<List<SkyDir>> lines;
-  final List<({String label, String kind, SkyDir dir})> objects;
+  final List<SkyObject> objects;
   final List<({DateTime at, SkyDir start, SkyDir end})> meteors;
   final List<
     ({DateTime at, SkyDir start, SkyDir end, String kind, String? name})
@@ -1486,4 +1497,42 @@ extension PublicSkyForecast on HubClient {
         Place.fromJson(p as Map<String, dynamic>),
     ];
   }
+}
+
+/// Our explanation of a sky object, with a freely licensed photo where there is one
+/// (hub `/api/v1/public/sky-objects/{key}`).
+class SkyObjectInfo {
+  SkyObjectInfo.fromJson(Map<String, dynamic> json)
+    : key = json['key'] as String,
+      kind = json['kind'] as String,
+      kindLabel = json['kind_label'] as String,
+      text = json['text'] as String,
+      photo = json['photo'] as Map<String, dynamic>?;
+
+  final String key;
+  final String kind;
+  final String kindLabel;
+  final String text;
+
+  /// url (on the hub), author, licence, licence_url, page (on Wikimedia Commons).
+  final Map<String, dynamic>? photo;
+}
+
+extension PublicSkyView on HubClient {
+  /// The sky view at a place, for everyone; the place goes out rounded to 0.1°.
+  Future<SkyViewData> publicSkyView(double lat, double lon) async =>
+      SkyViewData.fromJson(
+        await _sendUri(
+              'GET',
+              _uri('/public/sky-view', {
+                'lat': lat.toStringAsFixed(1),
+                'lon': lon.toStringAsFixed(1),
+              }),
+            )
+            as Map<String, dynamic>,
+      );
+
+  Future<SkyObjectInfo> skyObject(String key) async => SkyObjectInfo.fromJson(
+    await _send('GET', '/public/sky-objects/$key') as Map<String, dynamic>,
+  );
 }

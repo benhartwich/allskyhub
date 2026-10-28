@@ -22,6 +22,7 @@ import 'package:sensors_plus/sensors_plus.dart';
 import '../api/hub_client.dart';
 import '../design.dart';
 import '../l10n.dart';
+import 'sky_find.dart';
 
 typedef Vec = ({double x, double y, double z});
 
@@ -138,13 +139,22 @@ class SkyViewScreen extends StatefulWidget {
   const SkyViewScreen({
     super.key,
     required this.client,
-    required this.camera,
+    this.camera,
+    this.load,
+    this.place,
     this.poseSource,
     this.useCamera = true,
-  });
+  }) : assert(camera != null || load != null);
 
   final HubClient client;
-  final Camera camera;
+
+  /// Above this camera, with its meteors and overflights; or else [load] (the public sky
+  /// view at a place, with search and object info).
+  final Camera? camera;
+  final Future<SkyViewData> Function()? load;
+
+  /// The place's name for the hint line (public sky view).
+  final String? place;
   final PoseSource? poseSource;
 
   /// The phone's camera behind the drawing (AR); off in tests.
@@ -167,6 +177,8 @@ class _SkyViewScreenState extends State<SkyViewScreen>
   bool _showLines = true;
   bool _showMeteors = true;
   bool _showOverflights = true;
+  SkyObject? _target;
+  Timer? _reload;
 
   /// Vertical field of view of what the screen shows, in degrees.
   double _fov = 64;
@@ -179,6 +191,8 @@ class _SkyViewScreenState extends State<SkyViewScreen>
     SystemChrome.setPreferredOrientations([DeviceOrientation.portraitUp]);
     if (widget.useCamera) _startCamera();
     _load();
+    // The sky turns 1° every 4 minutes; fresh positions keep labels and arrow on target.
+    _reload = Timer.periodic(const Duration(minutes: 5), (_) => _load());
     _sub = (widget.poseSource ?? SensorPoseSource()).poses.listen(
       (pose) {
         if (mounted) setState(() => _pose = pose);
@@ -192,6 +206,7 @@ class _SkyViewScreenState extends State<SkyViewScreen>
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
+    _reload?.cancel();
     _sub?.cancel();
     _cam?.dispose();
     SystemChrome.setPreferredOrientations([]);
@@ -239,8 +254,19 @@ class _SkyViewScreenState extends State<SkyViewScreen>
 
   Future<void> _load() async {
     try {
-      final data = await widget.client.skyView(widget.camera.id);
-      if (mounted) setState(() => _data = data);
+      final camera = widget.camera;
+      final data = camera != null
+          ? await widget.client.skyView(camera.id)
+          : await widget.load!();
+      if (!mounted) return;
+      setState(() {
+        _data = data;
+        // Follow the target to its new place.
+        final key = _target?.key;
+        if (key != null) {
+          _target = data.objects.where((o) => o.key == key).firstOrNull;
+        }
+      });
     } on HubException catch (e) {
       if (mounted) setState(() => _error = e.message);
     } on Exception {
@@ -255,6 +281,38 @@ class _SkyViewScreenState extends State<SkyViewScreen>
     }
   }
 
+  Future<void> _find(SkyViewData data) async {
+    final picked = await Navigator.of(context).push<SkyObject>(
+      MaterialPageRoute(builder: (_) => SkyFindScreen(objects: data.objects)),
+    );
+    if (picked != null && mounted) setState(() => _target = picked);
+  }
+
+  void _tapped(SkyViewData data, Pose pose, double fov, Offset at, Size size) {
+    SkyObject? best;
+    var bestDistance = 36.0;
+    for (final o in data.objects) {
+      if (o.key == null) continue;
+      final p = SkyPainter.project(pose, fov, o.dir, size);
+      if (p == null) continue;
+      final d = (p - at).distance;
+      if (d < bestDistance) {
+        best = o;
+        bestDistance = d;
+      }
+    }
+    if (best != null) _info(best);
+  }
+
+  Future<void> _info(SkyObject object) async {
+    final guide = await showModalBottomSheet<bool>(
+      context: context,
+      isScrollControlled: true,
+      builder: (_) => SkyObjectSheet(client: widget.client, object: object),
+    );
+    if (guide == true && mounted) setState(() => _target = object);
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -267,9 +325,22 @@ class _SkyViewScreenState extends State<SkyViewScreen>
       const Shadow(color: Colors.black, blurRadius: 4),
       const Shadow(color: Colors.black, blurRadius: 8),
     ];
+    final catalogue = data != null && data.objects.any((o) => o.key != null);
+    final target = _target;
     return Scaffold(
       backgroundColor: Sky.bg,
-      appBar: AppBar(title: Text(tr('Himmel', 'Sky'))),
+      appBar: AppBar(
+        title: Text(tr('Himmel', 'Sky')),
+        actions: [
+          if (catalogue)
+            IconButton(
+              key: const Key('sky-find'),
+              tooltip: tr('Am Himmel suchen', 'Find in the sky'),
+              icon: const Icon(Icons.search),
+              onPressed: () => _find(data),
+            ),
+        ],
+      ),
       body: Stack(
         children: [
           if (ar)
@@ -289,19 +360,34 @@ class _SkyViewScreenState extends State<SkyViewScreen>
             ),
           if (data != null && pose != null)
             Positioned.fill(
-              child: CustomPaint(
-                key: const Key('sky-view'),
-                painter: SkyPainter(
-                  data,
-                  pose,
-                  fov: ar ? _fov : SkyPainter.defaultFov,
-                  lines: _showLines,
-                  meteors: _showMeteors,
-                  overflights: _showOverflights,
-                  shadow: ar,
-                  fontFamily: Theme.of(
-                    context,
-                  ).textTheme.bodyMedium?.fontFamily,
+              child: LayoutBuilder(
+                builder: (context, box) => GestureDetector(
+                  behavior: HitTestBehavior.opaque,
+                  onTapUp: catalogue
+                      ? (d) => _tapped(
+                          data,
+                          pose,
+                          ar ? _fov : SkyPainter.defaultFov,
+                          d.localPosition,
+                          box.biggest,
+                        )
+                      : null,
+                  child: CustomPaint(
+                    key: const Key('sky-view'),
+                    painter: SkyPainter(
+                      data,
+                      pose,
+                      target: target,
+                      fov: ar ? _fov : SkyPainter.defaultFov,
+                      lines: _showLines,
+                      meteors: _showMeteors,
+                      overflights: _showOverflights,
+                      shadow: ar,
+                      fontFamily: Theme.of(
+                        context,
+                      ).textTheme.bodyMedium?.fontFamily,
+                    ),
+                  ),
                 ),
               ),
             ),
@@ -325,17 +411,19 @@ class _SkyViewScreenState extends State<SkyViewScreen>
                   selected: _showLines,
                   onSelected: (v) => setState(() => _showLines = v),
                 ),
-                FilterChip(
-                  label: Text(tr('Meteore', 'Meteors')),
-                  selected: _showMeteors,
-                  onSelected: (v) => setState(() => _showMeteors = v),
-                ),
-                FilterChip(
-                  key: const Key('sky-toggle-overflights'),
-                  label: Text(tr('Überflüge', 'Overflights')),
-                  selected: _showOverflights,
-                  onSelected: (v) => setState(() => _showOverflights = v),
-                ),
+                if (widget.camera != null) ...[
+                  FilterChip(
+                    label: Text(tr('Meteore', 'Meteors')),
+                    selected: _showMeteors,
+                    onSelected: (v) => setState(() => _showMeteors = v),
+                  ),
+                  FilterChip(
+                    key: const Key('sky-toggle-overflights'),
+                    label: Text(tr('Überflüge', 'Overflights')),
+                    selected: _showOverflights,
+                    onSelected: (v) => setState(() => _showOverflights = v),
+                  ),
+                ],
               ],
             ),
           ),
@@ -346,6 +434,13 @@ class _SkyViewScreenState extends State<SkyViewScreen>
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
+                if (target != null && looking != null)
+                  TargetCard(
+                    target: target,
+                    looking: looking,
+                    onInfo: () => _info(target),
+                    onEnd: () => setState(() => _target = null),
+                  ),
                 if (ar)
                   Row(
                     children: [
@@ -380,6 +475,17 @@ class _SkyViewScreenState extends State<SkyViewScreen>
                               'Halte das Telefon in Richtung Himmel.',
                               'Hold the phone up to the sky.',
                             )
+                          : widget.camera == null
+                          ? tr(
+                              'Blick nach ${compassName(looking.az)}, '
+                                  '${looking.alt.round()}° hoch'
+                                  '${widget.place == null ? '' : ' · ${widget.place}'}. '
+                                  'Antippen erklärt, Lupe sucht.',
+                              'Looking ${compassName(looking.az)}, '
+                                  '${looking.alt.round()}° up'
+                                  '${widget.place == null ? '' : ' · ${widget.place}'}. '
+                                  'Tap to learn, search to find.',
+                            )
                           : tr(
                               'Blick nach ${compassName(looking.az)} '
                                   '(${looking.az.round()}°), '
@@ -409,6 +515,7 @@ class SkyPainter extends CustomPainter {
   SkyPainter(
     this.data,
     this.pose, {
+    this.target,
     this.fov = defaultFov,
     this.lines = true,
     this.meteors = true,
@@ -419,6 +526,9 @@ class SkyPainter extends CustomPainter {
 
   final SkyViewData data;
   final Pose pose;
+
+  /// Ringed, or pointed at from the screen's edge (public sky view, search).
+  final SkyObject? target;
 
   /// Vertical field of view in degrees.
   final double fov;
@@ -439,7 +549,10 @@ class SkyPainter extends CustomPainter {
     'aircraft': Sky.warn,
   };
 
-  Offset? _at(SkyDir d, Size size) {
+  Offset? _at(SkyDir d, Size size) => project(pose, fov, d, size);
+
+  /// Where a direction lands on the screen, or null behind the phone.
+  static Offset? project(Pose pose, double fov, SkyDir d, Size size) {
     final p = pose.toPhone(d);
     if (p.z > -0.05) return null; // behind the phone or at its edge
     final f = size.height / 2 / math.tan(fov / 2 * math.pi / 180);
@@ -534,14 +647,34 @@ class SkyPainter extends CustomPainter {
       }
     }
     for (final o in data.objects) {
+      final isTarget = target != null && o.key == target!.key;
+      // The catalogue (public view) lists everything; label the bright deep-sky
+      // objects only, and nothing far below the horizon, unless it is the target.
+      final deepSky = !const {
+        'constellation',
+        'planet',
+        'moon',
+      }.contains(o.kind);
+      if (!isTarget && (o.dir.alt < -10 || (deepSky && (o.mag ?? 99) > 6))) {
+        continue;
+      }
       final at = _at(o.dir, size);
       if (at == null) continue;
       final constellation = o.kind == 'constellation';
       if (!constellation) {
         canvas.drawCircle(
           at,
-          o.kind == 'moon' ? 9 : 5,
-          Paint()..color = o.kind == 'moon' ? Sky.text : Sky.warn,
+          o.kind == 'moon'
+              ? 9
+              : deepSky
+              ? 4
+              : 5,
+          Paint()
+            ..color = o.kind == 'moon'
+                ? Sky.text
+                : deepSky
+                ? Sky.accent2
+                : Sky.warn,
         );
       }
       _text(
@@ -555,6 +688,8 @@ class SkyPainter extends CustomPainter {
         ),
       );
     }
+    final t = target;
+    if (t != null) _target(canvas, size, t);
     // Cross hairs in the middle.
     final centre = size.center(Offset.zero);
     final cross = Paint()
@@ -572,6 +707,39 @@ class SkyPainter extends CustomPainter {
     );
   }
 
+  /// A ring around the target, or an arrow at the screen's edge toward it.
+  void _target(Canvas canvas, Size size, SkyObject t) {
+    final paint = Paint()
+      ..color = Sky.warn
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 2.5;
+    final at = _at(t.dir, size);
+    final inside =
+        at != null &&
+        at.dx >= 0 &&
+        at.dy >= 0 &&
+        at.dx <= size.width &&
+        at.dy <= size.height;
+    if (inside) {
+      canvas.drawCircle(at, 22, paint);
+      return;
+    }
+    // Direction on the screen plane: x right, y up in phone terms.
+    final p = pose.toPhone(t.dir);
+    final angle = math.atan2(-p.y, p.x);
+    final centre = size.center(Offset.zero);
+    final r = math.min(size.width, size.height) / 2 - 36;
+    final tip = centre + Offset(math.cos(angle), math.sin(angle)) * r;
+    final back = Offset(math.cos(angle), math.sin(angle)) * -26;
+    final side = Offset(-math.sin(angle), math.cos(angle)) * 12;
+    final arrow = Path()
+      ..moveTo(tip.dx, tip.dy)
+      ..lineTo((tip + back + side).dx, (tip + back + side).dy)
+      ..lineTo((tip + back - side).dx, (tip + back - side).dy)
+      ..close();
+    canvas.drawPath(arrow, Paint()..color = Sky.warn);
+  }
+
   /// Along the great circle, in a few steps, so long tracks bend like the sky.
   static List<SkyDir> _track(SkyDir start, SkyDir end) => [
     for (var i = 0; i <= 8; i++)
@@ -585,6 +753,7 @@ class SkyPainter extends CustomPainter {
   bool shouldRepaint(SkyPainter oldDelegate) =>
       oldDelegate.pose != pose ||
       oldDelegate.data != data ||
+      oldDelegate.target != target ||
       oldDelegate.fov != fov ||
       oldDelegate.lines != lines ||
       oldDelegate.meteors != meteors ||

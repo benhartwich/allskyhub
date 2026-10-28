@@ -16,11 +16,12 @@ import math
 from typing import Annotated, Any, Literal
 from zoneinfo import ZoneInfo
 
-from fastapi import APIRouter, HTTPException, Query, Request
-from fastapi.responses import JSONResponse
+from fastapi import APIRouter, HTTPException, Path, Query, Request
+from fastapi.responses import JSONResponse, Response
 from pydantic import BaseModel
 from sqlalchemy import select
 
+from allskyhub_server.api import sky_view
 from allskyhub_server.auth import ratelimit
 from allskyhub_server.devices import (
     astro,
@@ -31,11 +32,15 @@ from allskyhub_server.devices import (
     space_weather,
     tonight,
 )
+from allskyhub_server.devices.sky_photos import SkyPhotos
 from allskyhub_server.devices.space_weather import KpCache
 from allskyhub_server.devices.tonight import ForecastCache, Tonight
 from allskyhub_server.i18n import english, tr
 from allskyhub_server.models import Device, SkySample
 from allskyhub_server.web.deps import DbSession, SettingsDep, client_ip
+from allskyhub_sky import constellations, describe
+from allskyhub_sky.objects import PLANETS
+from allskyhub_sky.objects import _messier as messier  # pyright: ignore[reportPrivateUsage]
 
 router = APIRouter(prefix="/api/v1/public")
 
@@ -644,3 +649,96 @@ async def sky_series(
     return JSONResponse(
         model.model_dump(mode="json"), headers={"Cache-Control": "public, max-age=60"}
     )
+
+
+# The sky view for everyone (roadmap N6 without a camera): the phone's place stands for
+# the camera's. Objects carry their key for the search and the object info below.
+
+
+@router.get("/sky-view")
+async def public_sky_view(
+    request: Request, settings: SettingsDep, lat: Lat, lon: Lon
+) -> JSONResponse:
+    await _limit(request, settings)
+    lat, lon = round(lat, 1), round(lon, 1)
+    now = dt.datetime.now(dt.UTC)
+    lines, objects = await asyncio.to_thread(sky_view.sky_objects, lat, lon, now, catalogue=True)
+    view = sky_view.SkyView(at=now, lines=lines, objects=objects, meteors=[])
+    return JSONResponse(
+        view.model_dump(mode="json"), headers={"Cache-Control": "public, max-age=60"}
+    )
+
+
+class SkyPhoto(BaseModel):
+    url: str  # on the hub
+    author: str
+    licence: str
+    licence_url: str
+    page: str  # the file on Wikimedia Commons
+
+
+class SkyObjectInfo(BaseModel):
+    key: str
+    kind: str
+    kind_label: str
+    text: str
+    photo: SkyPhoto | None
+
+
+OBJECT_KEY = r"^(moon|mercury|venus|mars|jupiter|saturn|uranus|neptune|M\d{1,3}|[A-Z][a-z]{2})$"
+
+
+@router.get("/sky-objects/{key}")
+async def sky_object(
+    request: Request, key: Annotated[str, Path(pattern=OBJECT_KEY)]
+) -> JSONResponse:
+    """Our explanation of an object, with a freely licensed photo where there is one."""
+    kind, mag = _object_kind(key)
+    if kind is None:
+        raise HTTPException(404)
+    en = english()
+    photos: SkyPhotos = request.app.state.sky_photos
+    credit = photos.credit(key)
+    info = SkyObjectInfo(
+        key=key,
+        kind=kind,
+        kind_label=describe.kind_label(kind, en),
+        text=describe.text(key, kind, mag, en),
+        photo=SkyPhoto(
+            url=f"/api/v1/public/sky-photos/{key}",
+            author=credit["author"],
+            licence=credit["licence"],
+            licence_url=credit["licence_url"],
+            page=credit["page"],
+        )
+        if credit
+        else None,
+    )
+    return JSONResponse(
+        info.model_dump(mode="json"), headers={"Cache-Control": "public, max-age=86400"}
+    )
+
+
+@router.get("/sky-photos/{key}")
+async def sky_photo(request: Request, key: Annotated[str, Path(pattern=OBJECT_KEY)]) -> Response:
+    photos: SkyPhotos = request.app.state.sky_photos
+    found = await photos.get(key)
+    if found is None:
+        raise HTTPException(404)
+    body, media_type = found
+    return Response(
+        body, media_type=media_type, headers={"Cache-Control": "public, max-age=604800"}
+    )
+
+
+def _object_kind(key: str) -> tuple[str | None, float | None]:
+    if key == "moon":
+        return "moon", None
+    if key in PLANETS:
+        return "planet", None
+    if key in constellations():
+        return "constellation", None
+    entry = messier().get(key)
+    if entry is None:
+        return None, None
+    return str(entry[4]), float(entry[3]) if entry[3] is not None else None

@@ -21,9 +21,10 @@ from allskyhub_server.devices import events, queries
 from allskyhub_server.i18n import english, tr
 from allskyhub_server.models import EventRecord
 from allskyhub_server.web.deps import DbSession
-from allskyhub_sky import alt_az, precess, sidereal_deg, sky_lines
+from allskyhub_sky import alt_az, constellations, precess, sidereal_deg, sky_lines
 from allskyhub_sky.astro import moon_radec
-from allskyhub_sky.objects import PLANETS, planet_radec
+from allskyhub_sky.objects import MESSIER_EN, PLANETS, planet_radec
+from allskyhub_sky.objects import _messier as messier  # pyright: ignore[reportPrivateUsage]
 
 router = APIRouter(prefix="/api/v1")
 
@@ -36,9 +37,12 @@ MIN_ALT = -5.0
 
 class SkyObjectItem(BaseModel):
     label: str
-    kind: str  # "moon", "planet", "constellation"
+    kind: str  # "moon", "planet", "constellation", or a Messier kind (allskyhub_sky.describe)
     alt: float
     az: float
+    # For the app's search and object info (public sky view); older apps ignore them.
+    key: str | None = None
+    mag: float | None = None
 
 
 class MeteorItem(BaseModel):
@@ -83,18 +87,7 @@ async def sky_view(db: DbSession, user: AppUser, device_id: str) -> SkyView:
             ),
         )
     now = dt.datetime.now(dt.UTC)
-    sky = sky_lines(float(lat), float(lon), now, latin=english())
-    lst = sidereal_deg(now, float(lon))
-    objects = [SkyObjectItem(label=name, kind="constellation", alt=alt, az=az)
-               for name, alt, az in sky.names]  # fmt: skip
-    for key, label in PLANETS.items():
-        label = key.capitalize() if english() else label  # the keys are the English names
-        alt, az = alt_az(*precess(*planet_radec(key, now), now), lst, float(lat))
-        if alt >= MIN_ALT:
-            objects.append(SkyObjectItem(label=label, kind="planet", alt=alt, az=az))
-    alt, az = alt_az(*moon_radec(now), lst, float(lat))
-    if alt >= MIN_ALT:
-        objects.append(SkyObjectItem(label=tr("Mond", "Moon"), kind="moon", alt=alt, az=az))
+    lines, objects = sky_objects(float(lat), float(lon), now)
     rows = await db.scalars(
         select(EventRecord)
         .where(
@@ -121,6 +114,45 @@ async def sky_view(db: DbSession, user: AppUser, device_id: str) -> SkyView:
                 ))  # fmt: skip
         elif not events.dismissed(event) and len(meteors) < METEOR_MAX:
             meteors.append(MeteorItem(at=event.start, start=(a1, z1), end=(a2, z2)))
-    return SkyView(
-        at=now, lines=sky.lines, objects=objects, meteors=meteors, overflights=overflights
-    )
+    return SkyView(at=now, lines=lines, objects=objects, meteors=meteors, overflights=overflights)
+
+
+def sky_objects(
+    lat: float, lon: float, now: dt.datetime, *, catalogue: bool = False
+) -> tuple[list[list[tuple[float, float]]], list[SkyObjectItem]]:
+    """Constellation lines and the objects to label. With ``catalogue`` (the public sky
+    view and its search): every constellation, planet and Messier object, also below the
+    horizon, each with its key and brightness."""
+    sky = sky_lines(lat, lon, now, latin=english())
+    lst = sidereal_deg(now, lon)
+    floor = -90.0 if catalogue else MIN_ALT
+    objects: list[SkyObjectItem] = []
+    if catalogue:
+        for key, (name, ra, dec) in constellations(latin=english()).items():
+            alt, az = alt_az(*precess(ra, dec, now), lst, lat)
+            objects.append(SkyObjectItem(label=name, kind="constellation", alt=alt, az=az, key=key))
+    else:
+        objects += [SkyObjectItem(label=name, kind="constellation", alt=alt, az=az)
+                    for name, alt, az in sky.names]  # fmt: skip
+    for key, label in PLANETS.items():
+        label = key.capitalize() if english() else label  # the keys are the English names
+        alt, az = alt_az(*precess(*planet_radec(key, now), now), lst, lat)
+        if alt >= floor:
+            objects.append(
+                SkyObjectItem(label=label, kind="planet", alt=alt, az=az,
+                              key=key if catalogue else None)
+            )  # fmt: skip
+    alt, az = alt_az(*moon_radec(now), lst, lat)
+    if alt >= floor:
+        objects.append(SkyObjectItem(label=tr("Mond", "Moon"), kind="moon", alt=alt, az=az,
+                                     key="moon" if catalogue else None))  # fmt: skip
+    if catalogue:
+        for key, (name, ra, dec, mag, kind) in messier().items():
+            if english() and name:
+                name = MESSIER_EN.get(key, name)
+            alt, az = alt_az(*precess(float(ra), float(dec), now), lst, lat)
+            objects.append(SkyObjectItem(
+                label=f"{key} {name}" if name else key, kind=str(kind), alt=alt, az=az,
+                key=key, mag=float(mag) if mag is not None else None,
+            ))  # fmt: skip
+    return sky.lines, objects

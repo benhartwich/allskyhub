@@ -1237,6 +1237,13 @@ class Stores:
             content=bundle,
             headers={**auth, "Content-Type": "application/octet-stream"},
         )
+        if r.status_code == 403 and "has already been used" in r.text:
+            # The build number counts commits: a rebuild of the same commit is one Google
+            # already has (Benjamin pressed twice, 2026-10-28). The open edit just expires.
+            return 0, (
+                "Diese Version hat Google schon; seit dem letzten Build gab es keinen neuen "
+                "Stand. Der vorige Upload gilt."
+            )
         if r.status_code != 200:
             raise StoreError(f"Upload abgelehnt ({_message(r)}).")
         code = _dict(r.json()).get("versionCode")

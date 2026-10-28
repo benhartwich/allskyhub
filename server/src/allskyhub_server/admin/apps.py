@@ -159,7 +159,7 @@ def ios_row(
                    "App Store übertragen")  # fmt: skip
     if review and str(review.get("at", "")) > str(pushed.get("at", "")):
         rsteps: list[dict[str, Any]] = review.get("steps") or []
-        if any(s.get("title") == appstore.WITHDRAWN for s in rsteps):  # the new build next
+        if any(s.get("title") in appstore.TO_PUSH for s in rsteps):  # the new build next
             return Row("iOS", "todo", _text(rsteps), "appstore", "App Store übertragen")
         if _state(rsteps) == "fail":
             return Row("iOS", "fail", f"Einreichen ging nicht: {_text(rsteps)}",

@@ -87,6 +87,8 @@ def test_ios_steps() -> None:
     # An outdated version withdrawn from the queue: the push comes next, not a resubmission.
     back = {**sent, "steps": [{"title": appstore.WITHDRAWN, "state": "warn", "text": "Zurück."}]}
     assert apps.ios_row(True, done, pushed, back).action == "appstore"
+    old = {**sent, "steps": [{"title": appstore.OUTDATED, "state": "warn", "text": "Alt."}]}
+    assert apps.ios_row(True, done, pushed, old).action == "appstore"
 
 
 async def test_apps_page_and_actions(

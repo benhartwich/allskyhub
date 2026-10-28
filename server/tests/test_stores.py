@@ -1318,6 +1318,26 @@ async def test_submit_to_apple_review(tmp_path: Path) -> None:
     item = next(b for _, p, b in seen if p == "/v1/reviewSubmissionItems")
     assert item["data"]["relationships"]["appStoreVersion"]["data"]["id"] == "V1"
 
+    # Apple refuses the item and names the reasons only as associated errors.
+    refused = {"errors": [{"status": "409", "detail": "This resource cannot be reviewed.",
+        "meta": {"associatedErrors": {"/v1/appStoreVersions/V1": [
+            {"code": "ENTITY_ERROR.ATTRIBUTE.REQUIRED", "detail": "App privacy is missing."},
+            {"detail": "Pricing is missing."}]}}}]}  # fmt: skip
+    hub._client = httpx.AsyncClient(  # pyright: ignore[reportPrivateUsage]
+        transport=httpx.MockTransport(
+            lambda r: (
+                httpx.Response(409, json=refused)
+                if r.url.path == "/v1/reviewSubmissionItems"
+                else answer(r)
+            )
+        )
+    )
+    report = await appstore.submit_report(hub)
+    assert report.steps[0].text == (
+        "Version zur Einreichung: HTTP 409: This resource cannot be reviewed. – "
+        "App privacy is missing. Pricing is missing."
+    )
+
     version_build["data"] = None  # no build chosen yet
     report = await appstore.submit_report(hub)
     assert report.steps[0].state == "fail"

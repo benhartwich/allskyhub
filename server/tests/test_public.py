@@ -90,6 +90,11 @@ async def test_public_page_is_opt_in_and_shows_only_public_things(
     img = await new_client.get(f"/sky/{slug}/latest.jpg")
     assert img.content == JPEG
     assert img.headers["cache-control"] == "public, max-age=60"
+    # The small picture for lists (the app's "Entdecken").
+    assert (await new_client.get(f"/sky/{slug}/latest.jpg?thumb=1")).status_code == 404
+    store: ImageStore = app.state.images
+    store.save_frame(device_id, "20261007", "a.jpg", FrameVariant.THUMB, b"thumb")
+    assert (await new_client.get(f"/sky/{slug}/latest.jpg?thumb=1")).content == b"thumb"
     keogram = await new_client.get(f"/sky/{slug}/products/20261007/keogram.jpg")
     assert keogram.content == JPEG
     assert (await new_client.get(f"/sky/{slug}/products/20261007/timelapse.mp4")).status_code == 404

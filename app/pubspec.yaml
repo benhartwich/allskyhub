@@ -94,6 +94,10 @@ flutter:
       fonts:
         - asset: assets/fonts/SpaceGrotesk.ttf
 
+  # Land outlines for the globe (Natural Earth, public domain, see REUSE.toml).
+  assets:
+    - assets/geo/land.json
+
   # To add assets to your application, add an assets section, like this:
   # assets:
   #   - images/a_dot_burr.jpeg

@@ -1134,3 +1134,124 @@ class SkyViewData {
   >
   overflights;
 }
+
+/// A public camera for the app without login (hub `/api/v1/public`, app_public.py):
+/// only what its public page shows.
+class PublicCamera {
+  PublicCamera.fromJson(Map<String, dynamic> json)
+    : slug = json['slug'] as String,
+      title = json['title'] as String,
+      place = json['place'] as String? ?? '',
+      lat = (json['lat'] as num?)?.toDouble(),
+      lon = (json['lon'] as num?)?.toDouble(),
+      online = json['online'] as bool? ?? false,
+      imageAt = _optionalDate(json['image_at']),
+      night = json['night'] as bool?;
+
+  final String slug;
+  final String title;
+  final String place;
+
+  /// Rounded to 0.1°, null when the owner does not show the place.
+  final double? lat;
+  final double? lon;
+  final bool online;
+
+  /// Null without a picture or when the live image is not public.
+  final DateTime? imageAt;
+  final bool? night;
+}
+
+/// A detection on a public page; [url] is a path on the hub (`/sky/…`).
+class PublicEvent {
+  PublicEvent.fromJson(Map<String, dynamic> json)
+    : slug = json['slug'] as String,
+      camera = json['camera'] as String,
+      kind = json['kind'] as String,
+      title = json['title'] as String,
+      at = DateTime.parse(json['at'] as String),
+      nightId = json['night_id'] as String,
+      url = json['url'] as String;
+
+  final String slug;
+  final String camera;
+  final String kind;
+  final String title;
+  final DateTime at;
+  final String nightId;
+  final String url;
+}
+
+class PublicCameraDetail extends PublicCamera {
+  PublicCameraDetail.fromJson(super.json)
+    : locationLabel = json['location_label'] as String? ?? '',
+      camera = json['camera'] as String? ?? '',
+      lens = json['lens'] as String? ?? '',
+      computer = json['computer'] as String? ?? '',
+      owner = json['owner'] as String? ?? '',
+      notes = json['notes'] as String? ?? '',
+      facts = (json['facts'] as Map<String, dynamic>?) ?? const {},
+      liveUrl = json['live_url'] as String?,
+      pageUrl = json['page_url'] as String? ?? '/sky/${json['slug']}',
+      loop = [
+        for (final f in (json['loop'] as List<dynamic>? ?? const []))
+          (f as Map<String, dynamic>)['url'] as String,
+      ],
+      lastNight = json['last_night'] as String?,
+      products = {
+        for (final p in (json['products'] as List<dynamic>? ?? const []))
+          (p as Map<String, dynamic>)['name'] as String: p['url'] as String,
+      },
+      videoUrl = json['video_url'] as String?,
+      events = [
+        for (final e in (json['events'] as List<dynamic>? ?? const []))
+          PublicEvent.fromJson(e as Map<String, dynamic>),
+      ],
+      super.fromJson();
+
+  final String locationLabel;
+  final String camera;
+  final String lens;
+  final String computer;
+  final String owner;
+  final String notes;
+
+  /// The latest picture's facts: mode, sun_elevation, exposure_s, gain, cloud_cover
+  /// (0..1), sqm_mag, stars; each may be missing.
+  final Map<String, dynamic> facts;
+  final String? liveUrl;
+  final String pageUrl;
+
+  /// Thumbnails of the last hour, oldest first.
+  final List<String> loop;
+  final String? lastNight;
+
+  /// `keogram.jpg`, `startrails.jpg` → thumbnail path (`?full=1` for the full image).
+  final Map<String, String> products;
+  final String? videoUrl;
+  final List<PublicEvent> events;
+}
+
+extension PublicSky on HubClient {
+  Future<List<PublicCamera>> publicCameras() async => [
+    for (final c in await _send('GET', '/public/cameras') as List<dynamic>)
+      PublicCamera.fromJson(c as Map<String, dynamic>),
+  ];
+
+  Future<PublicCameraDetail> publicCamera(String slug) async =>
+      PublicCameraDetail.fromJson(
+        await _send('GET', '/public/cameras/$slug') as Map<String, dynamic>,
+      );
+
+  /// "Gerade passiert": the newest detections of all listed public cameras.
+  Future<List<PublicEvent>> publicFeed() async {
+    final json = await _send('GET', '/public/feed') as Map<String, dynamic>;
+    return [
+      for (final e in json['events'] as List<dynamic>)
+        PublicEvent.fromJson(e as Map<String, dynamic>),
+    ];
+  }
+
+  /// A path on the hub's website (`/sky/…`, `/start`) as a full URL.
+  Uri site(String path) => Uri.parse(baseUrl).resolve(path);
+}

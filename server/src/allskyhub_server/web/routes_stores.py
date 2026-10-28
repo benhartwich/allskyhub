@@ -95,20 +95,64 @@ async def fcm_app(
     android_api_key: Annotated[str, Form(max_length=200)] = "",
     ios_app_id: Annotated[str, Form(max_length=200)] = "",
     ios_api_key: Annotated[str, Form(max_length=200)] = "",
+    android_file: Annotated[UploadFile | None, File()] = None,
+    ios_files: Annotated[list[UploadFile] | None, File()] = None,
 ) -> Response:
-    """The app's Firebase registration: public identifiers, shown on the page."""
+    """The apps' Firebase registration: public identifiers, shown on the page. From
+    google-services.json (it lists every Android app of the project) and each iOS app's
+    GoogleService-Info.plist, or typed in. A further app's (bortle) go to its own file,
+    for its builds' --dart-define (admin/stores.py ``fcm_defines``)."""
     admin_only(session, settings)
     stores: admin_stores.Stores = request.app.state.stores
+    fields = {"sender_id": sender_id, "android_app_id": android_app_id,
+              "android_api_key": android_api_key, "ios_app_id": ios_app_id,
+              "ios_api_key": ios_api_key}  # fmt: skip
+    packages = {
+        admin_stores.PACKAGE: "",
+        **{a.package: a.key for a in admin_stores.OTHER_APPS.values()},
+    }
+    found: dict[str, dict[str, str]] = {}  # package -> identifiers from the files
     try:
-        ids = admin_stores.parse_fcm_app(
-            {"sender_id": sender_id, "android_app_id": android_app_id,
-             "android_api_key": android_api_key, "ios_app_id": ios_app_id,
-             "ios_api_key": ios_api_key}
-        )  # fmt: skip
+        if android_file is not None and android_file.filename:
+            raw = await _read(android_file)
+            for package in packages:
+                try:
+                    found[package] = admin_stores.parse_google_services(raw, package)
+                except admin_stores.StoreError:
+                    if package == admin_stores.PACKAGE:
+                        raise
+        for upload in ios_files or []:
+            if not upload.filename:
+                continue
+            raw = await _read(upload)
+            package = admin_stores.plist_package(raw)
+            if package not in packages:
+                package = admin_stores.PACKAGE  # the error names the app expected
+            ids_ios = admin_stores.parse_service_info(raw, package)
+            found[package] = found.get(package, {}) | ids_ios
+        projects = {v["sender_id"] for v in found.values()}
+        if len(projects) > 1:
+            raise admin_stores.StoreError("Die Dateien sind aus verschiedenen Projekten.")
+        fields |= found.get(admin_stores.PACKAGE, {})
+        ids = admin_stores.parse_fcm_app(fields) if fields["sender_id"] or not found else None
     except admin_stores.StoreError as exc:
         return await page(request, db, session, 400, error=str(exc))
-    stores.vault.write_json(admin_stores.FCM_APP_FILE, ids)
-    return await page(request, db, session, notice="Firebase-Kennungen der App gespeichert.")
+    if ids is not None:
+        stores.vault.write_json(admin_stores.FCM_APP_FILE, ids)
+    others: list[str] = []
+    for package, key in packages.items():
+        if key and package in found:
+            other = admin_stores.OTHER_APPS[key]
+            kept = stores.vault.read_json(other.fcm_file) or {}
+            stores.vault.write_json(other.fcm_file, kept | found[package])
+            others.append(other.title)
+    notice = "Firebase-Kennungen der App gespeichert." if ids is not None else ""
+    if others:
+        notice += (
+            f" Firebase-Kennungen für {', '.join(others)} gespeichert; in dessen Builds "
+            "kommen sie mit „prüfen und einrichten“ (Codemagic) und beim nächsten Android-Release."
+        )
+    return await page(request, db, session, notice=notice)
 
 
 @router.get("/admin/stores-android/{name}")

@@ -47,7 +47,7 @@ main() {
     # Which app: allskyhub (app/ of this repository) or a further one the hub knows
     # (admin/stores.py OTHER_APPS), each with its clone, key, variables and answers.
     local app=allskyhub APP_DIR=app KEY_KIND=android_upload PREFIX=ALLSKYHUB
-    local PACKAGE=org.allskyhub.app SRC=$BASE/src
+    local PACKAGE=org.allskyhub.app SRC=$BASE/src DEFINES=
 
     install -d -m 755 "$BASE"
     mkdir -p "$BASE/maven-google"
@@ -63,6 +63,12 @@ main() {
         if [[ $first == app=bortle ]]; then
             app=bortle APP_DIR=. KEY_KIND=bortle_android_upload PREFIX=BORTLE
             PACKAGE=eu.bortle.app SRC=$BASE/src-bortle
+            # Its Firebase identifiers (public; admin/stores.py fcm_defines): expanded by
+            # the container's shell from --env-file, never pasted into the command.
+            local f
+            for f in PROJECT_ID SENDER_ID ANDROID_APP_ID ANDROID_API_KEY IOS_APP_ID IOS_API_KEY; do
+                DEFINES+=" --dart-define=BORTLE_FCM_$f=\"\$BORTLE_FCM_$f\""
+            done
             REPO_URL=${ALLSKYHUB_BORTLE_REPO_URL:-https://github.com/benhartwich/bortle-app.git}
             RELEASE=${ALLSKYHUB_BORTLE_RELEASE_OUT:-$BASE/release-bortle}
         fi
@@ -157,8 +163,11 @@ release_build() {
     chmod 700 "$KEY_TMP"
     # Read as the hub: the key is the hub's, and a symlink there must not reach root's files.
     runuser -u "$HUB_USER" -- cat -- "$STORE/$KEY_KIND.secret" > "$KEY_TMP/secret.json"
-    python3 - "$KEY_TMP/secret.json" "$KEY_TMP" "$PREFIX" <<'PY'
-import base64, json, os, sys
+    # A further app's Firebase identifiers, if the admin page has them (fcm_app_<app>.json).
+    timeout 5 runuser -u "$HUB_USER" -- cat -- "$STORE/fcm_app_$app.json" \
+        > "$KEY_TMP/fcm.json" 2>/dev/null || true
+    python3 - "$KEY_TMP/secret.json" "$KEY_TMP" "$PREFIX" "$KEY_TMP/fcm.json" <<'PY'
+import base64, json, os, re, sys
 key = json.load(open(sys.argv[1]))
 prefix = sys.argv[3]
 os.umask(0o077)
@@ -167,6 +176,17 @@ with open(os.path.join(sys.argv[2], "upload.p12"), "wb") as f:
 with open(os.path.join(sys.argv[2], "keystore.env"), "w") as f:
     f.write("%s_KEYSTORE_PASSWORD=%s\n%s_KEY_ALIAS=upload\n" % (prefix, key["password"], prefix))
     f.write("%s_KEY_PASSWORD=%s\n" % (prefix, key["password"]))
+    # The hub wrote these; only plain identifiers pass (admin/stores.py FCM_ID).
+    try:
+        fcm = json.load(open(sys.argv[4]))
+    except (OSError, ValueError):
+        fcm = {}
+    fields = ("project_id", "sender_id", "android_app_id", "android_api_key",
+              "ios_app_id", "ios_api_key")
+    for name in fields if isinstance(fcm, dict) else ():
+        value = fcm.get(name)
+        if isinstance(value, str) and re.fullmatch(r"[A-Za-z0-9:._-]{1,200}", value):
+            f.write("%s_FCM_%s=%s\n" % (prefix, name.upper(), value))
 PY
     docker run --rm --name allskyhub-android-release --cpus 6 --memory 8g \
         -v "$SRC:/work" \
@@ -179,7 +199,7 @@ PY
         -e "${PREFIX}_KEYSTORE=/keys/upload.p12" \
         -e ALLSKYHUB_MAVEN_GOOGLE="http://$PROXY_HOST:$PROXY_PORT/" \
         -w "/work/$APP_DIR" "$IMAGE" \
-        sh -c "flutter pub get && flutter build appbundle --release --build-number=$build"
+        sh -c "flutter pub get && flutter build appbundle --release --build-number=$build$DEFINES"
     rm -rf "$KEY_TMP"
 
     local aab=$SRC/$APP_DIR/build/app/outputs/bundle/release/app-release.aab

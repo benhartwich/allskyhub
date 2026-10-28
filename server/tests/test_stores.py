@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import base64
 import json
+import plistlib
 from pathlib import Path
 from typing import Any
 
@@ -852,6 +853,8 @@ async def test_a_further_app_shares_the_keys(tmp_path: Path) -> None:
     hub.vault.update_meta("codemagic", app_id="APP1")
     bortle = stores.OTHER_APPS["bortle"]
 
+    # Its Firebase identifiers (from the admin page's files) go along in plain sight.
+    hub.vault.write_json(bortle.fcm_file, {"sender_id": "5678", "ios_app_id": "1:5678:ios:b1"})
     report = await hub.setup_other(bortle, "a")
     states = {s.title: s.state for s in report.steps}
     assert states == {
@@ -870,7 +873,7 @@ async def test_a_further_app_shares_the_keys(tmp_path: Path) -> None:
     names = {
         v["name"]
         for m, p, b in seen
-        if m == "POST" and p == "/api/v3/variable-groups/G2/variables"
+        if m == "POST" and p == "/api/v3/variable-groups/G2/variables" and b["secure"]
         for v in b["variables"]
     }
     assert names == {
@@ -879,6 +882,9 @@ async def test_a_further_app_shares_the_keys(tmp_path: Path) -> None:
         "APP_STORE_CONNECT_ISSUER_ID",
         "CERTIFICATE_PRIVATE_KEY",
     }
+    assert ("POST", "/api/v3/variable-groups/G2/variables", {"secure": False, "variables": [
+        {"name": "BORTLE_FCM_SENDER_ID", "value": "5678"},
+        {"name": "BORTLE_FCM_IOS_APP_ID", "value": "1:5678:ios:b1"}]}) in seen  # fmt: skip
     meta = hub.vault.meta("codemagic") or {}
     assert (meta["app_id"], meta["bortle_app_id"]) == ("APP1", "APP2")  # allskyhub's stays
     assert "Neue App, Bundle-ID eu.bortle.app, Name bortle" in " ".join(
@@ -995,6 +1001,82 @@ async def test_admin_enters_push_and_turnstile(
         "/admin/stores-fcm-app", data={"csrf_token": token, "sender_id": "<script>"}
     )
     assert bad.status_code == 400
+
+    # Firebase's own files instead: the project lists bortle's apps too.
+    services = {
+        "project_info": {"project_number": "5678", "project_id": "shared"},
+        "client": [
+            {"client_info": {"mobilesdk_app_id": "1:5678:android:b0",
+                             "android_client_info": {"package_name": "eu.bortle.app"}},
+             "api_key": [{"current_key": "AIzaSyB-bortle"}]},
+            {"client_info": {"mobilesdk_app_id": "1:5678:android:a1",
+                             "android_client_info": {"package_name": "org.allskyhub.app"}},
+             "api_key": [{"current_key": "AIzaSyA-android2"}]},
+        ],
+    }  # fmt: skip
+    plist = plistlib.dumps(
+        {"BUNDLE_ID": "org.allskyhub.app", "GCM_SENDER_ID": "5678",
+         "GOOGLE_APP_ID": "1:5678:ios:c2", "API_KEY": "AIzaSyC-ios"}
+    )  # fmt: skip
+    r = await client.post(
+        "/admin/stores-fcm-app",
+        data={"csrf_token": token},
+        files={"android_file": ("google-services.json", json.dumps(services), "application/json"),
+               "ios_files": ("GoogleService-Info.plist", plist, "application/xml")},
+    )  # fmt: skip
+    assert "Kennungen der App gespeichert" in r.text, r.text
+    config = (await new_client.get("/api/v1/push/config")).json()
+    assert (config["sender_id"], config["android_app_id"], config["android_api_key"]) == (
+        "5678", "1:5678:android:a1", "AIzaSyA-android2")  # fmt: skip
+    assert (config["ios_app_id"], config["ios_api_key"]) == ("1:5678:ios:c2", "AIzaSyC-ios")
+    # bortle's entries go to its own file, for its builds' --dart-define.
+    bortle = stores.OTHER_APPS["bortle"]
+    assert app.state.stores.vault.read_json(bortle.fcm_file) == {
+        "project_id": "shared", "sender_id": "5678",
+        "android_app_id": "1:5678:android:b0", "android_api_key": "AIzaSyB-bortle",
+    }  # fmt: skip
+    bortle_plist = plistlib.dumps(
+        {"BUNDLE_ID": "eu.bortle.app", "GCM_SENDER_ID": "5678", "PROJECT_ID": "shared",
+         "GOOGLE_APP_ID": "1:5678:ios:b1", "API_KEY": "AIzaSyD-bortle"}
+    )  # fmt: skip
+    r = await client.post(
+        "/admin/stores-fcm-app",
+        data={"csrf_token": token},
+        files={"ios_files": ("GoogleService-Info.plist", bortle_plist, "application/xml")},
+    )
+    assert r.status_code == 200
+    assert "für bortle gespeichert" in r.text
+    assert stores.fcm_defines(bortle, app.state.stores.vault.read_json(bortle.fcm_file)) == {
+        "BORTLE_FCM_PROJECT_ID": "shared", "BORTLE_FCM_SENDER_ID": "5678",
+        "BORTLE_FCM_ANDROID_APP_ID": "1:5678:android:b0",
+        "BORTLE_FCM_ANDROID_API_KEY": "AIzaSyB-bortle",
+        "BORTLE_FCM_IOS_APP_ID": "1:5678:ios:b1", "BORTLE_FCM_IOS_API_KEY": "AIzaSyD-bortle",
+    }  # fmt: skip
+    # allskyhub's stay as they were.
+    assert (await new_client.get("/api/v1/push/config")).json()["ios_app_id"] == "1:5678:ios:c2"
+    unknown = plistlib.dumps({"BUNDLE_ID": "com.example", "GCM_SENDER_ID": "5678"})
+    r = await client.post(
+        "/admin/stores-fcm-app",
+        data={"csrf_token": token},
+        files={"ios_files": ("GoogleService-Info.plist", unknown, "application/xml")},
+    )
+    assert r.status_code == 400
+    assert "nicht zur iOS-App org.allskyhub.app" in r.text
+    other = plistlib.dumps({"BUNDLE_ID": "org.allskyhub.app", "GCM_SENDER_ID": "9999",
+                            "GOOGLE_APP_ID": "1:9999:ios:x", "API_KEY": "AIzaSyX"})  # fmt: skip
+    r = await client.post(
+        "/admin/stores-fcm-app",
+        data={"csrf_token": token},
+        files={"android_file": ("google-services.json", json.dumps(services), "application/json"),
+               "ios_files": ("GoogleService-Info.plist", other, "application/xml")},
+    )  # fmt: skip
+    assert "verschiedenen Projekten" in r.text
+    r = await client.post(
+        "/admin/stores-fcm-app",
+        data={"csrf_token": token},
+        files={"ios_files": ("GoogleService-Info.plist", b"<not a plist", "application/xml")},
+    )
+    assert "keine Plist-Datei" in r.text
 
     r = await client.post(
         "/admin/stores/turnstile",

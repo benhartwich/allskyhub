@@ -121,15 +121,20 @@
       <label>Dein Passwort<input type="password" name="password" autocomplete="current-password" required></label>
       <button type="submit" class="secondary">Hochladen</button>
     </form>
-    <form method="post" action="/admin/stores-fcm-app" class="stack">
+    <form method="post" action="/admin/stores-fcm-app" enctype="multipart/form-data" class="stack">
       <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
       <h3>Firebase-Kennungen der App</h3>
-      <p class="muted small">Firebase-Konsole → Projekteinstellungen → Allgemein → Meine Apps: die Android- und die iOS-App <code>{{ package }}</code>. Öffentliche Kennungen (stehen auch in jeder App), die die App beim Start vom Hub holt. Für iOS in der Firebase-Konsole zusätzlich unter Cloud Messaging den APNs-Schlüssel hochladen.</p>
-      <label>Sender-ID (Projektnummer)<input name="sender_id" value="{{ fcm_app.sender_id or '' }}" required maxlength="200" autocomplete="off"></label>
+      <p class="muted small">Firebase-Konsole → Projekteinstellungen → Allgemein → Meine Apps: <code>google-services.json</code> (eine für alle Android-Apps des Projekts) und die <code>GoogleService-Info.plist</code> jeder iOS-App herunterladen und hier hochladen; der Hub sortiert sie nach App: <code>{{ package }}</code>{% for o in other_apps %} und <code>{{ o[0].package }}</code> ({{ o[0].title }}, für dessen Builds){% endfor %}. Öffentliche Kennungen (stehen auch in jeder App), die die App beim Start vom Hub holt. Für iOS in der Firebase-Konsole zusätzlich unter Cloud Messaging den APNs-Schlüssel hochladen.</p>
+      <label>google-services.json (Android)<input type="file" name="android_file" accept=".json,application/json"></label>
+      <label>GoogleService-Info.plist (iOS, auch mehrere)<input type="file" name="ios_files" accept=".plist" multiple></label>
+      <details>
+        <summary>Oder von Hand eintragen</summary>
+      <label>Sender-ID (Projektnummer)<input name="sender_id" value="{{ fcm_app.sender_id or '' }}" maxlength="200" autocomplete="off"></label>
       <label>Android: App-ID<input name="android_app_id" value="{{ fcm_app.android_app_id or '' }}" maxlength="200" autocomplete="off" placeholder="1:…:android:…"></label>
       <label>Android: API-Schlüssel<input name="android_api_key" value="{{ fcm_app.android_api_key or '' }}" maxlength="200" autocomplete="off" placeholder="AIza…"></label>
       <label>iOS: App-ID<input name="ios_app_id" value="{{ fcm_app.ios_app_id or '' }}" maxlength="200" autocomplete="off" placeholder="1:…:ios:…"></label>
       <label>iOS: API-Schlüssel<input name="ios_api_key" value="{{ fcm_app.ios_api_key or '' }}" maxlength="200" autocomplete="off" placeholder="AIza…"></label>
+      </details>
       <button type="submit" class="secondary">Speichern</button>
     </form>
     <form method="post" action="/admin/stores/turnstile" class="stack">

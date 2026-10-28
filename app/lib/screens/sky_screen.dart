@@ -412,6 +412,34 @@ class _Sky extends StatelessWidget {
             if (tonight != null) Expanded(child: _Moon(night: tonight)),
           ],
         ),
+        if (sky.planets.isNotEmpty)
+          Card(
+            key: const Key('sky-planets'),
+            margin: const EdgeInsets.only(top: 12),
+            child: Padding(
+              padding: const EdgeInsets.all(14),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    tr('Planeten heute Nacht', 'Planets tonight'),
+                    style: theme.textTheme.titleMedium,
+                  ),
+                  const SizedBox(height: 6),
+                  for (final p in sky.planets)
+                    Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 2),
+                      child: Text(
+                        tr(
+                          '${p.name}: ${clock(p.start)}–${clock(p.end)}, am höchsten ${clock(p.best)} im ${compass(p.azimuth)} (${p.altitude.round()}°)',
+                          '${p.name}: ${clock(p.start)}–${clock(p.end)}, highest ${clock(p.best)} in the ${compass(p.azimuth)} (${p.altitude.round()}°)',
+                        ),
+                      ),
+                    ),
+                ],
+              ),
+            ),
+          ),
         Card(
           margin: const EdgeInsets.only(top: 12),
           child: InkWell(
@@ -903,6 +931,31 @@ class _PlaceScreenState extends State<PlaceScreen> {
       ),
     );
   }
+}
+
+/// Compass direction of an azimuth: "Süden", "Südwesten" …
+String compass(double azimuth) {
+  const de = [
+    'Norden',
+    'Nordosten',
+    'Osten',
+    'Südosten',
+    'Süden',
+    'Südwesten',
+    'Westen',
+    'Nordwesten',
+  ];
+  const en = [
+    'north',
+    'north-east',
+    'east',
+    'south-east',
+    'south',
+    'south-west',
+    'west',
+    'north-west',
+  ];
+  return (appEnglish ? en : de)[(azimuth / 45).round() % 8];
 }
 
 /// "Heute 19:42", "Do 30.10.", for the calendar.

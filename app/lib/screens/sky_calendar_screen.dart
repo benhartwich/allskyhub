@@ -11,14 +11,21 @@ import 'sky_screen.dart' show calendarWhen;
 
 const _filters = {
   'shower': ['shower'],
-  'moon': ['new_moon', 'full_moon'],
+  'moon': [
+    'new_moon',
+    'full_moon',
+    'moon_planet',
+    'lunar_eclipse',
+    'solar_eclipse',
+  ],
   'pass': ['pass'],
   'aurora': ['aurora', 'good_night'],
 };
 
 Color _color(String kind) => switch (kind) {
   'shower' => Sky.accent2,
-  'full_moon' => Sky.warn,
+  'full_moon' || 'lunar_eclipse' || 'solar_eclipse' => Sky.warn,
+  'moon_planet' => Sky.accent2,
   'new_moon' => Sky.text2,
   'pass' => Sky.accent,
   _ => Sky.aurora,
@@ -87,7 +94,7 @@ class _SkyCalendarScreenState extends State<SkyCalendarScreen> {
     final theme = Theme.of(context);
     final labels = {
       'shower': tr('Meteore', 'Meteors'),
-      'moon': tr('Mond', 'Moon'),
+      'moon': tr('Mond, Planeten, Finsternisse', 'Moon, planets, eclipses'),
       'pass': tr('Überflüge', 'Passes'),
       'aurora': tr('Polarlicht & klare Nächte', 'Aurora & clear nights'),
     };

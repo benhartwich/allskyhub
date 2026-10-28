@@ -16,8 +16,10 @@
 	<string>Für den Himmel über dir (Wolken, Mond, Überflüge) und für den Sonnenstand deiner Kamera braucht die App den ungefähren Standort, auf etwa 10 km gerundet.</string>
 	<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
 	<string>Für den Himmel über dir und für den Sonnenstand deiner Kamera braucht die App den ungefähren Standort. Sie fragt ihn nur ab, wenn du es antippst, nie im Hintergrund.</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>Um ein Foto zu deiner Polarlicht-Meldung auszuwählen. Die App lädt nur das Foto hoch, das du wählst, ohne Ort und Kameradaten.</string>
 	<key>NSCameraUsageDescription</key>
-	<string>Zum Scannen des WLAN-QR-Codes auf dem Aufkleber deiner Kamera und als Hintergrund der Himmelsansicht (AR). Bilder werden nicht gespeichert.</string>
+	<string>Zum Scannen des WLAN-QR-Codes auf dem Aufkleber deiner Kamera, als Hintergrund der Himmelsansicht (AR) und für ein Foto zu deiner Polarlicht-Meldung.</string>
 	<key>NSLocalNetworkUsageDescription</key>
 	<string>allskyhub verbindet sich im WLAN mit deiner Kamera, um sie einzurichten.</string>
 	<key>CADisableMinimumFrameDurationOnPhone</key>

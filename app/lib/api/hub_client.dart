@@ -1622,3 +1622,124 @@ extension SkyReports on HubClient {
   Future<Map<String, dynamic>> myReports() async =>
       await _send('GET', '/reports/mine') as Map<String, dynamic>;
 }
+
+/// An aurora report as the hub lists it (`/api/v1/sightings/aurora`).
+class AuroraSighting {
+  AuroraSighting.fromJson(Map<String, dynamic> json)
+    : id = json['id'] as String,
+      at = DateTime.parse(json['at'] as String),
+      distanceKm = (json['distance_km'] as num).toDouble(),
+      nakedEye = json['naked_eye'] as bool,
+      details = [for (final d in json['details'] as List<dynamic>) d as String],
+      photo = json['photo'] as String?,
+      thumb = json['thumb'] as String?,
+      author = json['author'] as String?,
+      photoState = json['photo_state'] as String?;
+
+  final String id;
+  final DateTime at;
+  final double distanceKm;
+  final bool nakedEye;
+  final List<String> details;
+
+  /// Paths on the hub, only once an admin approved the photo.
+  final String? photo;
+  final String? thumb;
+  final String? author;
+
+  /// Your own report's photo: pending, approved, rejected or none.
+  final String? photoState;
+}
+
+extension Sightings on HubClient {
+  /// Returns cameras [{at, title, image}], tracks [path], others_km [km], id.
+  Future<Map<String, dynamic>> reportFireball({
+    required DateTime seenAt,
+    required double lat,
+    required double lon,
+    SkyDir? start,
+    SkyDir? end,
+    required String brightness,
+    required List<String> details,
+  }) async =>
+      await _send(
+            'POST',
+            '/sightings/fireball',
+            body: {
+              'seen_at': seenAt.toUtc().toIso8601String(),
+              'lat': double.parse(lat.toStringAsFixed(1)),
+              'lon': double.parse(lon.toStringAsFixed(1)),
+              if (start != null) 'start': [start.alt, start.az],
+              if (end != null) 'end': [end.alt, end.az],
+              'brightness': brightness,
+              'details': details,
+            },
+          )
+          as Map<String, dynamic>;
+
+  Future<AuroraSighting> reportAurora({
+    required double lat,
+    required double lon,
+    required bool nakedEye,
+    required List<String> details,
+    Uint8List? photo,
+    String photoName = 'photo.jpg',
+    String author = '',
+  }) async {
+    final request = http.MultipartRequest('POST', _uri('/sightings/aurora'))
+      ..headers.addAll(authHeaders)
+      ..headers['Accept-Language'] = appLocale.languageCode
+      ..fields.addAll({
+        'lat': lat.toStringAsFixed(1),
+        'lon': lon.toStringAsFixed(1),
+        'naked_eye': '$nakedEye',
+        'details': details.join(','),
+        'author': author,
+        'licence': '${photo != null}',
+      });
+    if (photo != null) {
+      request.files.add(
+        http.MultipartFile.fromBytes('photo', photo, filename: photoName),
+      );
+    }
+    final response = await http.Response.fromStream(await _http.send(request));
+    if (response.statusCode >= 400) {
+      var message = response.reasonPhrase ?? 'error';
+      try {
+        message = (jsonDecode(response.body) as Map<String, dynamic>)['detail']
+            .toString();
+      } on FormatException {
+        // keep the reason phrase
+      }
+      throw HubException(response.statusCode, message);
+    }
+    return AuroraSighting.fromJson(
+      jsonDecode(utf8.decode(response.bodyBytes)) as Map<String, dynamic>,
+    );
+  }
+
+  Future<List<AuroraSighting>> auroraNearby(double lat, double lon) async => [
+    for (final a
+        in await _sendUri(
+              'GET',
+              _uri('/sightings/aurora', {
+                'lat': lat.toStringAsFixed(1),
+                'lon': lon.toStringAsFixed(1),
+              }),
+            )
+            as List<dynamic>)
+      AuroraSighting.fromJson(a as Map<String, dynamic>),
+  ];
+
+  Future<void> flagAurora(String id) =>
+      _send('POST', '/sightings/aurora/$id/flag');
+
+  Future<Map<String, dynamic>> alerts() async =>
+      await _send('GET', '/account/alerts') as Map<String, dynamic>;
+
+  Future<Map<String, dynamic>> updateAlerts(
+    Map<String, Object?> changes,
+  ) async =>
+      await _send('PUT', '/account/alerts', body: changes)
+          as Map<String, dynamic>;
+}

@@ -60,6 +60,7 @@ async def test_detail_follows_the_sections(
     detail = (await new_client.get(f"/api/v1/public/cameras/{slug}")).json()
     assert (detail["loop"], detail["events"], detail["nights"]) == ([], [], [])
     assert (detail["live_url"], detail["facts"], detail["image_at"]) == (None, None, None)
+    assert (detail["online"], detail["night"]) == (None, None)
     assert (await new_client.get("/api/v1/public/feed")).json() == {"events": []}
 
 

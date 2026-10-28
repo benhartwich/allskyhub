@@ -83,6 +83,8 @@ TITLES = {
     "youtube": "YouTube-OAuth-Client",
     "fcm": "Firebase-Dienstkonto (Push)",
     "turnstile": "Cloudflare Turnstile",
+    # Further apps' own upload keys (OtherApp.android_upload), made on their setup.
+    "bortle_android_upload": "bortle: Android-Upload-Schlüssel",
 }
 UPLOADED = ("play", "asc", "codemagic", "youtube", "fcm", "turnstile")
 # The app's own Firebase registration (public identifiers, not in the vault's secrets).
@@ -125,6 +127,12 @@ class OtherApp:
     categories: tuple[str, str] = ("", "")
     version: str = "1.0.0"
     what_to_test: dict[str, str] = field(default_factory=dict[str, str])
+
+    @property
+    def android_upload(self) -> str:
+        """The vault kind of its own Play upload key (built on the hub's server like
+        allskyhub's, deploy/android: the request's first line is ``app=<key>``)."""
+        return f"{self.key}_android_upload"
 
 
 OTHER_APPS = {
@@ -383,14 +391,14 @@ def parse_youtube(raw: bytes, redirect_uri: str) -> tuple[bytes, dict[str, Any]]
 # --- What the hub makes itself ---------------------------------------------------------
 
 
-def make_android_upload() -> tuple[bytes, dict[str, Any]]:
+def make_android_upload(app: str = "allskyhub") -> tuple[bytes, dict[str, Any]]:
     """The upload key for Play App Signing: RSA 4096 in a PKCS#12 keystore, alias
     ``upload``, valid for 30 years (Play wants validity past 2033)."""
     key = rsa.generate_private_key(public_exponent=65537, key_size=4096)
     name = x509.Name(
         [
-            x509.NameAttribute(NameOID.COMMON_NAME, "allskyhub upload"),
-            x509.NameAttribute(NameOID.ORGANIZATION_NAME, "allskyhub"),
+            x509.NameAttribute(NameOID.COMMON_NAME, f"{app} upload"),
+            x509.NameAttribute(NameOID.ORGANIZATION_NAME, app),
         ]
     )
     now = dt.datetime.now(dt.UTC)
@@ -902,6 +910,10 @@ class Stores:
             secret, meta = make_ios_certificate_key()
             self.vault.put("ios_certificate", secret, meta, by)
             report.add(TITLES["ios_certificate"], "ok", "Neu erzeugt.")
+        if not self.vault.has(app.android_upload):
+            secret, meta = make_android_upload(app.title)
+            self.vault.put(app.android_upload, secret, meta, by)
+            report.add(TITLES[app.android_upload], "ok", "Neu erzeugt.")
         client = self._http()
         try:
             try:
@@ -931,7 +943,7 @@ class Stores:
     ) -> str:
         """Start a release build; the build id (Codemagic's, or "local")."""
         if platform == "android":
-            self.request_android(by)
+            self.request_android(by, app)
             return "local"
         meta = self.vault.meta("codemagic") or {}
         app_id = self.other_app_id(app) if app else meta.get("app_id")
@@ -961,9 +973,13 @@ class Stores:
     async def recent_builds(self, limit: int = 3) -> list[dict[str, Any]]:
         """The last builds started here, with Codemagic's current status."""
         builds = self.vault.builds()[:limit]
-        local = [i for i, b in enumerate(builds) if b.get("id") == "local"]
-        if local:  # only the newest local build has a state; older ones are done
-            builds[local[0]] = {**builds[local[0]], "status": self.android_job().state}
+        seen: set[str] = set()
+        for i, b in enumerate(builds):
+            key = str(b.get("app", ""))
+            if b.get("id") != "local" or key in seen:
+                continue
+            seen.add(key)  # only an app's newest local build has a state; older ones are done
+            builds[i] = {**b, "status": self.android_job(OTHER_APPS.get(key)).state}
         if not self.vault.has("codemagic"):
             return builds
         client = self._http()
@@ -988,26 +1004,48 @@ class Stores:
 
     # Android on the hub's server
 
-    def request_android(self, by: str) -> None:
-        """Leave a request for the root helper (allskyhub-android-release.path)."""
-        if not self.vault.has("android_upload"):
+    def request_android(self, by: str, app: OtherApp | None = None) -> None:
+        """Leave a request for the root helper (allskyhub-android-release.path); for a
+        further app its first line is ``app=<key>``. One build at a time."""
+        if not self.vault.has(app.android_upload if app else "android_upload"):
             raise StoreError("Erst „Prüfen und einrichten“, dann bauen.")
-        if self.android_job().busy:
+        if self.android_busy():
             raise StoreError("Es läuft schon ein Android-Build.")
         self.release_dir.mkdir(mode=0o750, parents=True, exist_ok=True)
-        (self.release_dir / "request").write_text(f"{by}\n")
-        self.vault.add_build({"id": "local", "platform": "android", "at": _now(), "by": by})
-        log.info("android release requested by %s", by)
+        (self.release_dir / "request").write_text((f"app={app.key}\n" if app else "") + f"{by}\n")
+        self.vault.add_build(
+            {"id": "local", "platform": "android", "at": _now(), "by": by}
+            | ({"app": app.key} if app else {})
+        )
+        log.info("android release of %s requested by %s", app.key if app else "allskyhub", by)
 
-    def android_job(self) -> AndroidJob:
+    def android_busy(self) -> bool:
+        return any(self.android_job(a).busy for a in (None, *OTHER_APPS.values()))
+
+    def _release_out(self, app: OtherApp | None) -> Path:
+        """Where the root helper answers for the app (deploy/android: release-<key>)."""
+        return self.release_out if app is None else self.release_out.with_name(f"release-{app.key}")
+
+    def _requested(self) -> str | None:
+        """The app a waiting request names: "allskyhub", a further app's key, or None."""
+        try:
+            first = (self.release_dir / "request").read_text().split("\n", 1)[0]
+        except OSError:
+            return None
+        key = first.removeprefix("app=")
+        return key if first.startswith("app=") and key in OTHER_APPS else "allskyhub"
+
+    def android_job(self, app: OtherApp | None = None) -> AndroidJob:
+        out = self._release_out(app)
+
         def read(name: str) -> str:
             try:
-                return (self.release_out / name).read_text()
+                return (out / name).read_text()
             except OSError:
                 return ""
 
         state = read("state").strip() or "idle"
-        if (self.release_dir / "request").exists():
+        if self._requested() == (app.key if app else "allskyhub"):
             state = "requested"
         latest: dict[str, Any] | None = None
         try:
@@ -1017,23 +1055,27 @@ class Stores:
         except ValueError:
             pass
         name = str(latest.get("file", "")) if latest else ""
-        if latest and not (re.fullmatch(r"allskyhub-\d+\.aab", name) and self.aab(name)):
+        prefix = app.key if app else "allskyhub"
+        if latest and not (re.fullmatch(rf"{prefix}-\d+\.aab", name) and self.aab(name)):
             latest = None
         return AndroidJob(state, "\n".join(read("log").splitlines()[-LOG_TAIL:]), latest)
 
     def aab(self, name: str) -> Path | None:
-        path = self.release_out / name
-        ok = re.fullmatch(r"allskyhub-\d+\.aab", name) and path.is_file()
-        return path if ok else None
+        """An App Bundle built here, by its name (``<app>-<build>.aab``)."""
+        for app in (None, *OTHER_APPS.values()):
+            if re.fullmatch(rf"{app.key if app else 'allskyhub'}-\d+\.aab", name):
+                path = self._release_out(app) / name
+                return path if path.is_file() else None
+        return None
 
-    async def play_upload(self, aab: Path) -> tuple[int, str]:
+    async def play_upload(self, aab: Path, package: str = PACKAGE) -> tuple[int, str]:
         """Send an App Bundle to the internal test track: (0, text) when it is there,
         (3, text) when Google does not know the app yet (the first one goes by hand)."""
         if not self.vault.has("play"):
             return 1, "Kein Google-Play-Dienstkonto hinterlegt."
         client = self._client or httpx.AsyncClient(timeout=UPLOAD_TIMEOUT)
         try:
-            return await self._play_upload(client, aab)
+            return await self._play_upload(client, aab, package)
         except StoreError as exc:
             return 1, str(exc)
         except httpx.HTTPError as exc:
@@ -1041,9 +1083,11 @@ class Stores:
         finally:
             await self._close(client)
 
-    async def _play_upload(self, client: httpx.AsyncClient, aab: Path) -> tuple[int, str]:
+    async def _play_upload(
+        self, client: httpx.AsyncClient, aab: Path, package: str
+    ) -> tuple[int, str]:
         auth = {"Authorization": f"Bearer {await self._play_token(client)}"}
-        app = f"{PLAY}/applications/{PACKAGE}"
+        app = f"{PLAY}/applications/{package}"
         r = await client.post(f"{app}/edits", headers=auth)
         if r.status_code == 404:
             return 3, (
@@ -1057,7 +1101,7 @@ class Stores:
         edit = str(_dict(r.json())["id"])
         bundle = await asyncio.to_thread(aab.read_bytes)
         r = await client.post(
-            f"{PLAY_UPLOAD}/applications/{PACKAGE}/edits/{edit}/bundles",
+            f"{PLAY_UPLOAD}/applications/{package}/edits/{edit}/bundles",
             params={"uploadType": "media"},
             content=bundle,
             headers={**auth, "Content-Type": "application/octet-stream"},

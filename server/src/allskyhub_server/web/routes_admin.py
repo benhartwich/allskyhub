@@ -166,10 +166,13 @@ async def page(
                     stores.other_app_id(a),
                     stores.listing_state(a),
                     appstore.state(stores, a),
+                    stores.android_job(a),
+                    stores.vault.has(a.android_upload),
                 )
                 for a in admin_stores.OTHER_APPS.values()
             ],
             "android_job": stores.android_job(),
+            "android_busy": stores.android_busy(),
             "android_states": {
                 "requested": "angefordert",
                 "running": "baut",

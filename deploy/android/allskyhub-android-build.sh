@@ -9,7 +9,10 @@
 #                                          when the admin page asks: an App Bundle signed
 #                                          with the hub's upload key, then sent to Google
 #                                          Play's internal test track by the hub
-#                                          (allskyhub-server play-upload)
+#                                          (allskyhub-server play-upload). A request
+#                                          whose first line is "app=bortle" builds the
+#                                          bortle app (github.com/benhartwich/bortle-app)
+#                                          the same way, with its own upload key
 #
 # Flutter and Gradle run in a container (ghcr.io/cirruslabs/flutter), limited in CPU and
 # memory so the hub keeps its share. dl.google.com does not answer HTTP/1.1 from here, so
@@ -41,6 +44,10 @@ main() {
     local STORE=${ALLSKYHUB_STORE_DIR:-/var/lib/allskyhub-server/store}
     local REPO=${ALLSKYHUB_DEPLOY_REPO:-/opt/allskyhub-server}
     local ENV_FILE=${ALLSKYHUB_ENV_FILE:-/etc/allskyhub-server/allskyhub-server.env}
+    # Which app: allskyhub (app/ of this repository) or a further one the hub knows
+    # (admin/stores.py OTHER_APPS), each with its clone, key, variables and answers.
+    local app=allskyhub APP_DIR=app KEY_KIND=android_upload PREFIX=ALLSKYHUB
+    local PACKAGE=org.allskyhub.app SRC=$BASE/src
 
     install -d -m 755 "$BASE"
     mkdir -p "$BASE/maven-google"
@@ -49,7 +56,16 @@ main() {
         # The spool belongs to the hub and is untrusted: only whether a request is there
         # counts. A test build may be running; wait for it.
         [[ -e $SPOOL/request || -L $SPOOL/request ]] || exit 0
+        # Read as the hub, briefly; only one exact line chooses the other app.
+        local first
+        first=$(timeout 5 runuser -u "$HUB_USER" -- head -n 1 -- "$SPOOL/request" || true)
         runuser -u "$HUB_USER" -- rm -f -- "$SPOOL/request"
+        if [[ $first == app=bortle ]]; then
+            app=bortle APP_DIR=. KEY_KIND=bortle_android_upload PREFIX=BORTLE
+            PACKAGE=eu.bortle.app SRC=$BASE/src-bortle
+            REPO_URL=${ALLSKYHUB_BORTLE_REPO_URL:-https://github.com/benhartwich/bortle-app.git}
+            RELEASE=${ALLSKYHUB_BORTLE_RELEASE_OUT:-$BASE/release-bortle}
+        fi
         install -d -m 755 "$RELEASE"
         rm -f -- "$RELEASE/log"
         exec >> "$RELEASE/log" 2>&1
@@ -62,26 +78,27 @@ main() {
         flock -n 9 || exit 0
     fi
 
-    local SRC=$BASE/src
     if [[ ! -d $SRC/.git ]]; then
         git clone --quiet "$REPO_URL" "$SRC"
     fi
     git -C "$SRC" fetch --quiet origin "$BRANCH"
-    local tree
-    tree=$(git -C "$SRC" rev-parse FETCH_HEAD:app)
-    # No published build yet (also right after the move into BASE): build even if app/ is
-    # unchanged.
-    if [[ $force == "" && -f $OUT/latest.json && -f $BASE/last-tree &&
-        $(cat "$BASE/last-tree") == "$tree" ]]; then
-        exit 0
+    local tree=
+    if [[ $force != --release ]]; then
+        tree=$(git -C "$SRC" rev-parse FETCH_HEAD:app)
+        # No published build yet (also right after the move into BASE): build even if
+        # app/ is unchanged.
+        if [[ $force == "" && -f $OUT/latest.json && -f $BASE/last-tree &&
+            $(cat "$BASE/last-tree") == "$tree" ]]; then
+            exit 0
+        fi
     fi
     git -C "$SRC" checkout --quiet --force --detach FETCH_HEAD
-    git -C "$SRC" clean --quiet -fdx -- app
+    git -C "$SRC" clean --quiet -fdx -- "$APP_DIR"
     local commit build version
     commit=$(git -C "$SRC" rev-parse --short=7 HEAD)
     build=$(git -C "$SRC" rev-list --count HEAD)
-    version=$(sed -n 's/^version: *\([0-9.]*\).*/\1/p' "$SRC/app/pubspec.yaml")
-    echo "Build $build ($version, $commit)"
+    version=$(sed -n 's/^version: *\([0-9.]*\).*/\1/p' "$SRC/$APP_DIR/pubspec.yaml")
+    echo "$app: build $build ($version, $commit)"
 
     python3 "$HERE/maven-google-proxy.py" "$PROXY_HOST" "$PROXY_PORT" "$BASE/maven-google" &
     PROXY_PID=$!  # global: the EXIT trap runs after main() has returned
@@ -129,9 +146,9 @@ main() {
 
 # The store build: an App Bundle signed with the hub's upload key (admin/stores.py keeps
 # it as JSON with the PKCS#12 file in base64), handed to the hub for the upload to Play.
-# Uses the variables of main().
+# Uses the variables of main(); the app's Gradle file reads <PREFIX>_KEYSTORE and the rest.
 release_build() {
-    [[ -f $STORE/android_upload.secret ]] || {
+    [[ -f $STORE/$KEY_KIND.secret ]] || {
         echo 'FEHLER: Kein Upload-Schlüssel, erst auf der Admin-Seite „Prüfen und einrichten“.'
         answer "$RELEASE" state failed
         return
@@ -139,16 +156,17 @@ release_build() {
     KEY_TMP=$(mktemp -d)  # global for the EXIT trap
     chmod 700 "$KEY_TMP"
     # Read as the hub: the key is the hub's, and a symlink there must not reach root's files.
-    runuser -u "$HUB_USER" -- cat -- "$STORE/android_upload.secret" > "$KEY_TMP/secret.json"
-    python3 - "$KEY_TMP/secret.json" "$KEY_TMP" <<'PY'
+    runuser -u "$HUB_USER" -- cat -- "$STORE/$KEY_KIND.secret" > "$KEY_TMP/secret.json"
+    python3 - "$KEY_TMP/secret.json" "$KEY_TMP" "$PREFIX" <<'PY'
 import base64, json, os, sys
 key = json.load(open(sys.argv[1]))
+prefix = sys.argv[3]
 os.umask(0o077)
 with open(os.path.join(sys.argv[2], "upload.p12"), "wb") as f:
     f.write(base64.b64decode(key["p12"]))
 with open(os.path.join(sys.argv[2], "keystore.env"), "w") as f:
-    f.write("ALLSKYHUB_KEYSTORE_PASSWORD=%s\nALLSKYHUB_KEY_ALIAS=upload\n" % key["password"])
-    f.write("ALLSKYHUB_KEY_PASSWORD=%s\n" % key["password"])
+    f.write("%s_KEYSTORE_PASSWORD=%s\n%s_KEY_ALIAS=upload\n" % (prefix, key["password"], prefix))
+    f.write("%s_KEY_PASSWORD=%s\n" % (prefix, key["password"]))
 PY
     docker run --rm --name allskyhub-android-release --cpus 6 --memory 8g \
         -v "$SRC:/work" \
@@ -158,27 +176,27 @@ PY
         -v "$HERE/gradle.properties:/root/.gradle/gradle.properties:ro" \
         -v "$KEY_TMP/upload.p12:/keys/upload.p12:ro" \
         --env-file "$KEY_TMP/keystore.env" \
-        -e ALLSKYHUB_KEYSTORE=/keys/upload.p12 \
+        -e "${PREFIX}_KEYSTORE=/keys/upload.p12" \
         -e ALLSKYHUB_MAVEN_GOOGLE="http://$PROXY_HOST:$PROXY_PORT/" \
-        -w /work/app "$IMAGE" \
+        -w "/work/$APP_DIR" "$IMAGE" \
         sh -c "flutter pub get && flutter build appbundle --release --build-number=$build"
     rm -rf "$KEY_TMP"
 
-    local aab=$SRC/app/build/app/outputs/bundle/release/app-release.aab
-    local name=allskyhub-$build.aab
+    local aab=$SRC/$APP_DIR/build/app/outputs/bundle/release/app-release.aab
+    local name=$app-$build.aab
     install -m 644 "$aab" "$RELEASE/$name"
     printf '{"build": %d, "version": "%s", "commit": "%s", "built_at": "%s", "size": %d, "file": "%s"}\n' \
         "$build" "$version" "$commit" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$(stat -c %s "$aab")" "$name" \
         | answer_stdin "$RELEASE" latest.json
     # shellcheck disable=SC2012  # our own file names: no spaces or newlines
-    ls -1t "$RELEASE"/allskyhub-*.aab | tail -n +4 | xargs -r rm -f
+    ls -1t "$RELEASE/$app"-*.aab | tail -n +4 | xargs -r rm -f
     echo "$name gebaut ($(stat -c %s "$aab") Bytes). Hochladen zu Google Play …"
 
     trap - ERR
     local result=0
     sudo -u "$HUB_USER" bash -c \
-        'set -a; . "$1"; exec "$2/.venv/bin/allskyhub-server" play-upload "$3"' \
-        _ "$ENV_FILE" "$REPO" "$RELEASE/$name" || result=$?
+        'set -a; . "$1"; exec "$2/.venv/bin/allskyhub-server" play-upload --package "$4" "$3"' \
+        _ "$ENV_FILE" "$REPO" "$RELEASE/$name" "$PACKAGE" || result=$?
     case $result in
         0) answer "$RELEASE" state ok ;;
         3) answer "$RELEASE" state built ;;  # the first upload goes by hand

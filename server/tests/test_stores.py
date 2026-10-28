@@ -1327,6 +1327,8 @@ async def test_submit_to_apple_review(tmp_path: Path) -> None:
 async def test_submit_to_play_production(tmp_path: Path) -> None:
     seen: list[tuple[str, str, Any]] = []
     draft_only = False
+    at_commit = False
+    puts_status: list[str] = []
 
     def answer(request: httpx.Request) -> httpx.Response:
         path = request.url.path
@@ -1342,7 +1344,9 @@ async def test_submit_to_play_production(tmp_path: Path) -> None:
             return httpx.Response(200, json={"releases": [
                 {"versionCodes": ["294"]}, {"versionCodes": ["301"]}]})  # fmt: skip
         if path.endswith("/tracks/production"):
-            if draft_only and (body or {})["releases"][0]["status"] != "draft":
+            status = str(body["releases"][0]["status"]) if body else ""
+            puts_status.append(status)
+            if draft_only and status != "draft":
                 return httpx.Response(
                     400,
                     json={
@@ -1354,6 +1358,9 @@ async def test_submit_to_play_production(tmp_path: Path) -> None:
                 )
             return httpx.Response(200, json={})
         if path.endswith(":commit"):
+            if at_commit and puts_status[-1] != "draft":
+                message = "Only releases with status draft may be created on draft app."
+                return httpx.Response(400, json={"error": {"message": message}})
             return httpx.Response(200, json={})
         return httpx.Response(404)
 
@@ -1374,6 +1381,15 @@ async def test_submit_to_play_production(tmp_path: Path) -> None:
     report = await hub.submit_play()
     assert report.steps[0].state == "warn"
     assert "Entwurf" in report.steps[0].text
+
+    # Google may say so only at the commit (eu.bortle.app, 2026-10-28).
+    draft_only = False
+    at_commit = True
+    seen.clear()
+    report = await hub.submit_play("eu.bortle.app")
+    assert report.steps[0].state == "warn", report.steps
+    puts = [b["releases"][0]["status"] for m, _, b in seen if m == "PUT" and b]
+    assert puts == ["completed", "draft"]
 
 
 def test_a_further_apps_version_comes_with_its_store(tmp_path: Path) -> None:

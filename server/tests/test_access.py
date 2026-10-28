@@ -232,7 +232,8 @@ async def test_english_pages_and_switch(app: FastAPI, client: httpx.AsyncClient)
     assert '<html lang="en">' in landing.text
     assert "The whole sky, on your phone." in landing.text
     assert "Open source, run it yourself" in landing.text
-    assert "Native apps for Android and iOS are coming soon" in landing.text
+    assert "Get the app on Google Play" in landing.text
+    assert "play.google.com/store/apps/details?id=org.allskyhub.app" in landing.text
     assert landing.cookies.get("ash_lang") == "en"
     # Remembered: the next page without ?lang is English too, the menu offers German.
     form = await client.get("/zugang")

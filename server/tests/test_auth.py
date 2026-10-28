@@ -107,7 +107,9 @@ async def test_login_logout(client: httpx.AsyncClient) -> None:
     )
     assert ok.status_code == 303
     assert ok.headers["location"] == "/"
-    assert "Meine Kameras" in (await client.get("/")).text
+    home = (await client.get("/")).text
+    assert "Meine Kameras" in home
+    assert "id=org.allskyhub.app" in home  # the app at Google Play
 
 
 async def test_post_without_csrf_is_rejected(client: httpx.AsyncClient) -> None:

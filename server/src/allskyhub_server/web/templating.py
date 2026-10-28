@@ -134,6 +134,9 @@ def heater_text(heater: object) -> str:
 
 
 cast(dict[str, Any], templates.env.globals)["asset"] = asset
+# The app in the stores (Benjamin, 2026-10-28); iOS joins once Apple has released it.
+PLAY_STORE_URL = "https://play.google.com/store/apps/details?id=org.allskyhub.app"
+cast(dict[str, Any], templates.env.globals)["play_store_url"] = PLAY_STORE_URL
 cast(dict[str, Any], templates.env.globals)["heater_text"] = heater_text
 cast(dict[str, Any], templates.env.globals)["air_overlay"] = air_overlay
 cast(dict[str, Any], templates.env.globals)["sky_overlay"] = sky_overlay

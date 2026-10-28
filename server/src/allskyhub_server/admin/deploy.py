@@ -134,6 +134,9 @@ class GitHub:
             )
             r.raise_for_status()
             runs: list[dict[str, Any]] = r.json().get("check_runs") or []
+        except httpx.HTTPStatusError as exc:
+            log.warning("admin: GitHub not reachable: %s", exc)
+            raise DeployError(_refused(exc.response)) from exc
         except (httpx.HTTPError, ValueError) as exc:
             log.warning("admin: GitHub not reachable: %s", exc)
             raise DeployError("GitHub ist gerade nicht erreichbar.") from exc
@@ -152,6 +155,21 @@ class GitHub:
 
     def forget(self) -> None:
         self._cached = None
+
+
+def _refused(r: httpx.Response) -> str:
+    """GitHub's anonymous limit (60 an hour) is per address, shared with everything else
+    on the server: say so, with the time it resets."""
+    if r.status_code in (403, 429) and r.headers.get("x-ratelimit-remaining") == "0":
+        try:
+            reset = dt.datetime.fromtimestamp(int(r.headers["x-ratelimit-reset"]), dt.UTC)
+        except (KeyError, ValueError):
+            return "GitHub-Abrufgrenze dieses Servers erreicht (60 pro Stunde)."
+        return (
+            "GitHub-Abrufgrenze dieses Servers erreicht (60 pro Stunde); wieder ab "
+            f"{reset:%H:%M} UTC."
+        )
+    return "GitHub ist gerade nicht erreichbar."
 
 
 def spool(data_dir: Path) -> Path:

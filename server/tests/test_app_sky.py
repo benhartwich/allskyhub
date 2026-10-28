@@ -237,6 +237,8 @@ async def test_sky_photo_failures_are_remembered_and_capped(tmp_path: Path) -> N
 
     def commons(request: httpx.Request) -> httpx.Response:
         asked.append(str(request.url))
+        if "Saturn" in str(request.url):
+            return httpx.Response(200, headers={"content-length": "lots"}, content=b"\xff\xd8")
         if "Jupiter" in str(request.url):
             return httpx.Response(200, content=b"\xff\xd8" + b"x" * (sky_photos.MAX_BYTES + 10))
         return httpx.Response(404)
@@ -245,7 +247,7 @@ async def test_sky_photo_failures_are_remembered_and_capped(tmp_path: Path) -> N
         tmp_path, httpx.AsyncClient(transport=httpx.MockTransport(commons))
     )
     assert await photos.get("jupiter") is None  # too big
-    assert await photos.get("saturn") is None  # 404
+    assert await photos.get("saturn") is None  # a broken Content-Length
     assert await photos.get("jupiter") is None
     assert await photos.get("saturn") is None
     assert len(asked) == 2  # each tried once within the hour

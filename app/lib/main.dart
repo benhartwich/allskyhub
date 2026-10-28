@@ -4,11 +4,14 @@ import 'package:flutter_localizations/flutter_localizations.dart';
 import 'design.dart';
 import 'l10n.dart';
 import 'api/hub_client.dart';
+import 'api/place_store.dart';
 import 'api/session_store.dart';
+import 'platform/location.dart';
 import 'screens/cameras_screen.dart';
 import 'screens/explore_screen.dart';
 import 'screens/join_screen.dart';
 import 'screens/login_screen.dart';
+import 'screens/sky_screen.dart';
 
 void main() {
   runApp(
@@ -22,10 +25,20 @@ void main() {
 typedef ClientFactory = HubClient Function(String baseUrl, String? token);
 
 class AllskyApp extends StatefulWidget {
-  const AllskyApp({super.key, required this.store, required this.clientFor});
+  const AllskyApp({
+    super.key,
+    required this.store,
+    required this.clientFor,
+    this.places,
+    this.location,
+  });
 
   final SessionStore store;
   final ClientFactory clientFor;
+
+  /// "Himmel": the chosen place and the phone's location (fakes in tests).
+  final PlaceStore? places;
+  final LocationSource? location;
 
   @override
   State<AllskyApp> createState() => _AllskyAppState();
@@ -97,6 +110,8 @@ class _AllskyAppState extends State<AllskyApp> {
           : HomeShell(
               key: ValueKey(client),
               client: client ?? _guest,
+              places: widget.places ?? SecurePlaceStore(),
+              location: widget.location ?? PlatformLocationSource(),
               mine: client == null
                   ? null
                   : CamerasScreen(client: client, onSignOut: _signOut),
@@ -106,12 +121,21 @@ class _AllskyAppState extends State<AllskyApp> {
   }
 }
 
-/// The tabs at the bottom: "Meine" after sign-in, then Entdecken and Mitmachen for
-/// everyone.
+/// The tabs at the bottom: "Meine" after sign-in, then Entdecken, Himmel and Mitmachen
+/// for everyone.
 class HomeShell extends StatefulWidget {
-  const HomeShell({super.key, required this.client, this.mine, this.onSignIn});
+  const HomeShell({
+    super.key,
+    required this.client,
+    required this.places,
+    required this.location,
+    this.mine,
+    this.onSignIn,
+  });
 
   final HubClient client;
+  final PlaceStore places;
+  final LocationSource location;
   final Widget? mine;
   final VoidCallback? onSignIn;
 
@@ -128,6 +152,11 @@ class _HomeShellState extends State<HomeShell> {
     final pages = [
       ?mine,
       ExploreScreen(client: widget.client, onSignIn: widget.onSignIn),
+      SkyScreen(
+        client: widget.client,
+        places: widget.places,
+        location: widget.location,
+      ),
       JoinScreen(client: widget.client),
     ];
     return Scaffold(
@@ -146,6 +175,11 @@ class _HomeShellState extends State<HomeShell> {
             icon: const Icon(Icons.public_outlined),
             selectedIcon: const Icon(Icons.public),
             label: tr('Entdecken', 'Explore'),
+          ),
+          NavigationDestination(
+            icon: const Icon(Icons.nights_stay_outlined),
+            selectedIcon: const Icon(Icons.nights_stay),
+            label: tr('Himmel', 'Sky'),
           ),
           NavigationDestination(
             icon: const Icon(Icons.star_outline),

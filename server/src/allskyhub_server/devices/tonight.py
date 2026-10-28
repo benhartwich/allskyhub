@@ -193,7 +193,32 @@ def _clock(t: dt.datetime, zone: ZoneInfo) -> str:
 def build(
     now: dt.datetime, lat: float, lon: float, zone: ZoneInfo, forecast: list[Hour]
 ) -> Tonight:
+    return build_night(_evening_noon(now, zone, lat, lon), now, lat, lon, zone, forecast)
+
+
+def coming_nights(
+    now: dt.datetime, lat: float, lon: float, zone: ZoneInfo, forecast: list[Hour], count: int
+) -> list[tuple[dt.date, Tonight]]:
+    """Tonight (or the night still running) and the ``count - 1`` after it, each with the
+    date of its evening."""
     noon = _evening_noon(now, zone, lat, lon)
+    out: list[tuple[dt.date, Tonight]] = []
+    for i in range(count):
+        evening = noon + dt.timedelta(days=i)
+        out.append(
+            (evening.astimezone(zone).date(), build_night(evening, now, lat, lon, zone, forecast))
+        )
+    return out
+
+
+def build_night(
+    noon: dt.datetime,
+    now: dt.datetime,
+    lat: float,
+    lon: float,
+    zone: ZoneInfo,
+    forecast: list[Hour],
+) -> Tonight:
     night = astro.night_after(noon, lat, lon)
     by_hour = {h.at: h for h in forecast}
     hours: list[NightHour] = []

@@ -1,7 +1,9 @@
 import 'dart:convert';
 
 import 'package:allskyhub_app/api/hub_client.dart';
+import 'package:allskyhub_app/api/place_store.dart';
 import 'package:allskyhub_app/api/session_store.dart';
+import 'package:allskyhub_app/platform/location.dart';
 import 'package:allskyhub_app/api/camera_setup.dart';
 import 'package:allskyhub_app/l10n.dart';
 import 'package:allskyhub_app/main.dart';
@@ -33,8 +35,19 @@ MockClient fakeHub({
   };
 });
 
+class _NoLocation implements LocationSource {
+  @override
+  Future<LocationResult> current() async =>
+      const LocationResult.missing(LocationProblem.denied);
+
+  @override
+  Future<String?> timezone() async => null;
+}
+
 Widget app(SessionStore store, MockClient hub) => AllskyApp(
   store: store,
+  places: MemoryPlaceStore(),
+  location: _NoLocation(),
   clientFor: (url, token) =>
       HubClient(baseUrl: url, token: token, httpClient: hub),
 );

@@ -142,6 +142,7 @@ class SkyViewScreen extends StatefulWidget {
     this.camera,
     this.load,
     this.place,
+    this.targetKey,
     this.poseSource,
     this.useCamera = true,
   }) : assert(camera != null || load != null);
@@ -155,6 +156,10 @@ class SkyViewScreen extends StatefulWidget {
 
   /// The place's name for the hint line (public sky view).
   final String? place;
+
+  /// Start guiding to this object (key from the public catalogue), e.g. the
+  /// constellation of a sky-brightness report.
+  final String? targetKey;
   final PoseSource? poseSource;
 
   /// The phone's camera behind the drawing (AR); off in tests.
@@ -178,6 +183,7 @@ class _SkyViewScreenState extends State<SkyViewScreen>
   bool _showMeteors = true;
   bool _showOverflights = true;
   SkyObject? _target;
+  bool _startedTarget = false;
   Timer? _reload;
 
   /// Vertical field of view of what the screen shows, in degrees.
@@ -262,7 +268,8 @@ class _SkyViewScreenState extends State<SkyViewScreen>
       setState(() {
         _data = data;
         // Follow the target to its new place.
-        final key = _target?.key;
+        final key = _target?.key ?? (_startedTarget ? null : widget.targetKey);
+        _startedTarget = true;
         if (key != null) {
           _target = data.objects.where((o) => o.key == key).firstOrNull;
         }

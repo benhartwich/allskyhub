@@ -34,10 +34,16 @@ class _CamerasScreenState extends State<CamerasScreen> {
   late Future<List<Camera>> _cameras = widget.client.cameras();
   TestBuild? _update;
 
+  /// A reporter account (sky-brightness reports only) cannot pair cameras.
+  bool _reporter = false;
+
   @override
   void initState() {
     super.initState();
     if (testChannel) _checkUpdate();
+    widget.client.accountSettings().then((s) {
+      if (mounted && s.kind == 'reporter') setState(() => _reporter = true);
+    }, onError: (Object _) {});
   }
 
   /// A test build from the hub's server offers the newer one (deploy/android).
@@ -143,11 +149,13 @@ class _CamerasScreenState extends State<CamerasScreen> {
           ),
         ],
       ),
-      floatingActionButton: FloatingActionButton.extended(
-        onPressed: _pair,
-        icon: const Icon(Icons.add),
-        label: Text(tr('Kamera koppeln', 'Pair camera')),
-      ),
+      floatingActionButton: _reporter
+          ? null
+          : FloatingActionButton.extended(
+              onPressed: _pair,
+              icon: const Icon(Icons.add),
+              label: Text(tr('Kamera koppeln', 'Pair camera')),
+            ),
       body: Column(
         children: [
           if (_update case final update?) _UpdateBanner(update: update),
@@ -181,6 +189,14 @@ class _CamerasScreenState extends State<CamerasScreen> {
           final cameras = snapshot.data;
           if (cameras == null) {
             return const Center(child: CircularProgressIndicator());
+          }
+          if (cameras.isEmpty && _reporter) {
+            return _Message(
+              tr(
+                'Mit deinem Melder-Konto meldest du die Himmelshelligkeit (Mitmachen). Für eine eigene Kamera frag auf allskyhub.org Zugang an.',
+                'With your reporter account you report the sky brightness (Take part). For your own camera, request access on allskyhub.org.',
+              ),
+            );
           }
           if (cameras.isEmpty) {
             return _Message(

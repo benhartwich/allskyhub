@@ -722,6 +722,7 @@ class AccountSettings {
     : keepDays = json['event_keep_days'] as int,
       pushAvailable = json['push_available'] as bool? ?? false,
       mailAvailable = json['mail_available'] as bool? ?? false,
+      kind = json['kind'] as String? ?? 'owner',
       notify = {
         for (final key in notifyKeys)
           if (json[key] is bool) key: json[key] as bool,
@@ -740,6 +741,10 @@ class AccountSettings {
   final int keepDays;
   final bool pushAvailable;
   final bool mailAvailable;
+
+  /// `owner`, or `reporter`: an account only for reporting the sky brightness, which
+  /// cannot pair cameras.
+  final String kind;
   final Map<String, bool> notify;
 }
 
@@ -1535,4 +1540,85 @@ extension PublicSkyView on HubClient {
   Future<SkyObjectInfo> skyObject(String key) async => SkyObjectInfo.fromJson(
     await _send('GET', '/public/sky-objects/$key') as Map<String, dynamic>,
   );
+}
+
+/// What to compare the sky with (hub `/api/v1/reports/chart`): a constellation as it
+/// stands now, its stars as (x, y, mag) in degrees, y toward the zenith.
+class ReportChart {
+  ReportChart.fromJson(Map<String, dynamic> json)
+    : ready = json['ready'] as bool,
+      reason = json['reason'] as String?,
+      key = json['key'] as String?,
+      name = json['name'] as String?,
+      altitude = (json['altitude'] as num?)?.toDouble(),
+      azimuth = (json['azimuth'] as num?)?.toDouble(),
+      stars = [
+        for (final s in json['stars'] as List<dynamic>? ?? const [])
+          (
+            x: ((s as List<dynamic>)[0] as num).toDouble(),
+            y: (s[1] as num).toDouble(),
+            mag: (s[2] as num).toDouble(),
+          ),
+      ],
+      limits = [
+        for (final l in json['limits'] as List<dynamic>? ?? const [])
+          (l as num).toDouble(),
+      ],
+      sunAltitude = (json['sun_altitude'] as num).toDouble(),
+      moonUp = json['moon_up'] as bool? ?? false,
+      moonIllumination = (json['moon_illumination'] as num?)?.toDouble() ?? 0,
+      nextAt = _optionalDate(json['next_at']);
+
+  final bool ready;
+  final String? reason;
+  final String? key;
+  final String? name;
+  final double? altitude;
+  final double? azimuth;
+  final List<({double x, double y, double mag})> stars;
+  final List<double> limits;
+  final double sunAltitude;
+  final bool moonUp;
+  final double moonIllumination;
+
+  /// The next report is possible from then (once an hour).
+  final DateTime? nextAt;
+}
+
+extension SkyReports on HubClient {
+  Map<String, String> _at(double lat, double lon) => {
+    'lat': lat.toStringAsFixed(1),
+    'lon': lon.toStringAsFixed(1),
+  };
+
+  Future<ReportChart> reportChart(double lat, double lon) async =>
+      ReportChart.fromJson(
+        await _sendUri('GET', _uri('/reports/chart', _at(lat, lon)))
+            as Map<String, dynamic>,
+      );
+
+  /// Returns sqm, label, limit_mag, next_at.
+  Future<Map<String, dynamic>> sendReport({
+    required double lat,
+    required double lon,
+    required String constellation,
+    required double limit,
+    required bool clouds,
+  }) async =>
+      await _send(
+            'POST',
+            '/reports',
+            body: {
+              'lat': double.parse(lat.toStringAsFixed(1)),
+              'lon': double.parse(lon.toStringAsFixed(1)),
+              'constellation': constellation,
+              'limit_mag': limit,
+              'clouds': clouds,
+            },
+          )
+          as Map<String, dynamic>;
+
+  /// count, last_sqm, last_at, next_at.
+  Future<Map<String, dynamic>> myReports() async =>
+      await _send('GET', '/reports/mine') as Map<String, dynamic>;
 }

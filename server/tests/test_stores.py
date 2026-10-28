@@ -732,6 +732,7 @@ async def test_push_appstore(tmp_path: Path) -> None:
         ("Name und Untertitel", "ok"),
         ("Kategorie", "ok"),
         ("Altersfreigabe", "ok"),
+        ("Versionsnummer", "ok"),
         ("Texte und Screenshots de-DE", "ok"),
         ("Texte und Screenshots en-US", "ok"),
         ("Build", "ok"),
@@ -739,8 +740,11 @@ async def test_push_appstore(tmp_path: Path) -> None:
         ("TestFlight-Prüfung", "ok"),
         ("Noch in App Store Connect", "warn"),
     ], report.steps
+    # The version in preparation takes the app's version (Apple ties it to the build).
+    assert report.steps[3].text == f"1.0 → {appstore.VERSION}"
+    assert ("PATCH", "/v1/appStoreVersions/V1") in calls
     # The public TestFlight group, made once, with the build in it and sent to review.
-    assert report.steps[6].text == "https://tf.example/join/X"
+    assert report.steps[7].text == "https://tf.example/join/X"
     assert created["betaGroups"][0]["publicLinkEnabled"] is True
     assert ("POST", "/v1/betaGroups/betaGroups-1/relationships/builds") in calls
     assert [a["locale"] for a in created["betaAppLocalizations"]] == ["de-DE", "en-US"]
@@ -1101,6 +1105,7 @@ def _bortle_tarball() -> bytes:
     files = {
         "store/play/icon.png": png,
         "lib/main.dart": b"void main() {}",
+        "pubspec.yaml": b"name: bortle\nversion: 0.3.0+4\n",
         "../evil.txt": b"outside",
     }
     for lang in ("de-DE", "en-US"):
@@ -1369,6 +1374,15 @@ async def test_submit_to_play_production(tmp_path: Path) -> None:
     report = await hub.submit_play()
     assert report.steps[0].state == "warn"
     assert "Entwurf" in report.steps[0].text
+
+
+def test_a_further_apps_version_comes_with_its_store(tmp_path: Path) -> None:
+    """bortle, 2026-10-28: the App Store version from its pubspec, no fixed value."""
+    store = stores.extract_listing(_bortle_tarball(), tmp_path / "bortle")
+    assert appstore.app_version(store.parent / "pubspec.yaml", "0.2.0") == "0.3.0"
+    assert not (tmp_path / "bortle" / "lib").exists()
+    (store.parent / "pubspec.yaml").write_text("version: ../evil\n")
+    assert appstore.app_version(store.parent / "pubspec.yaml", "0.2.0") == "0.2.0"
 
 
 def test_app_store_version_follows_pubspec(tmp_path: Path) -> None:

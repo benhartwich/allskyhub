@@ -172,8 +172,9 @@ LISTING_MAX_BYTES = 200_000_000
 
 
 def extract_listing(tarball: bytes, dest: Path) -> Path:
-    """Unpack only ``store/`` of a GitHub tarball into ``dest`` (replaced), with the
-    tarfile data filter: no links, devices or paths outside. Returns ``dest/store``."""
+    """Unpack only ``store/`` and ``pubspec.yaml`` of a GitHub tarball into ``dest``
+    (replaced), with the tarfile data filter: no links, devices or paths outside.
+    Returns ``dest/store``."""
     import io
     import shutil
     import tarfile
@@ -185,7 +186,11 @@ def extract_listing(tarball: bytes, dest: Path) -> Path:
         members: list[tarfile.TarInfo] = []
         for m in tar.getmembers():
             parts = m.name.split("/", 1)  # "<repo>-<sha>/store/..."
-            if len(parts) == 2 and parts[1].startswith("store/") and (m.isfile() or m.isdir()):
+            wanted = len(parts) == 2 and (
+                (parts[1].startswith("store/") and (m.isfile() or m.isdir()))
+                or (parts[1] == "pubspec.yaml" and m.isfile())  # its version
+            )
+            if wanted:
                 m.name = parts[1]
                 members.append(m)
         tar.extractall(dest, members=members, filter="data")

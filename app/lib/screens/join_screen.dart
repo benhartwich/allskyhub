@@ -10,6 +10,7 @@ import '../design.dart';
 import '../l10n.dart';
 import '../platform/location.dart';
 import 'report_screen.dart';
+import 'sightings_screen.dart';
 
 /// Lets screens deep in a guest's navigation open the sign-in (null when signed in).
 class SignInScope extends InheritedWidget {
@@ -33,13 +34,29 @@ class JoinScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    Widget soon(IconData icon, Color color, String title, String text) => Card(
+    Widget entry(
+      Key key,
+      IconData icon,
+      Color color,
+      String title,
+      String text,
+      Widget Function() screen, {
+      bool account = true,
+    }) => Card(
       margin: const EdgeInsets.fromLTRB(16, 0, 16, 12),
       child: ListTile(
+        key: key,
         leading: Icon(icon, color: color, size: 30),
         title: Text(title),
         subtitle: Text(text),
-        trailing: Chip(label: Text(tr('bald', 'soon'))),
+        trailing: const Icon(Icons.chevron_right),
+        onTap: () => Navigator.of(context).push(
+          MaterialPageRoute<void>(
+            builder: (_) => account && client.token == null
+                ? ReportGateScreen(client: client)
+                : screen(),
+          ),
+        ),
       ),
     );
     return Scaffold(
@@ -133,7 +150,8 @@ class JoinScreen extends StatelessWidget {
               ),
             ),
           ),
-          soon(
+          entry(
+            const Key('join-fireball'),
             Icons.auto_awesome,
             Sky.warn,
             tr('Feuerkugel gesehen?', 'Seen a fireball?'),
@@ -141,15 +159,38 @@ class JoinScreen extends StatelessWidget {
               'Zeit und Richtung melden, wir gleichen mit den Kameras ab.',
               'Report time and direction; we compare with the cameras.',
             ),
+            () => FireballScreen(client: client, location: location),
           ),
-          soon(
+          entry(
+            const Key('join-aurora'),
             Icons.waves,
             Sky.aurora,
             tr('Polarlicht gesehen?', 'Seen the aurora?'),
             tr(
-              'Ort und Foto teilen, andere in der Nähe erfahren es.',
-              'Share place and photo; others nearby learn about it.',
+              'Melden, gern mit Foto; andere in der Nähe erfahren es.',
+              'Report it, with a photo if you like; others nearby learn about it.',
             ),
+            () => AuroraScreen(client: client, location: location),
+          ),
+          entry(
+            const Key('join-aurora-list'),
+            Icons.list_alt,
+            Sky.aurora,
+            tr('Polarlicht-Meldungen in der Nähe', 'Aurora reports nearby'),
+            tr('Die letzten Stunden, mit Fotos', 'The last hours, with photos'),
+            () => _AuroraNearby(client: client, location: location),
+            account: false,
+          ),
+          entry(
+            const Key('join-alerts'),
+            Icons.notifications_active_outlined,
+            Sky.accent,
+            tr('Benachrichtigungen', 'Notifications'),
+            tr(
+              'Polarlicht, Feuerkugeln und klare Nächte bei dir',
+              'Aurora, fireballs and clear nights where you are',
+            ),
+            () => AlertsScreen(client: client, location: location),
           ),
         ],
       ),
@@ -265,4 +306,42 @@ class OwnCameraScreen extends StatelessWidget {
       ),
     );
   }
+}
+
+/// Finds the phone's place, then lists the aurora reports around it.
+class _AuroraNearby extends StatelessWidget {
+  const _AuroraNearby({required this.client, required this.location});
+
+  final HubClient client;
+  final LocationSource location;
+
+  @override
+  Widget build(BuildContext context) => FutureBuilder<LocationResult>(
+    future: location.current(),
+    builder: (context, snapshot) {
+      final at = snapshot.data?.location;
+      if (snapshot.connectionState != ConnectionState.done) {
+        return const Scaffold(body: Center(child: CircularProgressIndicator()));
+      }
+      if (at == null) {
+        return Scaffold(
+          appBar: AppBar(),
+          body: Padding(
+            padding: const EdgeInsets.all(24),
+            child: Text(
+              tr(
+                'Für die Meldungen in deiner Nähe braucht die App deinen ungefähren Standort.',
+                'For the reports near you the app needs your rough location.',
+              ),
+            ),
+          ),
+        );
+      }
+      return AuroraListScreen(
+        client: client,
+        lat: at.latitude,
+        lon: at.longitude,
+      );
+    },
+  );
 }

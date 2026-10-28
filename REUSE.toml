@@ -66,3 +66,9 @@ SPDX-License-Identifier = "BSD-3-Clause"
 path = "server/src/allskyhub_server/web/static/leaflet/**"
 SPDX-FileCopyrightText = "2010-2023 Volodymyr Agafonkin, 2010-2011 CloudMade"
 SPDX-License-Identifier = "BSD-2-Clause"
+
+# Land outlines for the app's globe: Natural Earth 1:110m land (v5.1.2), rounded to 0.1°.
+[[annotations]]
+path = "app/assets/geo/land.json"
+SPDX-FileCopyrightText = "Natural Earth (naturalearthdata.com)"
+SPDX-License-Identifier = "LicenseRef-PublicDomain"

@@ -1,0 +1,6 @@
+This work is in the public domain.
+
+Natural Earth (https://www.naturalearthdata.com/about/terms-of-use/): "All versions of
+Natural Earth raster + vector map data found on this website are in the public domain.
+You may use the maps in any manner, including modifying the content and design,
+electronic dissemination, and offset printing."

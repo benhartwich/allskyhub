@@ -27,6 +27,8 @@ MockClient fakeHub({
               401,
             ),
     '/api/v1/cameras' => http.Response(jsonEncode(cameras), 200),
+    '/api/v1/public/cameras' => http.Response('[]', 200),
+    '/api/v1/public/feed' => http.Response('{"events": []}', 200),
     _ => http.Response('', 404),
   };
 });
@@ -42,10 +44,14 @@ void main() {
     final store = MemorySessionStore();
     await tester.pumpWidget(app(store, fakeHub()));
     await tester.pumpAndSettle();
+    // Guests start on "Entdecken"; signing in is one tap away.
+    expect(find.text('Entdecken'), findsWidgets);
+    await tester.tap(find.byKey(const Key('sign-in')));
+    await tester.pumpAndSettle();
 
     await tester.enterText(find.byKey(const Key('email')), 'a@example.org');
     await tester.enterText(find.byKey(const Key('password')), 'wrong');
-    await tester.tap(find.text('Anmelden'));
+    await tester.tap(find.widgetWithText(FilledButton, 'Anmelden'));
     await tester.pumpAndSettle();
     expect(
       find.text('E-Mail-Adresse oder Passwort ist falsch.'),
@@ -53,7 +59,7 @@ void main() {
     );
 
     await tester.enterText(find.byKey(const Key('password')), 'right password');
-    await tester.tap(find.text('Anmelden'));
+    await tester.tap(find.widgetWithText(FilledButton, 'Anmelden'));
     await tester.pumpAndSettle();
     expect(find.text('Meine Kameras'), findsOneWidget);
     expect(find.textContaining('Noch keine Kamera gekoppelt'), findsOneWidget);
@@ -72,15 +78,17 @@ void main() {
       ),
     );
     await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('sign-in')));
+    await tester.pumpAndSettle();
 
     await tester.enterText(find.byKey(const Key('email')), 'a@example.org');
     await tester.enterText(find.byKey(const Key('password')), 'wrong');
-    await tester.tap(find.text('Sign in'));
+    await tester.tap(find.widgetWithText(FilledButton, 'Sign in'));
     await tester.pumpAndSettle();
     expect(find.text('Wrong email address or password.'), findsOneWidget);
 
     await tester.enterText(find.byKey(const Key('password')), 'right password');
-    await tester.tap(find.text('Sign in'));
+    await tester.tap(find.widgetWithText(FilledButton, 'Sign in'));
     await tester.pumpAndSettle();
     expect(find.text('My cameras'), findsOneWidget);
     expect(find.textContaining('No camera paired yet'), findsOneWidget);

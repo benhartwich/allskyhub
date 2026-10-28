@@ -177,12 +177,14 @@ async def sky_now(request: Request, db: DbSession, slug: str) -> Response:
 
 
 @router.get("/sky/{slug}/latest.jpg")
-async def sky_latest(request: Request, db: DbSession, slug: str) -> Response:
+async def sky_latest(request: Request, db: DbSession, slug: str, thumb: bool = False) -> Response:
+    """The latest picture; ``thumb=1`` for lists such as the app's "Entdecken"."""
     device = await _device(db, slug)
     if not public.profile(device).sections.live:
         raise HTTPException(404)  # the owner switched the live image off
     store: ImageStore = request.app.state.images
-    return _jpeg(store.path(device.id, FrameVariant.FULL), PUBLIC_CACHE)
+    variant = FrameVariant.THUMB if thumb else FrameVariant.FULL
+    return _jpeg(store.path(device.id, variant), PUBLIC_CACHE)
 
 
 @router.get("/sky/{slug}/nights/{night_id}")

@@ -806,3 +806,108 @@ async def test_push_appstore(tmp_path: Path) -> None:
     assert step.state == "warn"
     assert "HTTP 422" in step.text
     assert all("s3cret" not in s.text for s in report.steps)
+
+
+async def test_a_further_app_shares_the_keys(tmp_path: Path) -> None:
+    """Benjamin, 2026-10-28: bortle uses the same Apple key, Codemagic token and
+    distribution certificate; only bundle id, repository and variable group differ."""
+    seen: list[tuple[str, str, Any]] = []
+
+    def answer(request: httpx.Request) -> httpx.Response:
+        body: Any = json.loads(request.content) if request.content.startswith(b"{") else None
+        path = request.url.path
+        seen.append((request.method, path, body))
+        if request.url.host == "api.appstoreconnect.apple.com":
+            if path == "/v1/bundleIds" and request.method == "GET":
+                assert request.url.params["filter[identifier]"] == "eu.bortle.app"
+                return httpx.Response(200, json={"data": []})
+            if path == "/v1/bundleIds":
+                return httpx.Response(201, json={"data": {"id": "B2"}})
+            if path == "/v1/apps":
+                return httpx.Response(200, json={"data": []})
+        if path == "/api/v3/user/apps":
+            return httpx.Response(200, json={"data": [{"id": "APP1", "name": "allskyhub"}]})
+        if path == "/api/v3/user/teams":
+            return httpx.Response(200, json={"data": [{"id": "T1", "name": "Sternwarte"}]})
+        if path == "/apps":
+            return httpx.Response(200, json={"_id": "APP2"})
+        if path == "/api/v3/apps/APP2/variable-groups" and request.method == "GET":
+            return httpx.Response(200, json={"data": []})
+        if path == "/api/v3/apps/APP2/variable-groups":
+            return httpx.Response(201, json={"data": {"id": "G2"}})
+        if path == "/api/v3/variable-groups/G2/variables" and request.method == "GET":
+            return httpx.Response(200, json={"data": []})
+        if path == "/api/v3/variable-groups/G2/variables":
+            return httpx.Response(201, json={"data": []})
+        if path == "/api/v3/apps/APP2/builds":
+            return httpx.Response(202, json={"data": {"id": "BUILD2"}})
+        return httpx.Response(404, json={"message": f"unexpected {path}"})
+
+    client = httpx.AsyncClient(transport=httpx.MockTransport(answer))
+    hub = stores.Stores(tmp_path, "benhartwich/allskyhub", client)
+    hub.vault.put("asc", *stores.parse_asc(_p8(), "2X9R4HXF34", ISSUER), by="a")
+    hub.vault.put("codemagic", *stores.parse_codemagic("abcdefghijklmnopqrstuvwxyz0123"), by="a")
+    hub.vault.update_meta("codemagic", app_id="APP1")
+    bortle = stores.OTHER_APPS["bortle"]
+
+    report = await hub.setup_other(bortle, "a")
+    states = {s.title: s.state for s in report.steps}
+    assert states == {
+        "Schlüssel des iOS-Zertifikats": "ok",
+        "Bundle-ID": "ok",
+        "App-Store-Connect-API-Schlüssel": "warn",
+        "Codemagic-API-Token": "ok",
+        "Codemagic-Gruppe bortle_store": "ok",
+    }, report.steps
+    assert ("POST", "/v1/bundleIds", {"data": {"type": "bundleIds", "attributes": {
+        "identifier": "eu.bortle.app", "name": "bortle", "platform": "IOS"}}}) in seen  # fmt: skip
+    assert ("POST", "/apps", {"repositoryUrl": "https://github.com/benhartwich/bortle-app.git",
+                              "teamId": "T1"}) in seen  # fmt: skip
+    assert ("POST", "/api/v3/apps/APP2/variable-groups", {"name": "bortle_store"}) in seen
+    names = {
+        v["name"]
+        for m, p, b in seen
+        if m == "POST" and p == "/api/v3/variable-groups/G2/variables"
+        for v in b["variables"]
+    }
+    assert names == {
+        "APP_STORE_CONNECT_PRIVATE_KEY",
+        "APP_STORE_CONNECT_KEY_IDENTIFIER",
+        "APP_STORE_CONNECT_ISSUER_ID",
+        "CERTIFICATE_PRIVATE_KEY",
+    }
+    meta = hub.vault.meta("codemagic") or {}
+    assert (meta["app_id"], meta["bortle_app_id"]) == ("APP1", "APP2")  # allskyhub's stays
+    assert "Neue App, Bundle-ID eu.bortle.app, Name bortle" in " ".join(
+        s.text for s in report.steps
+    )
+
+    assert await hub.build("ios", "a", app=bortle) == "BUILD2"
+    assert ("POST", "/api/v3/apps/APP2/builds", {"workflow_id": "ios-release",
+                                                 "branch": "main"}) in seen  # fmt: skip
+    assert hub.vault.builds()[0]["app"] == "bortle"
+
+
+async def test_admin_page_offers_the_further_app(
+    app: FastAPI,
+    client: httpx.AsyncClient,
+    settings: Settings,
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    email = await make_account(client)
+    monkeypatch.setattr(settings, "admin_emails", email)
+    monkeypatch.setattr(app.state, "stores", stores.Stores(tmp_path, "benhartwich/allskyhub"))
+    page = await client.get("/admin")
+    assert "Weitere App: bortle (iOS)" in page.text
+    assert "bortle: iOS-Release bauen" not in page.text  # only after the setup
+    token = csrf_from(page.text)
+    r = await client.post(
+        "/admin/stores-other", data={"csrf_token": token, "app": "nope", "action": "setup"}
+    )
+    assert r.status_code == 400
+    r = await client.post(
+        "/admin/stores-other", data={"csrf_token": token, "app": "bortle", "action": "build"}
+    )
+    assert r.status_code == 400
+    assert "einrichten" in r.text

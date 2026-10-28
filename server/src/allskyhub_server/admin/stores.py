@@ -94,6 +94,36 @@ OBSOLETE = frozenset(
     }
 )
 
+
+@dataclass(frozen=True)
+class OtherApp:
+    """A further iOS app of the same developer accounts (Benjamin, 2026-10-28: one App
+    Store Connect key and one Codemagic token for all). The hub registers its bundle id,
+    adds its repository to Codemagic and fills its variable group with the same keys, so
+    the keys never leave the hub."""
+
+    key: str
+    title: str
+    package: str
+    name: str  # the bundle id's name at Apple
+    repo: str  # owner/name on GitHub
+    codemagic_name: str  # Codemagic names an app after its repository
+    group: str
+    workflow: str = "ios-release"
+
+
+OTHER_APPS = {
+    "bortle": OtherApp(
+        key="bortle",
+        title="bortle",
+        package="eu.bortle.app",
+        name="bortle",
+        repo="benhartwich/bortle-app",
+        codemagic_name="bortle-app",
+        group="bortle_store",
+    ),
+}
+
 KEY_ID = re.compile(r"^[A-Z0-9]{10}$")
 ISSUER_ID = re.compile(r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$")
 TOKEN = re.compile(r"^[A-Za-z0-9._~+/=-]{16,512}$")
@@ -524,37 +554,43 @@ class Stores:
         )
         return {"Authorization": f"Bearer {token}"}
 
-    async def _check_asc(self, client: httpx.AsyncClient, report: Report) -> None:
+    async def _check_asc(
+        self,
+        client: httpx.AsyncClient,
+        report: Report,
+        package: str = PACKAGE,
+        name: str = APP_NAME,
+    ) -> None:
         title = TITLES["asc"]
         if not self.vault.has("asc"):
             report.add(title, "warn", "Noch nicht hochgeladen.")
             return
         auth = self.asc_auth()
         r = await client.get(
-            f"{ASC}/bundleIds", params={"filter[identifier]": PACKAGE}, headers=auth
+            f"{ASC}/bundleIds", params={"filter[identifier]": package}, headers=auth
         )
         if r.status_code != 200:
             report.add(title, "fail", f"Apple lehnt den Schlüssel ab ({_message(r)}).")
             return
         found = [
             b for b in _list(_dict(r.json()).get("data"))
-            if _dict(b.get("attributes")).get("identifier") == PACKAGE
+            if _dict(b.get("attributes")).get("identifier") == package
         ]  # fmt: skip
         if found:
-            report.add("Bundle-ID", "ok", f"{PACKAGE} ist bei Apple registriert.")
+            report.add("Bundle-ID", "ok", f"{package} ist bei Apple registriert.")
         else:
             body = {
                 "data": {
                     "type": "bundleIds",
-                    "attributes": {"identifier": PACKAGE, "name": APP_NAME, "platform": "IOS"},
+                    "attributes": {"identifier": package, "name": name, "platform": "IOS"},
                 }
             }
             r = await client.post(f"{ASC}/bundleIds", json=body, headers=auth)
             if r.status_code != 201:
                 report.add("Bundle-ID", "fail", f"Anlegen ging nicht ({_message(r)}).")
                 return
-            report.add("Bundle-ID", "ok", f"{PACKAGE} bei Apple angelegt.")
-        r = await client.get(f"{ASC}/apps", params={"filter[bundleId]": PACKAGE}, headers=auth)
+            report.add("Bundle-ID", "ok", f"{package} bei Apple angelegt.")
+        r = await client.get(f"{ASC}/apps", params={"filter[bundleId]": package}, headers=auth)
         if r.status_code == 200 and _list(_dict(r.json()).get("data")):
             report.add(title, "ok", "Die App ist in App Store Connect angelegt.")
         elif r.status_code == 200:
@@ -562,7 +598,7 @@ class Stores:
                 title,
                 "warn",
                 "Schlüssel gilt. Die App selbst kann nur von Hand angelegt werden: App Store "
-                f"Connect → Apps → + → Neue App, Bundle-ID {PACKAGE}, Name allskyhub.",
+                f"Connect → Apps → + → Neue App, Bundle-ID {package}, Name {name}.",
             )
         else:
             report.add(title, "fail", _message(r))
@@ -572,7 +608,13 @@ class Stores:
     def _cm_auth(self, purpose: str) -> dict[str, str]:
         return {"x-auth-token": self.vault.secret("codemagic", purpose).decode()}
 
-    async def _cm_app(self, client: httpx.AsyncClient, report: Report) -> str | None:
+    async def _cm_app(
+        self,
+        client: httpx.AsyncClient,
+        report: Report,
+        name: str = APP_NAME,
+        repo: str | None = None,
+    ) -> str | None:
         """The Codemagic app of the repository: the one there, or added now."""
         auth = self._cm_auth("Codemagic-App")
         r = await client.get(f"{CODEMAGIC}/user/apps", params={"page_size": 100}, headers=auth)
@@ -582,11 +624,11 @@ class Stores:
             )
             return None
         for app in _list(_dict(r.json()).get("data")):
-            if app.get("name") == APP_NAME and not app.get("archived"):
+            if app.get("name") == name and not app.get("archived"):
                 app_id = str(app["id"])
                 report.add(TITLES["codemagic"], "ok", "Die App ist in Codemagic vorhanden.")
                 return app_id
-        body: dict[str, Any] = {"repositoryUrl": f"https://github.com/{self.repo}.git"}
+        body: dict[str, Any] = {"repositoryUrl": f"https://github.com/{repo or self.repo}.git"}
         r = await client.get(f"{CODEMAGIC}/user/teams", headers=auth)
         teams = _list(_dict(r.json()).get("data")) if r.status_code == 200 else []
         if len(teams) == 1:
@@ -615,9 +657,11 @@ class Stores:
         ).decode()
         return out
 
-    async def _cm_group(self, client: httpx.AsyncClient, app_id: str, report: Report) -> None:
+    async def _cm_group(
+        self, client: httpx.AsyncClient, app_id: str, report: Report, name: str = GROUP
+    ) -> None:
         auth = self._cm_auth("Codemagic-Gruppe")
-        title = f"Codemagic-Gruppe {GROUP}"
+        title = f"Codemagic-Gruppe {name}"
         r = await client.get(
             f"{CODEMAGIC}/apps/{app_id}/variable-groups", params={"page_size": 100}, headers=auth
         )
@@ -625,11 +669,11 @@ class Stores:
             report.add(title, "fail", _message(r))
             return
         group = next(
-            (g["id"] for g in _list(_dict(r.json()).get("data")) if g.get("name") == GROUP), None
+            (g["id"] for g in _list(_dict(r.json()).get("data")) if g.get("name") == name), None
         )
         if group is None:
             r = await client.post(
-                f"{CODEMAGIC}/apps/{app_id}/variable-groups", json={"name": GROUP}, headers=auth
+                f"{CODEMAGIC}/apps/{app_id}/variable-groups", json={"name": name}, headers=auth
             )
             group = _dict(_dict(r.json()).get("data")).get("id") if r.status_code < 300 else None
             if not isinstance(group, str):
@@ -714,20 +758,55 @@ class Stores:
             await self._close(client)
         return report
 
-    async def build(self, platform: str, by: str, branch: str = "main") -> str:
+    async def setup_other(self, app: OtherApp, by: str) -> Report:
+        """Like ``setup`` for a further iOS app, with the same Apple key, Codemagic token
+        and distribution certificate (Apple allows only a few per team)."""
+        report = Report()
+        if not self.vault.has("ios_certificate"):
+            secret, meta = make_ios_certificate_key()
+            self.vault.put("ios_certificate", secret, meta, by)
+            report.add(TITLES["ios_certificate"], "ok", "Neu erzeugt.")
+        client = self._http()
+        try:
+            try:
+                await self._check_asc(client, report, app.package, app.name)
+            except httpx.HTTPError as exc:
+                report.add("Verbindung", "fail", f"{type(exc).__name__}")
+            if not self.vault.has("codemagic"):
+                report.add(TITLES["codemagic"], "warn", "Noch nicht hochgeladen.")
+                return report
+            try:
+                app_id = await self._cm_app(client, report, app.codemagic_name, app.repo)
+                if app_id:
+                    self.vault.update_meta("codemagic", **{f"{app.key}_app_id": app_id})
+                    await self._cm_group(client, app_id, report, app.group)
+            except httpx.HTTPError as exc:
+                report.add("Codemagic", "fail", f"{type(exc).__name__}")
+        finally:
+            await self._close(client)
+        return report
+
+    def other_app_id(self, app: OtherApp) -> str | None:
+        value = (self.vault.meta("codemagic") or {}).get(f"{app.key}_app_id")
+        return value if isinstance(value, str) else None
+
+    async def build(
+        self, platform: str, by: str, branch: str = "main", app: OtherApp | None = None
+    ) -> str:
         """Start a release build; the build id (Codemagic's, or "local")."""
         if platform == "android":
             self.request_android(by)
             return "local"
         meta = self.vault.meta("codemagic") or {}
-        app_id = meta.get("app_id")
+        app_id = self.other_app_id(app) if app else meta.get("app_id")
         if not isinstance(app_id, str):
             raise StoreError("Erst „Prüfen und einrichten“, dann bauen.")
+        workflow = app.workflow if app else WORKFLOWS[platform]
         client = self._http()
         try:
             r = await client.post(
                 f"{CODEMAGIC}/apps/{app_id}/builds",
-                json={"workflow_id": WORKFLOWS[platform], "branch": branch},
+                json={"workflow_id": workflow, "branch": branch},
                 headers=self._cm_auth(f"Build {platform}"),
             )
         except httpx.HTTPError as exc:
@@ -739,6 +818,7 @@ class Stores:
             raise StoreError(f"Codemagic startet den Build nicht ({_message(r)}).")
         self.vault.add_build(
             {"id": build_id, "app_id": app_id, "platform": platform, "at": _now(), "by": by}
+            | ({"app": app.key} if app else {})
         )
         return build_id
 

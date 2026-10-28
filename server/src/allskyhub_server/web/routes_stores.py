@@ -150,6 +150,33 @@ async def setup_stores(
     return await page(request, db, session, store_report=report)
 
 
+@router.post("/admin/stores-other")
+async def other_app(
+    request: Request,
+    db: DbSession,
+    session: CurrentSession,
+    settings: SettingsDep,
+    app: Annotated[str, Form(max_length=32)],
+    action: Annotated[str, Form(max_length=16)],
+) -> Response:
+    """A further iOS app on the same accounts (admin/stores.py ``OTHER_APPS``)."""
+    admin_only(session, settings)
+    other = admin_stores.OTHER_APPS.get(app)
+    if other is None or action not in ("setup", "build"):
+        return await page(request, db, session, 400, error="Unbekannte App.")
+    stores: admin_stores.Stores = request.app.state.stores
+    if action == "setup":
+        report = await stores.setup_other(other, session.user.email)
+        return await page(request, db, session, store_report=report)
+    try:
+        await stores.build("ios", session.user.email, app=other)
+    except admin_stores.StoreError as exc:
+        return await page(request, db, session, 400, error=str(exc))
+    return await page(
+        request, db, session, notice=f"{other.title}: iOS-Release bei Codemagic gestartet."
+    )
+
+
 @router.post("/admin/stores-build")
 async def build_release(
     request: Request,

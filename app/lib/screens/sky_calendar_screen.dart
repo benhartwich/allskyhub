@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import '../api/hub_client.dart';
 import '../design.dart';
 import '../l10n.dart';
+import '../platform/reminders.dart';
 import 'sky_screen.dart' show calendarWhen;
 
 const _filters = {
@@ -31,9 +32,18 @@ Color _color(String kind) => switch (kind) {
 };
 
 class SkyCalendarScreen extends StatefulWidget {
-  const SkyCalendarScreen({super.key, required this.items});
+  const SkyCalendarScreen({
+    super.key,
+    required this.items,
+    required this.reminders,
+    this.forecasts = const {},
+  });
 
   final List<CalendarItem> items;
+  final Reminders reminders;
+
+  /// Evening → forecast summary, for the reminder's text.
+  final Map<DateTime, String> forecasts;
 
   @override
   State<SkyCalendarScreen> createState() => _SkyCalendarScreenState();
@@ -41,6 +51,43 @@ class SkyCalendarScreen extends StatefulWidget {
 
 class _SkyCalendarScreenState extends State<SkyCalendarScreen> {
   String? _filter;
+  Set<int> _pending = {};
+
+  @override
+  void initState() {
+    super.initState();
+    widget.reminders.pending().then((p) {
+      if (mounted) setState(() => _pending = p);
+    });
+  }
+
+  Future<void> _toggle(CalendarItem item) async {
+    final id = reminderId(item);
+    if (_pending.contains(id)) {
+      await widget.reminders.forget(item);
+      if (mounted) setState(() => _pending = {..._pending}..remove(id));
+      return;
+    }
+    final ok = await widget.reminders.remind(
+      item,
+      forecast: widget.forecasts[nightOf(item)],
+    );
+    if (!mounted) return;
+    if (ok) {
+      setState(() => _pending = {..._pending, id});
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            tr(
+              'Erinnern geht nicht: Benachrichtigungen sind für die App aus.',
+              'Cannot remind you: notifications are off for the app.',
+            ),
+          ),
+        ),
+      );
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -113,12 +160,36 @@ class _SkyCalendarScreenState extends State<SkyCalendarScreen> {
                         title: Text(item.title),
                         subtitle: Text('${calendarWhen(item)}\n${item.text}'),
                         isThreeLine: true,
+                        trailing: reminderTime(item) == null
+                            ? null
+                            : IconButton(
+                                key: Key('remind-${reminderId(item)}'),
+                                tooltip: _pending.contains(reminderId(item))
+                                    ? tr('Nicht erinnern', 'Do not remind')
+                                    : tr('Erinnern', 'Remind me'),
+                                icon: Icon(
+                                  _pending.contains(reminderId(item))
+                                      ? Icons.notifications_active
+                                      : Icons.notifications_none,
+                                  color: _pending.contains(reminderId(item))
+                                      ? Sky.aurora
+                                      : null,
+                                ),
+                                onPressed: () => _toggle(item),
+                              ),
                       ),
                     ),
                   ],
                 ),
               ),
             ),
+          Text(
+            tr(
+              'Glocke: die App erinnert dich am Abend (ganztägige Ereignisse um 18 Uhr, sonst 30 Minuten vorher), mit der neuesten Vorhersage, wenn du „Himmel“ vorher noch einmal geöffnet hast. ',
+              'Bell: the app reminds you in the evening (all-day events at 6 pm, others 30 minutes before), with the newest forecast if you opened “Sky” again before. ',
+            ),
+            style: theme.textTheme.bodySmall,
+          ),
           Text(
             tr(
               'Meteorzahlen gelten für einen sehr dunklen Himmel, den Radiant hoch am Himmel. Unter Stadtlicht sieht man nur einen Bruchteil.',

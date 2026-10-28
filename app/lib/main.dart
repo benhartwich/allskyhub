@@ -7,6 +7,7 @@ import 'api/hub_client.dart';
 import 'api/place_store.dart';
 import 'api/session_store.dart';
 import 'platform/location.dart';
+import 'platform/reminders.dart';
 import 'screens/cameras_screen.dart';
 import 'screens/explore_screen.dart';
 import 'screens/join_screen.dart';
@@ -31,6 +32,7 @@ class AllskyApp extends StatefulWidget {
     required this.clientFor,
     this.places,
     this.location,
+    this.reminders,
   });
 
   final SessionStore store;
@@ -39,6 +41,7 @@ class AllskyApp extends StatefulWidget {
   /// "Himmel": the chosen place and the phone's location (fakes in tests).
   final PlaceStore? places;
   final LocationSource? location;
+  final Reminders? reminders;
 
   @override
   State<AllskyApp> createState() => _AllskyAppState();
@@ -112,6 +115,7 @@ class _AllskyAppState extends State<AllskyApp> {
               client: client ?? _guest,
               places: widget.places ?? SecurePlaceStore(),
               location: widget.location ?? PlatformLocationSource(),
+              reminders: widget.reminders ?? LocalReminders(),
               mine: client == null
                   ? null
                   : CamerasScreen(client: client, onSignOut: _signOut),
@@ -129,6 +133,7 @@ class HomeShell extends StatefulWidget {
     required this.client,
     required this.places,
     required this.location,
+    required this.reminders,
     this.mine,
     this.onSignIn,
   });
@@ -136,6 +141,7 @@ class HomeShell extends StatefulWidget {
   final HubClient client;
   final PlaceStore places;
   final LocationSource location;
+  final Reminders reminders;
   final Widget? mine;
   final VoidCallback? onSignIn;
 
@@ -156,6 +162,7 @@ class _HomeShellState extends State<HomeShell> {
         client: widget.client,
         places: widget.places,
         location: widget.location,
+        reminders: widget.reminders,
       ),
       JoinScreen(client: widget.client),
     ];

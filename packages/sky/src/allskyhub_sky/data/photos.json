@@ -1,0 +1,842 @@
+{
+ "moon": {
+  "file": "Moon_nearside_LRO_5000_(2).png",
+  "page": "https://commons.wikimedia.org/wiki/File:Moon_nearside_LRO_5000_(2).png",
+  "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/2/20/Moon_nearside_LRO_5000_%282%29.png/960px-Moon_nearside_LRO_5000_%282%29.png",
+  "author": "NASA/GSFC/Arizona State University",
+  "licence": "Public domain",
+  "licence_url": ""
+ },
+ "mercury": {
+  "file": "Mercury_in_true_color.jpg",
+  "page": "https://commons.wikimedia.org/wiki/File:Mercury_in_true_color.jpg",
+  "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/4/4a/Mercury_in_true_color.jpg/960px-Mercury_in_true_color.jpg",
+  "author": "NASA/Johns Hopkins University Applied Physics Laboratory/Arizona State University/Carnegie Institution of Washington",
+  "licence": "Public domain",
+  "licence_url": ""
+ },
+ "venus": {
+  "file": "Venus_from_Mariner_10.jpg",
+  "page": "https://commons.wikimedia.org/wiki/File:Venus_from_Mariner_10.jpg",
+  "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/0/08/Venus_from_Mariner_10.jpg/960px-Venus_from_Mariner_10.jpg",
+  "author": "NASA/JPL-Caltech",
+  "licence": "Public domain",
+  "licence_url": ""
+ },
+ "mars": {
+  "file": "Mars_-_August_30_2021_-_Flickr_-_Kevin_M._Gill.png",
+  "page": "https://commons.wikimedia.org/wiki/File:Mars_-_August_30_2021_-_Flickr_-_Kevin_M._Gill.png",
+  "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/0/0c/Mars_-_August_30_2021_-_Flickr_-_Kevin_M._Gill.png/960px-Mars_-_August_30_2021_-_Flickr_-_Kevin_M._Gill.png",
+  "author": "Kevin Gill from Los Angeles, CA, United States",
+  "licence": "CC BY 2.0",
+  "licence_url": "https://creativecommons.org/licenses/by/2.0"
+ },
+ "jupiter": {
+  "file": "Jupiter_OPAL_2024.png",
+  "page": "https://commons.wikimedia.org/wiki/File:Jupiter_OPAL_2024.png",
+  "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/e/e2/Jupiter_OPAL_2024.png/960px-Jupiter_OPAL_2024.png",
+  "author": "NASA/STSCI (S.T.A.R.S)",
+  "licence": "Public domain",
+  "licence_url": ""
+ },
+ "saturn": {
+  "file": "Saturn_global_view_from_Cassini,_rings_open_Better_Colour.png",
+  "page": "https://commons.wikimedia.org/wiki/File:Saturn_global_view_from_Cassini,_rings_open_Better_Colour.png",
+  "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/4/43/Saturn_global_view_from_Cassini%2C_rings_open_Better_Colour.png/960px-Saturn_global_view_from_Cassini%2C_rings_open_Better_Colour.png",
+  "author": "NASA / JPL-Caltech / SSI / color composite by Gordan Ugarkovic",
+  "licence": "Public domain",
+  "licence_url": ""
+ },
+ "uranus": {
+  "file": "Uranus_Voyager2_color_calibrated.png",
+  "page": "https://commons.wikimedia.org/wiki/File:Uranus_Voyager2_color_calibrated.png",
+  "url": "https://upload.wikimedia.org/wikipedia/commons/6/69/Uranus_Voyager2_color_calibrated.png",
+  "author": "Ardenau4",
+  "licence": "CC0",
+  "licence_url": "http://creativecommons.org/publicdomain/zero/1.0/deed.en"
+ },
+ "neptune": {
+  "file": "Neptune_Voyager2_color_calibrated.png",
+  "page": "https://commons.wikimedia.org/wiki/File:Neptune_Voyager2_color_calibrated.png",
+  "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/b/b9/Neptune_Voyager2_color_calibrated.png/960px-Neptune_Voyager2_color_calibrated.png",
+  "author": "NASA / Voyager 2 / PDS / OPUS / Ardenau4",
+  "licence": "CC0",
+  "licence_url": "http://creativecommons.org/publicdomain/zero/1.0/deed.en"
+ },
+ "M1": {
+  "file": "Crab_Nebula.jpg",
+  "page": "https://commons.wikimedia.org/wiki/File:Crab_Nebula.jpg",
+  "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/0/00/Crab_Nebula.jpg/960px-Crab_Nebula.jpg",
+  "author": "NASA , ESA , J. Hester and A. Loll (Arizona State University)",
+  "licence": "Public domain",
+  "licence_url": ""
+ },
+ "M2": {
+  "file": "Messier2_-_HST_-_Potw1913a.jpg",
+  "page": "https://commons.wikimedia.org/wiki/File:Messier2_-_HST_-_Potw1913a.jpg",
+  "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/d/d6/Messier2_-_HST_-_Potw1913a.jpg/960px-Messier2_-_HST_-_Potw1913a.jpg",
+  "author": "Credit: ESA/Hubble & NASA, G. Piotto et al.",
+  "licence": "CC BY 4.0",
+  "licence_url": "https://creativecommons.org/licenses/by/4.0"
+ },
+ "M3": {
+  "file": "NASA’s_Hubble_Spots_Star-Spangled_Cosmic_Scene_(M3).jpg",
+  "page": "https://commons.wikimedia.org/wiki/File:NASA%E2%80%99s_Hubble_Spots_Star-Spangled_Cosmic_Scene_(M3).jpg",
+  "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/b/bc/NASA%E2%80%99s_Hubble_Spots_Star-Spangled_Cosmic_Scene_%28M3%29.jpg/960px-NASA%E2%80%99s_Hubble_Spots_Star-Spangled_Cosmic_Scene_%28M3%29.jpg",
+  "author": "NASA, ESA, and A. Sarajedini (Florida Atlantic University); Processing: Gladys Kober (NASA/Catholic University of America)",
+  "licence": "Public domain",
+  "licence_url": ""
+ },
+ "M4": {
+  "file": "Globular_star_cluster_Messier_4.jpg",
+  "page": "https://commons.wikimedia.org/wiki/File:Globular_star_cluster_Messier_4.jpg",
+  "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/9/90/Globular_star_cluster_Messier_4.jpg/960px-Globular_star_cluster_Messier_4.jpg",
+  "author": "ESO Imaging Survey",
+  "licence": "CC BY 4.0",
+  "licence_url": "https://creativecommons.org/licenses/by/4.0"
+ },
+ "M5": {
+  "file": "M5-Messier-5.png",
+  "page": "https://commons.wikimedia.org/wiki/File:M5-Messier-5.png",
+  "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/8/85/M5-Messier-5.png/960px-M5-Messier-5.png",
+  "author": "Chuck Ayoub",
+  "licence": "CC0",
+  "licence_url": "http://creativecommons.org/publicdomain/zero/1.0/deed.en"
+ },
+ "M6": {
+  "file": "Messier_6_-_The_Butterfly_Cluster.jpg",
+  "page": "https://commons.wikimedia.org/wiki/File:Messier_6_-_The_Butterfly_Cluster.jpg",
+  "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/2/28/Messier_6_-_The_Butterfly_Cluster.jpg/960px-Messier_6_-_The_Butterfly_Cluster.jpg",
+  "author": "Giuseppe Donatiello from Oria (Brindisi), Italy",
+  "licence": "CC0",
+  "licence_url": "http://creativecommons.org/publicdomain/zero/1.0/deed.en"
+ },
+ "M7": {
+  "file": "The_star_cluster_Messier_7.jpg",
+  "page": "https://commons.wikimedia.org/wiki/File:The_star_cluster_Messier_7.jpg",
+  "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/a/a5/The_star_cluster_Messier_7.jpg/960px-The_star_cluster_Messier_7.jpg",
+  "author": "Credit: ESO",
+  "licence": "CC BY 3.0",
+  "licence_url": "https://creativecommons.org/licenses/by/3.0"
+ },
+ "M8": {
+  "file": "VST_images_the_Lagoon_Nebula.jpg",
+  "page": "https://commons.wikimedia.org/wiki/File:VST_images_the_Lagoon_Nebula.jpg",
+  "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/a/a8/VST_images_the_Lagoon_Nebula.jpg/960px-VST_images_the_Lagoon_Nebula.jpg",
+  "author": "ESO/VPHAS+ team",
+  "licence": "CC BY 4.0",
+  "licence_url": "https://creativecommons.org/licenses/by/4.0"
+ },
+ "M10": {
+  "file": "Messier 10 Hubble WikiSky.jpg",
+  "page": "https://commons.wikimedia.org/wiki/File:Messier_10_Hubble_WikiSky.jpg",
+  "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/6/67/Messier_10_Hubble_WikiSky.jpg/960px-Messier_10_Hubble_WikiSky.jpg",
+  "author": "en:NASA , en:STScI , en:WikiSky",
+  "licence": "Public domain",
+  "licence_url": ""
+ },
+ "M11": {
+  "file": "Eso1430a.jpg",
+  "page": "https://commons.wikimedia.org/wiki/File:Eso1430a.jpg",
+  "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/4/4a/Eso1430a.jpg/960px-Eso1430a.jpg",
+  "author": "ESO",
+  "licence": "CC BY 4.0",
+  "licence_url": "https://creativecommons.org/licenses/by/4.0"
+ },
+ "M12": {
+  "file": "ESO-Messier 12-Phot-04a-06.jpg",
+  "page": "https://commons.wikimedia.org/wiki/File:ESO-Messier_12-Phot-04a-06.jpg",
+  "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/1/12/ESO-Messier_12-Phot-04a-06.jpg/960px-ESO-Messier_12-Phot-04a-06.jpg",
+  "author": "ESO",
+  "licence": "CC BY 3.0",
+  "licence_url": "https://creativecommons.org/licenses/by/3.0"
+ },
+ "M13": {
+  "file": "M13-Globular-Cluster.png",
+  "page": "https://commons.wikimedia.org/wiki/File:M13-Globular-Cluster.png",
+  "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/2/2a/M13-Globular-Cluster.png/960px-M13-Globular-Cluster.png",
+  "author": "Chuck Ayoub",
+  "licence": "CC0",
+  "licence_url": "http://creativecommons.org/publicdomain/zero/1.0/deed.en"
+ },
+ "M14": {
+  "file": "Messier_14.jpg",
+  "page": "https://commons.wikimedia.org/wiki/File:Messier_14.jpg",
+  "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/1/16/Messier_14.jpg/960px-Messier_14.jpg",
+  "author": "NOIRLAB / NSF / AURA",
+  "licence": "CC BY 4.0",
+  "licence_url": "https://creativecommons.org/licenses/by/4.0"
+ },
+ "M15": {
+  "file": "New Hubble image of star cluster Messier 15.jpg",
+  "page": "https://commons.wikimedia.org/wiki/File:New_Hubble_image_of_star_cluster_Messier_15.jpg",
+  "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/8/8b/New_Hubble_image_of_star_cluster_Messier_15.jpg/960px-New_Hubble_image_of_star_cluster_Messier_15.jpg",
+  "author": "Credit: NASA, ESA",
+  "licence": "CC BY 3.0",
+  "licence_url": "https://creativecommons.org/licenses/by/3.0"
+ },
+ "M16": {
+  "file": "Eagle_Nebula_from_ESO.jpg",
+  "page": "https://commons.wikimedia.org/wiki/File:Eagle_Nebula_from_ESO.jpg",
+  "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/2/2b/Eagle_Nebula_from_ESO.jpg/960px-Eagle_Nebula_from_ESO.jpg",
+  "author": "ESO",
+  "licence": "CC BY 4.0",
+  "licence_url": "https://creativecommons.org/licenses/by/4.0"
+ },
+ "M17": {
+  "file": "VST_image_of_the_spectacular_star-forming_region_Messier_17_(Omega_Nebula).jpg",
+  "page": "https://commons.wikimedia.org/wiki/File:VST_image_of_the_spectacular_star-forming_region_Messier_17_(Omega_Nebula).jpg",
+  "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/7/7f/VST_image_of_the_spectacular_star-forming_region_Messier_17_%28Omega_Nebula%29.jpg/960px-VST_image_of_the_spectacular_star-forming_region_Messier_17_%28Omega_Nebula%29.jpg",
+  "author": "ESO/INAF-VST/OmegaCAM. Acknowledgement: OmegaCen/Astro-WISE/Kapteyn Institute",
+  "licence": "CC BY 4.0",
+  "licence_url": "https://creativecommons.org/licenses/by/4.0"
+ },
+ "M18": {
+  "file": "Messier18.jpg",
+  "page": "https://commons.wikimedia.org/wiki/File:Messier18.jpg",
+  "url": "https://upload.wikimedia.org/wikipedia/commons/c/c8/Messier18.jpg",
+  "author": "unbekannt",
+  "licence": "Public domain",
+  "licence_url": ""
+ },
+ "M19": {
+  "file": "M19-Cluster.png",
+  "page": "https://commons.wikimedia.org/wiki/File:M19-Cluster.png",
+  "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/e/e0/M19-Cluster.png/960px-M19-Cluster.png",
+  "author": "Chuck Ayoub",
+  "licence": "CC0",
+  "licence_url": "http://creativecommons.org/publicdomain/zero/1.0/deed.en"
+ },
+ "M20": {
+  "file": "Trifid_Nebula_(noirlab2521ah).jpg",
+  "page": "https://commons.wikimedia.org/wiki/File:Trifid_Nebula_(noirlab2521ah).jpg",
+  "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/5/5b/Trifid_Nebula_%28noirlab2521ah%29.jpg/960px-Trifid_Nebula_%28noirlab2521ah%29.jpg",
+  "author": "RubinObs/NOIRLab/SLAC/NSF/DOE/AURA",
+  "licence": "CC BY 4.0",
+  "licence_url": "https://creativecommons.org/licenses/by/4.0"
+ },
+ "M21": {
+  "file": "Trifid_and_Lagoon_Nebulae_Excerpt-_Messier_21_(noirlab2521ag).jpg",
+  "page": "https://commons.wikimedia.org/wiki/File:Trifid_and_Lagoon_Nebulae_Excerpt-_Messier_21_(noirlab2521ag).jpg",
+  "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/f/ff/Trifid_and_Lagoon_Nebulae_Excerpt-_Messier_21_%28noirlab2521ag%29.jpg/960px-Trifid_and_Lagoon_Nebulae_Excerpt-_Messier_21_%28noirlab2521ag%29.jpg",
+  "author": "RubinObs/NOIRLab/SLAC/NSF/DOE/AURA",
+  "licence": "CC BY 4.0",
+  "licence_url": "https://creativecommons.org/licenses/by/4.0"
+ },
+ "M22": {
+  "file": "The_crammed_centre_of_Messier_22.jpg",
+  "page": "https://commons.wikimedia.org/wiki/File:The_crammed_centre_of_Messier_22.jpg",
+  "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/7/76/The_crammed_centre_of_Messier_22.jpg/960px-The_crammed_centre_of_Messier_22.jpg",
+  "author": "ESA/Hubble & NASA",
+  "licence": "CC BY 4.0",
+  "licence_url": "https://creativecommons.org/licenses/by/4.0"
+ },
+ "M23": {
+  "file": "M23_Open_Star_Cluster.png",
+  "page": "https://commons.wikimedia.org/wiki/File:M23_Open_Star_Cluster.png",
+  "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/5/54/M23_Open_Star_Cluster.png/960px-M23_Open_Star_Cluster.png",
+  "author": "Chuck Ayoub",
+  "licence": "CC0",
+  "licence_url": "http://creativecommons.org/publicdomain/zero/1.0/deed.en"
+ },
+ "M24": {
+  "file": "Messier 24 (infrared, red, green).jpg",
+  "page": "https://commons.wikimedia.org/wiki/File:Messier_24_(infrared,_red,_green).jpg",
+  "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/2/25/Messier_24_%28infrared%2C_red%2C_green%29.jpg/960px-Messier_24_%28infrared%2C_red%2C_green%29.jpg",
+  "author": "Brainandforce",
+  "licence": "CC BY 4.0",
+  "licence_url": "https://creativecommons.org/licenses/by/4.0"
+ },
+ "M26": {
+  "file": "Messier_26_Cluster.png",
+  "page": "https://commons.wikimedia.org/wiki/File:Messier_26_Cluster.png",
+  "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/9/9d/Messier_26_Cluster.png/960px-Messier_26_Cluster.png",
+  "author": "Chuck Ayoub",
+  "licence": "CC0",
+  "licence_url": "http://creativecommons.org/publicdomain/zero/1.0/deed.en"
+ },
+ "M27": {
+  "file": "M27_-_Noao-m27.jpg",
+  "page": "https://commons.wikimedia.org/wiki/File:M27_-_Noao-m27.jpg",
+  "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/e/ec/M27_-_Noao-m27.jpg/960px-M27_-_Noao-m27.jpg",
+  "author": "Credit: REU program/NOIRLab/NSF/AURA",
+  "licence": "CC BY 4.0",
+  "licence_url": "https://creativecommons.org/licenses/by/4.0"
+ },
+ "M28": {
+  "file": "M28_-_HST-U-V-IR.jpg",
+  "page": "https://commons.wikimedia.org/wiki/File:M28_-_HST-U-V-IR.jpg",
+  "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/b/b0/M28_-_HST-U-V-IR.jpg/960px-M28_-_HST-U-V-IR.jpg",
+  "author": "Credits: NASA, ESA, STScI, R. Buonanno (Universita di Roma Tor Vergata), K. Gebhardt (University of Texas at Austin), J. Grindlay (Harvard University), and F. Ferraro (Universita di Bologna)",
+  "licence": "Public domain",
+  "licence_url": ""
+ },
+ "M30": {
+  "file": "M30_NASA.jpg",
+  "page": "https://commons.wikimedia.org/wiki/File:M30_NASA.jpg",
+  "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/5/5a/M30_NASA.jpg/960px-M30_NASA.jpg",
+  "author": "NASA/ESA",
+  "licence": "Public domain",
+  "licence_url": ""
+ },
+ "M31": {
+  "file": "Andromeda Galaxy Hubble M31Mosaic 2025 42208x9870.jpg",
+  "page": "https://commons.wikimedia.org/wiki/File:Andromeda_Galaxy_Hubble_M31Mosaic_2025_42208x9870.jpg",
+  "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/2/26/Andromeda_Galaxy_Hubble_M31Mosaic_2025_42208x9870.jpg/960px-Andromeda_Galaxy_Hubble_M31Mosaic_2025_42208x9870.jpg",
+  "author": "NASA, ESA, Benjamin F. Williams (UWashington), Zhuo Chen (UWashington), L. Clifton Johnson (Northwestern); Image Processing: Joseph DePasquale (STScI). [ 1 ]",
+  "licence": "Public domain",
+  "licence_url": ""
+ },
+ "M32": {
+  "file": "Messier 32 from Hubble.jpg",
+  "page": "https://commons.wikimedia.org/wiki/File:Messier_32_from_Hubble.jpg",
+  "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/a/a3/Messier_32_from_Hubble.jpg/960px-Messier_32_from_Hubble.jpg",
+  "author": "NASA/ESA",
+  "licence": "Public domain",
+  "licence_url": ""
+ },
+ "M33": {
+  "file": "VST_snaps_a_very_detailed_view_of_the_Triangulum_Galaxy.jpg",
+  "page": "https://commons.wikimedia.org/wiki/File:VST_snaps_a_very_detailed_view_of_the_Triangulum_Galaxy.jpg",
+  "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/6/64/VST_snaps_a_very_detailed_view_of_the_Triangulum_Galaxy.jpg/960px-VST_snaps_a_very_detailed_view_of_the_Triangulum_Galaxy.jpg",
+  "author": "ESO",
+  "licence": "CC BY 4.0",
+  "licence_url": "https://creativecommons.org/licenses/by/4.0"
+ },
+ "M35": {
+  "file": "M35_and_NGC_2158.png",
+  "page": "https://commons.wikimedia.org/wiki/File:M35_and_NGC_2158.png",
+  "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/4/47/M35_and_NGC_2158.png/960px-M35_and_NGC_2158.png",
+  "author": "Chuck Ayoub",
+  "licence": "CC0",
+  "licence_url": "http://creativecommons.org/publicdomain/zero/1.0/deed.en"
+ },
+ "M36": {
+  "file": "M36-pinwheel-cluster.png",
+  "page": "https://commons.wikimedia.org/wiki/File:M36-pinwheel-cluster.png",
+  "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/7/7c/M36-pinwheel-cluster.png/960px-M36-pinwheel-cluster.png",
+  "author": "Chuck Ayoub",
+  "licence": "CC0",
+  "licence_url": "http://creativecommons.org/publicdomain/zero/1.0/deed.en"
+ },
+ "M37": {
+  "file": "M37_Star_Cluster.png",
+  "page": "https://commons.wikimedia.org/wiki/File:M37_Star_Cluster.png",
+  "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/0/07/M37_Star_Cluster.png/960px-M37_Star_Cluster.png",
+  "author": "Chuck Ayoub",
+  "licence": "CC0",
+  "licence_url": "http://creativecommons.org/publicdomain/zero/1.0/deed.en"
+ },
+ "M38": {
+  "file": "IC_410_-_IC_417_-_NGC_1912_in_Auriga.jpg",
+  "page": "https://commons.wikimedia.org/wiki/File:IC_410_-_IC_417_-_NGC_1912_in_Auriga.jpg",
+  "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/a/aa/IC_410_-_IC_417_-_NGC_1912_in_Auriga.jpg/960px-IC_410_-_IC_417_-_NGC_1912_in_Auriga.jpg",
+  "author": "gjdonatiello",
+  "licence": "CC0",
+  "licence_url": "http://creativecommons.org/publicdomain/zero/1.0/deed.en"
+ },
+ "M39": {
+  "file": "M39-Star-Cluster.png",
+  "page": "https://commons.wikimedia.org/wiki/File:M39-Star-Cluster.png",
+  "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/1/12/M39-Star-Cluster.png/960px-M39-Star-Cluster.png",
+  "author": "Chuck Ayoub",
+  "licence": "CC0",
+  "licence_url": "http://creativecommons.org/publicdomain/zero/1.0/deed.en"
+ },
+ "M40": {
+  "file": "M40_(Winnecke_4)_(noao-m40).jpg",
+  "page": "https://commons.wikimedia.org/wiki/File:M40_(Winnecke_4)_(noao-m40).jpg",
+  "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/6/68/M40_%28Winnecke_4%29_%28noao-m40%29.jpg/960px-M40_%28Winnecke_4%29_%28noao-m40%29.jpg",
+  "author": "NOIRLab/ NSF /AURA",
+  "licence": "CC BY 4.0",
+  "licence_url": "https://creativecommons.org/licenses/by/4.0"
+ },
+ "M41": {
+  "file": "M41-Open-Cluster-of-Stars.png",
+  "page": "https://commons.wikimedia.org/wiki/File:M41-Open-Cluster-of-Stars.png",
+  "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/2/28/M41-Open-Cluster-of-Stars.png/960px-M41-Open-Cluster-of-Stars.png",
+  "author": "Chuck Ayoub",
+  "licence": "CC0",
+  "licence_url": "http://creativecommons.org/publicdomain/zero/1.0/deed.en"
+ },
+ "M42": {
+  "file": "Orion_Nebula_-_Hubble_2006_mosaic_18000.jpg",
+  "page": "https://commons.wikimedia.org/wiki/File:Orion_Nebula_-_Hubble_2006_mosaic_18000.jpg",
+  "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/f/f3/Orion_Nebula_-_Hubble_2006_mosaic_18000.jpg/960px-Orion_Nebula_-_Hubble_2006_mosaic_18000.jpg",
+  "author": "NASA, ESA, M. Robberto (Space Telescope Science Institute/ESA) and the Hubble Space Telescope Orion Treasury Project Team",
+  "licence": "Public domain",
+  "licence_url": ""
+ },
+ "M43": {
+  "file": "M43_HST.jpg",
+  "page": "https://commons.wikimedia.org/wiki/File:M43_HST.jpg",
+  "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/9/93/M43_HST.jpg/960px-M43_HST.jpg",
+  "author": "NASA, ESA, M. Robberto (Space Telescope Science Institute/ESA) and the Hubble Space Telescope Orion Treasury Project Team",
+  "licence": "Public domain",
+  "licence_url": ""
+ },
+ "M44": {
+  "file": "M44-Star-Cluster.png",
+  "page": "https://commons.wikimedia.org/wiki/File:M44-Star-Cluster.png",
+  "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/9/99/M44-Star-Cluster.png/960px-M44-Star-Cluster.png",
+  "author": "Chuck Ayoub",
+  "licence": "CC0",
+  "licence_url": "http://creativecommons.org/publicdomain/zero/1.0/deed.en"
+ },
+ "M45": {
+  "file": "Pleiades_large.jpg",
+  "page": "https://commons.wikimedia.org/wiki/File:Pleiades_large.jpg",
+  "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/4/4e/Pleiades_large.jpg/960px-Pleiades_large.jpg",
+  "author": "NASA, ESA, AURA/Caltech, Palomar Observatory The science team consists of: D. Soderblom and E. Nelan (STScI), F. Benedict and B. Arthur (U. Texas), and B. Jones (Lick Obs.)",
+  "licence": "Public domain",
+  "licence_url": ""
+ },
+ "M46": {
+  "file": "M46-star-cluster.png",
+  "page": "https://commons.wikimedia.org/wiki/File:M46-star-cluster.png",
+  "url": "https://upload.wikimedia.org/wikipedia/commons/5/5c/M46-star-cluster.png",
+  "author": "Chuck Ayoub",
+  "licence": "CC0",
+  "licence_url": "http://creativecommons.org/publicdomain/zero/1.0/deed.en"
+ },
+ "M47": {
+  "file": "M47-Star-Cluster.png",
+  "page": "https://commons.wikimedia.org/wiki/File:M47-Star-Cluster.png",
+  "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/0/0e/M47-Star-Cluster.png/960px-M47-Star-Cluster.png",
+  "author": "Chuck Ayoub",
+  "licence": "CC0",
+  "licence_url": "http://creativecommons.org/publicdomain/zero/1.0/deed.en"
+ },
+ "M49": {
+  "file": "Messier_49-Rubin_Observatory.png",
+  "page": "https://commons.wikimedia.org/wiki/File:Messier_49-Rubin_Observatory.png",
+  "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/5/55/Messier_49-Rubin_Observatory.png/960px-Messier_49-Rubin_Observatory.png",
+  "author": "RubinObs/NOIRLab/SLAC/NSF/DOE/AURA",
+  "licence": "CC BY 4.0",
+  "licence_url": "https://creativecommons.org/licenses/by/4.0"
+ },
+ "M50": {
+  "file": "M50_Open_Star_Cluster.png",
+  "page": "https://commons.wikimedia.org/wiki/File:M50_Open_Star_Cluster.png",
+  "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/5/53/M50_Open_Star_Cluster.png/960px-M50_Open_Star_Cluster.png",
+  "author": "Chuck Ayoub",
+  "licence": "CC0",
+  "licence_url": "http://creativecommons.org/publicdomain/zero/1.0/deed.en"
+ },
+ "M51": {
+  "file": "Messier51_sRGB.jpg",
+  "page": "https://commons.wikimedia.org/wiki/File:Messier51_sRGB.jpg",
+  "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/d/db/Messier51_sRGB.jpg/960px-Messier51_sRGB.jpg",
+  "author": "NASA and European Space Agency",
+  "licence": "Public domain",
+  "licence_url": ""
+ },
+ "M53": {
+  "file": "Messier53_-_SDSS_DR14_(panorama).jpg",
+  "page": "https://commons.wikimedia.org/wiki/File:Messier53_-_SDSS_DR14_(panorama).jpg",
+  "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/2/29/Messier53_-_SDSS_DR14_%28panorama%29.jpg/960px-Messier53_-_SDSS_DR14_%28panorama%29.jpg",
+  "author": "Sloan Digital Sky Survey",
+  "licence": "CC BY 4.0",
+  "licence_url": "https://creativecommons.org/licenses/by/4.0"
+ },
+ "M54": {
+  "file": "Messier_54_HST.jpg",
+  "page": "https://commons.wikimedia.org/wiki/File:Messier_54_HST.jpg",
+  "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/3/33/Messier_54_HST.jpg/960px-Messier_54_HST.jpg",
+  "author": "ESA/Hubble & NASA",
+  "licence": "CC BY 3.0",
+  "licence_url": "https://creativecommons.org/licenses/by/3.0"
+ },
+ "M55": {
+  "file": "Messier_55_VISTA.jpg",
+  "page": "https://commons.wikimedia.org/wiki/File:Messier_55_VISTA.jpg",
+  "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/d/d2/Messier_55_VISTA.jpg/960px-Messier_55_VISTA.jpg",
+  "author": "ESO/J. Emerson/VISTA",
+  "licence": "CC BY 4.0",
+  "licence_url": "https://creativecommons.org/licenses/by/4.0"
+ },
+ "M56": {
+  "file": "Messier_56_Hubble_WikiSky.jpg",
+  "page": "https://commons.wikimedia.org/wiki/File:Messier_56_Hubble_WikiSky.jpg",
+  "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/7/73/Messier_56_Hubble_WikiSky.jpg/960px-Messier_56_Hubble_WikiSky.jpg",
+  "author": "en:NASA , en:STScI , en:WikiSky",
+  "licence": "Public domain",
+  "licence_url": ""
+ },
+ "M57": {
+  "file": "Webb_captures_detailed_beauty_of_Ring_Nebula_(NIRCam_image)_(weic2320b).jpg",
+  "page": "https://commons.wikimedia.org/wiki/File:Webb_captures_detailed_beauty_of_Ring_Nebula_(NIRCam_image)_(weic2320b).jpg",
+  "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/8/8d/Webb_captures_detailed_beauty_of_Ring_Nebula_%28NIRCam_image%29_%28weic2320b%29.jpg/960px-Webb_captures_detailed_beauty_of_Ring_Nebula_%28NIRCam_image%29_%28weic2320b%29.jpg",
+  "author": "ESA/Webb, NASA, CSA, M. Barlow, N. Cox, R. Wesson",
+  "licence": "CC BY 4.0",
+  "licence_url": "https://creativecommons.org/licenses/by/4.0"
+ },
+ "M58": {
+  "file": "M58s.jpg",
+  "page": "https://commons.wikimedia.org/wiki/File:M58s.jpg",
+  "url": "https://upload.wikimedia.org/wikipedia/commons/e/ea/M58s.jpg",
+  "author": "Credit: SIRTF/ en:NASA / en:JPL .",
+  "licence": "Public domain",
+  "licence_url": ""
+ },
+ "M59": {
+  "file": "Messier59_-_HST_-_Potw1921a.jpg",
+  "page": "https://commons.wikimedia.org/wiki/File:Messier59_-_HST_-_Potw1921a.jpg",
+  "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/8/8f/Messier59_-_HST_-_Potw1921a.jpg/960px-Messier59_-_HST_-_Potw1921a.jpg",
+  "author": "Credit: ESA/Hubble & NASA, L. Ho et al.",
+  "licence": "CC BY 4.0",
+  "licence_url": "https://creativecommons.org/licenses/by/4.0"
+ },
+ "M60": {
+  "file": "Arp116_Hubble.jpg",
+  "page": "https://commons.wikimedia.org/wiki/File:Arp116_Hubble.jpg",
+  "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/6/63/Arp116_Hubble.jpg/960px-Arp116_Hubble.jpg",
+  "author": "NASA, ESA",
+  "licence": "CC BY 3.0",
+  "licence_url": "https://creativecommons.org/licenses/by/3.0"
+ },
+ "M61": {
+  "file": "A_hungry_starburst_galaxy.jpg",
+  "page": "https://commons.wikimedia.org/wiki/File:A_hungry_starburst_galaxy.jpg",
+  "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/e/e9/A_hungry_starburst_galaxy.jpg/960px-A_hungry_starburst_galaxy.jpg",
+  "author": "ESA/Hubble & NASA Acknowledgement: Det58",
+  "licence": "CC BY 4.0",
+  "licence_url": "https://creativecommons.org/licenses/by/4.0"
+ },
+ "M62": {
+  "file": "Messier62_-_HST_-_Potw1915a.jpg",
+  "page": "https://commons.wikimedia.org/wiki/File:Messier62_-_HST_-_Potw1915a.jpg",
+  "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/c/c7/Messier62_-_HST_-_Potw1915a.jpg/960px-Messier62_-_HST_-_Potw1915a.jpg",
+  "author": "Credit: ESA/Hubble & NASA, S. Anderson et al.",
+  "licence": "CC BY 4.0",
+  "licence_url": "https://creativecommons.org/licenses/by/4.0"
+ },
+ "M63": {
+  "file": "M63_(NGC_5055).jpg",
+  "page": "https://commons.wikimedia.org/wiki/File:M63_(NGC_5055).jpg",
+  "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/b/b4/M63_%28NGC_5055%29.jpg/960px-M63_%28NGC_5055%29.jpg",
+  "author": "NASA/ESA - The Hubble Legacy Archive (HLA): Space Telescope Science Institute (STScI), the Space Telescope European Coordinating Facility (ST-ECF), and the Canadian Astronomy Data Centre (CADC) - zora",
+  "licence": "Public domain",
+  "licence_url": ""
+ },
+ "M64": {
+  "file": "NGC_4826_-_HST.png",
+  "page": "https://commons.wikimedia.org/wiki/File:NGC_4826_-_HST.png",
+  "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/e/e8/NGC_4826_-_HST.png/960px-NGC_4826_-_HST.png",
+  "author": "Judy Schmidt from USA",
+  "licence": "CC BY 2.0",
+  "licence_url": "https://creativecommons.org/licenses/by/2.0"
+ },
+ "M65": {
+  "file": "Messier_65_through_the_years.jpg",
+  "page": "https://commons.wikimedia.org/wiki/File:Messier_65_through_the_years.jpg",
+  "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/a/af/Messier_65_through_the_years.jpg/960px-Messier_65_through_the_years.jpg",
+  "author": "ESA/Hubble & NASA",
+  "licence": "Public domain",
+  "licence_url": ""
+ },
+ "M66": {
+  "file": "Phot-33c-03-fullres.jpg",
+  "page": "https://commons.wikimedia.org/wiki/File:Phot-33c-03-fullres.jpg",
+  "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/7/7c/Phot-33c-03-fullres.jpg/960px-Phot-33c-03-fullres.jpg",
+  "author": "ESO",
+  "licence": "CC BY 4.0",
+  "licence_url": "https://creativecommons.org/licenses/by/4.0"
+ },
+ "M67": {
+  "file": "M67-Star-Cluster.png",
+  "page": "https://commons.wikimedia.org/wiki/File:M67-Star-Cluster.png",
+  "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/5/57/M67-Star-Cluster.png/960px-M67-Star-Cluster.png",
+  "author": "Chuck Ayoub",
+  "licence": "CC0",
+  "licence_url": "http://creativecommons.org/publicdomain/zero/1.0/deed.en"
+ },
+ "M68": {
+  "file": "Messier_68_Hubble_WikiSky.jpg",
+  "page": "https://commons.wikimedia.org/wiki/File:Messier_68_Hubble_WikiSky.jpg",
+  "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/c/c0/Messier_68_Hubble_WikiSky.jpg/960px-Messier_68_Hubble_WikiSky.jpg",
+  "author": "en:NASA , en:STScI , en:WikiSky",
+  "licence": "Public domain",
+  "licence_url": ""
+ },
+ "M69": {
+  "file": "Cosmic_riches.jpg",
+  "page": "https://commons.wikimedia.org/wiki/File:Cosmic_riches.jpg",
+  "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/b/ba/Cosmic_riches.jpg/960px-Cosmic_riches.jpg",
+  "author": "ESA/Hubble & NASA",
+  "licence": "CC BY 3.0",
+  "licence_url": "https://creativecommons.org/licenses/by/3.0"
+ },
+ "M70": {
+  "file": "Messier70-HST-Potw1215a.jpg",
+  "page": "https://commons.wikimedia.org/wiki/File:Messier70-HST-Potw1215a.jpg",
+  "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/0/07/Messier70-HST-Potw1215a.jpg/960px-Messier70-HST-Potw1215a.jpg",
+  "author": "ESA/Hubble & NASA",
+  "licence": "CC BY 4.0",
+  "licence_url": "https://creativecommons.org/licenses/by/4.0"
+ },
+ "M71": {
+  "file": "Messier_71,_an_Unusual_Globular_Cluster.jpg",
+  "page": "https://commons.wikimedia.org/wiki/File:Messier_71,_an_Unusual_Globular_Cluster.jpg",
+  "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/6/68/Messier_71%2C_an_Unusual_Globular_Cluster.jpg/960px-Messier_71%2C_an_Unusual_Globular_Cluster.jpg",
+  "author": "ESA/Hubble and NASA",
+  "licence": "CC BY 3.0",
+  "licence_url": "https://creativecommons.org/licenses/by/3.0"
+ },
+ "M72": {
+  "file": "M72_Hubble_WikiSky.jpg",
+  "page": "https://commons.wikimedia.org/wiki/File:M72_Hubble_WikiSky.jpg",
+  "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/7/71/M72_Hubble_WikiSky.jpg/960px-M72_Hubble_WikiSky.jpg",
+  "author": "en:NASA , en:STScI , en:WikiSky",
+  "licence": "Public domain",
+  "licence_url": ""
+ },
+ "M74": {
+  "file": "Webb_and_Hubble’s_Views_of_Spiral_Galaxy_NGC_628_(2024-105).png",
+  "page": "https://commons.wikimedia.org/wiki/File:Webb_and_Hubble%E2%80%99s_Views_of_Spiral_Galaxy_NGC_628_(2024-105).png",
+  "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/d/d6/Webb_and_Hubble%E2%80%99s_Views_of_Spiral_Galaxy_NGC_628_%282024-105%29.png/960px-Webb_and_Hubble%E2%80%99s_Views_of_Spiral_Galaxy_NGC_628_%282024-105%29.png",
+  "author": "Image: NASA, ESA, CSA, STScI, Janice Lee (STScI), Thomas Williams (Oxford), PHANGS Team",
+  "licence": "Public domain",
+  "licence_url": ""
+ },
+ "M75": {
+  "file": "Crowded_cluster_Messier_75.jpg",
+  "page": "https://commons.wikimedia.org/wiki/File:Crowded_cluster_Messier_75.jpg",
+  "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/0/06/Crowded_cluster_Messier_75.jpg/960px-Crowded_cluster_Messier_75.jpg",
+  "author": "ESA/Hubble & NASA, F. Ferraro et al.",
+  "licence": "CC BY 4.0",
+  "licence_url": "https://creativecommons.org/licenses/by/4.0"
+ },
+ "M77": {
+  "file": "Messier_77_spiral_galaxy_by_HST.jpg",
+  "page": "https://commons.wikimedia.org/wiki/File:Messier_77_spiral_galaxy_by_HST.jpg",
+  "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/d/d9/Messier_77_spiral_galaxy_by_HST.jpg/960px-Messier_77_spiral_galaxy_by_HST.jpg",
+  "author": "NASA, ESA & A. van der Hoeven",
+  "licence": "Public domain",
+  "licence_url": ""
+ },
+ "M78": {
+  "file": "Messier_78.jpg",
+  "page": "https://commons.wikimedia.org/wiki/File:Messier_78.jpg",
+  "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/4/4a/Messier_78.jpg/960px-Messier_78.jpg",
+  "author": "ESO/Igor Chekalin",
+  "licence": "CC BY 4.0",
+  "licence_url": "https://creativecommons.org/licenses/by/4.0"
+ },
+ "M79": {
+  "file": "A_snowstorm_of_stars.jpg",
+  "page": "https://commons.wikimedia.org/wiki/File:A_snowstorm_of_stars.jpg",
+  "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/3/31/A_snowstorm_of_stars.jpg/960px-A_snowstorm_of_stars.jpg",
+  "author": "NASA and ESA Acknowledgement: S. Djorgovski (Caltech) and F. Ferraro (University of Bologna)",
+  "licence": "CC BY 4.0",
+  "licence_url": "https://creativecommons.org/licenses/by/4.0"
+ },
+ "M80": {
+  "file": "Messier_80_Cluster.png",
+  "page": "https://commons.wikimedia.org/wiki/File:Messier_80_Cluster.png",
+  "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/4/49/Messier_80_Cluster.png/960px-Messier_80_Cluster.png",
+  "author": "Chuck Ayoub",
+  "licence": "CC0",
+  "licence_url": "http://creativecommons.org/publicdomain/zero/1.0/deed.en"
+ },
+ "M81": {
+  "file": "Messier_81_HST.jpg",
+  "page": "https://commons.wikimedia.org/wiki/File:Messier_81_HST.jpg",
+  "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/6/63/Messier_81_HST.jpg/960px-Messier_81_HST.jpg",
+  "author": "NASA, ESA and the Hubble Heritage Team (STScI/AURA)",
+  "licence": "Public domain",
+  "licence_url": ""
+ },
+ "M82": {
+  "file": "M82_HST_ACS_2006-14-a-large_web.jpg",
+  "page": "https://commons.wikimedia.org/wiki/File:M82_HST_ACS_2006-14-a-large_web.jpg",
+  "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/c/ce/M82_HST_ACS_2006-14-a-large_web.jpg/960px-M82_HST_ACS_2006-14-a-large_web.jpg",
+  "author": "NASA, ESA, and The Hubble Heritage Team (STScI/AURA)",
+  "licence": "Public domain",
+  "licence_url": ""
+ },
+ "M83": {
+  "file": "The_Outskirts_of_the_Southern_Pinwheel_Galaxy_(noirlab2429a).jpg",
+  "page": "https://commons.wikimedia.org/wiki/File:The_Outskirts_of_the_Southern_Pinwheel_Galaxy_(noirlab2429a).jpg",
+  "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/6/69/The_Outskirts_of_the_Southern_Pinwheel_Galaxy_%28noirlab2429a%29.jpg/960px-The_Outskirts_of_the_Southern_Pinwheel_Galaxy_%28noirlab2429a%29.jpg",
+  "author": "CTIO/NOIRLab/DOE/NSF/AURA Image processing: T.A. Rector (University of Alaska Anchorage/NSF NOIRLab), D. de Martin (NSF NOIRLab) & M. Zamani (NSF NOIRLab)",
+  "licence": "CC BY 4.0",
+  "licence_url": "https://creativecommons.org/licenses/by/4.0"
+ },
+ "M84": {
+  "file": "A_fascinating_core.jpg",
+  "page": "https://commons.wikimedia.org/wiki/File:A_fascinating_core.jpg",
+  "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/5/59/A_fascinating_core.jpg/960px-A_fascinating_core.jpg",
+  "author": "ESA/Hubble & NASA",
+  "licence": "CC BY 4.0",
+  "licence_url": "https://creativecommons.org/licenses/by/4.0"
+ },
+ "M85": {
+  "file": "Messier85_-_HST_-_Potw1905a.jpg",
+  "page": "https://commons.wikimedia.org/wiki/File:Messier85_-_HST_-_Potw1905a.jpg",
+  "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/e/e8/Messier85_-_HST_-_Potw1905a.jpg/960px-Messier85_-_HST_-_Potw1905a.jpg",
+  "author": "Credit: ESA/Hubble & NASA, R. O'Connell",
+  "licence": "CC BY 4.0",
+  "licence_url": "https://creativecommons.org/licenses/by/4.0"
+ },
+ "M86": {
+  "file": "Beacon_of_Light_Messier_86.jpg",
+  "page": "https://commons.wikimedia.org/wiki/File:Beacon_of_Light_Messier_86.jpg",
+  "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/9/95/Beacon_of_Light_Messier_86.jpg/960px-Beacon_of_Light_Messier_86.jpg",
+  "author": "ESA/Hubble & NASA, P. Cote et al.",
+  "licence": "CC BY 4.0",
+  "licence_url": "https://creativecommons.org/licenses/by/4.0"
+ },
+ "M87": {
+  "file": "Messier_87_Hubble_WikiSky.jpg",
+  "page": "https://commons.wikimedia.org/wiki/File:Messier_87_Hubble_WikiSky.jpg",
+  "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/0/07/Messier_87_Hubble_WikiSky.jpg/960px-Messier_87_Hubble_WikiSky.jpg",
+  "author": "en:NASA , en:STScI , en:WikiSky",
+  "licence": "Public domain",
+  "licence_url": ""
+ },
+ "M89": {
+  "file": "M89 Galaxy.png",
+  "page": "https://commons.wikimedia.org/wiki/File:M89_Galaxy.png",
+  "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/b/b7/M89_Galaxy.png/960px-M89_Galaxy.png",
+  "author": "Chuck Ayoub",
+  "licence": "CC0",
+  "licence_url": "http://creativecommons.org/publicdomain/zero/1.0/deed.en"
+ },
+ "M90": {
+  "file": "Messier_90_-_HST.png",
+  "page": "https://commons.wikimedia.org/wiki/File:Messier_90_-_HST.png",
+  "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/b/b0/Messier_90_-_HST.png/960px-Messier_90_-_HST.png",
+  "author": "Judy Schmidt from USA",
+  "licence": "CC BY 2.0",
+  "licence_url": "https://creativecommons.org/licenses/by/2.0"
+ },
+ "M92": {
+  "file": "M92_Hubble_WikiSky.jpg",
+  "page": "https://commons.wikimedia.org/wiki/File:M92_Hubble_WikiSky.jpg",
+  "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/1/1b/M92_Hubble_WikiSky.jpg/960px-M92_Hubble_WikiSky.jpg",
+  "author": "en:NASA , en:STScI , en:WikiSky",
+  "licence": "Public domain",
+  "licence_url": ""
+ },
+ "M94": {
+  "file": "Messier 94, Imaged by John Richards May, 2024.jpg",
+  "page": "https://commons.wikimedia.org/wiki/File:Messier_94,_Imaged_by_John_Richards_May,_2024.jpg",
+  "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/a/ab/Messier_94%2C_Imaged_by_John_Richards_May%2C_2024.jpg/960px-Messier_94%2C_Imaged_by_John_Richards_May%2C_2024.jpg",
+  "author": "Johrich",
+  "licence": "CC BY 4.0",
+  "licence_url": "https://creativecommons.org/licenses/by/4.0"
+ },
+ "M95": {
+  "file": "The_VLT_goes_lion_hunting.jpg",
+  "page": "https://commons.wikimedia.org/wiki/File:The_VLT_goes_lion_hunting.jpg",
+  "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/f/fd/The_VLT_goes_lion_hunting.jpg/960px-The_VLT_goes_lion_hunting.jpg",
+  "author": "ESO",
+  "licence": "CC BY 3.0",
+  "licence_url": "https://creativecommons.org/licenses/by/3.0"
+ },
+ "M96": {
+  "file": "Messier_96_as_Seen_with_DESI_Legacy_Survey_(noirlab2620a).jpg",
+  "page": "https://commons.wikimedia.org/wiki/File:Messier_96_as_Seen_with_DESI_Legacy_Survey_(noirlab2620a).jpg",
+  "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/d/dc/Messier_96_as_Seen_with_DESI_Legacy_Survey_%28noirlab2620a%29.jpg/960px-Messier_96_as_Seen_with_DESI_Legacy_Survey_%28noirlab2620a%29.jpg",
+  "author": "DESI Legacy Imaging Surveys/LBNL/DOE & KPNO/CTIO/NOIRLab/NSF/AURA Image processing: M. Rodriguez (Gemini Observatory/NSF NOIRLab), J. Miller (Gemini Observatory/NSF NOIRLab), T.A. Rector (University o",
+  "licence": "CC BY 4.0",
+  "licence_url": "https://creativecommons.org/licenses/by/4.0"
+ },
+ "M97": {
+  "file": "M97rosse.jpg",
+  "page": "https://commons.wikimedia.org/wiki/File:M97rosse.jpg",
+  "url": "https://upload.wikimedia.org/wikipedia/commons/b/b4/M97rosse.jpg",
+  "author": "unbekannt",
+  "licence": "Public domain",
+  "licence_url": ""
+ },
+ "M98": {
+  "file": "Messier_98.jpg",
+  "page": "https://commons.wikimedia.org/wiki/File:Messier_98.jpg",
+  "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/9/92/Messier_98.jpg/960px-Messier_98.jpg",
+  "author": "ESO Acknowledgements: Flickr user jbarring",
+  "licence": "CC BY 4.0",
+  "licence_url": "https://creativecommons.org/licenses/by/4.0"
+ },
+ "M100": {
+  "file": "Messier_100_—_Grand_Design_Splendour.jpg",
+  "page": "https://commons.wikimedia.org/wiki/File:Messier_100_%E2%80%94_Grand_Design_Splendour.jpg",
+  "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/8/85/Messier_100_%E2%80%94_Grand_Design_Splendour.jpg/960px-Messier_100_%E2%80%94_Grand_Design_Splendour.jpg",
+  "author": "ESO",
+  "licence": "CC BY 4.0",
+  "licence_url": "https://creativecommons.org/licenses/by/4.0"
+ },
+ "M101": {
+  "file": "M101_hires_STScI-PRC2006-10a.jpg",
+  "page": "https://commons.wikimedia.org/wiki/File:M101_hires_STScI-PRC2006-10a.jpg",
+  "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/c/c5/M101_hires_STScI-PRC2006-10a.jpg/960px-M101_hires_STScI-PRC2006-10a.jpg",
+  "author": "Credit: Image: European Space Agency & NASA Acknowledgements: Project Investigators for the original Hubble data: K.D. Kuntz (GSFC), F. Bresolin (University of Hawaii), J. Trauger (JPL), J. Mould (NOA",
+  "licence": "CC BY 4.0",
+  "licence_url": "https://creativecommons.org/licenses/by/4.0"
+ },
+ "M102": {
+  "file": "M102_PS.jpg",
+  "page": "https://commons.wikimedia.org/wiki/File:M102_PS.jpg",
+  "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/0/07/M102_PS.jpg/960px-M102_PS.jpg",
+  "author": "Sboone61",
+  "licence": "CC0",
+  "licence_url": "http://creativecommons.org/publicdomain/zero/1.0/deed.en"
+ },
+ "M104": {
+  "file": "Sombrero_Galaxy_(heic2506a).jpg",
+  "page": "https://commons.wikimedia.org/wiki/File:Sombrero_Galaxy_(heic2506a).jpg",
+  "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/c/cc/Sombrero_Galaxy_%28heic2506a%29.jpg/960px-Sombrero_Galaxy_%28heic2506a%29.jpg",
+  "author": "ESA/Hubble & NASA, K. Noll",
+  "licence": "CC BY 4.0",
+  "licence_url": "https://creativecommons.org/licenses/by/4.0"
+ },
+ "M105": {
+  "file": "Messier105_-_HST_-_Potw1901a.jpg",
+  "page": "https://commons.wikimedia.org/wiki/File:Messier105_-_HST_-_Potw1901a.jpg",
+  "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/e/ec/Messier105_-_HST_-_Potw1901a.jpg/960px-Messier105_-_HST_-_Potw1901a.jpg",
+  "author": "Credit: ESA/Hubble & NASA, C. Sarazin et al.",
+  "licence": "CC BY 4.0",
+  "licence_url": "https://creativecommons.org/licenses/by/4.0"
+ },
+ "M106": {
+  "file": "Messier_106_visible_and_infrared_composite.jpg",
+  "page": "https://commons.wikimedia.org/wiki/File:Messier_106_visible_and_infrared_composite.jpg",
+  "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/2/2d/Messier_106_visible_and_infrared_composite.jpg/960px-Messier_106_visible_and_infrared_composite.jpg",
+  "author": "NASA, ESA, the Hubble Heritage Team (STScI/AURA), and R. Gendler (for the Hubble Heritage Team). Acknowledgment: J. GaBany",
+  "licence": "Public domain",
+  "licence_url": ""
+ },
+ "M107": {
+  "file": "Messier_107_Hubble_WikiSky.jpg",
+  "page": "https://commons.wikimedia.org/wiki/File:Messier_107_Hubble_WikiSky.jpg",
+  "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/4/42/Messier_107_Hubble_WikiSky.jpg/960px-Messier_107_Hubble_WikiSky.jpg",
+  "author": "en:NASA , en:STScI , en:WikiSky",
+  "licence": "Public domain",
+  "licence_url": ""
+ },
+ "M108": {
+  "file": "Messier108_-_SDSS_DR_14_(panorama).jpg",
+  "page": "https://commons.wikimedia.org/wiki/File:Messier108_-_SDSS_DR_14_(panorama).jpg",
+  "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/1/11/Messier108_-_SDSS_DR_14_%28panorama%29.jpg/960px-Messier108_-_SDSS_DR_14_%28panorama%29.jpg",
+  "author": "Sloan Digital Sky Survey",
+  "licence": "CC BY 4.0",
+  "licence_url": "https://creativecommons.org/licenses/by/4.0"
+ },
+ "M109": {
+  "file": "M109_(noao-m109hatfield).jpg",
+  "page": "https://commons.wikimedia.org/wiki/File:M109_(noao-m109hatfield).jpg",
+  "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/a/a7/M109_%28noao-m109hatfield%29.jpg/960px-M109_%28noao-m109hatfield%29.jpg",
+  "author": "KPNO/NOIRLab/NSF/AURA/George Hatfield and Flynn Haase",
+  "licence": "CC BY 4.0",
+  "licence_url": "https://creativecommons.org/licenses/by/4.0"
+ },
+ "M110": {
+  "file": "Not_So_Dead_After_All_(48763200193).jpg",
+  "page": "https://commons.wikimedia.org/wiki/File:Not_So_Dead_After_All_(48763200193).jpg",
+  "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/1/1b/Not_So_Dead_After_All_%2848763200193%29.jpg/960px-Not_So_Dead_After_All_%2848763200193%29.jpg",
+  "author": "European Space Agency",
+  "licence": "CC BY 2.0",
+  "licence_url": "https://creativecommons.org/licenses/by/2.0"
+ }
+}

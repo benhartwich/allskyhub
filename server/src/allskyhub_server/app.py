@@ -38,6 +38,7 @@ from allskyhub_server.devices.map_tiles import MapTiles
 from allskyhub_server.devices.renders import Renderer
 from allskyhub_server.devices.satellite_match import SatelliteCatalogue
 from allskyhub_server.devices.satellites import TleCache
+from allskyhub_server.devices.sky_photos import SkyPhotos
 from allskyhub_server.devices.space_weather import KpCache, OvationCache
 from allskyhub_server.devices.tonight import ForecastCache
 from allskyhub_server.devices.youtube import YouTube
@@ -305,6 +306,10 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.state.ovation = OvationCache()
     app.state.map_tiles = MapTiles(
         settings.data_dir / "tiles",
+        httpx.AsyncClient(headers={"User-Agent": f"allskyhub ({settings.base_url})"}),
+    )
+    app.state.sky_photos = SkyPhotos(
+        settings.data_dir / "sky-photos",
         httpx.AsyncClient(headers={"User-Agent": f"allskyhub ({settings.base_url})"}),
     )
     app.state.hub_keys = HubKeys(settings.key_dir)

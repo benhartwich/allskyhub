@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import datetime as dt
+from pathlib import Path
 
 import httpx
 from fastapi import FastAPI
@@ -159,3 +160,71 @@ async def test_sky_lists_tonights_planets(new_client: httpx.AsyncClient) -> None
     for p in sky["planets"]:
         assert p["key"] in ("mercury", "venus", "mars", "jupiter", "saturn")
         assert p["altitude"] >= 10
+
+
+async def test_public_sky_view_and_object_info(
+    app: FastAPI, new_client: httpx.AsyncClient, tmp_path: Path
+) -> None:
+    from allskyhub_server.devices.sky_photos import SkyPhotos
+
+    asked: list[str] = []
+
+    def commons(request: httpx.Request) -> httpx.Response:
+        asked.append(str(request.url))
+        return httpx.Response(200, content=b"\xff\xd8\xff\xe0jupiter")
+
+    app.state.sky_photos = SkyPhotos(
+        tmp_path, httpx.AsyncClient(transport=httpx.MockTransport(commons))
+    )
+    view = (
+        await new_client.get("/api/v1/public/sky-view", params={"lat": 48.1, "lon": 14.4})
+    ).json()
+    keys = {o["key"] for o in view["objects"]}
+    assert {"moon", "jupiter", "M31", "M42", "Ori", "UMa"} <= keys  # also below the horizon
+    assert len([o for o in view["objects"] if o["kind"] == "constellation"]) == 88
+    m31 = next(o for o in view["objects"] if o["key"] == "M31")
+    assert (m31["label"], m31["kind"], m31["mag"]) == ("M31 Andromedagalaxie", "s", 3.4)
+    assert view["meteors"] == []
+    assert view["lines"]
+
+    info = (await new_client.get("/api/v1/public/sky-objects/M31")).json()
+    assert info["kind_label"] == "Spiralgalaxie"
+    assert "2,5 Millionen Lichtjahre" in info["text"]
+    photo = info["photo"]
+    assert photo["url"] == "/api/v1/public/sky-photos/M31"
+    assert photo["licence"] in ("Public domain", "CC0") or photo["licence"].startswith("CC BY")
+    assert "SA" not in photo["licence"]
+    assert photo["page"].startswith("https://commons.wikimedia.org/")
+
+    en = await new_client.get("/api/v1/public/sky-objects/M2", headers={"Accept-Language": "en"})
+    assert en.json()["kind_label"] == "Globular cluster"
+    assert "binoculars" in en.json()["text"]
+    ori = (await new_client.get("/api/v1/public/sky-objects/Ori")).json()
+    assert ori["kind"] == "constellation"
+    assert ori["photo"] is None
+    assert (await new_client.get("/api/v1/public/sky-objects/M999")).status_code == 404
+    assert (await new_client.get("/api/v1/public/sky-objects/..%2Fx")).status_code in (400, 404)
+
+    first = await new_client.get("/api/v1/public/sky-photos/jupiter")
+    assert first.content == b"\xff\xd8\xff\xe0jupiter"
+    assert first.headers["content-type"] == "image/jpeg"
+    await new_client.get("/api/v1/public/sky-photos/jupiter")
+    assert len(asked) == 1  # kept on the hub's disk
+    assert asked[0].startswith("https://thumb.wikimedia.org/")
+    assert "?" not in asked[0]
+    assert (await new_client.get("/api/v1/public/sky-photos/Ori")).status_code == 404
+
+
+def test_every_photo_is_freely_licensed() -> None:
+    """tools/sky_photos.py: public domain, CC0 or CC BY only, each with its credit."""
+    from allskyhub_sky.describe import photos
+
+    found = photos()
+    assert len(found) > 100
+    for key, p in found.items():
+        licence = p["licence"].lower()
+        assert licence in ("public domain", "cc0") or licence.startswith("cc by "), key
+        assert not {"sa", "nc", "nd"} & set(licence.replace("-", " ").split()), key
+        assert p["author"], key
+        assert p["page"].startswith("https://commons.wikimedia.org/wiki/File:"), key
+        assert "charles" not in p["file"].lower(), key

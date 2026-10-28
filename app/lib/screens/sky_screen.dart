@@ -14,6 +14,7 @@ import '../platform/reminders.dart';
 import 'gallery_screens.dart' show clock;
 import 'public_camera_screen.dart';
 import 'sky_calendar_screen.dart';
+import 'sky_view_screen.dart';
 
 typedef _Loaded = ({
   String label,
@@ -276,6 +277,31 @@ class _Sky extends StatelessWidget {
           icon: const Icon(Icons.place_outlined, size: 18),
           label: Text('${data.label} · ${tr('ändern', 'change')}'),
           onPressed: onChoose,
+        ),
+        FilledButton.icon(
+          key: const Key('sky-look'),
+          icon: const Icon(Icons.explore_outlined),
+          label: Text(tr('Himmel ansehen', 'Look at the sky')),
+          onPressed: () => Navigator.of(context).push(
+            MaterialPageRoute<void>(
+              builder: (_) => SkyViewScreen(
+                client: client,
+                load: () => client.publicSkyView(sky.lat, sky.lon),
+                place: data.label,
+              ),
+            ),
+          ),
+        ),
+        Padding(
+          padding: const EdgeInsets.only(top: 4, bottom: 12),
+          child: Text(
+            tr(
+              'Handy hochhalten: Sternbilder, Planeten, Galaxien. Mit Suche und Erklärungen.',
+              'Hold the phone up: constellations, planets, galaxies. With search and explanations.',
+            ),
+            style: Theme.of(context).textTheme.bodySmall,
+            textAlign: TextAlign.center,
+          ),
         ),
         Row(
           children: [

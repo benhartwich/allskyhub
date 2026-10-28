@@ -110,3 +110,9 @@ def test_moon_phases_hit_known_dates() -> None:
 
 def test_distance() -> None:
     assert round(app_sky.distance_km((48.2, 16.4), (48.3, 14.3))) == 156  # Vienna – Linz
+
+
+async def test_privacy_policy_names_the_sky_tab(new_client: httpx.AsyncClient) -> None:
+    page = (await new_client.get("/datenschutz")).text
+    assert "Himmel in der App" in page
+    assert "Open-Meteo" in page

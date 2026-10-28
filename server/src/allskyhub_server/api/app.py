@@ -36,6 +36,7 @@ from allskyhub_server.devices import (
     public,
     queries,
     settings_form,
+    sightings,
 )
 from allskyhub_server.devices import settings as settings_mod
 from allskyhub_server.devices.connections import ConnectionRegistry
@@ -709,9 +710,10 @@ async def delete_account(
     await _limit_account(request, user)
     if not await verify_secret_async(user.password_hash, body.password):
         raise HTTPException(400, tr("Das Passwort stimmt nicht.", "The password is not right."))
+    photos = await sightings.photo_ids(db, user.id)
     device_ids = await accounts.delete_account(db, user)
     await db.commit()
-    await finish_deletion(request, device_ids)
+    await finish_deletion(request, device_ids, photos)
     return Response(status_code=204)
 
 

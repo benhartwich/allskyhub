@@ -16,6 +16,7 @@ import asyncio
 import datetime as dt
 import io
 import math
+import time
 import uuid
 from dataclasses import dataclass
 from pathlib import Path
@@ -46,6 +47,7 @@ FLAGS_TO_REVIEW = 3
 # Distances to other people's reports are only given in steps, so a few queries from
 # chosen places cannot pin a reporter down (review of #330).
 AURORA_STEP_KM = 25
+SWEEP_GRACE_S = 600
 OTHERS_STEP_KM = 50
 BRIGHTNESS = ("star", "venus", "moon", "day")
 FIREBALL_DETAILS = ("green", "red", "orange", "blue", "broke", "trail", "sound")
@@ -169,18 +171,34 @@ def step_km(km: float, step: int) -> int:
     return max(step, math.ceil(km / step) * step)
 
 
+async def photo_ids(db: AsyncSession, user_id: uuid.UUID) -> list[uuid.UUID]:
+    """The account's aurora reports with a photo file, to delete them with the account."""
+    return list(
+        await db.scalars(
+            select(AuroraReport.id).where(
+                AuroraReport.user_id == user_id, AuroraReport.photo.in_(("pending", "approved"))
+            )
+        )
+    )
+
+
 async def sweep(db: AsyncSession, root: Path) -> None:
     """Delete photo files whose report is gone (an account deleted with its reports)."""
     kept = {str(i) for i in await db.scalars(select(AuroraReport.id))}
     await asyncio.to_thread(_sweep_files, root, kept)
 
 
-def _sweep_files(root: Path, kept: set[str]) -> None:
+def _sweep_files(root: Path, kept: set[str], now: float | None = None) -> None:
     if not root.is_dir():
         return
+    now = time.time() if now is None else now
     for path in root.glob("*.jpg"):
-        if path.name.removesuffix(".jpg").removesuffix("-thumb") not in kept:
-            path.unlink(missing_ok=True)
+        if path.name.removesuffix(".jpg").removesuffix("-thumb") in kept:
+            continue
+        # A photo is written before its report is committed: leave fresh files alone.
+        if now - path.stat().st_mtime < SWEEP_GRACE_S:
+            continue
+        path.unlink(missing_ok=True)
 
 
 def delete_photo(root: Path, report_id: uuid.UUID) -> None:

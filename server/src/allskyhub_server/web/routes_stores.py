@@ -53,6 +53,8 @@ async def upload_store_key(
     try:
         if kind == "codemagic":
             secret, meta = admin_stores.parse_codemagic(token)
+        elif kind == "github":
+            secret, meta = admin_stores.parse_github(token)
         elif kind == "turnstile":
             secret, meta = admin_stores.parse_turnstile(site_key, token)
         elif file is None:
@@ -76,6 +78,10 @@ async def upload_store_key(
         # Takes effect at once, without a restart.
         request.app.state.notifier.set_sender(Sender(secret))
         notice = "Firebase-Dienstkonto gespeichert: Der Hub kann jetzt Push-Nachrichten senden."
+    elif kind == "github":
+        request.app.state.github.token = request.app.state.latest_image.token = secret.decode()
+        request.app.state.github.forget()
+        notice = "GitHub-Token gespeichert: Der Hub hat jetzt 5000 Abrufe pro Stunde."
     elif kind == "turnstile":
         request.app.state.turnstile = turnstile_from(settings, stores.vault)
         notice = "Turnstile gespeichert: Die Melder-Registrierung (/melden/konto) ist offen."

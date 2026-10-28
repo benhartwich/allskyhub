@@ -13,6 +13,16 @@
     {% endif %}
   </dl>
   {% if upstream_error %}<p class="msg error">{{ upstream_error }}</p>{% endif %}
+  <details>
+    <summary>{{ store_titles.github }}{% if github_token %} · hinterlegt{% endif %}</summary>
+    <form method="post" action="/admin/stores/github" class="stack">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+      <p class="muted small">Ohne Token erlaubt GitHub 60 Abrufe pro Stunde für den ganzen Server, mit Token 5000. GitHub → Settings → Developer settings → Personal access tokens → Fine-grained tokens → Generate new token: Repository access „Public repositories (read-only)“, keine weiteren Berechtigungen, mit Ablaufdatum (danach hier neu eintragen). So kann ein Token, der abhandenkommt, nichts außer Abrufe. Wirkt sofort; wird nie wieder angezeigt.</p>
+      <label>Token<input type="password" name="token" required maxlength="512" autocomplete="off" placeholder="github_pat_…"></label>
+      <label>Dein Passwort<input type="password" name="password" autocomplete="current-password" required></label>
+      <button type="submit" class="secondary">Speichern</button>
+    </form>
+  </details>
   {% if upstream and upstream.commits %}
   <h3>Neu seit der laufenden Version ({{ upstream.ahead }})</h3>
   <ul class="commit-list">
@@ -190,7 +200,7 @@
       {%- if e.meta.key_id %}<br><span class="small">Key-ID <code>{{ e.meta.key_id }}</code></span>{% endif %}
       {%- if e.meta.sha256 %}<br><span class="small">SHA-256 <code>{{ e.meta.sha256 }}</code></span>{% endif %}
       {%- if e.meta.app_id %}<br><span class="small">Codemagic-App <code>{{ e.meta.app_id }}</code></span>{% endif %}
-    {%- else %}<span class="muted">{{ 'fehlt' if e.kind in ('play', 'asc', 'codemagic', 'youtube', 'fcm', 'turnstile') else 'wird beim Einrichten erzeugt' }}</span>{% endif %}</dd>
+    {%- else %}<span class="muted">{{ 'fehlt' if e.kind in ('play', 'asc', 'codemagic', 'youtube', 'fcm', 'turnstile', 'github') else 'wird beim Einrichten erzeugt' }}</span>{% endif %}</dd>
     {% endfor %}
   </dl>
   <form method="post" action="/admin/stores-setup" class="inline">

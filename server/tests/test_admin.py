@@ -223,3 +223,49 @@ async def test_github_limit_is_named() -> None:
     )
     with pytest.raises(deploy.DeployError, match="nicht erreichbar"):
         await github.upstream(None)
+
+
+async def test_github_token_and_failures_kept(
+    app: FastAPI,
+    client: httpx.AsyncClient,
+    settings: Settings,
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    """Benjamin, 2026-10-28: the limit was reached again. A read-only token from the admin
+    page lifts it to 5000; a failure is kept for a minute instead of asked again."""
+    from allskyhub_server.admin import stores
+
+    seen: list[str | None] = []
+
+    def limited(request: httpx.Request) -> httpx.Response:
+        seen.append(request.headers.get("authorization"))
+        return httpx.Response(403, headers={"x-ratelimit-remaining": "0"})
+
+    github = deploy.GitHub(
+        "benhartwich/allskyhub", httpx.AsyncClient(transport=httpx.MockTransport(limited))
+    )
+    for _ in range(3):
+        with pytest.raises(deploy.DeployError, match="mit GitHub-Token 5000"):
+            await github.upstream(None)
+    assert seen == [None]  # asked once
+
+    email = await make_account(client)
+    monkeypatch.setattr(settings, "admin_emails", email)
+    monkeypatch.setattr(
+        app.state, "stores", stores.Stores(tmp_path / "store", "benhartwich/allskyhub")
+    )
+    monkeypatch.setattr(app.state, "github", github)
+    token = csrf_from((await client.get("/admin")).text)
+    secret = "github_pat_" + "A1b2" * 10
+    r = await client.post(
+        "/admin/stores/github", data={"csrf_token": token, "password": PASSWORD, "token": "nope"}
+    )
+    assert r.status_code == 400
+    r = await client.post(
+        "/admin/stores/github", data={"csrf_token": token, "password": PASSWORD, "token": secret}
+    )
+    assert "5000 Abrufe pro Stunde" in r.text
+    assert secret not in r.text
+    assert seen[-1] == f"Bearer {secret}"  # asked again at once, with the token
+    assert app.state.latest_image.token == secret

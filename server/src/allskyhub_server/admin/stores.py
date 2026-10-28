@@ -85,10 +85,12 @@ TITLES = {
     "youtube": "YouTube-OAuth-Client",
     "fcm": "Firebase-Dienstkonto (Push)",
     "turnstile": "Cloudflare Turnstile",
+    "github": "GitHub-Token (nur lesen)",
     # Further apps' own upload keys (OtherApp.android_upload), made on their setup.
     "bortle_android_upload": "bortle: Android-Upload-Schlüssel",
 }
-UPLOADED = ("play", "asc", "codemagic", "youtube", "fcm", "turnstile")
+UPLOADED = ("play", "asc", "codemagic", "youtube", "fcm", "turnstile", "github")
+GITHUB_TOKEN = re.compile(r"^(github_pat_|ghp_)[A-Za-z0-9_]{20,255}$")
 # The app's own Firebase registration (public identifiers, not in the vault's secrets).
 FCM_APP_FIELDS = ("sender_id", "android_app_id", "android_api_key", "ios_app_id", "ios_api_key")
 FCM_APP_FILE = "fcm_app.json"
@@ -421,6 +423,20 @@ def fcm_defines(app: OtherApp, ids: dict[str, Any] | None) -> dict[str, str]:
         if value and FCM_ID.match(value):
             out[f"{app.key.upper()}_FCM_{field_name.upper()}"] = value
     return out
+
+
+def parse_github(token: str) -> tuple[bytes, dict[str, Any]]:
+    """A read-only GitHub token: 5000 API requests an hour instead of 60 per address."""
+    token = token.strip()
+    if not GITHUB_TOKEN.match(token):
+        raise StoreError("Das sieht nicht wie ein GitHub-Token aus (github_pat_… oder ghp_…).")
+    return token.encode(), {}
+
+
+def github_token(vault: Vault) -> str | None:
+    if not vault.has("github"):
+        return None
+    return vault.secret("github", "GitHub-API").decode()
 
 
 def parse_codemagic(token: str) -> tuple[bytes, dict[str, Any]]:

@@ -15,6 +15,8 @@ from typing import Any, cast
 
 import httpx
 
+from allskyhub_server.admin.deploy import github_headers
+
 API = "https://api.github.com"
 CACHE_S = 3600.0
 FAILED_CACHE_S = 300.0
@@ -33,6 +35,7 @@ class LatestImage:
         self.repo = repo
         self.releases_url = f"https://github.com/{repo}/releases/latest"
         self._client = client
+        self.token: str | None = None  # the admin page's GitHub token (admin/deploy.py)
         self._cached: tuple[float, Image | None] | None = None
 
     async def get(self) -> Image | None:
@@ -47,7 +50,7 @@ class LatestImage:
 
     async def _fetch(self) -> Image | None:
         client = self._client or httpx.AsyncClient(timeout=5)
-        headers = {"Accept": "application/vnd.github+json", "User-Agent": "allskyhub-hub"}
+        headers = github_headers(self.token)
         try:
             r = await client.get(f"{API}/repos/{self.repo}/releases/latest", headers=headers)
             if r.status_code != 200:

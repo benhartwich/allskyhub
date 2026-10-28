@@ -1265,3 +1265,115 @@ async def test_play_upload_other_package(tmp_path: Path) -> None:
     code, _ = await hub.play_upload(aab, "eu.bortle.app")
     assert code == 0
     assert seen[-1] == ("POST", "/androidpublisher/v3/applications/eu.bortle.app/edits/E1:commit")
+
+
+async def test_submit_to_apple_review(tmp_path: Path) -> None:
+    """Benjamin, 2026-10-28: "danach apple und android einreichen" from the hub."""
+    seen: list[tuple[str, str, Any]] = []
+    version_build: dict[str, Any] = {"data": {"id": "B1", "attributes": {"version": "57"}}}
+
+    def answer(request: httpx.Request) -> httpx.Response:
+        path, method = request.url.path, request.method
+        body = json.loads(request.content) if request.content else None
+        seen.append((method, path, body))
+        if path == "/v1/apps":
+            return httpx.Response(200, json={"data": [{"id": "A1"}]})
+        if path == "/v1/apps/A1/appStoreVersions":
+            return httpx.Response(200, json={"data": [{"id": "V1", "attributes": {
+                "versionString": "1.0.0",
+                "appVersionState": "PREPARE_FOR_SUBMISSION"}}]})  # fmt: skip
+        if path == "/v1/appStoreVersions/V1/build":
+            return httpx.Response(200, json=version_build)
+        if path == "/v1/apps/A1/reviewSubmissions":
+            return httpx.Response(200, json={"data": []})
+        if path == "/v1/reviewSubmissions" and method == "POST":
+            return httpx.Response(201, json={"data": {"id": "S1"}})
+        if path == "/v1/reviewSubmissions/S1/items":
+            return httpx.Response(200, json={"data": []})
+        if path == "/v1/reviewSubmissionItems":
+            return httpx.Response(201, json={"data": {"id": "I1"}})
+        if path == "/v1/reviewSubmissions/S1" and method == "PATCH":
+            return httpx.Response(200, json={"data": {"id": "S1"}})
+        return httpx.Response(404)
+
+    hub = stores.Stores(
+        tmp_path / "store",
+        "benhartwich/allskyhub",
+        httpx.AsyncClient(transport=httpx.MockTransport(answer)),
+    )
+    assert (await appstore.submit_report(hub)).steps[0].state == "warn"  # no key yet
+    hub.vault.put("asc", *stores.parse_asc(_p8(), "2X9R4HXF34", ISSUER), by="a")
+    report = await appstore.submit_report(hub, stores.OTHER_APPS["bortle"])
+    assert [(s.state, s.text) for s in report.steps] == [
+        ("ok", "Version 1.0.0 mit Build 57 ist zur Prüfung eingereicht.")
+    ]
+    assert ("GET", "/v1/apps", None) in seen
+    assert seen[-1] == ("PATCH", "/v1/reviewSubmissions/S1", {"data": {
+        "type": "reviewSubmissions", "id": "S1", "attributes": {"submitted": True}}})  # fmt: skip
+    item = next(b for _, p, b in seen if p == "/v1/reviewSubmissionItems")
+    assert item["data"]["relationships"]["appStoreVersion"]["data"]["id"] == "V1"
+
+    version_build["data"] = None  # no build chosen yet
+    report = await appstore.submit_report(hub)
+    assert report.steps[0].state == "fail"
+    assert "noch keinen Build" in report.steps[0].text
+
+
+async def test_submit_to_play_production(tmp_path: Path) -> None:
+    seen: list[tuple[str, str, Any]] = []
+    draft_only = False
+
+    def answer(request: httpx.Request) -> httpx.Response:
+        path = request.url.path
+        if request.url.host == "oauth2.googleapis.com":  # a form, not JSON
+            return httpx.Response(200, json={"access_token": "t"})
+        body = json.loads(request.content) if request.content else None
+        seen.append((request.method, path, body))
+        if request.url.host == "oauth2.googleapis.com":
+            return httpx.Response(200, json={"access_token": "t"})
+        if path.endswith("/edits"):
+            return httpx.Response(200, json={"id": "E1"})
+        if path.endswith("/tracks/internal"):
+            return httpx.Response(200, json={"releases": [
+                {"versionCodes": ["294"]}, {"versionCodes": ["301"]}]})  # fmt: skip
+        if path.endswith("/tracks/production"):
+            if draft_only and (body or {})["releases"][0]["status"] != "draft":
+                return httpx.Response(
+                    400,
+                    json={
+                        "error": {
+                            "message": "Only releases with status draft may be created "
+                            "on draft app."
+                        }
+                    },
+                )
+            return httpx.Response(200, json={})
+        if path.endswith(":commit"):
+            return httpx.Response(200, json={})
+        return httpx.Response(404)
+
+    hub = stores.Stores(
+        tmp_path / "store",
+        "benhartwich/allskyhub",
+        httpx.AsyncClient(transport=httpx.MockTransport(answer)),
+    )
+    hub.vault.put("play", *stores.parse_play(_play_json()), by="a")
+    report = await hub.submit_play("eu.bortle.app")
+    assert [(s.state, s.text) for s in report.steps] == [
+        ("ok", "Version 301 ist eingereicht und geht nach Googles Prüfung live.")
+    ]
+    assert ("PUT", "/androidpublisher/v3/applications/eu.bortle.app/edits/E1/tracks/production",
+            {"track": "production", "releases": [
+                {"versionCodes": ["301"], "status": "completed"}]}) in seen  # fmt: skip
+    draft_only = True
+    report = await hub.submit_play()
+    assert report.steps[0].state == "warn"
+    assert "Entwurf" in report.steps[0].text
+
+
+def test_app_store_version_follows_pubspec(tmp_path: Path) -> None:
+    assert appstore.VERSION == "1.1.0"  # the update after 1.0.0
+    pubspec = tmp_path / "pubspec.yaml"
+    pubspec.write_text("name: app\nversion: 2.3.4+17\n")
+    assert appstore.app_version(pubspec) == "2.3.4"
+    assert appstore.app_version(tmp_path / "missing.yaml") == "1.0.0"

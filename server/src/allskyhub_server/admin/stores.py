@@ -1243,6 +1243,67 @@ class Stores:
             )
         return 0, f"Version {code} ist im internen Test."
 
+    async def submit_play(self, package: str = PACKAGE) -> Report:
+        """The newest App Bundle of the internal test into production, which sends it to
+        Google's review."""
+        report = Report()
+        title = "Google Play: Produktion"
+        if not self.vault.has("play"):
+            report.add(title, "warn", "Kein Google-Play-Dienstkonto hinterlegt.")
+            return report
+        client = self._http()
+        try:
+            state, text = await self._submit_play(client, package)
+            report.add(title, state, text)
+        except StoreError as exc:
+            report.add(title, "fail", str(exc))
+        except httpx.HTTPError as exc:
+            report.add(title, "fail", f"Google Play nicht erreichbar ({type(exc).__name__}).")
+        finally:
+            await self._close(client)
+        return report
+
+    async def _submit_play(self, client: httpx.AsyncClient, package: str) -> tuple[str, str]:
+        auth = {"Authorization": f"Bearer {await self._play_token(client)}"}
+        app = f"{PLAY}/applications/{package}"
+        r = await client.post(f"{app}/edits", headers=auth)
+        if r.status_code != 200:
+            raise StoreError(f"Bearbeitung nicht möglich ({_message(r)}).")
+        edit = str(_dict(r.json())["id"])
+        r = await client.get(f"{app}/edits/{edit}/tracks/{TRACK}", headers=auth)
+        if r.status_code != 200:
+            raise StoreError(f"Interner Test nicht lesbar ({_message(r)}).")
+        codes: set[int] = set()
+        for release in _list(_dict(r.json()).get("releases")):
+            raw = release.get("versionCodes")
+            for c in cast(list[Any], raw) if isinstance(raw, list) else []:
+                if str(c).isdigit():
+                    codes.add(int(c))
+        if not codes:
+            raise StoreError("Im internen Test liegt noch keine Version; erst Release bauen.")
+        code = str(max(codes))
+        release: dict[str, Any] = {"versionCodes": [code], "status": "completed"}
+        track = f"{app}/edits/{edit}/tracks/production"
+        body = {"track": "production", "releases": [release]}
+        r = await client.put(track, json=body, headers=auth)
+        if r.status_code == 400 and "draft" in r.text.lower():
+            # An app never published takes draft releases only.
+            release["status"] = "draft"
+            r = await client.put(track, json=body, headers=auth)
+        if r.status_code != 200:
+            raise StoreError(f"Produktion nicht gesetzt ({_message(r)}).")
+        r = await client.post(f"{app}/edits/{edit}:commit", headers=auth)
+        if r.status_code != 200:
+            raise StoreError(f"Einreichen abgelehnt ({_message(r)}).")
+        if release["status"] == "draft":
+            return "warn", (
+                f"Version {code} liegt als Entwurf in der Produktion. Die erste "
+                "Veröffentlichung gibt Google nur in der Play Console frei (Produktion → "
+                "Release prüfen → Einführen); vorher müssen dort alle Punkte unter „App "
+                "einrichten“ erledigt sein."
+            )
+        return "ok", f"Version {code} ist eingereicht und geht nach Googles Prüfung live."
+
     # Store listing
 
     def screenshots(self, language: str | None = None, root: Path | None = None) -> list[Path]:

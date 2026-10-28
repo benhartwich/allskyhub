@@ -14,7 +14,7 @@ from allskyhub_protocol import EventVariant, FrameVariant
 from allskyhub_server.auth import access_requests, password_reset, reporters
 from allskyhub_server.auth.accounts import DEFAULT_EVENT_KEEP_DAYS
 from allskyhub_server.auth.sessions import IDLE_TIMEOUT
-from allskyhub_server.devices import renders, stats
+from allskyhub_server.devices import camera_map, renders, stats
 from allskyhub_server.devices.images import ImageStore
 from allskyhub_server.models import (
     AircraftPass,
@@ -28,6 +28,7 @@ from allskyhub_server.models import (
     PairingCode,
     Product,
     RateLimit,
+    SkyReport,
     SkySample,
     StatusSample,
     User,
@@ -73,6 +74,10 @@ async def purge(
     await renders.purge(db, store, settings, now)
     await password_reset.purge(db, now)
     await reporters.purge(db, now)
+    # Reports by eye count on the map for a year (devices/camera_map.py), then go.
+    await db.execute(
+        delete(SkyReport).where(SkyReport.at < now - dt.timedelta(days=camera_map.REPORT_DAYS))
+    )
     await access_requests.purge(db, now)
     await _purge_frames(db, store, settings, now)
     # Roadmap H9: the day's aircraft go with the night's other data.

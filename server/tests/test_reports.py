@@ -4,13 +4,17 @@ from __future__ import annotations
 
 import datetime as dt
 import re
+from urllib.parse import unquote
 
 import httpx
 import pytest
 from fastapi import FastAPI
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from allskyhub_server.api import app_reports
 from allskyhub_server.mail.send import MemoryMailer
+from allskyhub_server.models import SkyReport, User
 from allskyhub_server.settings import Settings
 from allskyhub_sky import report
 from tests.helpers import PASSWORD, csrf_from
@@ -46,12 +50,23 @@ async def _app_login(client: httpx.AsyncClient, email: str) -> httpx.Response:
     return await client.post("/api/v1/auth/login", json={"email": email, "password": PASSWORD})
 
 
+async def _confirm(client: httpx.AsyncClient, mailer: MemoryMailer) -> httpx.Response:
+    """Open the newest confirmation link and press its button."""
+    link = re.search(r"/melden/bestaetigen\?token=(\S+)", mailer.sent[-1].body)
+    assert link
+    page = await client.get(link[0])
+    assert page.status_code == 200
+    assert "Konto bestätigen" in page.text
+    return await client.post(
+        "/melden/bestaetigen",
+        data={"csrf_token": csrf_from(page.text), "token": unquote(link[1])},
+    )
+
+
 async def _reporter(client: httpx.AsyncClient, mailer: MemoryMailer, email: str) -> str:
     """Sign up and confirm; the app token."""
     assert (await _sign_up(client, email)).status_code == 200
-    link = re.search(r"/melden/bestaetigen\?token=\S+", mailer.sent[-1].body)
-    assert link
-    assert (await client.get(link[0])).status_code == 200
+    assert (await _confirm(client, mailer)).status_code == 200
     return (await _app_login(client, email)).json()["access_token"]
 
 
@@ -72,9 +87,20 @@ async def test_signup_confirm_and_no_cameras(
     r = await _sign_up(client, "a@example.org")
     assert "E-Mail mit einem Link ist unterwegs" in r.text
     assert (await _app_login(client, "a@example.org")).status_code == 401  # not confirmed
+    # The mail got lost: signing up again sends a fresh link, the first password stays.
+    first = signup_on.sent[-1].body
+    assert (await _sign_up(client, "a@example.org")).status_code == 200
+    assert signup_on.sent[-1].body != first
+    assert "/melden/bestaetigen" in signup_on.sent[-1].body
+    old = re.search(r"/melden/bestaetigen\?token=\S+", first)
+    assert old
+    assert (await client.get(old[0])).status_code == 404  # replaced
+    # A scanner fetching the link does not confirm; the button does, once.
     link = re.search(r"/melden/bestaetigen\?token=\S+", signup_on.sent[-1].body)
     assert link
-    assert "Konto bestätigt" in (await client.get(link[0])).text
+    await client.get(link[0])
+    assert (await _app_login(client, "a@example.org")).status_code == 401
+    assert "Konto bestätigt" in (await _confirm(client, signup_on)).text
     assert (await client.get(link[0])).status_code == 404  # single use
     token = (await _app_login(client, "a@example.org")).json()["access_token"]
     auth = {"Authorization": f"Bearer {token}"}
@@ -91,7 +117,10 @@ async def test_signup_confirm_and_no_cameras(
 
 
 async def test_report_at_night_once_an_hour(
-    client: httpx.AsyncClient, signup_on: MemoryMailer, monkeypatch: pytest.MonkeyPatch
+    app: FastAPI,
+    client: httpx.AsyncClient,
+    signup_on: MemoryMailer,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     token = await _reporter(client, signup_on, "b@example.org")
     auth = {"Authorization": f"Bearer {token}"}
@@ -120,9 +149,22 @@ async def test_report_at_night_once_an_hour(
     assert mine["count"] == 1
     assert mine["next_at"] is not None
 
-    # On the light-pollution map, as a cell, without a name.
+    # On the light-pollution map only from three reports by two accounts, without names.
+    assert '"lat": 48.1, "lon": 14.4' not in (await client.get("/karte?layer=sqm")).text
+    maker: async_sessionmaker[AsyncSession] = app.state.sessionmaker
+    async with maker() as db:
+        owner = await db.scalar(select(User).where(User.email == "b@example.org"))
+        assert owner
+        other = User(email="z@example.org", password_hash="-", kind="reporter")  # noqa: S106
+        db.add(other)
+        await db.flush()
+        for user in (owner, other):
+            db.add(SkyReport(user_id=user.id, at=NIGHT, lat=48.1, lon=14.4,
+                             constellation="Cyg", limit_mag=5, sqm=19.3, clouds=False))  # fmt: skip
+        await db.commit()
     page = (await client.get("/karte?layer=sqm")).text
     assert '"lat": 48.1, "lon": 14.4' in page
+    assert "3 Meldungen" in page
     assert "b@example.org" not in page
 
 
@@ -150,3 +192,26 @@ def test_limit_to_sky_brightness() -> None:
     assert report.sqm_from_limit(7.0) == 22.0  # never darker than the natural sky
     assert report.sky_class(21.8) == "sehr dunkler Himmel"
     assert report.sky_class(18.0, english=True) == "city sky"
+
+
+async def test_reports_and_unconfirmed_accounts_expire(
+    app: FastAPI, client: httpx.AsyncClient, signup_on: MemoryMailer, settings: Settings
+) -> None:
+    from allskyhub_server import maintenance
+
+    await _sign_up(client, "late@example.org")  # never confirmed
+    token = await _reporter(client, signup_on, "d@example.org")
+    assert token
+    maker: async_sessionmaker[AsyncSession] = app.state.sessionmaker
+    async with maker() as db:
+        user = await db.scalar(select(User).where(User.email == "d@example.org"))
+        assert user
+        db.add(SkyReport(user_id=user.id, at=NIGHT, lat=48.1, lon=14.4, constellation="Cyg",
+                         limit_mag=5, sqm=19.3, clouds=False))  # fmt: skip
+        await db.commit()
+        later = NIGHT + dt.timedelta(days=366)
+        await maintenance.purge(db, app.state.images, settings, now=later)
+        assert await db.scalar(select(SkyReport)) is None
+        emails = set(await db.scalars(select(User.email)))
+        assert "d@example.org" in emails  # confirmed accounts stay
+        assert "late@example.org" not in emails

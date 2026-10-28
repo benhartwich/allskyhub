@@ -131,6 +131,10 @@ async def cameras(db: AsyncSession, now: dt.datetime | None = None) -> list[MapC
 
 
 REPORT_DAYS = 365
+# A cell shows only from this many reports by at least two accounts, so one person's home
+# is not on the map.
+REPORT_MIN = 3
+REPORT_MIN_ACCOUNTS = 2
 
 
 @dataclass(frozen=True)
@@ -153,19 +157,24 @@ class ReportCell:
 
 
 async def report_cells(db: AsyncSession, now: dt.datetime | None = None) -> list[ReportCell]:
-    """Median of the reports without clouds of the last ``REPORT_DAYS`` days, per cell."""
+    """Median of the reports without clouds of the last ``REPORT_DAYS`` days, per cell with
+    enough reports by enough accounts."""
     since = (now or dt.datetime.now(dt.UTC)) - dt.timedelta(days=REPORT_DAYS)
     rows = await db.execute(
-        select(SkyReport.lat, SkyReport.lon, SkyReport.sqm).where(
+        select(SkyReport.lat, SkyReport.lon, SkyReport.sqm, SkyReport.user_id).where(
             SkyReport.at >= since, SkyReport.clouds.is_(False)
         )
     )
     cells: dict[tuple[float, float], list[float]] = {}
-    for lat, lon, sqm in rows.all():
-        cells.setdefault((round(lat, 1), round(lon, 1)), []).append(sqm)
+    accounts: dict[tuple[float, float], set[object]] = {}
+    for lat, lon, sqm, user_id in rows.all():
+        cell = (round(lat, 1), round(lon, 1))
+        cells.setdefault(cell, []).append(sqm)
+        accounts.setdefault(cell, set()).add(user_id)
     return [
         ReportCell(lat, lon, round(statistics.median(v), 2), len(v))
         for (lat, lon), v in sorted(cells.items())
+        if len(v) >= REPORT_MIN and len(accounts[(lat, lon)]) >= REPORT_MIN_ACCOUNTS
     ]
 
 

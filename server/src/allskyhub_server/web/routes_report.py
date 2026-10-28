@@ -101,7 +101,21 @@ async def signup(
 
 
 @router.get("/melden/bestaetigen")
-async def confirm(request: Request, db: DbSession, token: str = "") -> Response:
+async def confirm_form(request: Request, db: DbSession, token: str = "") -> Response:
+    """A button to confirm: mail scanners fetch links, they do not post forms."""
+    ok = await reporters.valid(db, token) is not None
+    return render(
+        request,
+        "report_confirmed.html",
+        {"ask": ok, "ok": ok, "token": token},
+        status_code=200 if ok else 404,
+    )
+
+
+@router.post("/melden/bestaetigen")
+async def confirm(
+    request: Request, db: DbSession, token: Annotated[str, Form(max_length=100)]
+) -> Response:
     user = await reporters.confirm(db, token)
     await db.commit()
     return render(

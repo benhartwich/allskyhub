@@ -2,7 +2,15 @@
 {% block title %}Melder-Konto · allskyhub{% endblock %}
 {% block content %}
 <div class="auth">
-  {% if ok %}
+  {% if ask %}
+  <h1>Melder-Konto bestätigen</h1>
+  <form method="post" action="/melden/bestaetigen" class="card stack">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <input type="hidden" name="token" value="{{ token }}">
+    <p>Ein Klick noch, dann kannst du in der allskyhub-App melden.</p>
+    <button type="submit">Konto bestätigen</button>
+  </form>
+  {% elif ok %}
   <h1>Konto bestätigt</h1>
   <div class="card stack">
     <p>Danke! Melde dich jetzt in der allskyhub-App unter „Mitmachen → Himmelshelligkeit melden“ an.</p>

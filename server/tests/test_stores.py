@@ -1260,6 +1260,29 @@ async def test_other_app_android_release(
     assert hub.android_job().latest is None
 
 
+async def test_play_upload_same_version_again(tmp_path: Path) -> None:
+    """A rebuild of the same commit gets the same version code; Google has it already."""
+    aab = tmp_path / "bortle-17.aab"
+    aab.write_bytes(b"bundle")
+    hub = stores.Stores(tmp_path / "store", "benhartwich/allskyhub")
+    hub.vault.put("play", *stores.parse_play(_play_json()), by="a")
+    seen: list[tuple[str, str]] = []
+    play = _play_answers(seen)
+    used = {"error": {"code": 403, "message": "Version code 17 has already been used."}}
+
+    def answer(request: httpx.Request) -> httpx.Response:
+        if request.url.path.endswith("/edits/E1/bundles"):
+            seen.append((request.method, request.url.path))
+            return httpx.Response(403, json=used)
+        return play.handle_request(request)
+
+    hub._client = httpx.AsyncClient(transport=httpx.MockTransport(answer))  # pyright: ignore[reportPrivateUsage]
+    code, text = await hub.play_upload(aab, "eu.bortle.app")
+    assert code == 0
+    assert "Google schon" in text
+    assert not any(p.endswith(":commit") for _, p in seen)
+
+
 async def test_play_upload_other_package(tmp_path: Path) -> None:
     aab = tmp_path / "bortle-13.aab"
     aab.write_bytes(b"bundle")

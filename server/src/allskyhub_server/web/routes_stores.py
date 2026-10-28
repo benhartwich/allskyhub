@@ -203,9 +203,22 @@ async def other_app(
     """A further iOS app on the same accounts (admin/stores.py ``OTHER_APPS``)."""
     admin_only(session, settings)
     other = admin_stores.OTHER_APPS.get(app)
-    if other is None or action not in ("setup", "build"):
+    if other is None or action not in ("setup", "build", "play", "appstore"):
         return await page(request, db, session, 400, error="Unbekannte App.")
     stores: admin_stores.Stores = request.app.state.stores
+    if action in ("play", "appstore"):
+        started = (
+            stores.start_listing(session.user.email, other)
+            if action == "play"
+            else appstore.start(stores, session.user.email, other)
+        )
+        where = "Google Play" if action == "play" else "App Store Connect"
+        notice = (
+            f"{other.title}: Eintrag wird an {where} übertragen; das Ergebnis steht gleich hier."
+            if started
+            else f"{other.title}: Eine Übertragung läuft noch."
+        )
+        return await page(request, db, session, notice=notice)
     if action == "setup":
         report = await stores.setup_other(other, session.user.email)
         return await page(request, db, session, store_report=report)

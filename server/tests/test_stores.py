@@ -899,7 +899,7 @@ async def test_admin_page_offers_the_further_app(
     monkeypatch.setattr(settings, "admin_emails", email)
     monkeypatch.setattr(app.state, "stores", stores.Stores(tmp_path, "benhartwich/allskyhub"))
     page = await client.get("/admin")
-    assert "Weitere App: bortle (iOS)" in page.text
+    assert "Weitere App: bortle" in page.text
     assert "bortle: iOS-Release bauen" not in page.text  # only after the setup
     token = csrf_from(page.text)
     r = await client.post(
@@ -1005,3 +1005,114 @@ async def test_admin_enters_push_and_turnstile(
     assert signup.status_code == 200
     assert 'data-sitekey="0x4AAAAAAAsite"' in signup.text
     assert stores.TITLES["fcm"] in (await client.get("/admin")).text
+
+
+def _bortle_tarball() -> bytes:
+    """Like GitHub's tarball of bortle-app main: store/ plus things to leave out."""
+    import io
+    import tarfile
+
+    png = b"\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR" + (1080).to_bytes(4) + (2400).to_bytes(4) + b"rest"
+    files = {
+        "store/play/icon.png": png,
+        "lib/main.dart": b"void main() {}",
+        "../evil.txt": b"outside",
+    }
+    for lang in ("de-DE", "en-US"):
+        files |= {
+            f"store/play/{lang}/title.txt": b"bortle",
+            f"store/play/{lang}/short_description.txt": b"Astro-Cockpit",
+            f"store/play/{lang}/full_description.txt": b"Plane und verfolge deine Nacht.",
+            f"store/play/{lang}/feature.png": png,
+            f"store/play/{lang}/screenshots/01.png": png,
+            f"store/play/{lang}/screenshots/02.png": png,
+            f"store/appstore/{lang}/name.txt": b"bortle",
+            f"store/appstore/{lang}/subtitle.txt": b"Astrofotografie",
+            f"store/appstore/{lang}/keywords.txt": b"astro,teleskop",
+            f"store/appstore/{lang}/promotional_text.txt": b"Neu",
+        }
+    out = io.BytesIO()
+    with tarfile.open(fileobj=out, mode="w:gz") as tar:
+        for name, data in files.items():
+            info = tarfile.TarInfo(f"bortle-app-43d8cab/{name}")
+            info.size = len(data)
+            tar.addfile(info, io.BytesIO(data))
+        link = tarfile.TarInfo("bortle-app-43d8cab/store/link")
+        link.type, link.linkname = tarfile.SYMTYPE, "/etc/passwd"
+        tar.addfile(link)
+    return out.getvalue()
+
+
+async def test_bortle_play_listing_from_its_repository(tmp_path: Path) -> None:
+    seen: list[tuple[str, str]] = []
+
+    def answer(request: httpx.Request) -> httpx.Response:
+        path = request.url.path
+        seen.append((request.method, f"{request.url.host}{path}"))
+        if request.url.host == "codeload.github.com":
+            assert path == "/benhartwich/bortle-app/tar.gz/refs/heads/main"
+            return httpx.Response(200, content=_bortle_tarball())
+        if request.url.host == "oauth2.googleapis.com":
+            return httpx.Response(200, json={"access_token": "t"})
+        assert "org.allskyhub.app" not in path
+        if path.endswith("/applications/eu.bortle.app/edits"):
+            return httpx.Response(200, json={"id": "E9"})
+        if path.endswith("/edits/E9/details"):
+            assert json.loads(request.content)["contactEmail"] == "info@bortle.eu"
+            return httpx.Response(200, json={})
+        if "/edits/E9/listings/" in path or path.endswith("/edits/E9:commit"):
+            return httpx.Response(200, json={})
+        return httpx.Response(404, json={"error": {"message": path}})
+
+    hub = stores.Stores(
+        tmp_path / "store",
+        "benhartwich/allskyhub",
+        httpx.AsyncClient(transport=httpx.MockTransport(answer)),
+    )
+    hub.vault.put("play", *stores.parse_play(_play_json()), by="a")
+    report = await hub.push_listing(stores.OTHER_APPS["bortle"])
+    states = {s.title: (s.state, s.text) for s in report.steps}
+    assert states["Store-Eintrag de-DE"] == (
+        "ok", "„bortle“: Texte, Icon, Grafik und 2 Screenshots"
+    )  # fmt: skip
+    assert "Screenshots" not in states  # two each are enough
+    extracted = tmp_path / "store" / "listings" / "bortle"
+    assert (extracted / "store" / "play" / "icon.png").is_file()
+    assert not (extracted / "lib").exists()
+    assert not (extracted / "store" / "link").exists()
+    assert not (tmp_path / "store" / "listings" / "evil.txt").exists()
+
+
+async def test_bortle_app_store_push_uses_its_profile(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    calls: list[tuple[Path, Path, appstore.Profile]] = []
+
+    async def fake_push(
+        client: object, auth: object, report: stores.Report, root: Path, play: Path,
+        p: appstore.Profile,
+    ) -> None:  # fmt: skip
+        calls.append((root, play, p))
+        report.add("Name und Untertitel", "ok", "de-DE, en-US")
+
+    monkeypatch.setattr(appstore, "push", fake_push)
+
+    def answer(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, content=_bortle_tarball())
+
+    hub = stores.Stores(
+        tmp_path / "store",
+        "benhartwich/allskyhub",
+        httpx.AsyncClient(transport=httpx.MockTransport(answer)),
+    )
+    hub.vault.put("asc", *stores.parse_asc(_p8(), "2X9R4HXF34", ISSUER), by="a")
+    report = await appstore.push_report(hub, stores.OTHER_APPS["bortle"])
+    assert report.ok
+    [(root, play, p)] = calls
+    assert (root / "de-DE" / "name.txt").read_text() == "bortle"
+    assert appstore.texts("de-DE", root, play)["description"] == "Plane und verfolge deine Nacht."
+    assert (p.package, p.privacy_url, p.categories) == (
+        "eu.bortle.app", "https://bortle.eu/privacy", ("PHOTO_AND_VIDEO", "UTILITIES"),
+    )  # fmt: skip
+    assert p.state_file == "appstore-bortle.json"
+    assert appstore.profile(None) is appstore.ALLSKYHUB

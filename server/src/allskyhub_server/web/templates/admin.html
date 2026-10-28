@@ -228,21 +228,33 @@
   <p class="muted small">Beide bauen <code>main</code>. Android baut dieser Server als App Bundle und lädt es selbst in den internen Test bei Google Play; iOS baut Codemagic und schickt es nach TestFlight.</p>
   {% endif %}
 
-  {% for other, other_app_id in other_apps %}
-  <h3>Weitere App: {{ other.title }} (iOS)</h3>
-  <p class="muted small">Gleiche Zugänge wie allskyhub: Apple-Schlüssel, Codemagic-Token und Verteilungszertifikat. Legt die Bundle-ID <code>{{ other.package }}</code> bei Apple an, fügt <code>{{ other.repo }}</code> in Codemagic hinzu und füllt dort die Gruppe <code>{{ other.group }}</code>. Den App-Eintrag in App Store Connect legt man einmal von Hand an.{% if other_app_id %} Codemagic-App <code>{{ other_app_id }}</code>.{% endif %}</p>
+  {% for other, other_app_id, other_play, other_ios in other_apps %}
+  <h3>Weitere App: {{ other.title }}</h3>
+  <p class="muted small">Gleiche Zugänge wie allskyhub: Apple-Schlüssel, Codemagic-Token, Verteilungszertifikat und das Play-Dienstkonto (in der Play Console für {{ other.package }} freigeben). Legt die Bundle-ID <code>{{ other.package }}</code> bei Apple an, fügt <code>{{ other.repo }}</code> in Codemagic hinzu und füllt dort die Gruppe <code>{{ other.group }}</code>.{% if other_app_id %} Codemagic-App <code>{{ other_app_id }}</code>.{% endif %} Die Store-Einträge kommen aus <code>store/</code> von <code>{{ other.repo }}</code> (main); Kontakt {{ other.contact_email }}, {{ other.website }}. Google Play kennt die App erst nach dem ersten App Bundle von Hand.</p>
   <div class="row-links">
-    {% for action, label, ready in (('setup', other.title ~ ': prüfen und einrichten', true), ('build', other.title ~ ': iOS-Release bauen', other_app_id)) %}
+    {% for action, label, ready in (('setup', other.title ~ ': prüfen und einrichten', true), ('build', other.title ~ ': iOS-Release bauen', other_app_id), ('play', other.title ~ ': Play-Eintrag übertragen', true), ('appstore', other.title ~ ': App Store übertragen', true)) %}
     {% if ready %}
     <form method="post" action="/admin/stores-other" class="inline">
       <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
       <input type="hidden" name="app" value="{{ other.key }}">
       <input type="hidden" name="action" value="{{ action }}">
-      <button type="submit" class="{{ 'secondary' if action == 'build' else '' }}">{{ label }}</button>
+      <button type="submit" class="{{ '' if action == 'setup' else 'secondary' }}">{{ label }}</button>
     </form>
     {% endif %}
     {% endfor %}
   </div>
+  {% for name, result in (('Google Play', other_play), ('App Store', other_ios)) %}
+  {% if result %}
+  <p class="small"><strong>{{ other.title }} · {{ name }}</strong> <span class="muted">{{ result.at[:16] | replace('T', ' ') }} UTC</span>{% if result.running %} · läuft …{% endif %}</p>
+  {% if result.steps %}
+  <ul class="parts">
+    {% for step in result.steps %}
+    <li><strong class="{{ '' if step.state == 'ok' else 'warn' }}">{{ {'ok': '✓', 'warn': '!', 'fail': '✕'}[step.state] }} {{ step.title }}</strong><span>{{ step.text }}</span></li>
+    {% endfor %}
+  </ul>
+  {% endif %}
+  {% endif %}
+  {% endfor %}
   {% endfor %}
 
   {% if stores[0].meta %}

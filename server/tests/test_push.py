@@ -114,14 +114,16 @@ async def test_event_notifications(
     first = meteor().model_copy(update={"start": fresh, "end": fresh + dt.timedelta(seconds=1)})
     async with device_ws(live_app, token) as ws:
         await send(ws, first)  # notifications are off by default
-        await asyncio.sleep(0.3)
+        # Wait for the hub's background check of this detection, not a fixed time: on a
+        # loaded machine it could still be pending when notifications are switched on.
+        await _hub_tasks_done()
         assert fake_push.sent == []
 
         r = await client.put("/api/v1/account/settings", json={"notify_events": True}, headers=auth)
         assert r.json()["notify_events"] is True
         assert r.json()["push_available"] is True
         await send(ws, first)  # resent after a reconnect: not new, no push
-        await asyncio.sleep(0.3)
+        await _hub_tasks_done()
         assert fake_push.sent == []
 
         later = first
@@ -281,3 +283,15 @@ async def test_push_config_for_the_app(
 
 class _ProjectSender(FakeSender):
     project_id = "allskyhub-test"
+
+
+async def _hub_tasks_done() -> None:
+    """Until the device API's fire-and-forget tasks (notifications) have run."""
+    from allskyhub_server.api import device as device_api
+
+    await asyncio.sleep(0.1)  # the message reaches the hub first
+    for _ in range(200):
+        if not device_api._tasks:  # pyright: ignore[reportPrivateUsage]
+            return
+        await asyncio.sleep(0.05)
+    raise AssertionError("the hub's background tasks did not finish")

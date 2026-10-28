@@ -17,7 +17,7 @@ from fastapi.responses import FileResponse, RedirectResponse, Response
 from sqlalchemy import delete, func, select
 from starlette.routing import Match
 
-from allskyhub_server.admin import appstore, deploy
+from allskyhub_server.admin import deploy
 from allskyhub_server.admin import stores as admin_stores
 from allskyhub_server.auth import access_requests, ratelimit
 from allskyhub_server.auth.accounts import AccountError
@@ -159,37 +159,10 @@ async def page(
             "stores": stores.vault.entries(),
             "store_titles": admin_stores.TITLES,
             "youtube_redirect": youtube.redirect_uri(request.app.state.settings.base_url),
-            "store_builds": await stores.recent_builds(),
-            "codemagic_app": (stores.vault.meta("codemagic") or {}).get("app_id"),
-            "other_apps": [
-                (
-                    a,
-                    stores.other_app_id(a),
-                    stores.listing_state(a),
-                    appstore.state(stores, a),
-                    stores.android_job(a),
-                    stores.vault.has(a.android_upload),
-                )
-                for a in admin_stores.OTHER_APPS.values()
-            ],
-            "android_job": stores.android_job(),
-            "android_busy": stores.android_busy(),
-            "android_states": {
-                "requested": "angefordert",
-                "running": "baut",
-                "ok": "bei Google Play",
-                "built": "gebaut, erstes Hochladen von Hand",
-                "failed": "fehlgeschlagen",
-                "idle": "fertig",
-            },
-            "android_key": stores.vault.has("android_upload"),
+            "other_apps": list(admin_stores.OTHER_APPS.values()),
             "screenshots": len(stores.screenshots()),
-            "listing": stores.listing_state(),
-            "appstore": appstore.state(stores),
-            "appstore_shots": {loc: len(appstore.screenshots(loc)) for loc in appstore.LOCALES},
             "uploaded_screenshots": stores.screenshot_dir.is_dir()
             and any(stores.screenshot_dir.iterdir()),
-            "build_url": admin_stores.build_url,
             "package": admin_stores.PACKAGE,
             **extra,
         },

@@ -134,7 +134,7 @@
     <form method="post" action="/admin/stores-fcm-app" enctype="multipart/form-data" class="stack">
       <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
       <h3>Firebase-Kennungen der App</h3>
-      <p class="muted small">Firebase-Konsole → Projekteinstellungen → Allgemein → Meine Apps: <code>google-services.json</code> (eine für alle Android-Apps des Projekts) und die <code>GoogleService-Info.plist</code> jeder iOS-App herunterladen und hier hochladen; der Hub sortiert sie nach App: <code>{{ package }}</code>{% for o in other_apps %} und <code>{{ o[0].package }}</code> ({{ o[0].title }}, für dessen Builds){% endfor %}. Öffentliche Kennungen (stehen auch in jeder App), die die App beim Start vom Hub holt. Für iOS in der Firebase-Konsole zusätzlich unter Cloud Messaging den APNs-Schlüssel hochladen.</p>
+      <p class="muted small">Firebase-Konsole → Projekteinstellungen → Allgemein → Meine Apps: <code>google-services.json</code> (eine für alle Android-Apps des Projekts) und die <code>GoogleService-Info.plist</code> jeder iOS-App herunterladen und hier hochladen; der Hub sortiert sie nach App: <code>{{ package }}</code>{% for o in other_apps %} und <code>{{ o.package }}</code> ({{ o.title }}, für dessen Builds){% endfor %}. Öffentliche Kennungen (stehen auch in jeder App), die die App beim Start vom Hub holt. Für iOS in der Firebase-Konsole zusätzlich unter Cloud Messaging den APNs-Schlüssel hochladen.</p>
       <label>google-services.json (Android)<input type="file" name="android_file" accept=".json,application/json"></label>
       <label>GoogleService-Info.plist (iOS, auch mehrere)<input type="file" name="ios_files" accept=".plist" multiple></label>
       <details>
@@ -183,8 +183,12 @@
   {% endif %}
   <p class="muted small">Fotos aus der App („Polarlicht gesehen?“) erscheinen erst nach der Freigabe, mit Name und CC BY 4.0. Dreimal als unpassend gemeldete Fotos kommen hierher zurück.</p>
 </section>
+<section class="card stack" id="apps-link">
+  <h2>Apps</h2>
+  <p>Bauen, Store-Einträge und Einreichen für allskyhub und bortle: <a href="/admin/apps"><strong>Apps verwalten →</strong></a></p>
+</section>
 <section class="card stack" id="stores">
-  <h2>Apps: Android und iOS</h2>
+  <h2>Store-Zugänge</h2>
   {% if store_report %}
   <ul class="parts">
     {% for step in store_report.steps %}
@@ -209,143 +213,13 @@
   </form>
   <p class="muted small">Prüft jeden Zugang, erzeugt die Signierschlüssel, legt die Bundle-ID {{ package }} bei Apple an, fügt das Repository in Codemagic hinzu und legt dort alle Schlüssel in die geschützte Variablengruppe <code>allskyhub_store</code>. Die Schlüssel stehen nur auf dem Server und werden nie wieder angezeigt.</p>
 
-  {% if store_builds %}
-  <h3>Letzte Builds (Android und iOS)</h3>
-  <ul class="commit-list">
-    {% for b in store_builds %}
-    {%- set url = build_url(b) %}
-    {%- set name = ('Android' if b.platform == 'android' else 'iOS') ~ ((' · ' ~ b.app) if b.app else '') %}
-    <li>{% if url %}<a href="{{ url }}">{{ name }}</a> <span class="muted small">(Codemagic)</span>{% else %}{{ name }}{% endif %} · {{ android_states.get(b.status or 'idle', b.status) if not url else (b.status or 'gestartet') }} <span class="muted small">· {{ b.at[:16] | replace('T', ' ') }} UTC</span></li>
-    {% endfor %}
-  </ul>
-  {% endif %}
-  {% if android_job.latest %}
-  <p><a href="/admin/stores-android/{{ android_job.latest.file }}">{{ android_job.latest.file }}</a> <span class="muted small">· Version {{ android_job.latest.version }} ({{ android_job.latest.build }}), {{ (android_job.latest.size / 1e6) | round | int }} MB · für das erste Hochladen von Hand</span></p>
-  {% endif %}
-  {% if android_job.log %}
-  <details{% if android_job.state in ('failed', 'built') %} open{% endif %}>
-    <summary>Protokoll des Android-Builds</summary>
-    <pre class="small">{{ android_job.log }}</pre>
-  </details>
-  {% endif %}
-  {% if android_key or codemagic_app %}
-  <div class="row-links">
-    {% for platform, name, ready in (('android', 'Android: Release bauen', android_key and not android_busy), ('ios', 'iOS: Release bauen', codemagic_app)) %}
-    {% if ready %}
-    <form method="post" action="/admin/stores-build" class="inline">
-      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-      <input type="hidden" name="platform" value="{{ platform }}">
-      <button type="submit" class="secondary">{{ name }}</button>
-    </form>
-    {% endif %}
-    {% endfor %}
-  </div>
-  <p class="muted small">Beide bauen <code>main</code>. Android baut dieser Server als App Bundle und lädt es selbst in den internen Test bei Google Play; iOS baut Codemagic und schickt es nach TestFlight.</p>
-  {% endif %}
-
-  {% for other, other_app_id, other_play, other_ios, other_android, other_key in other_apps %}
-  <h3>Weitere App: {{ other.title }}</h3>
-  <p class="muted small">Gleiche Zugänge wie allskyhub: Apple-Schlüssel, Codemagic-Token, Verteilungszertifikat und das Play-Dienstkonto (in der Play Console für {{ other.package }} freigeben). Legt die Bundle-ID <code>{{ other.package }}</code> bei Apple an, fügt <code>{{ other.repo }}</code> in Codemagic hinzu und füllt dort die Gruppe <code>{{ other.group }}</code>.{% if other_app_id %} Codemagic-App <code>{{ other_app_id }}</code>.{% endif %} Die Store-Einträge kommen aus <code>store/</code> von <code>{{ other.repo }}</code> (main); Kontakt {{ other.contact_email }}, {{ other.website }}. Android baut dieser Server aus <code>main</code> mit einem eigenen Upload-Schlüssel; Google Play kennt die App erst nach dem ersten App Bundle von Hand, danach geht es in den internen Test.{% if other_android.state != 'idle' %} Android: {{ android_states.get(other_android.state, other_android.state) }}.{% endif %}</p>
-  {% if other_android.latest %}
-  <p><a href="/admin/stores-android/{{ other_android.latest.file }}">{{ other_android.latest.file }}</a> <span class="muted small">· Version {{ other_android.latest.version }} ({{ other_android.latest.build }}), {{ (other_android.latest.size / 1e6) | round | int }} MB · für das erste Hochladen von Hand</span></p>
-  {% endif %}
-  {% if other_android.log %}
-  <details{% if other_android.state in ('failed', 'built') %} open{% endif %}>
-    <summary>Protokoll des Android-Builds ({{ other.title }})</summary>
-    <pre class="small">{{ other_android.log }}</pre>
-  </details>
-  {% endif %}
-  <div class="row-links">
-    {% for action, label, ready in (('setup', other.title ~ ': prüfen und einrichten', true), ('build', other.title ~ ': iOS-Release bauen', other_app_id), ('android', other.title ~ ': Android-Release bauen', other_key and not android_busy), ('play', other.title ~ ': Play-Eintrag übertragen', true), ('appstore', other.title ~ ': App Store übertragen', true)) %}
-    {% if ready %}
-    <form method="post" action="/admin/stores-other" class="inline">
-      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-      <input type="hidden" name="app" value="{{ other.key }}">
-      <input type="hidden" name="action" value="{{ action }}">
-      <button type="submit" class="{{ '' if action == 'setup' else 'secondary' }}">{{ label }}</button>
-    </form>
-    {% endif %}
-    {% endfor %}
-  </div>
-  <div class="row-links">
-    {% for store, label in (('play', other.title ~ ': Android zur Prüfung einreichen'), ('appstore', other.title ~ ': iOS zur Prüfung einreichen')) %}
-    <form method="post" action="/admin/stores-review" class="inline">
-      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-      <input type="hidden" name="app" value="{{ other.key }}">
-      <input type="hidden" name="store" value="{{ store }}">
-      <button type="submit">{{ label }}</button>
-    </form>
-    {% endfor %}
-  </div>
-  {% for name, result in (('Google Play', other_play), ('App Store', other_ios)) %}
-  {% if result %}
-  <p class="small"><strong>{{ other.title }} · {{ name }}</strong> <span class="muted">{{ result.at[:16] | replace('T', ' ') }} UTC</span>{% if result.running %} · läuft …{% endif %}</p>
-  {% if result.steps %}
-  <ul class="parts">
-    {% for step in result.steps %}
-    <li><strong class="{{ '' if step.state == 'ok' else 'warn' }}">{{ {'ok': '✓', 'warn': '!', 'fail': '✕'}[step.state] }} {{ step.title }}</strong><span>{{ step.text }}</span></li>
-    {% endfor %}
-  </ul>
-  {% endif %}
-  {% endif %}
-  {% endfor %}
-  {% endfor %}
-
   {% if stores[0].meta %}
-  <h3>Android: Eintrag bei Google Play</h3>
-  <p class="muted small">Titel, Beschreibungen (Deutsch und Englisch), Icon, Grafik und Screenshots kommen aus dem Repository (<code>app/store/play</code>); die Screenshots dort sind aus der App mit Beispieldaten und simuliertem Himmel. Hier hochgeladene Screenshots ersetzen sie. Kontakt: support@webinx.eu, allskyhub.org. Screenshots: {{ screenshots or 'keine' }}{% if screenshots and not uploaded_screenshots %} aus dem Repository{% endif %}.</p>
   <form method="post" action="/admin/stores-screenshots" enctype="multipart/form-data" class="stack">
     <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-    <label>Handy-Screenshots (2 bis 8, PNG oder JPEG)<input type="file" name="files" accept="image/png,image/jpeg" multiple required></label>
+    <label>Eigene Handy-Screenshots für Google Play (2 bis 8, PNG oder JPEG; ersetzen die aus dem Repository, jetzt {{ screenshots or 'keine' }}{% if screenshots and not uploaded_screenshots %} aus dem Repository{% endif %})<input type="file" name="files" accept="image/png,image/jpeg" multiple required></label>
     <button type="submit" class="secondary">Screenshots hochladen</button>
   </form>
-  {% if listing %}
-  <p class="small"><strong>Letzte Übertragung</strong> <span class="muted">{{ listing.at[:16] | replace('T', ' ') }} UTC</span>{% if listing.running %} · läuft …{% endif %}</p>
-  {% if listing.steps %}
-  <ul class="parts">
-    {% for step in listing.steps %}
-    <li><strong class="{{ '' if step.state == 'ok' else 'warn' }}">{{ {'ok': '✓', 'warn': '!', 'fail': '✕'}[step.state] }} {{ step.title }}</strong><span>{{ step.text }}</span></li>
-    {% endfor %}
-  </ul>
   {% endif %}
-  {% endif %}
-  <form method="post" action="/admin/stores-listing" class="inline">
-    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-    <button type="submit" class="secondary">Android: Play-Eintrag übertragen</button>
-  </form>
-  <form method="post" action="/admin/stores-review" class="inline">
-    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-    <input type="hidden" name="store" value="play">
-    <button type="submit">Android: zur Prüfung einreichen</button>
-  </form>
-  <p class="muted small">Nimmt die neueste Version aus dem internen Test in die Produktion; Google prüft sie und veröffentlicht sie danach.</p>
-  {% endif %}
-
-  {% if stores[1].meta %}
-  <h3>iOS: App Store und TestFlight</h3>
-  <p class="muted small">Name, Untertitel, Stichwörter und Werbetext (<code>app/store/appstore</code>), die Beschreibung des Play-Eintrags, iPhone-Screenshots (Deutsch {{ appstore_shots['de-DE'] }}, Englisch {{ appstore_shots['en-US'] }}) und der neueste Build gehen an die iOS-Version in Vorbereitung, dazu Kategorie und Altersfreigabe. Der Build kommt außerdem in die externe TestFlight-Gruppe „Öffentlich“ mit öffentlichem Link und zur Beta-Prüfung. App-Datenschutz, Preis sowie Kontakt und Testkonto für beide Prüfungen nimmt Apple nur in App Store Connect selbst.</p>
-  {% if appstore %}
-  <p class="small"><strong>Letzte Übertragung</strong> <span class="muted">{{ appstore.at[:16] | replace('T', ' ') }} UTC</span>{% if appstore.running %} · läuft …{% endif %}</p>
-  {% if appstore.steps %}
-  <ul class="parts">
-    {% for step in appstore.steps %}
-    <li><strong class="{{ '' if step.state == 'ok' else 'warn' }}">{{ {'ok': '✓', 'warn': '!', 'fail': '✕'}[step.state] }} {{ step.title }}</strong><span>{{ step.text }}</span></li>
-    {% endfor %}
-  </ul>
-  {% endif %}
-  {% endif %}
-  <form method="post" action="/admin/stores-appstore" class="inline">
-    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-    <button type="submit" class="secondary">iOS: App Store und TestFlight übertragen</button>
-  </form>
-  <form method="post" action="/admin/stores-review" class="inline">
-    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-    <input type="hidden" name="store" value="appstore">
-    <button type="submit">iOS: zur Prüfung einreichen</button>
-  </form>
-  <p class="muted small">Reicht die Version in Vorbereitung mit dem gewählten Build bei Apple ein; vorher übertragen. Was Apple noch fehlt, steht dann hier.</p>
-  {% endif %}
-
   <details>
     <summary>Zugänge hochladen</summary>
     <form method="post" action="/admin/stores/play" enctype="multipart/form-data" class="stack">

@@ -1,0 +1,80 @@
+{% extends "base.html" %}
+{% block title %}Apps · Admin · allskyhub{% endblock %}
+{% block head %}{% if refresh %}<meta http-equiv="refresh" content="30">{% endif %}{% endblock %}
+{% block content %}
+<div class="page-head"><h1>Apps</h1><p class="muted"><a href="/admin">← Admin</a></p></div>
+
+{% if report %}
+<section class="card stack">
+  <h2>{{ report_title }}</h2>
+  <ul class="parts">
+    {% for step in report.steps %}
+    <li><strong class="{{ '' if step.state == 'ok' else 'warn' }}">{{ {'ok': '✓', 'warn': '!', 'fail': '✕'}[step.state] }} {{ step.title }}</strong><span>{{ step.text }}</span></li>
+    {% endfor %}
+  </ul>
+</section>
+{% endif %}
+
+{% for card in cards %}
+<section class="card stack" id="app-{{ card.key }}">
+  <h2>{{ card.title }} <span class="muted small">· Version {{ card.version }}</span></h2>
+  <div class="store-rows">
+    {% for row in card.rows %}
+    <div class="store-row">
+      <strong>{{ row.store }}</strong>
+      <span class="tone-{{ row.tone }}">{{ {'done': '✓', 'todo': '→', 'wait': '⏳', 'fail': '✕'}[row.tone] }} {{ row.status }}{% if row.link %} <a href="{{ row.link }}">{{ row.link_label }}</a>{% endif %}</span>
+      {% if row.action and not (row.action == 'build-android' and android_busy) %}
+      <form method="post" action="/admin/apps" class="inline">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+        <input type="hidden" name="app" value="{{ card.key }}">
+        <input type="hidden" name="action" value="{{ row.action }}">
+        <button type="submit">{{ row.label }}</button>
+      </form>
+      {% else %}<span></span>{% endif %}
+    </div>
+    {% endfor %}
+  </div>
+  <details>
+    <summary>Mehr: neu bauen, Store-Einträge, Protokolle</summary>
+    <div class="row-links wrap">
+      {% for action in ('build-android', 'build-ios', 'play-listing', 'appstore', 'setup') %}
+      {% if not (action == 'build-android' and android_busy) %}
+      <form method="post" action="/admin/apps" class="inline">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+        <input type="hidden" name="app" value="{{ card.key }}">
+        <input type="hidden" name="action" value="{{ action }}">
+        <button type="submit" class="secondary">{{ titles[action] }}</button>
+      </form>
+      {% endif %}
+      {% endfor %}
+    </div>
+    <p class="muted small">Gebaut wird immer <code>main</code>: Android auf diesem Server (danach im internen Test bei Google Play), iOS bei Codemagic (danach in TestFlight). Die Store-Texte und Screenshots kommen aus dem Repository. „Einrichten“ prüft die Zugänge und legt fehlende Schlüssel an.</p>
+    {% if card.android and card.android.latest %}
+    <p class="small">Letztes App Bundle: <a href="/admin/stores-android/{{ card.android.latest.file }}">{{ card.android.latest.file }}</a> <span class="muted">· Version {{ card.android.latest.version }} ({{ card.android.latest.build }})</span></p>
+    {% endif %}
+    {% if card.android and card.android.log %}
+    <details>
+      <summary>Protokoll des Android-Builds</summary>
+      <pre class="small">{{ card.android.log }}</pre>
+    </details>
+    {% endif %}
+    {% for name, result in card.results %}
+    <p class="small"><strong>{{ name }}</strong> <span class="muted">zuletzt {{ result.at[:16] | replace('T', ' ') }} UTC</span>{% if result.running %} · läuft …{% endif %}</p>
+    {% if result.steps %}
+    <ul class="parts">
+      {% for step in result.steps %}
+      <li><strong class="{{ '' if step.state == 'ok' else 'warn' }}">{{ {'ok': '✓', 'warn': '!', 'fail': '✕'}[step.state] }} {{ step.title }}</strong><span>{{ step.text }}</span></li>
+      {% endfor %}
+    </ul>
+    {% endif %}
+    {% endfor %}
+  </details>
+</section>
+{% endfor %}
+
+<section class="card stack">
+  <h2>Zugänge</h2>
+  <p>{% for e in accounts %}<span class="{{ 'tone-done' if e.meta else 'tone-fail' }}">{{ '✓' if e.meta else '✕' }} {{ e.title }}</span>{% if not loop.last %} · {% endif %}{% endfor %}</p>
+  <p class="muted small">Einmalig hinterlegt; ändern auf der <a href="/admin#stores">Admin-Seite</a>.</p>
+</section>
+{% endblock %}

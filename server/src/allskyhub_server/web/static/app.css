@@ -491,3 +491,9 @@ table.stats.ovf-list th, table.stats.ovf-list td { text-align: left; }
   .appbar:has(.nav-lang) .nav-link { padding: 0 9px; }
   .appbar:has(.nav-lang) .brand-name { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
 }
+/* Admin: the apps page (admin_apps.html) */
+.store-rows { display: grid; gap: 12px; }
+.store-row { display: grid; grid-template-columns: 5rem 1fr auto; gap: 12px; align-items: center; }
+@media (max-width: 640px) { .store-row { grid-template-columns: 1fr; gap: 6px; } }
+.tone-done { color: var(--ok); } .tone-wait { color: var(--warn); } .tone-fail { color: var(--danger); }
+.row-links.wrap { flex-wrap: wrap; gap: 8px; justify-content: flex-start; }

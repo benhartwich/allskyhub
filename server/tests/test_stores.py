@@ -260,7 +260,8 @@ async def test_admin_uploads_keys_and_never_sees_them_again(
     monkeypatch.setattr(settings, "admin_emails", email)
     monkeypatch.setattr(app.state, "stores", stores.Stores(tmp_path, "benhartwich/allskyhub"))
     page = await client.get("/admin")
-    assert "Apps: Android und iOS" in page.text
+    assert "Store-Zugänge" in page.text
+    assert 'href="/admin/apps"' in page.text
     token = csrf_from(page.text)
     play = _play_json()
 
@@ -421,9 +422,8 @@ async def test_android_release_through_the_spool(
     # An Android build from Codemagic's time is labelled as Android, not iOS.
     old = {"id": "CM1", "app_id": "A1", "platform": "android", "at": "2026-10-16T03:33:00+00:00"}
     hub.vault.add_build({**old, "by": email})
-    page = await client.get("/admin")
-    assert 'build/CM1">Android</a> <span class="muted small">(Codemagic)' in page.text
-    assert "gebaut, erstes Hochladen von Hand" in page.text
+    page = await client.get("/admin/apps")
+    assert "Build 412 ist Version 1.0.0, nicht 1.1.0." in page.text  # the app is 1.1.0 now
     assert "Google kennt die App noch nicht." in page.text
     assert 'href="/admin/stores-android/allskyhub-412.aab"' in page.text
     r = await client.get("/admin/stores-android/allskyhub-412.aab")
@@ -565,7 +565,7 @@ async def test_listing_runs_in_the_background(
     r = await client.post("/admin/stores-listing", data={"csrf_token": token})
     assert r.status_code == 200
     assert "gestartet" in r.text
-    assert "läuft …" in (await client.get("/admin")).text
+    assert "läuft …" in (await client.get("/admin/apps")).text
     again = await client.post("/admin/stores-listing", data={"csrf_token": token})
     assert again.status_code == 409
 
@@ -575,13 +575,13 @@ async def test_listing_runs_in_the_background(
         if state and not state.get("running"):
             break
         await asyncio.sleep(0.01)
-    page = (await client.get("/admin")).text
+    page = (await client.get("/admin/apps")).text
     assert "läuft …" not in page
     assert "erst das erste App Bundle von Hand hochladen" in page
 
     # Running in the file but no task here: the hub restarted during a push.
     hub.vault.write_json("listing.json", {"at": "2026-10-16T07:39:00+00:00", "running": True})
-    assert "neu gestartet" in (await client.get("/admin")).text
+    assert "neu gestartet" in (await client.get("/admin/apps")).text
 
 
 async def test_a_failing_listing_push_says_so(tmp_path: Path) -> None:
@@ -911,9 +911,10 @@ async def test_admin_page_offers_the_further_app(
     email = await make_account(client)
     monkeypatch.setattr(settings, "admin_emails", email)
     monkeypatch.setattr(app.state, "stores", stores.Stores(tmp_path, "benhartwich/allskyhub"))
+    page = await client.get("/admin/apps")
+    assert 'id="app-bortle"' in page.text
+    assert page.text.count("Noch nicht eingerichtet.") == 4  # both apps, both stores
     page = await client.get("/admin")
-    assert "Weitere App: bortle" in page.text
-    assert "bortle: iOS-Release bauen" not in page.text  # only after the setup
     token = csrf_from(page.text)
     r = await client.post(
         "/admin/stores-other", data={"csrf_token": token, "app": "nope", "action": "setup"}
@@ -1248,11 +1249,10 @@ async def test_other_app_android_release(
     (answers / "bortle-13.aab").write_bytes(b"bortle bundle")
     latest = {"build": 13, "version": "0.2.0", "commit": "be1070c", "size": 13}
     (answers / "latest.json").write_text(json.dumps({**latest, "file": "bortle-13.aab"}))
-    page = await client.get("/admin")
+    page = await client.get("/admin/apps")
     assert 'href="/admin/stores-android/bortle-13.aab"' in page.text
     assert "bortle-13.aab gebaut." in page.text
-    assert "Android · bortle</li>" not in page.text
-    assert "Android · bortle · gebaut, erstes Hochladen von Hand" in page.text
+    assert "Build 13 ist gebaut. Google kennt die App noch nicht" in page.text
     r = await client.get("/admin/stores-android/bortle-13.aab")
     assert r.content == b"bortle bundle"
     # Names choose the folder: an allskyhub name never reaches bortle's, and back.

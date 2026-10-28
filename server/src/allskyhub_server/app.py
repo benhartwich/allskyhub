@@ -64,6 +64,7 @@ from allskyhub_server.web import (
     routes_account,
     routes_admin,
     routes_app_builds,
+    routes_apps,
     routes_auth,
     routes_cameras,
     routes_fireballs,
@@ -360,6 +361,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(routes_local.router)
     app.include_router(routes_admin.router)
     app.include_router(routes_stores.router)
+    app.include_router(routes_apps.router)
     app.include_router(routes_app_builds.router)
     app.include_router(routes_fireballs.router)
     app.include_router(routes_plus.router)

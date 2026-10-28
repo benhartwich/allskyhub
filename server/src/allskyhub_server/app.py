@@ -27,6 +27,7 @@ from allskyhub_server.api import (
     app_overview,
     app_public,
     app_reports,
+    app_sightings,
     app_sky,
     sky_view,
 )
@@ -230,6 +231,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         app.state.notifier = Notifier(app.state.sessionmaker, sender)
         app.state.notifier.mailer = app.state.mailer
         app.state.notifier.base_url = settings.base_url
+        app.state.notifier.admins = settings.admins
         app.state.notifier.forecast = app.state.forecast
         app.state.notifier.discord = Discord(
             app.state.sessionmaker, app.state.images, Poster(), settings.base_url
@@ -365,6 +367,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(app_public.router)
     app.include_router(app_sky.router)
     app.include_router(app_reports.router)
+    app.include_router(app_sightings.router)
     app.include_router(sky_view.router)
     app.include_router(routes_admin.reload_router)  # last: it catches GET /admin/*
 

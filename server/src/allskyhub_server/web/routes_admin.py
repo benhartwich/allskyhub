@@ -13,8 +13,8 @@ from dataclasses import dataclass
 from typing import Annotated, Any, cast
 
 from fastapi import APIRouter, Depends, Form, HTTPException, Request
-from fastapi.responses import RedirectResponse, Response
-from sqlalchemy import func, select
+from fastapi.responses import FileResponse, RedirectResponse, Response
+from sqlalchemy import delete, func, select
 from starlette.routing import Match
 
 from allskyhub_server.admin import appstore, deploy
@@ -23,10 +23,10 @@ from allskyhub_server.auth import access_requests, ratelimit
 from allskyhub_server.auth.accounts import AccountError
 from allskyhub_server.auth.passwords import verify_secret_async
 from allskyhub_server.auth.sessions import SessionInfo
-from allskyhub_server.devices import youtube
+from allskyhub_server.devices import sightings, youtube
 from allskyhub_server.devices.connections import ConnectionRegistry
 from allskyhub_server.mail.send import Mail, Mailer
-from allskyhub_server.models import Device, User
+from allskyhub_server.models import AuroraFlag, AuroraReport, Device, User
 from allskyhub_server.settings import Settings
 from allskyhub_server.version import full as running_version
 from allskyhub_server.web.deps import CurrentSession, DbSession, SettingsDep, csrf_protect
@@ -132,6 +132,13 @@ async def page(
             "update_states": UPDATE_STATES,
             "repo": settings.deploy_repo,
             "access_requests": await access_requests.open_requests(db),
+            "aurora_photos": list(
+                await db.scalars(
+                    select(AuroraReport)
+                    .where(AuroraReport.photo == "pending")
+                    .order_by(AuroraReport.created_at)
+                )
+            ),
             "stages": access_requests.STAGES,
             "plus": (
                 await db.execute(
@@ -300,6 +307,45 @@ async def decline_request(
         return await page(request, db, session, 400, error=exc.message)
     await db.commit()
     return await page(request, db, session, notice=f"Anfrage von {asked.email} abgelehnt.")
+
+
+@router.get("/admin/aurora-photos/{report_id}.jpg")
+async def aurora_photo(
+    request: Request, session: CurrentSession, settings: SettingsDep, report_id: uuid.UUID
+) -> Response:
+    """The photo for the admin, whatever its state."""
+    admin_only(session, settings)
+    path = sightings.photo_path(settings.data_dir / "sightings", report_id)
+    if not path.is_file():
+        raise HTTPException(404)
+    return FileResponse(path, media_type="image/jpeg", headers={"Cache-Control": "no-store"})
+
+
+@router.post("/admin/aurora-photos/{report_id}")
+async def review_aurora_photo(
+    request: Request,
+    db: DbSession,
+    session: CurrentSession,
+    settings: SettingsDep,
+    report_id: uuid.UUID,
+    action: Annotated[str, Form(max_length=16)],
+) -> Response:
+    """Approve a photo from the app (then it shows publicly) or reject it (then the file
+    is deleted; the report stays without a photo)."""
+    admin_only(session, settings)
+    report = await db.get(AuroraReport, report_id)
+    if report is None or action not in ("approve", "reject"):
+        return await page(request, db, session, 400, error="Unbekanntes Foto.")
+    if action == "approve":
+        report.photo = "approved"
+        report.flags = 0
+        await db.execute(delete(AuroraFlag).where(AuroraFlag.report_id == report.id))
+    else:
+        report.photo = "rejected"
+        await asyncio.to_thread(sightings.delete_photo, settings.data_dir / "sightings", report.id)
+    await db.commit()
+    notice = "Foto freigegeben." if action == "approve" else "Foto abgelehnt und gelöscht."
+    return await page(request, db, session, notice=notice)
 
 
 # Included after every other router (app.py): the admin forms answer with the page itself,

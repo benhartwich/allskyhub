@@ -73,6 +73,18 @@ class User(Base):
     # "owner" (cameras, the default) or "reporter": signed up on /melden/konto only to
     # report the sky brightness from the app; cannot pair cameras (Benjamin, 2026-10-28).
     kind: Mapped[str] = mapped_column(String(16), default="owner", server_default="owner")
+    # The app's alerts at a place of the user's choice, rounded to 0.1° (stage 5): aurora
+    # sightings and fireballs nearby, a clear night there. Off until set in the app.
+    alert_lat: Mapped[float | None] = mapped_column(Float)
+    alert_lon: Mapped[float | None] = mapped_column(Float)
+    alert_radius_km: Mapped[int] = mapped_column(Integer, default=300, server_default="300")
+    notify_aurora_near: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
+    notify_fireball_near: Mapped[bool] = mapped_column(
+        Boolean, default=False, server_default="false"
+    )
+    notify_clear_here: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
+    aurora_near_at: Mapped[dt.datetime | None] = mapped_column(_tz())
+    clear_here_night: Mapped[str | None] = mapped_column(String(8))
     created_at: Mapped[dt.datetime] = mapped_column(_tz(), server_default=func.now())
 
 
@@ -87,6 +99,64 @@ class EmailConfirmation(Base):
         ForeignKey("user_account.id", ondelete="CASCADE"), index=True
     )
     expires_at: Mapped[dt.datetime] = mapped_column(_tz())
+
+
+class FireballReport(Base):
+    """A fireball as a person saw it (stage 5): when, from where (0.1°), where in the sky
+    it started and ended, how bright. Matched with the cameras when read."""
+
+    __tablename__ = "fireball_report"
+
+    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid7)
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("user_account.id", ondelete="CASCADE"), index=True
+    )
+    seen_at: Mapped[dt.datetime] = mapped_column(_tz(), index=True)
+    lat: Mapped[float] = mapped_column(Float)
+    lon: Mapped[float] = mapped_column(Float)
+    start_alt: Mapped[float | None] = mapped_column(Float)
+    start_az: Mapped[float | None] = mapped_column(Float)
+    end_alt: Mapped[float | None] = mapped_column(Float)
+    end_az: Mapped[float | None] = mapped_column(Float)
+    brightness: Mapped[str] = mapped_column(String(16))
+    details: Mapped[list[str]] = mapped_column(JSONB, default=list)
+    created_at: Mapped[dt.datetime] = mapped_column(_tz(), server_default=func.now())
+
+
+class AuroraReport(Base):
+    """Aurora as a person saw it (stage 5), with an optional photo that shows publicly
+    only after an admin approved it (Benjamin, 2026-10-28)."""
+
+    __tablename__ = "aurora_report"
+
+    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid7)
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("user_account.id", ondelete="CASCADE"), index=True
+    )
+    seen_at: Mapped[dt.datetime] = mapped_column(_tz(), index=True)
+    lat: Mapped[float] = mapped_column(Float)
+    lon: Mapped[float] = mapped_column(Float)
+    naked_eye: Mapped[bool] = mapped_column(Boolean)
+    details: Mapped[list[str]] = mapped_column(JSONB, default=list)
+    # "none", "pending" (waits for an admin), "approved", "rejected".
+    photo: Mapped[str] = mapped_column(String(16), default="none", server_default="none")
+    # How the photographer wants to be named (CC BY 4.0); empty: "anonym".
+    author: Mapped[str] = mapped_column(String(100), default="", server_default="")
+    flags: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+    created_at: Mapped[dt.datetime] = mapped_column(_tz(), server_default=func.now())
+
+
+class AuroraFlag(Base):
+    """Someone reported an aurora photo as unsuitable (one flag per account)."""
+
+    __tablename__ = "aurora_flag"
+
+    report_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("aurora_report.id", ondelete="CASCADE"), primary_key=True
+    )
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("user_account.id", ondelete="CASCADE"), primary_key=True
+    )
 
 
 class SkyReport(Base):

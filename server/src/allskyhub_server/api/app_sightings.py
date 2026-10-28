@@ -20,12 +20,14 @@ from pydantic import BaseModel, Field
 from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
 
+from allskyhub_server.api import app_sky
 from allskyhub_server.api.app import AppUser, _In  # pyright: ignore[reportPrivateUsage]
-from allskyhub_server.devices import sightings
+from allskyhub_server.auth import ratelimit
+from allskyhub_server.devices import sightings, tonight
 from allskyhub_server.i18n import tr
 from allskyhub_server.models import AuroraFlag, AuroraReport, FireballReport
 from allskyhub_server.settings import Settings
-from allskyhub_server.web.deps import DbSession
+from allskyhub_server.web.deps import DbSession, SettingsDep, client_ip
 
 router = APIRouter(prefix="/api/v1")
 
@@ -145,7 +147,8 @@ def _aurora_out(r: AuroraReport, km: float, *, own: bool = False) -> AuroraOut:
     return AuroraOut(
         id=r.id,
         at=r.seen_at,
-        distance_km=round(km),
+        # In steps of 25 km ("up to 25 km"), never exact (review of #330).
+        distance_km=0 if own else sightings.step_km(km, sightings.AURORA_STEP_KM),
         naked_eye=r.naked_eye,
         details=r.details,
         photo=f"/api/v1/sightings/aurora/{r.id}/photo.jpg" if shown else None,
@@ -214,8 +217,20 @@ async def aurora(
 
 
 @router.get("/sightings/aurora")
-async def aurora_list(db: DbSession, lat: Lat, lon: Lon) -> list[AuroraOut]:
-    """Aurora reports of the last hours, nearest first."""
+async def aurora_list(
+    request: Request, db: DbSession, settings: SettingsDep, lat: Lat, lon: Lon
+) -> list[AuroraOut]:
+    """Aurora reports of the last hours, nearest first; limited per IP like the sky."""
+    try:
+        await ratelimit.hit(
+            request.app.state.engine,
+            f"public-sky:{client_ip(request, settings)}",
+            app_sky.SKY_PER_IP,
+        )
+    except ratelimit.RateLimitedError as exc:
+        raise HTTPException(
+            429, "Too many requests", {"Retry-After": str(exc.retry_after)}
+        ) from None
     since = _now() - dt.timedelta(hours=AURORA_HOURS)
     found = await sightings.aurora_near(db, (round(lat, 1), round(lon, 1)), since, AURORA_LIST_KM)
     return [_aurora_out(r, km) for r, km in found[:50]]
@@ -260,6 +275,8 @@ class Alerts(_In):
     aurora: bool | None = None
     fireball: bool | None = None
     clear_night: bool | None = None
+    # The phone's time zone (IANA), for the evening notice's times.
+    tz: str | None = Field(default=None, max_length=64)
 
 
 @router.get("/account/alerts")
@@ -271,6 +288,7 @@ async def alerts(user: AppUser) -> Alerts:
         aurora=user.notify_aurora_near,
         fireball=user.notify_fireball_near,
         clear_night=user.notify_clear_here,
+        tz=user.alert_tz,
     )
 
 
@@ -284,6 +302,8 @@ async def put_alerts(body: Alerts, db: DbSession, user: AppUser) -> Alerts:
         user.alert_radius_km = body.radius_km
     if body.lat is not None and body.lon is not None:
         user.alert_lat, user.alert_lon = round(body.lat, 1), round(body.lon, 1)
+    if body.tz is not None:
+        user.alert_tz = tonight.zone_for(body.tz).key
     if body.aurora is not None:
         user.notify_aurora_near = body.aurora
     if body.fireball is not None:
@@ -291,6 +311,6 @@ async def put_alerts(body: Alerts, db: DbSession, user: AppUser) -> Alerts:
     if body.clear_night is not None:
         user.notify_clear_here = body.clear_night
     if not (user.notify_aurora_near or user.notify_fireball_near or user.notify_clear_here):
-        user.alert_lat = user.alert_lon = None
+        user.alert_lat = user.alert_lon = user.alert_tz = None
     await db.commit()
     return await alerts(user)

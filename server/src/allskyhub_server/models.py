@@ -78,6 +78,7 @@ class User(Base):
     alert_lat: Mapped[float | None] = mapped_column(Float)
     alert_lon: Mapped[float | None] = mapped_column(Float)
     alert_radius_km: Mapped[int] = mapped_column(Integer, default=300, server_default="300")
+    alert_tz: Mapped[str | None] = mapped_column(String(64))
     notify_aurora_near: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
     notify_fireball_near: Mapped[bool] = mapped_column(
         Boolean, default=False, server_default="false"

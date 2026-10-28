@@ -12,6 +12,7 @@ approved photo back to the admins.
 
 from __future__ import annotations
 
+import asyncio
 import datetime as dt
 import io
 import math
@@ -20,7 +21,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from PIL import Image, UnidentifiedImageError
+from PIL import Image, ImageOps, UnidentifiedImageError
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -40,7 +41,12 @@ OTHERS_KM = 500.0
 PHOTO_MAX_UPLOAD = 12_000_000
 PHOTO_EDGE = 2048
 THUMB_EDGE = 480
+MAX_PIXELS = 50_000_000  # a larger picture is refused before it is decoded
 FLAGS_TO_REVIEW = 3
+# Distances to other people's reports are only given in steps, so a few queries from
+# chosen places cannot pin a reporter down (review of #330).
+AURORA_STEP_KM = 25
+OTHERS_STEP_KM = 50
 BRIGHTNESS = ("star", "venus", "moon", "day")
 FIREBALL_DETAILS = ("green", "red", "orange", "blue", "broke", "trail", "sound")
 AURORA_DETAILS = ("glow", "rays", "green", "red", "purple")
@@ -115,9 +121,11 @@ async def match(db: AsyncSession, report: FireballReport) -> FireballMatches:
             ),
         )
     )
-    others = [
-        round(d) for r in others_rows if (d := distance_km(here, (r.lat, r.lon))) <= OTHERS_KM
-    ]
+    others = sorted(
+        step_km(d, OTHERS_STEP_KM)
+        for r in others_rows
+        if (d := distance_km(here, (r.lat, r.lon))) <= OTHERS_KM
+    )
     return FireballMatches(cameras, tracks, [float(d) for d in others])
 
 
@@ -136,10 +144,15 @@ def store_photo(root: Path, report_id: uuid.UUID, data: bytes) -> None:
         raise PhotoError("too big")
     try:
         with Image.open(io.BytesIO(data)) as img:
-            if img.format not in ("JPEG", "PNG", "WEBP", "HEIF", "MPO"):
+            # The app sends JPEG (iPhones' HEIC is converted there).
+            if img.format not in ("JPEG", "PNG", "WEBP", "MPO"):
                 raise PhotoError("not a photo")
+            if img.size[0] * img.size[1] > MAX_PIXELS:
+                raise PhotoError("too big")
             img.load()
-            picture = img.convert("RGB")
+            # Phones store portrait photos turned, with an EXIF note; turn them upright
+            # before the metadata goes.
+            picture = ImageOps.exif_transpose(img).convert("RGB")
     except (UnidentifiedImageError, OSError, Image.DecompressionBombError) as exc:
         raise PhotoError("not a photo") from exc
     root.mkdir(parents=True, exist_ok=True)
@@ -149,6 +162,25 @@ def store_photo(root: Path, report_id: uuid.UUID, data: bytes) -> None:
         tmp = photo_path(root, report_id, thumb=thumb).with_suffix(".tmp")
         copy.save(tmp, "JPEG", quality=85, optimize=True)  # no exif, no icc: nothing to leak
         tmp.replace(photo_path(root, report_id, thumb=thumb))
+
+
+def step_km(km: float, step: int) -> int:
+    """A distance rounded up to whole steps: 0–25 km → 25 with a step of 25."""
+    return max(step, math.ceil(km / step) * step)
+
+
+async def sweep(db: AsyncSession, root: Path) -> None:
+    """Delete photo files whose report is gone (an account deleted with its reports)."""
+    kept = {str(i) for i in await db.scalars(select(AuroraReport.id))}
+    await asyncio.to_thread(_sweep_files, root, kept)
+
+
+def _sweep_files(root: Path, kept: set[str]) -> None:
+    if not root.is_dir():
+        return
+    for path in root.glob("*.jpg"):
+        if path.name.removesuffix(".jpg").removesuffix("-thumb") not in kept:
+            path.unlink(missing_ok=True)
 
 
 def delete_photo(root: Path, report_id: uuid.UUID) -> None:

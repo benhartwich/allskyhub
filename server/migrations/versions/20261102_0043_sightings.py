@@ -33,6 +33,7 @@ def upgrade() -> None:
         'user_account',
         sa.Column('alert_radius_km', sa.Integer(), server_default='300', nullable=False),
     )
+    op.add_column('user_account', sa.Column('alert_tz', sa.String(length=64), nullable=True))
     for name in FLAGS:
         op.add_column(
             'user_account', sa.Column(name, sa.Boolean(), server_default='false', nullable=False)
@@ -107,6 +108,6 @@ def downgrade() -> None:
     op.drop_index(op.f('ix_fireball_report_seen_at'), table_name='fireball_report')
     op.drop_index(op.f('ix_fireball_report_user_id'), table_name='fireball_report')
     op.drop_table('fireball_report')
-    for name in ('clear_here_night', 'aurora_near_at', *FLAGS, 'alert_radius_km',
+    for name in ('clear_here_night', 'aurora_near_at', *FLAGS, 'alert_tz', 'alert_radius_km',
                  'alert_lon', 'alert_lat'):
         op.drop_column('user_account', name)

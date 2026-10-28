@@ -639,12 +639,14 @@ class Notifier:
                         db, here, now - dt.timedelta(hours=1), user.alert_radius_km
                     )
                     eye = sum(r.naked_eye for r, _ in found)
-                    nearest = round(found[0][1]) if found else 0
+                    nearest = sightings.step_km(
+                        found[0][1] if found else 0, sightings.AURORA_STEP_KM
+                    )
                     user.aurora_near_at = now
                     await db.commit()
                     body = (
                         f"{len(found)} Meldung{'en' if len(found) != 1 else ''} im Umkreis, "
-                        f"die nächste {nearest} km entfernt"
+                        f"die nächste bis {nearest} km entfernt"
                         + (f", {eye} mit bloßem Auge" if eye else ", auf Fotos")
                         + ". Schau Richtung Pol!"
                     )
@@ -693,7 +695,7 @@ class Notifier:
                 if user.alert_lat is None or user.alert_lon is None:
                     continue
                 lat, lon = user.alert_lat, user.alert_lon
-                zone = tonight.zone_for(None)
+                zone = tonight.zone_for(user.alert_tz)
                 result = tonight.build(now, lat, lon, zone, await self.forecast.get(lat, lon))
                 night = result.night
                 if night.sunset is None:

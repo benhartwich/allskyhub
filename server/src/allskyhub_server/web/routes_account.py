@@ -11,8 +11,10 @@ from fastapi.responses import RedirectResponse, Response
 from allskyhub_protocol import CloseCode
 from allskyhub_server.auth import accounts, ratelimit
 from allskyhub_server.auth.passwords import verify_secret_async
+from allskyhub_server.devices import sightings
 from allskyhub_server.devices.connections import ConnectionRegistry
 from allskyhub_server.devices.images import ImageStore
+from allskyhub_server.settings import Settings
 from allskyhub_server.web.deps import CurrentSession, DbSession, SettingsDep, csrf_protect
 from allskyhub_server.web.render import render
 
@@ -38,6 +40,10 @@ async def finish_deletion(request: Request, device_ids: list[str]) -> None:
     for device_id in device_ids:
         await asyncio.to_thread(store.delete_device, device_id)
         await registry.close(device_id, CloseCode.UNPAIRED)
+    # The account's aurora photos: their rows went with it.
+    settings: Settings = request.app.state.settings
+    async with request.app.state.sessionmaker() as db:
+        await sightings.sweep(db, settings.data_dir / "sightings")
 
 
 def _page(

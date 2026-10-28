@@ -88,6 +88,8 @@ async def purge(
         await asyncio.to_thread(sightings.delete_photo, settings.data_dir / "sightings", report_id)
     if old:
         await db.execute(delete(AuroraReport).where(AuroraReport.id.in_(old)))
+    await db.flush()
+    await sightings.sweep(db, settings.data_dir / "sightings")
     await access_requests.purge(db, now)
     await _purge_frames(db, store, settings, now)
     # Roadmap H9: the day's aircraft go with the night's other data.

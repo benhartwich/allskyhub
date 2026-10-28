@@ -8,6 +8,7 @@ import asyncio
 import datetime as dt
 import io
 import uuid
+from pathlib import Path
 
 import httpx
 import pytest
@@ -39,6 +40,7 @@ def _jpeg_with_gps() -> bytes:
     exif = Image.Exif()
     exif[0x8825] = {2: (48, 7, 0)}  # GPSInfo: latitude
     exif[0x010F] = "PhoneMaker"
+    exif[0x0112] = 6  # Orientation: the phone was held upright
     out = io.BytesIO()
     img.save(out, "JPEG", exif=exif)
     return out.getvalue()
@@ -81,8 +83,7 @@ async def test_fireball_matched_with_cameras_and_others(
     [camera] = out["cameras"]
     assert camera["title"] == "Sternwarte"
     assert camera["image"] == f"/sky/{slug}/events/20261028/m1.jpg?v=1"
-    assert len(out["others_km"]) == 1
-    assert 60 < out["others_km"][0] < 80  # Linz – Passau
+    assert out["others_km"] == [100.0]  # Linz – Passau, about 70 km, in 50 km steps
     again = await new_client.get(
         f"/api/v1/sightings/fireball/{first.json()['id']}", headers=_auth(two)
     )
@@ -124,8 +125,8 @@ async def test_aurora_photo_waits_for_approval(
     assert r.json()["photo_state"] == "pending"
     stored = settings.data_dir / "sightings" / f"{report_id}.jpg"
     with Image.open(stored) as img:
-        assert max(img.size) == 2048
-        assert not img.getexif()  # no GPS, no maker
+        assert img.size == (1365, 2048)  # turned upright by its EXIF note, then dropped
+        assert not img.getexif()  # no GPS, no maker, no orientation
     too_soon = await new_client.post("/api/v1/sightings/aurora", data=form, headers=_auth(token))
     assert too_soon.status_code == 429
 
@@ -179,7 +180,7 @@ async def test_alerts_and_aurora_push(
         headers=_auth(watcher),
     )
     assert r.json() == {"lat": 48.2, "lon": 14.6, "radius_km": 300, "aurora": True,
-                        "fireball": False, "clear_night": False}  # fmt: skip
+                        "fireball": False, "clear_night": False, "tz": None}  # fmt: skip
     bad = await new_client.put(
         "/api/v1/account/alerts", json={"radius_km": 7}, headers=_auth(watcher)
     )
@@ -208,6 +209,7 @@ async def test_alerts_and_aurora_push(
     assert tokens == ["phone-1"]
     assert message.title == "Polarlicht gesichtet"
     assert "1 Meldung im Umkreis" in message.body
+    assert "die nächste bis 100 km entfernt" in message.body  # about 80 km, 25 km steps
     assert "mit bloßem Auge" in message.body
     assert message.data["kind"] == "aurora_near"
     assert message.data["path"] == "/sightings/aurora"
@@ -230,11 +232,12 @@ async def test_clear_night_at_the_alert_place(
     notifier = Notifier(app.state.sessionmaker, sender)
     notifier.forecast = app.state.forecast
     token = await _reporter(new_client, signup_on, "clear@example.org")
-    await new_client.put(
+    r = await new_client.put(
         "/api/v1/account/alerts",
-        json={"lat": 48.1, "lon": 14.4, "clear_night": True},
+        json={"lat": 48.1, "lon": 14.4, "clear_night": True, "tz": "Europe/Vienna"},
         headers=_auth(token),
     )
+    assert r.json()["tz"] == "Europe/Vienna"
     maker: async_sessionmaker[AsyncSession] = app.state.sessionmaker
     async with maker() as db:
         user = await db.scalar(select(User).where(User.email == "clear@example.org"))
@@ -285,10 +288,44 @@ async def test_sightings_expire_with_their_photos(
         await maintenance.purge(db, app.state.images, settings, now=later)
         assert await db.scalar(select(AuroraReport)) is None
     assert not path.exists()
-    _ = PASSWORD
 
 
 def _png() -> bytes:
     out = io.BytesIO()
     Image.new("RGB", (40, 30), (0, 200, 100)).save(out, "PNG")
     return out.getvalue()
+
+
+async def test_deleting_the_account_deletes_its_photos(
+    app: FastAPI,
+    new_client: httpx.AsyncClient,
+    settings: Settings,
+    signup_on: MemoryMailer,  # noqa: F811
+) -> None:
+    token = await _reporter(new_client, signup_on, "gone@example.org")
+    r = await new_client.post(
+        "/api/v1/sightings/aurora",
+        data={"lat": "48", "lon": "14", "naked_eye": "true", "licence": "true"},
+        files={"photo": ("a.png", _png(), "image/png")},
+        headers=_auth(token),
+    )
+    folder = settings.data_dir / "sightings"
+    report_id = r.json()["id"]
+    assert (folder / f"{report_id}.jpg").is_file()
+    deleted = await new_client.post(
+        "/api/v1/account/delete", json={"password": PASSWORD}, headers=_auth(token)
+    )
+    assert deleted.status_code < 300, deleted.text
+    assert not (folder / f"{report_id}.jpg").exists()
+    assert not (folder / f"{report_id}-thumb.jpg").exists()
+
+
+async def test_no_huge_or_unknown_pictures(tmp_path: Path) -> None:
+    from allskyhub_server.devices import sightings
+
+    with pytest.raises(sightings.PhotoError):
+        sightings.store_photo(tmp_path, uuid.uuid4(), b"GIF89a not a photo")
+    big = io.BytesIO()
+    Image.new("L", (8000, 7000)).save(big, "PNG")
+    with pytest.raises(sightings.PhotoError):
+        sightings.store_photo(tmp_path, uuid.uuid4(), big.getvalue())

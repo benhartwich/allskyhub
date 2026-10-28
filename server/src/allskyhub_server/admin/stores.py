@@ -610,11 +610,23 @@ def _message(r: httpx.Response) -> str:
             first = cast(dict[str, Any], errors[0])
             text = first.get("detail") or first.get("title")
             if isinstance(text, str):
-                return f"HTTP {r.status_code}: {text[:300]}"
+                return f"HTTP {r.status_code}: {text[:300]}{_associated(first)}"
         for k in ("message", "detail", "error_description"):
             if isinstance(b.get(k), str):
                 return f"HTTP {r.status_code}: {str(b[k])[:300]}"
     return f"HTTP {r.status_code}"
+
+
+def _associated(error: dict[str, Any]) -> str:
+    """What Apple lists behind "please check associated errors" (meta.associatedErrors:
+    per resource, each with its own detail), e.g. the missing privacy answers."""
+    found: list[str] = []
+    for errors in _dict(_dict(error.get("meta")).get("associatedErrors")).values():
+        for e in _list(errors):
+            text = e.get("detail") or e.get("title")
+            if isinstance(text, str) and text not in found:
+                found.append(text)
+    return f" – {' '.join(found)}"[:900] if found else ""
 
 
 def _dict(body: Any) -> dict[str, Any]:

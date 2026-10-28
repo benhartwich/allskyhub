@@ -1276,6 +1276,7 @@ async def test_submit_to_apple_review(tmp_path: Path) -> None:
     """Benjamin, 2026-10-28: "danach apple und android einreichen" from the hub."""
     seen: list[tuple[str, str, Any]] = []
     version_build: dict[str, Any] = {"data": {"id": "B1", "attributes": {"version": "57"}}}
+    current = {"name": "0.2.0"}  # bortle's fallback; no listing fetched here
 
     def answer(request: httpx.Request) -> httpx.Response:
         path, method = request.url.path, request.method
@@ -1285,7 +1286,7 @@ async def test_submit_to_apple_review(tmp_path: Path) -> None:
             return httpx.Response(200, json={"data": [{"id": "A1"}]})
         if path == "/v1/apps/A1/appStoreVersions":
             return httpx.Response(200, json={"data": [{"id": "V1", "attributes": {
-                "versionString": "1.0.0",
+                "versionString": current["name"],
                 "appVersionState": "PREPARE_FOR_SUBMISSION"}}]})  # fmt: skip
         if path == "/v1/appStoreVersions/V1/build":
             return httpx.Response(200, json=version_build)
@@ -1310,7 +1311,7 @@ async def test_submit_to_apple_review(tmp_path: Path) -> None:
     hub.vault.put("asc", *stores.parse_asc(_p8(), "2X9R4HXF34", ISSUER), by="a")
     report = await appstore.submit_report(hub, stores.OTHER_APPS["bortle"])
     assert [(s.state, s.text) for s in report.steps] == [
-        ("ok", "Version 1.0.0 mit Build 57 ist zur Prüfung eingereicht.")
+        ("ok", "Version 0.2.0 mit Build 57 ist zur Prüfung eingereicht.")
     ]
     assert ("GET", "/v1/apps", None) in seen
     assert seen[-1] == ("PATCH", "/v1/reviewSubmissions/S1", {"data": {
@@ -1318,10 +1319,102 @@ async def test_submit_to_apple_review(tmp_path: Path) -> None:
     item = next(b for _, p, b in seen if p == "/v1/reviewSubmissionItems")
     assert item["data"]["relationships"]["appStoreVersion"]["data"]["id"] == "V1"
 
+    # A version still under its old number is never submitted: the push renames it first.
+    seen.clear()
+    report = await appstore.submit_report(hub)  # allskyhub's version is appstore.VERSION
+    assert [(s.title, s.state) for s in report.steps] == [(appstore.OUTDATED, "warn")]
+    assert f"Version 0.2.0 ist noch nicht {appstore.VERSION}" in report.steps[0].text
+    assert not [m for m, _, _ in seen if m in ("POST", "PATCH")]
+    current["name"] = appstore.VERSION
+
+    # Apple refuses the item and names the reasons only as associated errors.
+    refused = {"errors": [{"status": "409", "detail": "This resource cannot be reviewed.",
+        "meta": {"associatedErrors": {"/v1/appStoreVersions/V1": [
+            {"code": "ENTITY_ERROR.ATTRIBUTE.REQUIRED", "detail": "App privacy is missing."},
+            {"detail": "Pricing is missing."}]}}}]}  # fmt: skip
+    hub._client = httpx.AsyncClient(  # pyright: ignore[reportPrivateUsage]
+        transport=httpx.MockTransport(
+            lambda r: (
+                httpx.Response(409, json=refused)
+                if r.url.path == "/v1/reviewSubmissionItems"
+                else answer(r)
+            )
+        )
+    )
+    report = await appstore.submit_report(hub)
+    assert report.steps[0].text == (
+        "Version zur Einreichung: HTTP 409: This resource cannot be reviewed. – "
+        "App privacy is missing. Pricing is missing."
+    )
+
     version_build["data"] = None  # no build chosen yet
     report = await appstore.submit_report(hub)
     assert report.steps[0].state == "fail"
     assert "noch keinen Build" in report.steps[0].text
+
+
+async def test_withdraw_an_outdated_waiting_version(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Benjamin, 2026-10-28: 1.0 waited for review with an old build while 1.1.0 was built;
+    submitting takes 1.0 back so the push can rename it and attach the new build."""
+    monkeypatch.setattr(appstore, "WITHDRAW_PAUSE", 0)
+    seen: list[tuple[str, str, Any]] = []
+    state: dict[str, Any] = {"version": "WAITING_FOR_REVIEW", "polls": 0, "name": "1.0"}
+
+    def answer(request: httpx.Request) -> httpx.Response:
+        path, method = request.url.path, request.method
+        body = json.loads(request.content) if request.content else None
+        seen.append((method, path, body))
+        version = {"id": "V1", "attributes": {
+            "versionString": state["name"], "appVersionState": state["version"]}}  # fmt: skip
+        if path == "/v1/apps":
+            return httpx.Response(200, json={"data": [{"id": "A1"}]})
+        if path == "/v1/apps/A1/appStoreVersions":
+            return httpx.Response(200, json={"data": [version]})
+        if path == "/v1/apps/A1/reviewSubmissions":
+            assert request.url.params["filter[state]"] == "WAITING_FOR_REVIEW"
+            return httpx.Response(200, json={"data": [{"id": "S0"}]})
+        if path == "/v1/reviewSubmissions/S0" and method == "PATCH":
+            return httpx.Response(200, json={"data": {"id": "S0"}})
+        if path == "/v1/appStoreVersions/V1":
+            state["polls"] += 1
+            if state["polls"] > 1:  # Apple hands it back a moment later
+                state["version"] = "DEVELOPER_REJECTED"
+            return httpx.Response(200, json={"data": version})
+        return httpx.Response(404)
+
+    hub = stores.Stores(
+        tmp_path / "store",
+        "benhartwich/allskyhub",
+        httpx.AsyncClient(transport=httpx.MockTransport(answer)),
+    )
+    hub.vault.put("asc", *stores.parse_asc(_p8(), "2X9R4HXF34", ISSUER), by="a")
+    report = await appstore.submit_report(hub)
+    assert [(s.title, s.state) for s in report.steps] == [(appstore.WITHDRAWN, "warn")]
+    assert f"Die Übertragung von {appstore.VERSION} läuft" in report.steps[0].text
+    assert "erst gleich frei" not in report.steps[0].text
+    cancel = {"data": {"type": "reviewSubmissions", "id": "S0", "attributes": {"canceled": True}}}
+    assert ("PATCH", "/v1/reviewSubmissions/S0", cancel) in seen
+    assert state["polls"] == 3
+
+    # Apple takes longer to hand it back: still withdrawn, and the push comes next.
+    state.update(version="WAITING_FOR_REVIEW", polls=-100)
+    report = await appstore.submit_report(hub)
+    assert [(s.title, s.state) for s in report.steps] == [(appstore.WITHDRAWN, "warn")]
+    assert "erst gleich frei" in report.steps[0].text
+
+    # The current version waiting for review stays there; bortle's comes from its pubspec.
+    state.update(version="WAITING_FOR_REVIEW", polls=0, name="0.3.0")
+    listing = tmp_path / "store" / "listings" / "bortle"
+    listing.mkdir(parents=True)
+    (listing / "pubspec.yaml").write_text("name: bortle\nversion: 0.3.0+4\n")
+    seen.clear()
+    report = await appstore.submit_report(hub, stores.OTHER_APPS["bortle"])
+    assert [(s.state, s.text) for s in report.steps] == [
+        ("ok", "Version 0.3.0 ist schon bei Apple (WAITING_FOR_REVIEW).")
+    ]
+    assert not [m for m, _, _ in seen if m == "PATCH"]
 
 
 async def test_submit_to_play_production(tmp_path: Path) -> None:

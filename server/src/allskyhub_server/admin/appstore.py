@@ -67,6 +67,13 @@ PRIVACY_URL = "https://allskyhub.org/datenschutz"
 EDITABLE = frozenset(
     {"PREPARE_FOR_SUBMISSION", "DEVELOPER_REJECTED", "REJECTED", "METADATA_REJECTED"}
 )
+# A withdrawn review, and a version still under its old number: step titles that lead to
+# the listing push, never to submitting; and how long Apple gets to hand the version back.
+WITHDRAWN = "Zurückgezogen"
+OUTDATED = "Versionsnummer"
+TO_PUSH = frozenset({WITHDRAWN, OUTDATED})
+WITHDRAW_TRIES = 10
+WITHDRAW_PAUSE = 3.0
 # Versions Apple has finished with; after them a new version can be made.
 RELEASED = frozenset(
     {
@@ -755,10 +762,30 @@ async def submit(client: httpx.AsyncClient, auth: Auth, report: Report, p: Profi
         busy = next((v for v in versions if _state(v) not in RELEASED), None)
         if busy is not None:
             name = _dict(busy.get("attributes")).get("versionString", "")
+            if _state(busy) == "WAITING_FOR_REVIEW" and name != p.version:
+                back = await _withdraw(api, app_id, str(busy["id"]))
+                text = (
+                    f"Version {name} wartete noch mit einem älteren Build auf die Prüfung und "
+                    f"ist zurückgezogen. Die Übertragung von {p.version} läuft, danach "
+                    "einreichen."
+                )
+                if not back:
+                    text += " (Apple gibt die Version erst gleich frei; wenn die Übertragung "
+                    text += "sie noch nicht ändern konnte, einfach noch einmal übertragen.)"
+                report.add(WITHDRAWN, "warn", text)
+                return
             report.add("Prüfung", "ok", f"Version {name} ist schon bei Apple ({_state(busy)}).")
             return
         raise StoreError("Keine Version in Vorbereitung; erst „App Store übertragen“.")
     name = _dict(version.get("attributes")).get("versionString", "")
+    if name != p.version:  # its build is likely the old one too; the push renames and picks
+        report.add(
+            OUTDATED,
+            "warn",
+            f"Version {name} ist noch nicht {p.version}; erst „App Store übertragen“, "
+            "dann einreichen.",
+        )
+        return
     build = _dict(
         (await api.call("GET", f"/appStoreVersions/{version['id']}/build", "Build")).get("data")
     )
@@ -811,6 +838,37 @@ async def submit(client: httpx.AsyncClient, auth: Auth, report: Report, p: Profi
     report.add("Prüfung", "ok", f"Version {name} mit Build {number} ist zur Prüfung eingereicht.")
 
 
+async def _withdraw(api: _Api, app_id: str, version: str) -> bool:
+    """Takes a version that still waits for Apple's review back out of the queue (Benjamin,
+    2026-10-28: 1.0 waited with an old build while 1.1.0 was ready), and waits until Apple
+    hands it back for editing (False if it has not yet), so the listing push that follows
+    can rename it and pick the build."""
+    waiting = await api.items(
+        f"/apps/{app_id}/reviewSubmissions",
+        "Einreichungen",
+        **{"filter[platform]": "IOS", "filter[state]": "WAITING_FOR_REVIEW"},
+    )
+    if not waiting:
+        raise StoreError("Apple nennt keine wartende Einreichung zum Zurückziehen.")
+    for submission in waiting:
+        body = {
+            "data": {
+                "type": "reviewSubmissions",
+                "id": submission["id"],
+                "attributes": {"canceled": True},
+            }
+        }
+        await api.call("PATCH", f"/reviewSubmissions/{submission['id']}", "Zurückziehen", body=body)
+    for _ in range(WITHDRAW_TRIES):
+        found = _dict(
+            (await api.call("GET", f"/appStoreVersions/{version}", "Version")).get("data")
+        )
+        if _state(found) in EDITABLE:
+            return True
+        await asyncio.sleep(WITHDRAW_PAUSE)
+    return False  # withdrawn all the same; Apple hands it back a little later
+
+
 async def submit_report(stores: Stores, app: OtherApp | None = None) -> Report:
     report = Report()
     if not stores.vault.has("asc"):
@@ -818,7 +876,11 @@ async def submit_report(stores: Stores, app: OtherApp | None = None) -> Report:
         return report
     client = stores.client or httpx.AsyncClient(timeout=UPLOAD_TIMEOUT)
     try:
-        await submit(client, stores.asc_auth, report, profile(app))
+        p = profile(app)
+        if app is not None:  # its pubspec, as the last listing push fetched it
+            pubspec = stores.vault.root / "listings" / app.key / "pubspec.yaml"
+            p = replace(p, version=app_version(pubspec, p.version))
+        await submit(client, stores.asc_auth, report, p)
     except StoreError as exc:
         report.add("Prüfung", "fail", str(exc))
     except httpx.HTTPError as exc:

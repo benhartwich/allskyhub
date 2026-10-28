@@ -174,15 +174,18 @@ def _cmd_play_upload(args: argparse.Namespace) -> int:
     """The App Bundle the Android release helper built (deploy/android) to Play's internal
     test track. Exit 3 (2 is argparse's): Google does not know the app yet, the first
     upload goes by hand."""
-    from allskyhub_server.admin.stores import Stores
+    from allskyhub_server.admin.stores import OTHER_APPS, PACKAGE, Stores
 
+    if args.package not in (PACKAGE, *(a.package for a in OTHER_APPS.values())):
+        print(f"unknown package {args.package}", file=sys.stderr)
+        return 1
     settings = get_settings()
     stores = Stores(
         settings.data_dir / "store",
         settings.deploy_repo,
         release_out=settings.android_dir / "release",
     )
-    code, text = asyncio.run(stores.play_upload(Path(args.aab)))
+    code, text = asyncio.run(stores.play_upload(Path(args.aab), args.package))
     print(text, file=sys.stderr if code == 1 else sys.stdout)
     return code
 
@@ -308,6 +311,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     p = sub.add_parser("play-upload", help="send an App Bundle to Google Play's internal test")
     p.add_argument("aab")
+    p.add_argument("--package", default="org.allskyhub.app", help="a further app's id")
     p.set_defaults(func=_cmd_play_upload)
 
     p = sub.add_parser("migrate", help="apply database migrations")

@@ -203,7 +203,7 @@ async def other_app(
     """A further iOS app on the same accounts (admin/stores.py ``OTHER_APPS``)."""
     admin_only(session, settings)
     other = admin_stores.OTHER_APPS.get(app)
-    if other is None or action not in ("setup", "build", "play", "appstore"):
+    if other is None or action not in ("setup", "build", "android", "play", "appstore"):
         return await page(request, db, session, 400, error="Unbekannte App.")
     stores: admin_stores.Stores = request.app.state.stores
     if action in ("play", "appstore"):
@@ -222,13 +222,18 @@ async def other_app(
     if action == "setup":
         report = await stores.setup_other(other, session.user.email)
         return await page(request, db, session, store_report=report)
+    platform = "android" if action == "android" else "ios"
     try:
-        await stores.build("ios", session.user.email, app=other)
+        await stores.build(platform, session.user.email, app=other)
     except admin_stores.StoreError as exc:
         return await page(request, db, session, 400, error=str(exc))
-    return await page(
-        request, db, session, notice=f"{other.title}: iOS-Release bei Codemagic gestartet."
+    notice = (
+        f"{other.title}: Android-Release angefordert; der Server baut es und lädt es zu "
+        "Google Play hoch."
+        if platform == "android"
+        else f"{other.title}: iOS-Release bei Codemagic gestartet."
     )
+    return await page(request, db, session, notice=notice)
 
 
 @router.post("/admin/stores-build")

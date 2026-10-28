@@ -215,7 +215,7 @@
   {% endif %}
   {% if android_key or codemagic_app %}
   <div class="row-links">
-    {% for platform, name, ready in (('android', 'Android: Release bauen', android_key and not android_job.busy), ('ios', 'iOS: Release bauen', codemagic_app)) %}
+    {% for platform, name, ready in (('android', 'Android: Release bauen', android_key and not android_busy), ('ios', 'iOS: Release bauen', codemagic_app)) %}
     {% if ready %}
     <form method="post" action="/admin/stores-build" class="inline">
       <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
@@ -228,11 +228,20 @@
   <p class="muted small">Beide bauen <code>main</code>. Android baut dieser Server als App Bundle und lädt es selbst in den internen Test bei Google Play; iOS baut Codemagic und schickt es nach TestFlight.</p>
   {% endif %}
 
-  {% for other, other_app_id, other_play, other_ios in other_apps %}
+  {% for other, other_app_id, other_play, other_ios, other_android, other_key in other_apps %}
   <h3>Weitere App: {{ other.title }}</h3>
-  <p class="muted small">Gleiche Zugänge wie allskyhub: Apple-Schlüssel, Codemagic-Token, Verteilungszertifikat und das Play-Dienstkonto (in der Play Console für {{ other.package }} freigeben). Legt die Bundle-ID <code>{{ other.package }}</code> bei Apple an, fügt <code>{{ other.repo }}</code> in Codemagic hinzu und füllt dort die Gruppe <code>{{ other.group }}</code>.{% if other_app_id %} Codemagic-App <code>{{ other_app_id }}</code>.{% endif %} Die Store-Einträge kommen aus <code>store/</code> von <code>{{ other.repo }}</code> (main); Kontakt {{ other.contact_email }}, {{ other.website }}. Google Play kennt die App erst nach dem ersten App Bundle von Hand.</p>
+  <p class="muted small">Gleiche Zugänge wie allskyhub: Apple-Schlüssel, Codemagic-Token, Verteilungszertifikat und das Play-Dienstkonto (in der Play Console für {{ other.package }} freigeben). Legt die Bundle-ID <code>{{ other.package }}</code> bei Apple an, fügt <code>{{ other.repo }}</code> in Codemagic hinzu und füllt dort die Gruppe <code>{{ other.group }}</code>.{% if other_app_id %} Codemagic-App <code>{{ other_app_id }}</code>.{% endif %} Die Store-Einträge kommen aus <code>store/</code> von <code>{{ other.repo }}</code> (main); Kontakt {{ other.contact_email }}, {{ other.website }}. Android baut dieser Server aus <code>main</code> mit einem eigenen Upload-Schlüssel; Google Play kennt die App erst nach dem ersten App Bundle von Hand, danach geht es in den internen Test.{% if other_android.state != 'idle' %} Android: {{ android_states.get(other_android.state, other_android.state) }}.{% endif %}</p>
+  {% if other_android.latest %}
+  <p><a href="/admin/stores-android/{{ other_android.latest.file }}">{{ other_android.latest.file }}</a> <span class="muted small">· Version {{ other_android.latest.version }} ({{ other_android.latest.build }}), {{ (other_android.latest.size / 1e6) | round | int }} MB · für das erste Hochladen von Hand</span></p>
+  {% endif %}
+  {% if other_android.log %}
+  <details{% if other_android.state in ('failed', 'built') %} open{% endif %}>
+    <summary>Protokoll des Android-Builds ({{ other.title }})</summary>
+    <pre class="small">{{ other_android.log }}</pre>
+  </details>
+  {% endif %}
   <div class="row-links">
-    {% for action, label, ready in (('setup', other.title ~ ': prüfen und einrichten', true), ('build', other.title ~ ': iOS-Release bauen', other_app_id), ('play', other.title ~ ': Play-Eintrag übertragen', true), ('appstore', other.title ~ ': App Store übertragen', true)) %}
+    {% for action, label, ready in (('setup', other.title ~ ': prüfen und einrichten', true), ('build', other.title ~ ': iOS-Release bauen', other_app_id), ('android', other.title ~ ': Android-Release bauen', other_key and not android_busy), ('play', other.title ~ ': Play-Eintrag übertragen', true), ('appstore', other.title ~ ': App Store übertragen', true)) %}
     {% if ready %}
     <form method="post" action="/admin/stores-other" class="inline">
       <input type="hidden" name="csrf_token" value="{{ csrf_token }}">

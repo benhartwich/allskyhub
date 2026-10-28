@@ -321,7 +321,9 @@ def _play_answers(seen: list[tuple[str, str]], track_status: int = 200) -> httpx
         path = request.url.path
         if request.url.host == "oauth2.googleapis.com":
             return httpx.Response(200, json={"access_token": "t"})
-        if path.endswith("/applications/org.allskyhub.app/edits"):
+        if path.endswith(
+            ("/applications/org.allskyhub.app/edits", "/applications/eu.bortle.app/edits")
+        ):
             return httpx.Response(200, json={"id": "E1"})
         if path.endswith("/edits/E1/bundles"):
             assert path.startswith("/upload/")
@@ -854,6 +856,7 @@ async def test_a_further_app_shares_the_keys(tmp_path: Path) -> None:
     states = {s.title: s.state for s in report.steps}
     assert states == {
         "Schlüssel des iOS-Zertifikats": "ok",
+        "bortle: Android-Upload-Schlüssel": "ok",  # its own, not allskyhub's
         "Bundle-ID": "ok",
         "App-Store-Connect-API-Schlüssel": "warn",
         "Codemagic-API-Token": "ok",
@@ -1116,3 +1119,67 @@ async def test_bortle_app_store_push_uses_its_profile(
     )  # fmt: skip
     assert p.state_file == "appstore-bortle.json"
     assert appstore.profile(None) is appstore.ALLSKYHUB
+
+
+async def test_other_app_android_release(
+    app: FastAPI,
+    client: httpx.AsyncClient,
+    settings: Settings,
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    """bortle's App Bundle through the same spool: its own key, request line and answers."""
+    email = await make_account(client)
+    monkeypatch.setattr(settings, "admin_emails", email)
+    out = tmp_path / "release"
+    hub = stores.Stores(tmp_path / "store", "benhartwich/allskyhub", release_out=out)
+    monkeypatch.setattr(app.state, "stores", hub)
+    bortle = stores.OTHER_APPS["bortle"]
+    token = csrf_from((await client.get("/admin")).text)
+    form = {"csrf_token": token, "app": "bortle", "action": "android"}
+
+    assert (await client.post("/admin/stores-other", data=form)).status_code == 400  # no key
+    hub.ensure_keys(stores.Report(), email)  # allskyhub's key is not bortle's
+    assert (await client.post("/admin/stores-other", data=form)).status_code == 400
+    secret, meta = stores.make_android_upload(bortle.title)
+    hub.vault.put(bortle.android_upload, secret, meta, email)
+    r = await client.post("/admin/stores-other", data=form)
+    assert r.status_code == 200, r.text
+    spool = tmp_path / "android-release"
+    assert (spool / "request").read_text() == f"app=bortle\n{email}\n"
+    assert hub.android_job(bortle).state == "requested"
+    assert hub.android_job().state == "idle"
+    assert "Android-Release bauen" not in r.text  # one build at a time, either app
+    build = {"csrf_token": token, "platform": "android"}
+    assert (await client.post("/admin/stores-build", data=build)).status_code == 400
+
+    (spool / "request").unlink()
+    answers = tmp_path / "release-bortle"
+    answers.mkdir()
+    (answers / "state").write_text("built\n")
+    (answers / "log").write_text("bortle-13.aab gebaut.\n")
+    (answers / "bortle-13.aab").write_bytes(b"bortle bundle")
+    latest = {"build": 13, "version": "0.2.0", "commit": "be1070c", "size": 13}
+    (answers / "latest.json").write_text(json.dumps({**latest, "file": "bortle-13.aab"}))
+    page = await client.get("/admin")
+    assert 'href="/admin/stores-android/bortle-13.aab"' in page.text
+    assert "bortle-13.aab gebaut." in page.text
+    assert "Android · bortle</li>" not in page.text
+    assert "Android · bortle · gebaut, erstes Hochladen von Hand" in page.text
+    r = await client.get("/admin/stores-android/bortle-13.aab")
+    assert r.content == b"bortle bundle"
+    # Names choose the folder: an allskyhub name never reaches bortle's, and back.
+    assert (await client.get("/admin/stores-android/allskyhub-13.aab")).status_code == 404
+    assert hub.android_job().latest is None
+
+
+async def test_play_upload_other_package(tmp_path: Path) -> None:
+    aab = tmp_path / "bortle-13.aab"
+    aab.write_bytes(b"bundle")
+    hub = stores.Stores(tmp_path / "store", "benhartwich/allskyhub")
+    hub.vault.put("play", *stores.parse_play(_play_json()), by="a")
+    seen: list[tuple[str, str]] = []
+    hub._client = httpx.AsyncClient(transport=_play_answers(seen))  # pyright: ignore[reportPrivateUsage]
+    code, _ = await hub.play_upload(aab, "eu.bortle.app")
+    assert code == 0
+    assert seen[-1] == ("POST", "/androidpublisher/v3/applications/eu.bortle.app/edits/E1:commit")

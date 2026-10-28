@@ -87,6 +87,8 @@ class AccountSettings(BaseModel):
     # Read only: the hub can send push notifications / e-mail at all.
     push_available: bool | None = None
     mail_available: bool | None = None
+    # Read only: "owner" or "reporter" (auth/reporters.py; reporters cannot pair cameras).
+    kind: str | None = None
 
 
 class PushTokenRequest(_In):
@@ -622,6 +624,7 @@ def _account_settings(request: Request, user: User) -> AccountSettings:
         notify_by_mail=user.notify_by_mail,
         push_available=request.app.state.notifier.enabled,
         mail_available=request.app.state.mailer.enabled,
+        kind=user.kind,
     )
 
 

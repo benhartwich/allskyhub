@@ -91,6 +91,15 @@
     marker.addTo(map);
     markers.push(marker);
   }
+  // Reports by eye from the app: small squares, coloured like the cameras.
+  for (const r of config.reports || []) {
+    const box = node("div", "map-popup");
+    box.append(node("strong", "", "Gemeldet mit bloßem Auge"));
+    box.append(node("span", "map-sqm", r.sqm_text));
+    L.circleMarker([r.lat, r.lon], { radius: 5, weight: 1, className: `map-report ${r.sqm_class}` })
+      .bindPopup(box, { maxWidth: 240 })
+      .addTo(map);
+  }
   if (markers.length && !new URLSearchParams(location.search).has("region")) {
     map.fitBounds(L.featureGroup(markers).getBounds().pad(0.4), { maxZoom: 6 });
   }

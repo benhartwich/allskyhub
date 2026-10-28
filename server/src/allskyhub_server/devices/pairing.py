@@ -47,6 +47,7 @@ from allskyhub_server.models import (
     SkySample,
     StatusSample,
     Subscription,
+    User,
 )
 
 NONCE_TTL = dt.timedelta(minutes=5)
@@ -191,6 +192,17 @@ async def _new_code(db: AsyncSession, device_id: str) -> PairingCode:
 
 async def claim(db: AsyncSession, user_id: uuid.UUID, code: str, name: str) -> Device:
     """SPEC §6.2 step 3: bind the device to ``user_id``. The caller commits."""
+    user = await db.get(User, user_id)
+    if user is not None and user.kind == "reporter":
+        # Reporter accounts only report the sky brightness (auth/reporters.py).
+        raise CodeInvalidError(
+            tr(
+                "Mit einem Melder-Konto kannst du keine Kamera koppeln. Für eine eigene Kamera "
+                "bitte auf allskyhub.org Zugang anfragen.",
+                "A reporter account cannot pair a camera. For your own camera, please request "
+                "access on allskyhub.org.",
+            )
+        )
     pairing = await db.scalar(
         select(PairingCode)
         .where(

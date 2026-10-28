@@ -14,7 +14,7 @@
 <p class="lead">Allsky-Kameras mit öffentlicher Seite, deren Betreiber den Ort zeigen (auf etwa 10 km gerundet). Tippe auf eine Kamera für ihr aktuelles Bild.</p>
 {% if layer %}
 <div class="card stack sqm-info">
-  <p class="muted small">Im Hintergrund die Lichter der Nacht aus dem All (NASA Black Marble): je heller, desto mehr Lichtverschmutzung. Die Punkte sind die Messungen der Kameras selbst: der Median der dunkelsten Messung klarer Nächte der letzten 60 Tage, in mag/″² (höher = dunkler). Ungefähr, solange die Kameras nicht kalibriert sind. Grau: noch zu wenige klare Nächte gemessen oder Himmelsqualität nicht öffentlich.</p>
+  <p class="muted small">Im Hintergrund die Lichter der Nacht aus dem All (NASA Black Marble): je heller, desto mehr Lichtverschmutzung. Die Punkte sind die Messungen der Kameras selbst: der Median der dunkelsten Messung klarer Nächte der letzten 60 Tage, in mag/″² (höher = dunkler). Ungefähr, solange die Kameras nicht kalibriert sind. Grau: noch zu wenige klare Nächte gemessen oder Himmelsqualität nicht öffentlich. Die kleinen Punkte sind Meldungen von Menschen mit bloßem Auge aus der allskyhub-App (Median je 10-km-Feld, letztes Jahr), noch ungenauer als die Kameras.</p>
   <ul class="sqm-legend">{% for _, cls, label in sqm_classes %}<li><span class="swatch {{ cls }}"></span>{{ label }}</li>{% endfor %}<li><span class="swatch sqm-none"></span>noch kein Wert</li></ul>
 </div>
 {% endif %}

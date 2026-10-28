@@ -20,7 +20,7 @@ from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
 from allskyhub_server import maintenance
 from allskyhub_server.admin.deploy import GitHub
-from allskyhub_server.admin.stores import Stores
+from allskyhub_server.admin.stores import Stores, github_token
 from allskyhub_server.api import app as app_api
 from allskyhub_server.api import (
     app_manage,
@@ -339,6 +339,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         release_out=settings.android_dir / "release",
     )
     app.state.turnstile = turnstile_from(settings, app.state.stores.vault)
+    app.state.github.token = app.state.latest_image.token = github_token(app.state.stores.vault)
     app.add_middleware(CustomDomainMiddleware, hosts=app.state.hosts)
     app.add_middleware(LanguageMiddleware)
     app.add_middleware(AccessLogMiddleware)

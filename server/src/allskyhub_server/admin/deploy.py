@@ -24,6 +24,7 @@ log = logging.getLogger(__name__)
 
 SHA = re.compile(r"^[0-9a-f]{40}$")
 CACHE_S = 60
+FAILED_S = 60  # after a failure (GitHub's limit) ask again only after this
 API = "https://api.github.com"
 GOOD_CONCLUSIONS = frozenset({"success", "neutral", "skipped"})
 LOG_TAIL = 80
@@ -97,22 +98,29 @@ def ci_state(check_runs: list[dict[str, Any]], only: tuple[str, ...] = ()) -> st
 
 
 class GitHub:
-    """Anonymous GitHub API (60 requests an hour), so answers are kept for a minute."""
+    """GitHub's API: anonymous allows 60 requests an hour per address, shared with
+    everything on the server; with the admin page's read-only token (``token``) 5000.
+    Answers are kept for a minute, failures too."""
 
     def __init__(
         self, repo: str, client: httpx.AsyncClient | None = None, checks: tuple[str, ...] = ()
     ) -> None:
         self.repo = repo
         self.checks = checks
+        self.token: str | None = None
         self._client = client
         self._cached: tuple[float, str | None, Upstream] | None = None
+        self._failed: tuple[float, str] | None = None
 
     async def upstream(self, running: str | None) -> Upstream:
         cached = self._cached
         if cached and cached[1] == running and time.monotonic() - cached[0] < CACHE_S:
             return cached[2]
+        failed = self._failed
+        if failed and time.monotonic() - failed[0] < FAILED_S:
+            raise DeployError(failed[1])
         client = self._client or httpx.AsyncClient(timeout=10)
-        headers = {"Accept": "application/vnd.github+json", "User-Agent": "allskyhub-hub"}
+        headers = github_headers(self.token)
         try:
             r = await client.get(f"{API}/repos/{self.repo}/commits/main", headers=headers)
             r.raise_for_status()
@@ -136,10 +144,12 @@ class GitHub:
             runs: list[dict[str, Any]] = r.json().get("check_runs") or []
         except httpx.HTTPStatusError as exc:
             log.warning("admin: GitHub not reachable: %s", exc)
-            raise DeployError(_refused(exc.response)) from exc
+            self._failed = (time.monotonic(), _refused(exc.response, self.token))
+            raise DeployError(self._failed[1]) from exc
         except (httpx.HTTPError, ValueError) as exc:
             log.warning("admin: GitHub not reachable: %s", exc)
-            raise DeployError("GitHub ist gerade nicht erreichbar.") from exc
+            self._failed = (time.monotonic(), "GitHub ist gerade nicht erreichbar.")
+            raise DeployError(self._failed[1]) from exc
         finally:
             if self._client is None:
                 await client.aclose()
@@ -155,20 +165,28 @@ class GitHub:
 
     def forget(self) -> None:
         self._cached = None
+        self._failed = None
 
 
-def _refused(r: httpx.Response) -> str:
+def github_headers(token: str | None) -> dict[str, str]:
+    headers = {"Accept": "application/vnd.github+json", "User-Agent": "allskyhub-hub"}
+    if token:
+        headers["Authorization"] = f"Bearer {token}"
+    return headers
+
+
+def _refused(r: httpx.Response, token: str | None = None) -> str:
     """GitHub's anonymous limit (60 an hour) is per address, shared with everything else
     on the server: say so, with the time it resets."""
+    if r.status_code == 401 and token:
+        return "GitHub lehnt den hinterlegten Token ab (abgelaufen?). Bitte neu eintragen."
     if r.status_code in (403, 429) and r.headers.get("x-ratelimit-remaining") == "0":
+        limit = "" if token else " (60 pro Stunde; mit GitHub-Token 5000, unten eintragen)"
         try:
             reset = dt.datetime.fromtimestamp(int(r.headers["x-ratelimit-reset"]), dt.UTC)
         except (KeyError, ValueError):
-            return "GitHub-Abrufgrenze dieses Servers erreicht (60 pro Stunde)."
-        return (
-            "GitHub-Abrufgrenze dieses Servers erreicht (60 pro Stunde); wieder ab "
-            f"{reset:%H:%M} UTC."
-        )
+            return f"GitHub-Abrufgrenze dieses Servers erreicht{limit}."
+        return f"GitHub-Abrufgrenze dieses Servers erreicht{limit}; wieder ab {reset:%H:%M} UTC."
     return "GitHub ist gerade nicht erreichbar."
 
 

@@ -121,6 +121,7 @@ async def page(
             "running": running,
             "upstream": upstream,
             "upstream_error": upstream_error,
+            "github_token": stores.vault.has("github"),
             "job": deploy.job(settings.data_dir),
             "disk_free_gb": disk.free / 1e9,
             "disk_free_pct": 100 * disk.free / disk.total,

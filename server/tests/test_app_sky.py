@@ -228,3 +228,25 @@ def test_every_photo_is_freely_licensed() -> None:
         assert p["author"], key
         assert p["page"].startswith("https://commons.wikimedia.org/wiki/File:"), key
         assert "charles" not in p["file"].lower(), key
+
+
+async def test_sky_photo_failures_are_remembered_and_capped(tmp_path: Path) -> None:
+    from allskyhub_server.devices import sky_photos
+
+    asked: list[str] = []
+
+    def commons(request: httpx.Request) -> httpx.Response:
+        asked.append(str(request.url))
+        if "Jupiter" in str(request.url):
+            return httpx.Response(200, content=b"\xff\xd8" + b"x" * (sky_photos.MAX_BYTES + 10))
+        return httpx.Response(404)
+
+    photos = sky_photos.SkyPhotos(
+        tmp_path, httpx.AsyncClient(transport=httpx.MockTransport(commons))
+    )
+    assert await photos.get("jupiter") is None  # too big
+    assert await photos.get("saturn") is None  # 404
+    assert await photos.get("jupiter") is None
+    assert await photos.get("saturn") is None
+    assert len(asked) == 2  # each tried once within the hour
+    assert not (tmp_path / "jupiter.img").exists()

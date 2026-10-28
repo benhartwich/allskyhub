@@ -164,7 +164,7 @@ class _HomeShellState extends State<HomeShell> {
         location: widget.location,
         reminders: widget.reminders,
       ),
-      JoinScreen(client: widget.client),
+      JoinScreen(client: widget.client, location: widget.location),
     ];
     return Scaffold(
       body: IndexedStack(index: _tab, children: pages),

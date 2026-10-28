@@ -8,6 +8,8 @@ import 'package:url_launcher/url_launcher.dart';
 import '../api/hub_client.dart';
 import '../design.dart';
 import '../l10n.dart';
+import '../platform/location.dart';
+import 'report_screen.dart';
 
 /// Lets screens deep in a guest's navigation open the sign-in (null when signed in).
 class SignInScope extends InheritedWidget {
@@ -23,9 +25,10 @@ class SignInScope extends InheritedWidget {
 }
 
 class JoinScreen extends StatelessWidget {
-  const JoinScreen({super.key, required this.client});
+  const JoinScreen({super.key, required this.client, required this.location});
 
   final HubClient client;
+  final LocationSource location;
 
   @override
   Widget build(BuildContext context) {
@@ -102,13 +105,32 @@ class JoinScreen extends StatelessWidget {
               ),
             ),
           ),
-          soon(
-            Icons.nights_stay_outlined,
-            Sky.accent,
-            tr('Himmelshelligkeit melden', 'Report the sky brightness'),
-            tr(
-              'Sterne in einem Sternbild zählen, ganz ohne Kamera. Daraus wird ein Punkt auf der Lichtverschmutzungs-Karte.',
-              'Count the stars in a constellation, no camera needed. It becomes a point on the light pollution map.',
+          Card(
+            margin: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+            child: ListTile(
+              key: const Key('join-report'),
+              leading: const Icon(
+                Icons.nights_stay_outlined,
+                color: Sky.accent,
+                size: 30,
+              ),
+              title: Text(
+                tr('Himmelshelligkeit melden', 'Report the sky brightness'),
+              ),
+              subtitle: Text(
+                tr(
+                  'Sterne in einem Sternbild vergleichen, ganz ohne Kamera. Daraus wird ein Punkt auf der Lichtverschmutzungs-Karte.',
+                  'Compare the stars in a constellation, no camera needed. It becomes a point on the light pollution map.',
+                ),
+              ),
+              trailing: const Icon(Icons.chevron_right),
+              onTap: () => Navigator.of(context).push(
+                MaterialPageRoute<void>(
+                  builder: (_) => client.token == null
+                      ? ReportGateScreen(client: client)
+                      : ReportScreen(client: client, location: location),
+                ),
+              ),
             ),
           ),
           soon(

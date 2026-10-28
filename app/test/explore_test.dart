@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:allskyhub_app/api/hub_client.dart';
 import 'package:allskyhub_app/screens/explore_screen.dart';
 import 'package:allskyhub_app/screens/globe.dart';
+import 'package:allskyhub_app/platform/location.dart';
 import 'package:allskyhub_app/screens/join_screen.dart';
 import 'package:allskyhub_app/screens/public_camera_screen.dart';
 import 'package:flutter/material.dart';
@@ -145,7 +146,7 @@ void main() {
       MaterialApp(
         builder: (context, child) =>
             SignInScope(onSignIn: () => asked = true, child: child!),
-        home: JoinScreen(client: _hub()),
+        home: JoinScreen(client: _hub(), location: _NoPlace()),
       ),
     );
     await tester.tap(find.byKey(const Key('join-own-camera')));
@@ -174,4 +175,13 @@ void main() {
       );
     },
   );
+}
+
+class _NoPlace implements LocationSource {
+  @override
+  Future<LocationResult> current() async =>
+      const LocationResult.missing(LocationProblem.denied);
+
+  @override
+  Future<String?> timezone() async => null;
 }

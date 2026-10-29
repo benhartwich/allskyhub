@@ -202,19 +202,31 @@ async def test_apps_page_and_actions(
     def act(app_key: str, action: str) -> dict[str, str]:
         return {"csrf_token": token, "app": app_key, "action": action}
 
-    assert (await client.post("/admin/apps", data=act("nope", "setup"))).status_code == 400
-    assert (await client.post("/admin/apps", data=act("bortle", "deploy"))).status_code == 400
-    r = await client.post("/admin/apps", data=act("allskyhub", "build-android"))
+    assert (
+        await client.post(follow_redirects=True, url="/admin/apps", data=act("nope", "setup"))
+    ).status_code == 400
+    assert (
+        await client.post(follow_redirects=True, url="/admin/apps", data=act("bortle", "deploy"))
+    ).status_code == 400
+    r = await client.post(
+        follow_redirects=True, url="/admin/apps", data=act("allskyhub", "build-android")
+    )
     assert r.status_code == 400
     assert "Erst „Prüfen und einrichten“" in r.text
 
     hub.ensure_keys(stores.Report(), email)
-    r = await client.post("/admin/apps", data=act("allskyhub", "build-android"))
+    r = await client.post(
+        follow_redirects=True, url="/admin/apps", data=act("allskyhub", "build-android")
+    )
     assert r.status_code == 200, r.text
     assert "Der Server baut gerade" in r.text
-    assert 'http-equiv="refresh"' not in r.text  # never after a POST
-    page = await client.get("/admin/apps")
-    assert 'http-equiv="refresh"' in page.text  # while it builds, on a GET
+    # Post/Redirect/Get (Benjamin, 2026-10-29): reloading shows the page, never re-runs.
+    assert [x.status_code for x in r.history] == [303]
+    assert "?m=" in str(r.url)
+    assert "Der Server baut das App Bundle" in r.text
+    page = await client.get(str(r.url))  # the browser's reload
+    assert "Der Server baut das App Bundle" not in page.text  # the notice only once
+    assert 'http-equiv="refresh"' in page.text  # while it builds
 
     # Built and in the internal test: the next step is the review; its result stays.
     (tmp_path / "android-release" / "request").unlink()
@@ -226,7 +238,9 @@ async def test_apps_page_and_actions(
     (out / "latest.json").write_text(json.dumps(latest))
     page = await client.get("/admin/apps")
     assert "Build 323 (Version 1.1.0) ist im internen Test." in page.text
-    r = await client.post("/admin/apps", data=act("allskyhub", "review-play"))
+    r = await client.post(
+        follow_redirects=True, url="/admin/apps", data=act("allskyhub", "review-play")
+    )
     assert "Kein Google-Play-Dienstkonto hinterlegt." in r.text
     assert hub.vault.read_json("review-allskyhub-play.json") is not None
     # A warning (here: no account) leaves the step to try again, not a dead end.
@@ -269,7 +283,9 @@ async def test_public_apk_download(
     assert 'href="/download/bortle.apk"' not in page.text
     token = csrf_from(page.text)
     r = await client.post(
-        "/admin/apps", data={"csrf_token": token, "app": "bortle", "action": "apk"}
+        follow_redirects=True,
+        url="/admin/apps",
+        data={"csrf_token": token, "app": "bortle", "action": "apk"},
     )
     assert "APK zum Herunterladen holen gestartet" in r.text
     task = hub.jobs["apk-bortle.json"]
@@ -295,11 +311,15 @@ async def test_vinventory_test_apk(
     assert page.text.count('value="build-test-apk"') == 1  # Vinventory only
     token = csrf_from(page.text)
     r = await client.post(
-        "/admin/apps", data={"csrf_token": token, "app": "bortle", "action": "build-test-apk"}
+        follow_redirects=True,
+        url="/admin/apps",
+        data={"csrf_token": token, "app": "bortle", "action": "build-test-apk"},
     )
     assert "keine Test-APK" in r.text
     r = await client.post(
-        "/admin/apps", data={"csrf_token": token, "app": "vinventory", "action": "build-test-apk"}
+        follow_redirects=True,
+        url="/admin/apps",
+        data={"csrf_token": token, "app": "vinventory", "action": "build-test-apk"},
     )
     assert "baut die Test-APK" in r.text
     assert (
@@ -333,3 +353,31 @@ async def test_vinventory_test_apk(
     # A latest.json naming another file is not served.
     (done / "latest.json").write_text(json.dumps({**latest, "file": "../store/play.secret"}))
     assert (await client.get("/download/vinventory-test.apk")).status_code == 404
+
+
+async def test_a_flash_only_for_its_session(
+    app: FastAPI,
+    client: httpx.AsyncClient,
+    settings: Settings,
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    out = tmp_path / "release"
+    monkeypatch.setattr(
+        app.state, "stores", stores.Stores(tmp_path / "store", "x/y", release_out=out)
+    )
+    email = await make_account(client)
+    monkeypatch.setattr(settings, "admin_emails", email)
+    token = csrf_from((await client.get("/admin/apps")).text)
+    r = await client.post(
+        "/admin/apps", data={"csrf_token": token, "app": "nope", "action": "setup"}
+    )
+    assert r.status_code == 303
+    url = r.headers["location"]
+    other = httpx.AsyncClient(transport=client._transport, base_url=client.base_url)  # pyright: ignore[reportPrivateUsage]
+    await make_account(other, "zwei@example.org")
+    monkeypatch.setattr(settings, "admin_emails", f"{email},zwei@example.org")
+    assert "Unbekannte App" not in (await other.get(url)).text
+    shown = await client.get(url)
+    assert shown.status_code == 400
+    assert "Unbekannte App" in shown.text

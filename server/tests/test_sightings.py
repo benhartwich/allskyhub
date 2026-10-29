@@ -142,7 +142,8 @@ async def test_aurora_photo_waits_for_approval(
     assert f"/admin/aurora-photos/{report_id}.jpg" in page.text
     assert (await client.get(f"/admin/aurora-photos/{report_id}.jpg")).status_code == 200
     r = await client.post(
-        f"/admin/aurora-photos/{report_id}",
+        follow_redirects=True,
+        url=f"/admin/aurora-photos/{report_id}",
         data={"csrf_token": csrf_from(page.text), "action": "approve"},
     )
     assert "Foto freigegeben" in r.text

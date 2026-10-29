@@ -29,6 +29,7 @@ from allskyhub_server.mail.send import Mail, Mailer
 from allskyhub_server.models import AuroraFlag, AuroraReport, Device, User
 from allskyhub_server.settings import Settings
 from allskyhub_server.version import full as running_version
+from allskyhub_server.web import flash
 from allskyhub_server.web.deps import CurrentSession, DbSession, SettingsDep, csrf_protect
 from allskyhub_server.web.render import render
 
@@ -103,6 +104,11 @@ async def page(
     status_code: int = 200,
     **extra: object,
 ) -> Response:
+    if request.method == "POST":  # reloading must not run the action again
+        return flash.redirect(request, session, "/admin", status_code, extra)
+    if status_code == 200:
+        status_code, kept = flash.take(request, session)
+        extra = {**kept, **extra}
     settings: Settings = request.app.state.settings
     github: deploy.GitHub = request.app.state.github
     stores: admin_stores.Stores = request.app.state.stores

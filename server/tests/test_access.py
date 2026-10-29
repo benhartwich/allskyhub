@@ -105,7 +105,8 @@ async def test_admin_invites_and_the_link_works(
     mailer: MemoryMailer = app.state.mailer
     mailer.sent.clear()
     r = await client.post(
-        f"/admin/access/{by_email['new@example.org'].id}/invite",
+        follow_redirects=True,
+        url=f"/admin/access/{by_email['new@example.org'].id}/invite",
         data={"csrf_token": csrf_from(page.text)},
     )
     assert "Einladung an new@example.org ist raus." in r.text
@@ -116,7 +117,8 @@ async def test_admin_invites_and_the_link_works(
     assert link is not None
 
     r = await client.post(
-        f"/admin/access/{by_email['no@example.org'].id}/decline",
+        follow_redirects=True,
+        url=f"/admin/access/{by_email['no@example.org'].id}/decline",
         data={"csrf_token": csrf_from(page.text)},
     )
     assert "abgelehnt" in r.text
@@ -124,7 +126,8 @@ async def test_admin_invites_and_the_link_works(
     assert "no@example.org" not in (await client.get("/admin")).text
     # Twice is refused.
     r = await client.post(
-        f"/admin/access/{by_email['no@example.org'].id}/decline",
+        follow_redirects=True,
+        url=f"/admin/access/{by_email['no@example.org'].id}/decline",
         data={"csrf_token": csrf_from(page.text)},
     )
     assert r.status_code == 400
@@ -155,7 +158,9 @@ async def test_only_admins_decide(app: FastAPI, client: httpx.AsyncClient) -> No
     await make_account(client)
     page = await client.get("/")
     r = await client.post(
-        f"/admin/access/{saved.id}/invite", data={"csrf_token": csrf_from(page.text)}
+        follow_redirects=True,
+        url=f"/admin/access/{saved.id}/invite",
+        data={"csrf_token": csrf_from(page.text)},
     )
     assert r.status_code == 404
 

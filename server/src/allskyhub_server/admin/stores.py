@@ -137,6 +137,8 @@ class OtherApp:
     version_file: str = "pubspec.yaml"
     # A private repository: its store files come with the hub's GitHub token.
     private: bool = False
+    # App Store age-rating answers other than "none"/"no" (appstore.AGE_RATING).
+    age_rating: dict[str, Any] = field(default_factory=dict[str, Any])
 
     @property
     def version_name(self) -> str:
@@ -199,6 +201,8 @@ OTHER_APPS = {
         },
         version_file="apps/mobile/app.json",
         private=True,
+        # A wine cellar: alcohol throughout (its store/README.md: 17+ at Apple).
+        age_rating={"alcoholTobaccoOrDrugUseOrReferences": "FREQUENT_OR_INTENSE"},
     ),
 }
 # A repository's store folder, downloaded for a listing push (codeload, no API quota).
@@ -670,6 +674,10 @@ def _associated(error: dict[str, Any]) -> str:
 
 def _dict(body: Any) -> dict[str, Any]:
     return cast(dict[str, Any], body) if isinstance(body, dict) else {}
+
+
+def _list_any(body: Any) -> list[Any]:
+    return cast(list[Any], body) if isinstance(body, list) else []
 
 
 def _list(body: Any) -> list[dict[str, Any]]:
@@ -1305,6 +1313,36 @@ class Stores:
                 "(Interner Test → Release prüfen → Einführen)."
             )
         return 0, f"Version {code} ist im internen Test."
+
+    async def play_tracks(self, package: str = PACKAGE) -> dict[str, list[dict[str, Any]]]:
+        """What Google has on each track, read in an edit that is thrown away: per track
+        its releases (name, status, version codes). For the apps page (apps.py), which
+        so also sees what was submitted by hand in the Play Console."""
+        client = self._http()
+        try:
+            auth = {"Authorization": f"Bearer {await self._play_token(client)}"}
+            app = f"{PLAY}/applications/{package}"
+            r = await client.post(f"{app}/edits", headers=auth)
+            if r.status_code != 200:
+                raise StoreError(f"Google Play: {_message(r)}")
+            edit = str(_dict(r.json())["id"])
+            r = await client.get(f"{app}/edits/{edit}/tracks", headers=auth)
+            await client.delete(f"{app}/edits/{edit}", headers=auth)
+            if r.status_code != 200:
+                raise StoreError(f"Google Play: {_message(r)}")
+            return {
+                str(t.get("track")): [
+                    {
+                        "name": str(x.get("name", "")),
+                        "status": str(x.get("status", "")),
+                        "codes": [str(c) for c in _list_any(x.get("versionCodes"))],
+                    }
+                    for x in _list(t.get("releases"))
+                ]
+                for t in _list(_dict(r.json()).get("tracks"))
+            }
+        finally:
+            await self._close(client)
 
     async def submit_play(self, package: str = PACKAGE) -> Report:
         """The newest App Bundle of the internal test into production, which sends it to

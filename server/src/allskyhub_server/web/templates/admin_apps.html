@@ -18,6 +18,7 @@
 {% for card in cards %}
 <section class="card stack" id="app-{{ card.key }}">
   <h2>{{ card.title }} <span class="muted small">· Version {{ card.version }}</span></h2>
+  <p class="muted small">{% if card.live_at %}Stand bei Apple und Google: {{ card.live_at[:16] | replace('T', ' ') }} UTC (alle zehn Minuten neu){% else %}Apple und Google werden gerade gefragt; Seite gleich neu laden.{% endif %}</p>
   <div class="store-rows">
     {% for row in card.rows %}
     <div class="store-row">

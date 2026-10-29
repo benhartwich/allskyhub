@@ -1571,3 +1571,29 @@ def test_app_store_version_follows_pubspec(tmp_path: Path) -> None:
     pubspec.write_text("name: app\nversion: 2.3.4+17\n")
     assert appstore.app_version(pubspec) == "2.3.4"
     assert appstore.app_version(tmp_path / "missing.yaml") == "1.0.0"
+
+
+async def test_age_rating_with_an_apps_own_answers() -> None:
+    """Vinventory, 2026-10-29: a wine cellar answers the alcohol question, not "none"."""
+    sent: list[dict[str, Any]] = []
+
+    def answer(request: httpx.Request) -> httpx.Response:
+        if request.method == "GET":
+            attrs = {"alcoholTobaccoOrDrugUseOrReferences": None, "gambling": None}
+            return httpx.Response(200, json={"data": {"id": "AGE", "attributes": attrs}})
+        sent.append(json.loads(request.content)["data"]["attributes"])
+        return httpx.Response(200, json={"data": {}})
+
+    api = appstore._Api(  # pyright: ignore[reportPrivateUsage]
+        httpx.AsyncClient(transport=httpx.MockTransport(answer)), lambda: {}
+    )
+    own = stores.OTHER_APPS["vinventory"].age_rating
+    text = await appstore._age_rating(api, "INFO", own)  # pyright: ignore[reportPrivateUsage]
+    assert sent[-1] == {
+        "alcoholTobaccoOrDrugUseOrReferences": "FREQUENT_OR_INTENSE",
+        "gambling": False,
+    }
+    assert text.startswith("1 Fragen mit „keine“ beantwortet; alcoholTobacco")
+    assert appstore.profile(stores.OTHER_APPS["vinventory"]).age_rating == own
+    await appstore._age_rating(api, "INFO")  # pyright: ignore[reportPrivateUsage]
+    assert sent[-1]["alcoholTobaccoOrDrugUseOrReferences"] == "NONE"

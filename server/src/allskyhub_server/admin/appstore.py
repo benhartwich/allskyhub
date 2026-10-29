@@ -16,7 +16,7 @@ import json
 import logging
 import re
 from collections.abc import Callable, Coroutine
-from dataclasses import dataclass, replace
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Any
 
@@ -134,6 +134,8 @@ class Profile:
     categories: tuple[str, str]
     version: str
     what_to_test: dict[str, str]
+    # Age-rating answers that differ from "none"/"no" (stores.OtherApp.age_rating).
+    age_rating: dict[str, Any] = field(default_factory=dict[str, Any])
 
     @property
     def state_file(self) -> str:
@@ -168,6 +170,7 @@ def profile(app: OtherApp | None) -> Profile:
         categories=app.categories,
         version=app.version,
         what_to_test=app.what_to_test,
+        age_rating=app.age_rating,
     )
 
 
@@ -296,7 +299,7 @@ async def push(
         )
     report.add("Name und Untertitel", "ok", ", ".join(LOCALES))
     await _soft(report, "Kategorie", _category(api, str(info["id"]), p))
-    await _soft(report, "Altersfreigabe", _age_rating(api, str(info["id"])))
+    await _soft(report, "Altersfreigabe", _age_rating(api, str(info["id"]), p.age_rating))
 
     versions = await api.items(
         f"/apps/{app_id}/appStoreVersions", "Versionen", **{"filter[platform]": "IOS"}
@@ -477,20 +480,24 @@ async def _category(api: _Api, info: str, p: Profile = ALLSKYHUB) -> str:
     return f"{primary}, {secondary}"
 
 
-async def _age_rating(api: _Api, info: str) -> str:
+async def _age_rating(api: _Api, info: str, differs: dict[str, Any] | None = None) -> str:
     """Every question answered "none"/"no" (as for Google Play: no violence, no
-    purchases, no web browser, no chat, no feed of other people's content). Only the
-    questions Apple's declaration has right now are sent."""
+    purchases, no web browser, no chat, no feed of other people's content), except the
+    app's own answers (Vinventory: alcohol). Only the questions Apple's declaration has
+    right now are sent."""
     found = _dict(
         (await api.call("GET", f"/appInfos/{info}/ageRatingDeclaration", "Altersfreigabe")).get(
             "data"
         )
     )
     present = _dict(found.get("attributes"))
-    answers = {k: v for k, v in AGE_RATING.items() if k in present}
+    own = differs or {}
+    answers = {k: own.get(k, v) for k, v in {**AGE_RATING, **own}.items() if k in present}
     body = {"data": {"type": "ageRatingDeclarations", "id": found["id"], "attributes": answers}}
     await api.call("PATCH", f"/ageRatingDeclarations/{found['id']}", "Altersfreigabe", body=body)
-    return f"{len(answers)} Fragen mit „keine“ beantwortet."
+    named = [f"{k}: {v}" for k, v in own.items() if k in present]
+    rest = len(answers) - len(named)
+    return f"{rest} Fragen mit „keine“ beantwortet" + (f"; {', '.join(named)}." if named else ".")
 
 
 async def _public_group(api: _Api, app_id: str, build: str) -> str:
@@ -877,6 +884,22 @@ async def _withdraw(api: _Api, app_id: str, version: str) -> bool:
             return True
         await asyncio.sleep(WITHDRAW_PAUSE)
     return False  # withdrawn all the same; Apple hands it back a little later
+
+
+async def live(client: httpx.AsyncClient, auth: Auth, p: Profile) -> list[dict[str, str]]:
+    """The app's App Store versions as Apple has them now (number and state), for the
+    apps page: so it also sees what was submitted in App Store Connect by hand."""
+    api = _Api(client, auth)
+    apps = await api.items("/apps", "App", **{"filter[bundleId]": p.package})
+    if not apps:
+        return []
+    versions = await api.items(
+        f"/apps/{apps[0]['id']}/appStoreVersions", "Versionen", **{"filter[platform]": "IOS"}
+    )
+    return [
+        {"version": str(_dict(v.get("attributes")).get("versionString", "")), "state": _state(v)}
+        for v in versions
+    ]
 
 
 async def submit_report(stores: Stores, app: OtherApp | None = None) -> Report:

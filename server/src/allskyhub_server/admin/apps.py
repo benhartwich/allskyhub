@@ -2,25 +2,36 @@
 where it stands and the one next step (Benjamin, 2026-10-28: the store part of the admin
 page was too hard to follow).
 
-Pure: it reads what the hub already keeps (the Android job, Codemagic's build states,
-the last listing push and review submission) and decides; the routes act.
+It reads what the hub keeps (the Android job, Codemagic's build states, the last listing
+push and review submission) and what the stores say now (live-<app>.json, refreshed in
+the background at most every ten minutes): a release submitted by hand in the Play
+Console or App Store Connect counts too (Benjamin, 2026-10-29: rows said "failed" for
+apps that were in review). The rows are pure; the routes act.
 """
 
 from __future__ import annotations
 
+import asyncio
 import datetime as dt
+import logging
 from dataclasses import dataclass, field
 from typing import Any
+
+import httpx
 
 from allskyhub_server.admin import appstore
 from allskyhub_server.admin.stores import (
     OTHER_APPS,
+    PACKAGE,
     AndroidJob,
     OtherApp,
     Report,
+    StoreError,
     Stores,
     build_url,
 )
+
+log = logging.getLogger(__name__)
 
 # Codemagic's build states that are over; anything else is still on its way.
 CM_DONE = frozenset({"finished"})
@@ -29,6 +40,20 @@ ACTIONS = (
     "setup", "build-android", "build-ios", "play-listing", "appstore",
     "review-play", "review-appstore",
 )  # fmt: skip
+# What the stores say, kept this long before the page asks again.
+LIVE_MAX_AGE = dt.timedelta(minutes=10)
+LIVE_JOB = "live"
+# Apple's states of a version on its way and in the store.
+APPLE_REVIEW = {
+    "WAITING_FOR_REVIEW": "wartet bei Apple auf die Prüfung",
+    "IN_REVIEW": "wird von Apple geprüft",
+    "PENDING_DEVELOPER_RELEASE": "ist von Apple freigegeben und wartet auf die Veröffentlichung",
+    "PENDING_APPLE_RELEASE": "ist von Apple freigegeben",
+    "PROCESSING_FOR_APP_STORE": "ist freigegeben und kommt gleich in den App Store",
+    "READY_FOR_SALE": "ist im App Store",
+    "READY_FOR_DISTRIBUTION": "ist im App Store",
+}
+APPLE_REJECTED = {"REJECTED", "METADATA_REJECTED", "INVALID_BINARY"}
 
 
 @dataclass(frozen=True)
@@ -53,10 +78,74 @@ class Card:
     results: list[tuple[str, dict[str, Any]]] = field(
         default_factory=lambda: list[tuple[str, dict[str, Any]]]()
     )
+    live_at: str = ""  # when Apple and Google were last asked
 
     @property
     def waiting(self) -> bool:
         return any(r.tone == "wait" for r in self.rows)
+
+
+def live_file(key: str) -> str:
+    return f"live-{key}.json"
+
+
+def live_of(stores: Stores, key: str) -> dict[str, Any]:
+    return stores.vault.read_json(live_file(key)) or {}
+
+
+def _stale(stores: Stores) -> bool:
+    now = dt.datetime.now(dt.UTC)
+    for key in ("allskyhub", *OTHER_APPS):
+        try:
+            at = dt.datetime.fromisoformat(str(live_of(stores, key).get("at", "")))
+        except ValueError:
+            return True
+        if now - at > LIVE_MAX_AGE:
+            return True
+    return False
+
+
+async def refresh_live(stores: Stores) -> None:
+    """Ask Apple and Google where each app stands; what one of them cannot answer is
+    left out (the rows then go by the hub's own records)."""
+    client = stores.client or httpx.AsyncClient(timeout=30)
+    try:
+        for app in (None, *OTHER_APPS.values()):
+            key = app.key if app else "allskyhub"
+            found: dict[str, Any] = {"at": _now()}
+            if stores.vault.has("asc"):
+                try:
+                    found["apple"] = await appstore.live(
+                        client, stores.asc_auth, appstore.profile(app)
+                    )
+                except (StoreError, httpx.HTTPError, KeyError) as exc:
+                    log.info("live state %s at Apple: %s", key, exc)
+            if stores.vault.has("play"):
+                try:
+                    found["play"] = await stores.play_tracks(app.package if app else PACKAGE)
+                except (StoreError, httpx.HTTPError, KeyError) as exc:
+                    log.info("live state %s at Google: %s", key, exc)
+            stores.vault.write_json(live_file(key), found)
+    finally:
+        if client is not stores.client:
+            await client.aclose()
+
+
+def start_live(stores: Stores, *, force: bool = False) -> bool:
+    """Refresh in the background when the last answers are older than LIVE_MAX_AGE."""
+    task = stores.jobs.get(LIVE_JOB)
+    if (task is not None and not task.done()) or not (force or _stale(stores)):
+        return False
+
+    async def run() -> Report:
+        try:
+            await refresh_live(stores)
+        except Exception:  # a bug: the page still works from the hub's own records
+            log.exception("live store state failed")
+        return Report()
+
+    stores.jobs[LIVE_JOB] = asyncio.create_task(run())
+    return True
 
 
 def review_file(key: str, store: str) -> str:
@@ -92,20 +181,42 @@ def version_of(stores: Stores, app: OtherApp | None) -> str:
     return appstore.listing_version(stores, app)
 
 
+def _production(play: dict[str, Any] | None, code: str) -> dict[str, Any] | None:
+    """The production release holding that version code, if Google has one."""
+    releases: list[dict[str, Any]] = (play or {}).get("production") or []
+    return next((r for r in releases if code in (r.get("codes") or [])), None)
+
+
 def android_row(
-    version: str, has_key: bool, job: AndroidJob, review: dict[str, Any] | None, aab: str
+    version: str,
+    has_key: bool,
+    job: AndroidJob,
+    review: dict[str, Any] | None,
+    aab: str,
+    play: dict[str, Any] | None = None,
 ) -> Row:
     latest = job.latest or {}
     if not has_key:
         return Row("Android", "todo", "Noch nicht eingerichtet.", "setup", "Einrichten")
     if job.busy:
         return Row("Android", "wait", "Der Server baut gerade das App Bundle …")
+    number, built = latest.get("build"), str(latest.get("version", ""))
+    release = _production(play, str(number)) if latest and built == version else None
+    if release is not None:  # also when submitted by hand in the Play Console
+        status = release.get("status")
+        if status == "draft":
+            return Row("Android", "todo", f"Build {number} ({built}) liegt als Entwurf in der "
+                       "Produktion: in der Play Console einführen.")  # fmt: skip
+        if status == "halted":
+            return Row("Android", "fail", f"Build {number} ({built}): die Einführung ist "
+                       "angehalten (Play Console).")  # fmt: skip
+        return Row("Android", "done", f"Build {number} ({built}) ist in der Produktion: bei "
+                   "Google in Prüfung oder schon live.")  # fmt: skip
     if job.state == "failed":
         return Row("Android", "fail", "Der letzte Build ist fehlgeschlagen (Protokoll unten).",
                    "build-android", "Neu bauen")  # fmt: skip
     if not latest:
         return Row("Android", "todo", "Noch kein Build.", "build-android", "Release bauen")
-    number, built = latest.get("build"), str(latest.get("version", ""))
     if built != version:
         return Row("Android", "todo", f"Build {number} ist Version {built}, nicht {version}.",
                    "build-android", "Release bauen")  # fmt: skip
@@ -132,9 +243,20 @@ def ios_row(
     build: dict[str, Any] | None,
     pushed: dict[str, Any] | None,
     review: dict[str, Any] | None,
+    apple: list[dict[str, str]] | None = None,
+    version: str = "",
 ) -> Row:
     if not codemagic:
         return Row("iOS", "todo", "Noch nicht eingerichtet.", "setup", "Einrichten")
+    # Where Apple has the current version (also when submitted in App Store Connect).
+    there = next((v for v in apple or [] if v.get("version") == version), None)
+    state = (there or {}).get("state", "")
+    if state in APPLE_REVIEW:
+        return Row("iOS", "done", f"Version {version} {APPLE_REVIEW[state]}.")
+    if state in APPLE_REJECTED:
+        return Row("iOS", "fail", f"Apple hat Version {version} abgelehnt; die Begründung "
+                   "steht in App Store Connect (App-Prüfung).", "review-appstore",
+                   "Erneut einreichen")  # fmt: skip
     if build is None:
         return Row("iOS", "todo", "Noch kein Build.", "build-ios", "Release bauen")
     link, status = build_url(build), str(build.get("status") or "")
@@ -180,6 +302,8 @@ async def cards(stores: Stores) -> list[Card]:
         card = Card(key, app.title if app else "allskyhub",
                     app.package if app else "org.allskyhub.app", version, android=job)  # fmt: skip
         latest_file = str((job.latest or {}).get("file", ""))
+        live = live_of(stores, key)
+        card.live_at = str(live.get("at", ""))
         card.rows.append(
             android_row(
                 version,
@@ -187,6 +311,7 @@ async def cards(stores: Stores) -> list[Card]:
                 job,
                 stores.vault.read_json(review_file(key, "play")),
                 f"/admin/stores-android/{latest_file}",
+                live.get("play"),
             )
         )
         codemagic = (
@@ -206,6 +331,8 @@ async def cards(stores: Stores) -> list[Card]:
                 ios_build,
                 pushed,
                 stores.vault.read_json(review_file(key, "appstore")),
+                live.get("apple"),
+                version,
             )
         )
         listing = stores.listing_state(app)

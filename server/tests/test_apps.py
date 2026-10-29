@@ -447,3 +447,47 @@ async def test_which_app_needs_a_new_build(tmp_path: Path) -> None:
     client = httpx.AsyncClient(transport=httpx.MockTransport(whole))
     assert await apps.main_commits(client, hub, stores.OTHER_APPS["bortle"], since) == []
     assert "path" not in asked[0]
+
+
+async def test_the_last_ios_build_from_codemagic(tmp_path: Path) -> None:
+    """Benjamin, 2026-10-29: iOS "unbekannt" for two apps. Android builds had pushed their
+    iOS builds out of the hub's list; Codemagic's own list knows them."""
+    hub = stores.Stores(tmp_path / "store", "benhartwich/allskyhub")
+    hub.vault.add_build(
+        {"id": "I1", "platform": "ios", "app": "bortle", "at": "2026-10-20T08:00:00Z"}
+    )
+    for n in range(12):
+        hub.vault.add_build({"id": "local", "platform": "android", "app": "vinventory", "n": n})
+    builds = hub.vault.builds()
+    assert len(builds) == 11
+    assert builds[-1]["id"] == "I1"  # an app's newest per platform stays
+    assert builds[0]["n"] == 11
+    assert apps._ios_at(hub, "bortle", {}) == "2026-10-20T08:00:00Z"  # pyright: ignore[reportPrivateUsage]
+
+    assert await hub.last_ios_build(stores.OTHER_APPS["bortle"]) is None  # no Codemagic
+    hub.vault.put("codemagic", *stores.parse_codemagic("t" * 30), by="a")
+    hub.vault.update_meta("codemagic", app_id="APP1", bortle_app_id="APP2")
+
+    def answer(request: httpx.Request) -> httpx.Response:
+        assert request.url.path == "/builds"
+        assert request.url.params["appId"] == "APP2"
+        ios, fin = "ios-release", "finished"
+        return httpx.Response(200, json={"builds": [
+            {"workflowId": ios, "status": fin, "startedAt": "2026-10-28T10:00:00.000+0000"},
+            {"workflowId": ios, "status": "failed", "startedAt": "2026-10-29T10:00:00.000+0000"},
+            {"workflowId": "android", "status": fin, "startedAt": "2026-10-29T11:00:00.000+0000"},
+            {"workflowId": ios, "status": fin, "startedAt": "2026-10-27T10:00:00.000+0000"},
+        ]})  # fmt: skip
+
+    hub._client = httpx.AsyncClient(transport=httpx.MockTransport(answer))  # pyright: ignore[reportPrivateUsage]
+    built = await hub.last_ios_build(stores.OTHER_APPS["bortle"])
+    assert built == "2026-10-28T10:00:00.000+0000"
+    # Codemagic's record wins over the hub's.
+    assert apps._ios_at(hub, "bortle", {"ios_built": built}) == built  # pyright: ignore[reportPrivateUsage]
+    commits = [{"sha": "c2", "date": "2026-10-29T09:00:00Z", "title": ""},
+               {"sha": "c1", "date": "2026-10-27T09:00:00Z", "title": ""}]  # fmt: skip
+    hub.vault.write_json(
+        apps.live_file("bortle"), {"at": "x", "ios_built": built, "commits": commits}
+    )
+    card = (await apps.cards(hub, only="bortle"))[0]
+    assert card.pending["ios"] == 1

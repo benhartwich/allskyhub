@@ -12,6 +12,7 @@ from fastapi import FastAPI
 
 from allskyhub_server.admin import apps, appstore, stores
 from allskyhub_server.admin.stores import AndroidJob
+from allskyhub_server.auth import ratelimit
 from allskyhub_server.settings import Settings
 from tests.helpers import csrf_from, make_account
 from tests.test_stores import ISSUER, _p8, _play_json  # pyright: ignore[reportPrivateUsage]
@@ -263,6 +264,9 @@ async def test_public_apk_download(
     tmp_path: Path,
 ) -> None:
     """Benjamin, 2026-10-29: a public download link for the Android app."""
+    # The limit's windows are fixed hours: here a day, so a test across the full hour
+    # still counts in one window (CI failed at 20:00, 2026-10-29).
+    monkeypatch.setattr(ratelimit, "APK_PER_IP", (ratelimit.Limit(10, 86400),))
     out = tmp_path / "release"
     hub = stores.Stores(tmp_path / "store", "benhartwich/allskyhub", release_out=out)
     monkeypatch.setattr(app.state, "stores", hub)

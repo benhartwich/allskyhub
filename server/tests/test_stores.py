@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import base64
+import hashlib
 import json
 import plistlib
 from pathlib import Path
@@ -1623,3 +1624,90 @@ async def test_a_build_codemagic_no_longer_knows_keeps_the_page(tmp_path: Path) 
     hub.vault.put("codemagic", *stores.parse_codemagic("t" * 40), by="a")
     hub.vault.add_build({"id": "GONE", "platform": "ios", "at": "x", "app": "vinventory"})
     assert [b["status"] for b in await hub.recent_builds()] == ["unbekannt"]
+
+
+def _built(tmp_path: Path, key: str, build: int) -> Path:
+    """An App Bundle the root helper built, as it leaves it in release-<key>."""
+    out = tmp_path / f"release-{key}"
+    out.mkdir()
+    (out / f"{key}-{build}.aab").write_bytes(b"x")
+    latest = {"build": build, "version": "0.1.0", "commit": "6e54f99",
+              "file": f"{key}-{build}.aab"}  # fmt: skip
+    (out / "latest.json").write_text(json.dumps(latest))
+    return out
+
+
+async def test_universal_apk_from_google(tmp_path: Path) -> None:
+    """Benjamin, 2026-10-29: a public download link for Vinventory's Android app. Google's
+    universal APK is signed with the app key, so it installs and takes store updates."""
+    _built(tmp_path, "vinventory", 33)
+    out = tmp_path / "release"
+    hub = stores.Stores(tmp_path / "store", "benhartwich/allskyhub", release_out=out)
+    hub.vault.put("play", *stores.parse_play(_play_json()), by="a")
+    apk = b"PK\x03\x04" + b"apk" * 1000
+    seen: list[str] = []
+    base = "/androidpublisher/v3/applications/eu.vinventory.app/generatedApks/33"
+
+    def answer(request: httpx.Request) -> httpx.Response:
+        seen.append(request.url.path)
+        if request.url.host == "oauth2.googleapis.com":
+            return httpx.Response(200, json={"access_token": "t"})
+        if request.url.path == base:
+            return httpx.Response(200, json={"generatedApks": [{
+                "certificateSha256Hash": "AB",
+                "generatedSplitApks": [{"downloadId": "split"}],
+                "generatedUniversalApk": {"downloadId": "U1"},
+            }]})  # fmt: skip
+        if request.url.path == f"{base}/downloads/U1:download":
+            assert request.url.params["alt"] == "media"
+            return httpx.Response(302, headers={"Location": "https://dl.example/u1"})
+        if request.url.host == "dl.example":
+            assert "Authorization" not in request.headers  # not to another host
+            return httpx.Response(200, content=apk)
+        return httpx.Response(404, json={"error": {"message": "nope"}})
+
+    hub._client = httpx.AsyncClient(transport=httpx.MockTransport(answer))  # pyright: ignore[reportPrivateUsage]
+    vinventory = stores.OTHER_APPS["vinventory"]
+    report = await hub.fetch_apk(vinventory)
+    assert report.ok, report.steps
+    assert "/download/vinventory.apk" in report.steps[0].text
+    found = hub.apk("vinventory")
+    assert found is not None
+    path, facts = found
+    assert path.read_bytes() == apk
+    assert facts["build"] == 33
+    assert facts["version"] == "0.1.0"
+    assert facts["size"] == len(apk)
+    assert facts["sha256"] == hashlib.sha256(apk).hexdigest()
+    assert sorted(p.name for p in hub.apk_dir.iterdir()) == ["vinventory.apk", "vinventory.json"]
+    assert hub.apk("bortle") is None
+    assert hub.apk("../store/play") is None
+
+    # Not a ZIP: the APK there stays as it was, nothing half-written is left.
+    apk_before = path.read_bytes()
+    apk = b"<html>"
+    report = await hub.fetch_apk(vinventory)
+    assert not report.ok
+    assert path.read_bytes() == apk_before
+    assert sorted(p.name for p in hub.apk_dir.iterdir()) == ["vinventory.apk", "vinventory.json"]
+
+
+async def test_no_universal_apk_yet(tmp_path: Path) -> None:
+    _built(tmp_path, "bortle", 18)
+    out = tmp_path / "release"
+    hub = stores.Stores(tmp_path / "store", "benhartwich/allskyhub", release_out=out)
+    bortle = stores.OTHER_APPS["bortle"]
+    assert "Kein Google-Play-Dienstkonto" in (await hub.fetch_apk(bortle)).steps[0].text
+    hub.vault.put("play", *stores.parse_play(_play_json()), by="a")
+
+    def answer(request: httpx.Request) -> httpx.Response:
+        if request.url.host == "oauth2.googleapis.com":
+            return httpx.Response(200, json={"access_token": "t"})
+        return httpx.Response(200, json={"generatedApks": [{"certificateSha256Hash": "AB"}]})
+
+    hub._client = httpx.AsyncClient(transport=httpx.MockTransport(answer))  # pyright: ignore[reportPrivateUsage]
+    report = await hub.fetch_apk(bortle)
+    assert [x.state for x in report.steps] == ["fail"]
+    assert "keine universelle APK" in report.steps[0].text
+    assert hub.apk("bortle") is None
+    assert "Noch kein App Bundle" in (await hub.fetch_apk(None)).steps[0].text

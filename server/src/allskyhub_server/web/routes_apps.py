@@ -29,6 +29,7 @@ TITLES = {
     "appstore": "App Store übertragen",
     "review-play": "Android zur Prüfung einreichen",
     "review-appstore": "iOS zur Prüfung einreichen",
+    "apk": "APK zum Herunterladen holen",
 }
 
 
@@ -104,6 +105,8 @@ async def apps_action(
             started = stores.start_listing(by, other)
         elif action == "appstore":
             started = appstore.start(stores, by, other)
+        elif action == "apk":
+            started = stores.start_apk(by, other)
         else:
             store = action.removeprefix("review-")
             if store == "play":

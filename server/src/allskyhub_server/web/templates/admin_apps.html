@@ -38,7 +38,7 @@
   <details>
     <summary>Mehr: neu bauen, Store-Einträge, Protokolle</summary>
     <div class="row-links wrap">
-      {% for action in ('build-android', 'build-ios', 'play-listing', 'appstore', 'setup') %}
+      {% for action in ('build-android', 'build-ios', 'play-listing', 'appstore', 'apk', 'setup') %}
       {% if not (action == 'build-android' and android_busy) %}
       <form method="post" action="/admin/apps" class="inline">
         <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
@@ -49,9 +49,12 @@
       {% endif %}
       {% endfor %}
     </div>
-    <p class="muted small">Gebaut wird immer <code>main</code>: Android auf diesem Server (danach im internen Test bei Google Play), iOS bei Codemagic (danach in TestFlight). Die Store-Texte und Screenshots kommen aus dem Repository. „Einrichten“ prüft die Zugänge und legt fehlende Schlüssel an.</p>
+    <p class="muted small">Gebaut wird immer <code>main</code>: Android auf diesem Server (danach im internen Test bei Google Play), iOS bei Codemagic (danach in TestFlight). Die Store-Texte und Screenshots kommen aus dem Repository. „Einrichten“ prüft die Zugänge und legt fehlende Schlüssel an. „APK zum Herunterladen holen“ lädt Googles installierbare APK des letzten App Bundles und stellt sie öffentlich zum Download.</p>
     {% if card.android and card.android.latest %}
     <p class="small">Letztes App Bundle: <a href="/admin/stores-android/{{ card.android.latest.file }}">{{ card.android.latest.file }}</a> <span class="muted">· Version {{ card.android.latest.version }} ({{ card.android.latest.build }})</span></p>
+    {% endif %}
+    {% if card.apk %}
+    <p class="small">Zum Herunterladen (öffentlich): <a href="/download/{{ card.key }}.apk">{{ request.base_url }}download/{{ card.key }}.apk</a> <span class="muted">· Version {{ card.apk.version }} ({{ card.apk.build }}), von Google signiert, geholt {{ card.apk.at[:16] | replace('T', ' ') }} UTC</span></p>
     {% endif %}
     {% if card.android and card.android.log %}
     <details>

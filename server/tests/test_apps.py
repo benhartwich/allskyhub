@@ -231,3 +231,41 @@ async def test_apps_page_and_actions(
     assert hub.vault.read_json("review-allskyhub-play.json") is not None
     # A warning (here: no account) leaves the step to try again, not a dead end.
     assert "Erneut einreichen" in (await client.get("/admin/apps")).text
+
+
+async def test_public_apk_download(
+    app: FastAPI,
+    client: httpx.AsyncClient,
+    settings: Settings,
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    """Benjamin, 2026-10-29: a public download link for the Android app."""
+    out = tmp_path / "release"
+    hub = stores.Stores(tmp_path / "store", "benhartwich/allskyhub", release_out=out)
+    monkeypatch.setattr(app.state, "stores", hub)
+    assert (await client.get("/download/vinventory.apk")).status_code == 404
+    hub.apk_dir.mkdir()
+    (hub.apk_dir / "vinventory.apk").write_bytes(b"PK\x03\x04apk")
+    facts = {"version": "0.1.0", "build": 33, "at": "2026-10-29T12:00:00Z"}
+    (hub.apk_dir / "vinventory.json").write_text(json.dumps(facts))
+    r = await client.get("/download/vinventory.apk")  # no login
+    assert r.status_code == 200
+    assert r.content == b"PK\x03\x04apk"
+    assert r.headers["content-type"] == "application/vnd.android.package-archive"
+    assert "vinventory-0.1.0-33.apk" in r.headers["content-disposition"]
+    assert (await client.get("/download/nope.apk")).status_code == 404
+
+    email = await make_account(client)
+    monkeypatch.setattr(settings, "admin_emails", email)
+    page = await client.get("/admin/apps")
+    assert 'href="/download/vinventory.apk"' in page.text
+    assert 'href="/download/bortle.apk"' not in page.text
+    token = csrf_from(page.text)
+    r = await client.post(
+        "/admin/apps", data={"csrf_token": token, "app": "bortle", "action": "apk"}
+    )
+    assert "APK zum Herunterladen holen gestartet" in r.text
+    task = hub.jobs["apk-bortle.json"]
+    await task
+    assert "Kein Google-Play-Dienstkonto" in (await client.get("/admin/apps")).text

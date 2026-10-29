@@ -23,6 +23,7 @@ from __future__ import annotations
 import asyncio
 import base64
 import datetime as dt
+import hashlib
 import json
 import logging
 import os
@@ -71,6 +72,7 @@ CONTACT_WEBSITE = "https://allskyhub.org"
 SCREENSHOTS = (2, 8)
 SCREENSHOT_MAX = 8 * 1024 * 1024
 LOG_TAIL = 60
+APK_MAX = 300 * 1024 * 1024  # a universal APK holds every ABI; Vinventory's is some 100 MB
 
 CODEMAGIC = "https://codemagic.io/api/v3"
 CODEMAGIC_V1 = "https://api.codemagic.io"
@@ -716,6 +718,9 @@ class Stores:
         # here holds this lock, and the apps page's look at Play skips while it is held.
         self.play_edits = asyncio.Lock()
         self.screenshot_dir = root / "screenshots"
+        # Google's universal APKs for the public download (/download/<app>.apk), next to
+        # the vault, never in it: the folder is served.
+        self.apk_dir = root.parent / "apk"
 
     @property
     def client(self) -> httpx.AsyncClient | None:
@@ -1361,6 +1366,149 @@ class Stores:
             ]
             for t in _list(_dict(r.json()).get("tracks"))
         }
+
+    # The APK for a download link (Benjamin, 2026-10-29: "einen downloadlink für die
+    # vinventory app android", public). Google makes a universal APK of every App Bundle
+    # and signs it with the app key, like the store's: it installs directly and later
+    # takes the store's updates. One signed with the upload key would do neither.
+
+    def start_apk(self, by: str, other: OtherApp | None = None) -> bool:
+        """Fetch the APK in the background (some 100 MB); False while one is on its way.
+        The result lands in ``apk-<app>.json``."""
+        key = other.key if other else "allskyhub"
+        name = f"apk-{key}.json"
+        task = self.jobs.get(name)
+        if task is not None and not task.done():
+            return False
+        self.vault.write_json(name, {"at": _now(), "by": by, "running": True})
+
+        async def run() -> Report:
+            try:
+                report = await self.fetch_apk(other)
+            except Exception:  # a bug, not Google
+                log.exception("apk fetch failed")
+                report = Report()
+                report.add("APK", "fail", "Interner Fehler, siehe Log des Hubs.")
+            steps = [{"title": x.title, "state": x.state, "text": x.text} for x in report.steps]
+            self.vault.write_json(name, {"at": _now(), "by": by, "steps": steps})
+            log.info("apk %s fetched by %s: %s", key, by,
+                     [(x.title, x.state, x.text) for x in report.steps])  # fmt: skip
+            return report
+
+        self.jobs[name] = asyncio.create_task(run())
+        return True
+
+    def apk_state(self, other: OtherApp | None = None) -> dict[str, Any] | None:
+        """The last fetch: ``running``, or its ``steps``."""
+        name = f"apk-{other.key if other else 'allskyhub'}.json"
+        state = self.vault.read_json(name)
+        task = self.jobs.get(name)
+        if state and state.get("running") and (task is None or task.done()):
+            text = "Abgebrochen (der Hub wurde neu gestartet), bitte noch einmal holen."
+            return {**state, "running": False,
+                    "steps": [{"title": "APK", "state": "fail", "text": text}]}  # fmt: skip
+        return state
+
+    def apk(self, key: str) -> tuple[Path, dict[str, Any]] | None:
+        """The APK fetched for an app and its facts (version, build, size, SHA-256)."""
+        if key != "allskyhub" and key not in OTHER_APPS:
+            return None
+        path = self.apk_dir / f"{key}.apk"
+        try:
+            raw = json.loads((self.apk_dir / f"{key}.json").read_text())
+        except (OSError, ValueError):
+            return None
+        if not isinstance(raw, dict) or not path.is_file():
+            return None
+        return path, cast(dict[str, Any], raw)
+
+    async def fetch_apk(self, other: OtherApp | None = None) -> Report:
+        """Google's universal APK of the newest App Bundle built here."""
+        report = Report()
+        latest = self.android_job(other).latest
+        if not self.vault.has("play"):
+            report.add("APK", "warn", "Kein Google-Play-Dienstkonto hinterlegt.")
+            return report
+        if latest is None:
+            report.add("APK", "warn", "Noch kein App Bundle gebaut („Android-Release bauen“).")
+            return report
+        client = self._client or httpx.AsyncClient(timeout=UPLOAD_TIMEOUT)
+        try:
+            await self._fetch_apk(client, other, latest, report)
+        except StoreError as exc:
+            report.add("APK", "fail", str(exc))
+        except httpx.HTTPError as exc:
+            report.add("APK", "fail", f"Google Play nicht erreichbar ({type(exc).__name__}).")
+        finally:
+            await self._close(client)
+        return report
+
+    async def _fetch_apk(
+        self,
+        client: httpx.AsyncClient,
+        other: OtherApp | None,
+        latest: dict[str, Any],
+        report: Report,
+    ) -> None:
+        key, package = (other.key, other.package) if other else ("allskyhub", PACKAGE)
+        code = int(latest["build"])
+        auth = {"Authorization": f"Bearer {await self._play_token(client)}"}
+        base = f"{PLAY}/applications/{package}/generatedApks/{code}"
+        r = await client.get(base, headers=auth)
+        if r.status_code != 200:
+            raise StoreError(f"Google hat keine APKs zu Version {code} ({_message(r)}).")
+        found = [
+            str(_dict(x.get("generatedUniversalApk")).get("downloadId", ""))
+            for x in _list(_dict(r.json()).get("generatedApks"))
+        ]
+        download = next((x for x in found if x), "")
+        if not download:
+            raise StoreError(
+                f"Google hat zu Version {code} (noch) keine universelle APK; ein frisch "
+                "hochgeladenes App Bundle braucht ein paar Minuten."
+            )
+        self.apk_dir.mkdir(mode=0o755, parents=True, exist_ok=True)
+        tmp = self.apk_dir / f".{key}.{_random.token_hex(4)}"
+        digest, size = hashlib.sha256(), 0
+        try:
+            async with client.stream(
+                "GET", f"{base}/downloads/{download}:download", params={"alt": "media"},
+                headers=auth, follow_redirects=True,
+            ) as r:  # fmt: skip
+                if r.status_code != 200:
+                    await r.aread()
+                    raise StoreError(f"Download abgelehnt ({_message(r)}).")
+                with tmp.open("xb") as f:
+                    async for chunk in r.aiter_bytes():
+                        size += len(chunk)
+                        if size > APK_MAX:
+                            raise StoreError("Die APK ist größer als erwartet; abgebrochen.")
+                        digest.update(chunk)
+                        f.write(chunk)
+            with tmp.open("rb") as f:
+                if f.read(4) != b"PK\x03\x04":
+                    raise StoreError("Google schickte keine APK.")
+            tmp.chmod(0o644)
+            tmp.replace(self.apk_dir / f"{key}.apk")
+        finally:
+            tmp.unlink(missing_ok=True)
+        facts = {
+            "version": str(latest.get("version", "")),
+            "build": code,
+            "commit": str(latest.get("commit", "")),
+            "size": size,
+            "sha256": digest.hexdigest(),
+            "at": _now(),
+        }
+        meta = self.apk_dir / f".{key}.json.{_random.token_hex(4)}"
+        meta.write_text(json.dumps(facts))
+        meta.chmod(0o644)
+        meta.replace(self.apk_dir / f"{key}.json")
+        report.add(
+            "APK", "ok",
+            f"Version {facts['version']} ({code}), {size // (1024 * 1024)} MB, von Google "
+            "signiert; zum Herunterladen unter /download/" + f"{key}.apk.",
+        )  # fmt: skip
 
     async def submit_play(self, package: str = PACKAGE) -> Report:
         """The newest App Bundle of the internal test into production, which sends it to

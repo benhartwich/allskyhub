@@ -38,7 +38,7 @@ CM_DONE = frozenset({"finished"})
 CM_FAILED = frozenset({"failed", "canceled", "timeout", "skipped"})
 ACTIONS = (
     "setup", "build-android", "build-ios", "play-listing", "appstore",
-    "review-play", "review-appstore", "apk",
+    "review-play", "review-appstore", "apk", "build-test-apk",
 )  # fmt: skip
 # What the stores say, kept this long before the page asks again.
 LIVE_MAX_AGE = dt.timedelta(minutes=10)
@@ -80,10 +80,11 @@ class Card:
     )
     live_at: str = ""  # when Apple and Google were last asked
     apk: dict[str, Any] | None = None  # the APK for /download/<key>.apk (Stores.apk)
+    test: AndroidJob | None = None  # the server's test APK (OtherApp.test_apk)
 
     @property
     def waiting(self) -> bool:
-        return any(r.tone == "wait" for r in self.rows)
+        return any(r.tone == "wait" for r in self.rows) or bool(self.test and self.test.busy)
 
 
 def live_file(key: str) -> str:
@@ -343,6 +344,7 @@ async def cards(stores: Stores) -> list[Card]:
         listing = stores.listing_state(app)
         found = stores.apk(key)
         card.apk = found[1] if found else None
+        card.test = stores.test_job(app) if app and app.test_apk else None
         results = (("Google-Play-Eintrag", listing), ("App Store", pushed),
                    ("APK", stores.apk_state(app)))  # fmt: skip
         for name, result in results:

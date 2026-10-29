@@ -142,6 +142,10 @@ class OtherApp:
     version_file: str = "pubspec.yaml"
     # A private repository: its store files come with the hub's GitHub token.
     private: bool = False
+    # A test APK built on the server (deploy/android, request "app=<key>-test"): package
+    # <package>.test beside the store app, signed with a key of the server, public at
+    # /download/<key>-test.apk (Benjamin, 2026-10-29: Google's universal APK sends to Play).
+    test_apk: bool = False
     # App Store age-rating answers other than "none"/"no" (appstore.AGE_RATING).
     age_rating: dict[str, Any] = field(default_factory=dict[str, Any])
 
@@ -206,6 +210,7 @@ OTHER_APPS = {
         },
         version_file="apps/mobile/app.json",
         private=True,
+        test_apk=True,
         # A wine cellar: alcohol throughout (its store/README.md: 17+ at Apple).
         age_rating={"alcoholTobaccoOrDrugUseOrReferences": "FREQUENT_OR_INTENSE"},
     ),
@@ -1212,24 +1217,57 @@ class Stores:
         )
         log.info("android release of %s requested by %s", app.key if app else "allskyhub", by)
 
+    def request_test_apk(self, by: str, app: OtherApp) -> None:
+        """Leave a request for the app's test APK (first line ``app=<key>-test``)."""
+        if not app.test_apk:
+            raise StoreError("Für diese App gibt es keine Test-APK.")
+        if self.android_busy():
+            raise StoreError("Es läuft schon ein Android-Build.")
+        self.release_dir.mkdir(mode=0o750, parents=True, exist_ok=True)
+        (self.release_dir / "request").write_text(f"app={app.key}-test\n{by}\n")
+        log.info("test apk of %s requested by %s", app.key, by)
+
     def android_busy(self) -> bool:
-        return any(self.android_job(a).busy for a in (None, *OTHER_APPS.values()))
+        apps = (None, *OTHER_APPS.values())
+        tests = (a for a in OTHER_APPS.values() if a.test_apk)
+        return any(self.android_job(a).busy for a in apps) or any(
+            self.test_job(a).busy for a in tests
+        )
 
     def _release_out(self, app: OtherApp | None) -> Path:
         """Where the root helper answers for the app (deploy/android: release-<key>)."""
         return self.release_out if app is None else self.release_out.with_name(f"release-{app.key}")
 
     def _requested(self) -> str | None:
-        """The app a waiting request names: "allskyhub", a further app's key, or None."""
+        """The build a waiting request names: "allskyhub", a further app's key,
+        "<key>-test" for its test APK, or None."""
         try:
             first = (self.release_dir / "request").read_text().split("\n", 1)[0]
         except OSError:
             return None
         key = first.removeprefix("app=")
-        return key if first.startswith("app=") and key in OTHER_APPS else "allskyhub"
+        tests = {f"{a.key}-test" for a in OTHER_APPS.values() if a.test_apk}
+        known = first.startswith("app=") and (key in OTHER_APPS or key in tests)
+        return key if known else "allskyhub"
 
     def android_job(self, app: OtherApp | None = None) -> AndroidJob:
-        out = self._release_out(app)
+        name = app.key if app else "allskyhub"
+        return self._job(self._release_out(app), name, rf"{name}-\d+\.aab")
+
+    def test_job(self, app: OtherApp) -> AndroidJob:
+        """The app's test APK (deploy/android answers in release-<key>-test)."""
+        out = self.release_out.with_name(f"release-{app.key}-test")
+        return self._job(out, f"{app.key}-test", rf"{app.key}-test-\d+\.apk")
+
+    def test_apk(self, key: str) -> Path | None:
+        """The newest test APK for ``<key>-test``, for /download/<key>-test.apk."""
+        app = OTHER_APPS.get(key.removesuffix("-test"))
+        if app is None or not app.test_apk or not key.endswith("-test"):
+            return None
+        latest = self.test_job(app).latest
+        return self.release_out.with_name(f"release-{key}") / latest["file"] if latest else None
+
+    def _job(self, out: Path, requested: str, pattern: str) -> AndroidJob:
 
         def read(name: str) -> str:
             try:
@@ -1238,7 +1276,7 @@ class Stores:
                 return ""
 
         state = read("state").strip() or "idle"
-        if self._requested() == (app.key if app else "allskyhub"):
+        if self._requested() == requested:
             state = "requested"
         latest: dict[str, Any] | None = None
         try:
@@ -1248,8 +1286,7 @@ class Stores:
         except ValueError:
             pass
         name = str(latest.get("file", "")) if latest else ""
-        prefix = app.key if app else "allskyhub"
-        if latest and not (re.fullmatch(rf"{prefix}-\d+\.aab", name) and self.aab(name)):
+        if latest and not (re.fullmatch(pattern, name) and (out / name).is_file()):
             latest = None
         return AndroidJob(state, "\n".join(read("log").splitlines()[-LOG_TAIL:]), latest)
 

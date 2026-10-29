@@ -15,7 +15,11 @@
 #                                          the same way, with its own upload key;
 #                                          "app=vinventory" the Expo app of the private
 #                                          github.com/benhartwich/vinventory (cloned with
-#                                          the hub's GitHub token)
+#                                          the hub's GitHub token);
+#                                          "app=vinventory-test" its test APK: package
+#                                          eu.vinventory.app.test, signed with a key of
+#                                          this server, published for the hub's
+#                                          /download/vinventory-test.apk, no upload
 #
 # Flutter and Gradle run in a container (ghcr.io/cirruslabs/flutter; for the Expo app
 # reactnativecommunity/react-native-android), limited in CPU and memory so the hub keeps
@@ -54,7 +58,7 @@ main() {
     local PACKAGE=org.allskyhub.app SRC=$BASE/src DEFINES=
     # flutter, or expo: React Native with expo prebuild and Gradle, in EXPO_IMAGE (pinned
     # like IMAGE; react-native-android v22.0: Node 22, JDK 17, Android SDK).
-    local KIND=flutter PRIVATE=
+    local KIND=flutter PRIVATE='' VARIANT=''
     local EXPO_IMAGE=${ALLSKYHUB_EXPO_IMAGE:-reactnativecommunity/react-native-android@sha256:e817ea1959719c97c05adbc55348ebe21d286cec2caed1f18ad3c4b88c08cbf7}
 
     install -d -m 755 "$BASE"
@@ -79,12 +83,15 @@ main() {
             done
             REPO_URL=${ALLSKYHUB_BORTLE_REPO_URL:-https://github.com/benhartwich/bortle-app.git}
             RELEASE=${ALLSKYHUB_BORTLE_RELEASE_OUT:-$BASE/release-bortle}
-        elif [[ $first == app=vinventory ]]; then
+        elif [[ $first == app=vinventory || $first == app=vinventory-test ]]; then
             app=vinventory APP_DIR=apps/mobile KEY_KIND=vinventory_android_upload
             PREFIX=VINVENTORY_UPLOAD PACKAGE=eu.vinventory.app SRC=$BASE/src-vinventory
             KIND=expo PRIVATE=1
             REPO_URL=${ALLSKYHUB_VINVENTORY_REPO_URL:-https://github.com/benhartwich/vinventory.git}
             RELEASE=${ALLSKYHUB_VINVENTORY_RELEASE_OUT:-$BASE/release-vinventory}
+            if [[ $first == app=vinventory-test ]]; then
+                VARIANT=test PACKAGE=eu.vinventory.app.test RELEASE=$BASE/release-vinventory-test
+            fi
         fi
         install -d -m 755 "$RELEASE"
         rm -f -- "$RELEASE/log"
@@ -191,13 +198,28 @@ main() {
 # it as JSON with the PKCS#12 file in base64), handed to the hub for the upload to Play.
 # Uses the variables of main(); the app's Gradle file reads <PREFIX>_KEYSTORE and the rest.
 release_build() {
-    [[ -f $STORE/$KEY_KIND.secret ]] || {
-        echo 'FEHLER: Kein Upload-Schlüssel, erst auf der Admin-Seite „Prüfen und einrichten“.'
-        answer "$RELEASE" state failed
-        return
-    }
     KEY_TMP=$(mktemp -d)  # global for the EXIT trap
     chmod 700 "$KEY_TMP"
+    if [[ -n $VARIANT ]]; then
+        # The test APK: a key of this server (root only, in KEYS, like allskyhub's test
+        # key), no Firebase (the test package is not registered there).
+        variant_key
+        cp -- "$KEYS/$app-test.p12" "$KEY_TMP/upload.p12"
+        cp -- "$KEYS/$app-test.env" "$KEY_TMP/keystore.env"
+    else
+        if [[ ! -f $STORE/$KEY_KIND.secret ]]; then
+            echo 'FEHLER: Kein Upload-Schlüssel, erst auf der Admin-Seite „Prüfen und einrichten“.'
+            answer "$RELEASE" state failed
+            return
+        fi
+        # Called plainly: in an `||` or `if` errexit and the ERR trap would be off inside.
+        store_key
+    fi
+    signed_build
+}
+
+# The hub's upload key (and the app's Firebase identifiers) into KEY_TMP.
+store_key() {
     # Read as the hub: the key is the hub's, and a symlink there must not reach root's files.
     runuser -u "$HUB_USER" -- cat -- "$STORE/$KEY_KIND.secret" > "$KEY_TMP/secret.json"
     # A further app's Firebase identifiers, if the admin page has them (fcm_app_<app>.json).
@@ -227,6 +249,29 @@ with open(os.path.join(sys.argv[2], "keystore.env"), "w") as f:
         if isinstance(value, str) and re.fullmatch(r"[A-Za-z0-9:._-]{1,200}", value):
             f.write("%s_FCM_%s=%s\n" % (sys.argv[5], name.upper(), value))
 PY
+}
+
+# A further app's test key, made once: test APKs update each other only when signed alike.
+# Back up /var/lib/allskyhub-android/keys with the server.
+variant_key() {
+    [[ -f $KEYS/$app-test.p12 && -f $KEYS/$app-test.env ]] && return
+    install -d -m 700 "$KEYS"
+    local password
+    password=$(head -c 24 /dev/urandom | base64 | tr -d '/+=')
+    # The password through the environment, not on a command line (/proc/*/cmdline).
+    KS_PASS=$password docker run --rm -e KS_PASS -v "$KEYS:/keys" "$EXPO_IMAGE" \
+        keytool -genkeypair -noprompt \
+        -keystore "/keys/$app-test.p12" -storetype PKCS12 -alias test -keyalg RSA \
+        -keysize 4096 -validity 10000 -dname "CN=$app test builds" \
+        -storepass:env KS_PASS -keypass:env KS_PASS
+    chmod 600 "$KEYS/$app-test.p12"
+    (umask 077; printf '%s_KEYSTORE_PASSWORD=%s\n%s_KEY_ALIAS=test\n%s_KEY_PASSWORD=%s\n' \
+        "$PREFIX" "$password" "$PREFIX" "$PREFIX" "$password" > "$KEYS/$app-test.env")
+    echo "Test key made: $KEYS/$app-test.p12"
+}
+
+# Gradle with the key in KEY_TMP: an App Bundle for the store, or the test APK.
+signed_build() {
     # React Native's build needs more than Flutter's: a fresh one was killed at 8 and 12 GB
     # (2026-10-29: Gradle, Kotlin daemon, R8 and clang for every core the container saw).
     # 16 GB, four cores visible, two Gradle workers, Kotlin in Gradle's own process, the
@@ -242,7 +287,8 @@ PY
         --env-file "$KEY_TMP/keystore.env"
         -e "${PREFIX}_KEYSTORE=/keys/upload.p12"
         -e ALLSKYHUB_MAVEN_GOOGLE="http://$PROXY_HOST:$PROXY_PORT/")
-    local aab
+    local aab task=bundleRelease
+    [[ -n $VARIANT ]] && task=assembleRelease
     if [[ $KIND == expo ]]; then
         # The workspace root installs (npm workspaces), the app's native project is made
         # fresh by expo prebuild; its config plugin signs from <PREFIX>_* and takes the
@@ -250,12 +296,13 @@ PY
         # The image points GRADLE_USER_HOME elsewhere; back to /root/.gradle, where the
         # cache volume, the Maven proxy's init script and gradle.properties are.
         "${run[@]}" -v allskyhub-android-npm:/root/.npm -e CI=1 -e GRADLE_USER_HOME=/root/.gradle \
-            -e "VINVENTORY_VERSION_CODE=$build" -w /work "$EXPO_IMAGE" \
+            -e "VINVENTORY_VERSION_CODE=$build" -e "VINVENTORY_VARIANT=$VARIANT" \
+            -w /work "$EXPO_IMAGE" \
             sh -c "npm ci --no-audit --no-fund && cd $APP_DIR \
                 && npx expo prebuild --platform android --clean --no-install \
                 && cd android && ./gradlew --no-daemon --max-workers=2 \
                     -Pkotlin.compiler.execution.strategy=in-process \
-                    -PreactNativeArchitectures=arm64-v8a,armeabi-v7a bundleRelease"
+                    -PreactNativeArchitectures=arm64-v8a,armeabi-v7a $task"
         aab=$SRC/$APP_DIR/android/app/build/outputs/bundle/release/app-release.aab
     else
         "${run[@]}" -v allskyhub-android-pub-cache:/root/.pub-cache \
@@ -264,6 +311,10 @@ PY
         aab=$SRC/$APP_DIR/build/app/outputs/bundle/release/app-release.aab
     fi
     rm -rf "$KEY_TMP"
+    if [[ -n $VARIANT ]]; then
+        publish_variant "$SRC/$APP_DIR/android/app/build/outputs/apk/release/app-release.apk"
+        return
+    fi
 
     local name=$app-$build.aab
     install -m 644 "$aab" "$RELEASE/$name"
@@ -284,6 +335,22 @@ PY
         3) answer "$RELEASE" state built ;;  # the first upload goes by hand
         *) answer "$RELEASE" state failed ;;
     esac
+}
+
+# The test APK into RELEASE (release-<app>-test), where the hub reads it; no upload.
+publish_variant() {  # publish_variant <apk>
+    local apk=$1 name=$app-test-$build.apk size sha
+    size=$(stat -c %s "$apk")
+    sha=$(sha256sum "$apk" | cut -d' ' -f1)
+    install -m 644 "$apk" "$RELEASE/$name"
+    printf '{"build": %d, "version": "%s", "commit": "%s", "built_at": "%s", "size": %d, "sha256": "%s", "file": "%s"}\n' \
+        "$build" "$version" "$commit" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$size" "$sha" "$name" \
+        | answer_stdin "$RELEASE" latest.json
+    # shellcheck disable=SC2012  # our own file names: no spaces or newlines
+    ls -1t "$RELEASE/$app"-test-*.apk | tail -n +4 | xargs -r rm -f
+    trap - ERR
+    answer "$RELEASE" state ok
+    echo "$name gebaut ($size Bytes)."
 }
 
 answer() {  # answer <root-owned dir> <file> <text>: replaced atomically, readable by all

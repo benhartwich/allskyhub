@@ -35,6 +35,28 @@
     </div>
     {% endfor %}
   </div>
+  {% if card.test %}
+  {% set t = card.test %}
+  <div class="store-rows">
+    <div class="store-row">
+      <strong>Test-APK</strong>
+      <span class="tone-{{ 'wait' if t.busy else ('fail' if t.state == 'failed' else ('done' if t.latest else 'todo')) }}">
+        {% if t.state == 'requested' %}⏳ angefordert, wartet auf den Server …{% elif t.state == 'running' %}⏳ wird gebaut …{% elif t.state == 'failed' %}✕ Bauen fehlgeschlagen (Protokoll unter „Mehr“){% elif not t.latest %}→ noch nicht gebaut{% endif %}
+        {% if t.latest and not t.busy %}✓ Build {{ t.latest.build }} (Version {{ t.latest.version }}, {{ t.latest.commit }}){% endif %}
+        {% if t.latest %} <a href="/download/{{ card.key }}-test.apk">{{ request.base_url }}download/{{ card.key }}-test.apk</a>{% endif %}
+      </span>
+      {% if not android_busy %}
+      <form method="post" action="/admin/apps" class="inline">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+        <input type="hidden" name="app" value="{{ card.key }}">
+        <input type="hidden" name="action" value="build-test-apk">
+        <button type="submit" class="secondary">{{ titles['build-test-apk'] }}</button>
+      </form>
+      {% else %}<span></span>{% endif %}
+    </div>
+  </div>
+  <p class="muted small">Eigene App „{{ card.title }} Test“ ({{ card.package }}.test) neben der Store-Version, vom Server signiert, ohne Push. Der Link ist öffentlich.</p>
+  {% endif %}
   <details>
     <summary>Mehr: neu bauen, Store-Einträge, Protokolle</summary>
     <div class="row-links wrap">
@@ -60,6 +82,12 @@
     <details>
       <summary>Protokoll des Android-Builds</summary>
       <pre class="small">{{ card.android.log }}</pre>
+    </details>
+    {% endif %}
+    {% if card.test and card.test.log %}
+    <details>
+      <summary>Protokoll der Test-APK</summary>
+      <pre class="small">{{ card.test.log }}</pre>
     </details>
     {% endif %}
     {% for name, result in card.results %}

@@ -11,7 +11,7 @@ import asyncio
 import datetime as dt
 import os
 import socket
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Iterator
 from pathlib import Path
 
 import httpx
@@ -81,6 +81,18 @@ async def engine(settings: Settings) -> AsyncIterator[AsyncEngine]:
     eng = create_async_engine(settings.async_database_url)
     yield eng
     await eng.dispose()
+
+
+@pytest.fixture(autouse=True)
+def _no_real_android_answers(tmp_path: Path) -> Iterator[None]:
+    """The root helper's answers under /var/lib/allskyhub-android are the server's: a
+    build running there made Stores look busy in tests (2026-10-29). Its own patch, not
+    the monkeypatch fixture, whose undo order the tests' app shutdown depends on."""
+    from allskyhub_server.admin import stores
+
+    with pytest.MonkeyPatch.context() as patch:
+        patch.setattr(stores, "RELEASE_OUT", tmp_path / "android-answers" / "release")
+        yield
 
 
 @pytest.fixture(autouse=True)

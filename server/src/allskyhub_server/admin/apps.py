@@ -118,12 +118,12 @@ async def refresh_live(stores: Stores) -> None:
                     found["apple"] = await appstore.live(
                         client, stores.asc_auth, appstore.profile(app)
                     )
-                except (StoreError, httpx.HTTPError, KeyError) as exc:
+                except (StoreError, httpx.HTTPError, KeyError, ValueError) as exc:
                     log.info("live state %s at Apple: %s", key, exc)
             if stores.vault.has("play"):
                 try:
                     found["play"] = await stores.play_tracks(app.package if app else PACKAGE)
-                except (StoreError, httpx.HTTPError, KeyError) as exc:
+                except (StoreError, httpx.HTTPError, KeyError, ValueError) as exc:
                     log.info("live state %s at Google: %s", key, exc)
             stores.vault.write_json(live_file(key), found)
     finally:

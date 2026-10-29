@@ -1326,8 +1326,10 @@ class Stores:
             if r.status_code != 200:
                 raise StoreError(f"Google Play: {_message(r)}")
             edit = str(_dict(r.json())["id"])
-            r = await client.get(f"{app}/edits/{edit}/tracks", headers=auth)
-            await client.delete(f"{app}/edits/{edit}", headers=auth)
+            try:
+                r = await client.get(f"{app}/edits/{edit}/tracks", headers=auth)
+            finally:
+                await client.delete(f"{app}/edits/{edit}", headers=auth)
             if r.status_code != 200:
                 raise StoreError(f"Google Play: {_message(r)}")
             return {

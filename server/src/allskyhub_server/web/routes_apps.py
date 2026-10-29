@@ -14,6 +14,7 @@ from fastapi.responses import Response
 from allskyhub_server.admin import apps, appstore
 from allskyhub_server.admin import stores as admin_stores
 from allskyhub_server.auth.sessions import SessionInfo
+from allskyhub_server.web import flash
 from allskyhub_server.web.deps import CurrentSession, SettingsDep, csrf_protect
 from allskyhub_server.web.render import render
 from allskyhub_server.web.routes_admin import admin_only
@@ -42,6 +43,10 @@ async def apps_page(
     refresh: bool = False,
     **extra: object,
 ) -> Response:
+    if request.method == "POST":  # reloading must not run the action again
+        return flash.redirect(request, session, "/admin/apps", status_code, extra)
+    status_code, kept = flash.take(request, session)
+    extra = {**kept, **extra}
     stores: admin_stores.Stores = request.app.state.stores
     cards = await apps.cards(stores)
     return render(

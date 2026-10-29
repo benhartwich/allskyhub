@@ -267,7 +267,8 @@ async def test_admin_uploads_keys_and_never_sees_them_again(
     play = _play_json()
 
     r = await client.post(
-        "/admin/stores/play",
+        follow_redirects=True,
+        url="/admin/stores/play",
         data={"csrf_token": token, "password": "wrong password"},
         files={"file": ("key.json", play, "application/json")},
     )
@@ -275,7 +276,8 @@ async def test_admin_uploads_keys_and_never_sees_them_again(
     assert not (tmp_path / "play.secret").exists()
 
     r = await client.post(
-        "/admin/stores/play",
+        follow_redirects=True,
+        url="/admin/stores/play",
         data={"csrf_token": token, "password": PASSWORD},
         files={"file": ("key.json", play, "application/json")},
     )
@@ -285,7 +287,8 @@ async def test_admin_uploads_keys_and_never_sees_them_again(
     assert (tmp_path / "play.secret").read_bytes() == play
 
     r = await client.post(
-        "/admin/stores/asc",
+        follow_redirects=True,
+        url="/admin/stores/asc",
         data={"csrf_token": token, "password": PASSWORD, "key_id": "nope", "issuer_id": ISSUER},
         files={"file": ("AuthKey.p8", _p8(), "application/octet-stream")},
     )
@@ -293,17 +296,26 @@ async def test_admin_uploads_keys_and_never_sees_them_again(
     assert "Key-ID" in r.text
 
     r = await client.post(
-        "/admin/stores/codemagic",
+        follow_redirects=True,
+        url="/admin/stores/codemagic",
         data={"csrf_token": token, "password": PASSWORD, "token": "abcdefghijklmnopqrstuvwxyz0123"},
     )
     assert r.status_code == 200
     assert "abcdefghijklmnopqrstuvwxyz0123" not in r.text
 
-    r = await client.post("/admin/stores/other", data={"csrf_token": token, "password": PASSWORD})
+    r = await client.post(
+        follow_redirects=True,
+        url="/admin/stores/other",
+        data={"csrf_token": token, "password": PASSWORD},
+    )
     assert r.status_code == 404
 
     # Building waits for the setup.
-    r = await client.post("/admin/stores-build", data={"csrf_token": token, "platform": "ios"})
+    r = await client.post(
+        follow_redirects=True,
+        url="/admin/stores-build",
+        data={"csrf_token": token, "platform": "ios"},
+    )
     assert r.status_code == 400
     assert "einrichten" in r.text
 
@@ -312,7 +324,8 @@ async def test_others_cannot_upload(app: FastAPI, client: httpx.AsyncClient) -> 
     await make_account(client)
     page = await client.get("/account")
     r = await client.post(
-        "/admin/stores/codemagic",
+        follow_redirects=True,
+        url="/admin/stores/codemagic",
         data={"csrf_token": csrf_from(page.text), "password": PASSWORD, "token": "x" * 20},
     )
     assert r.status_code == 404
@@ -397,17 +410,19 @@ async def test_android_release_through_the_spool(
     token = csrf_from((await client.get("/admin")).text)
     build = {"csrf_token": token, "platform": "android"}
 
-    r = await client.post("/admin/stores-build", data=build)
+    r = await client.post(follow_redirects=True, url="/admin/stores-build", data=build)
     assert r.status_code == 400  # no upload key yet
     hub.ensure_keys(stores.Report(), email)
-    r = await client.post("/admin/stores-build", data=build)
+    r = await client.post(follow_redirects=True, url="/admin/stores-build", data=build)
     assert r.status_code == 200, r.text
     spool = tmp_path / "android-release"
     assert (spool / "request").read_text() == f"{email}\n"
     assert hub.android_job().busy
     assert "angefordert" in r.text
     assert "Android: Release bauen" not in r.text  # one at a time
-    assert (await client.post("/admin/stores-build", data=build)).status_code == 400
+    assert (
+        await client.post(follow_redirects=True, url="/admin/stores-build", data=build)
+    ).status_code == 400
 
     assert [p.name for p in spool.iterdir()] == ["request"]  # all the hub writes there
 
@@ -563,11 +578,15 @@ async def test_listing_runs_in_the_background(
     monkeypatch.setattr(app.state, "stores", hub)
     token = csrf_from((await client.get("/admin")).text)
 
-    r = await client.post("/admin/stores-listing", data={"csrf_token": token})
+    r = await client.post(
+        follow_redirects=True, url="/admin/stores-listing", data={"csrf_token": token}
+    )
     assert r.status_code == 200
     assert "gestartet" in r.text
     assert "läuft …" in (await client.get("/admin/apps")).text
-    again = await client.post("/admin/stores-listing", data={"csrf_token": token})
+    again = await client.post(
+        follow_redirects=True, url="/admin/stores-listing", data={"csrf_token": token}
+    )
     assert again.status_code == 409
 
     gate.set()
@@ -918,11 +937,15 @@ async def test_admin_page_offers_the_further_app(
     page = await client.get("/admin")
     token = csrf_from(page.text)
     r = await client.post(
-        "/admin/stores-other", data={"csrf_token": token, "app": "nope", "action": "setup"}
+        follow_redirects=True,
+        url="/admin/stores-other",
+        data={"csrf_token": token, "app": "nope", "action": "setup"},
     )
     assert r.status_code == 400
     r = await client.post(
-        "/admin/stores-other", data={"csrf_token": token, "app": "bortle", "action": "build"}
+        follow_redirects=True,
+        url="/admin/stores-other",
+        data={"csrf_token": token, "app": "bortle", "action": "build"},
     )
     assert r.status_code == 400
     assert "einrichten" in r.text
@@ -987,7 +1010,8 @@ async def test_admin_enters_push_and_turnstile(
 
     account = _play_json()  # a service account like Firebase's
     r = await client.post(
-        "/admin/stores/fcm",
+        follow_redirects=True,
+        url="/admin/stores/fcm",
         data={"csrf_token": token, "password": PASSWORD},
         files={"file": ("firebase.json", account, "application/json")},
     )
@@ -995,7 +1019,7 @@ async def test_admin_enters_push_and_turnstile(
     assert "PRIVATE KEY" not in r.text
     assert app.state.notifier.enabled
     r = await client.post(
-        "/admin/stores-fcm-app",
+        follow_redirects=True, url="/admin/stores-fcm-app",
         data={"csrf_token": token, "sender_id": "1234", "android_app_id": "1:1234:android:ab",
               "android_api_key": "AIzaSyA-android"},
     )  # fmt: skip
@@ -1004,7 +1028,9 @@ async def test_admin_enters_push_and_turnstile(
     assert (config["project_id"], config["sender_id"]) == ("allskyhub-store", "1234")
     assert config["android_api_key"] == "AIzaSyA-android"
     bad = await client.post(
-        "/admin/stores-fcm-app", data={"csrf_token": token, "sender_id": "<script>"}
+        follow_redirects=True,
+        url="/admin/stores-fcm-app",
+        data={"csrf_token": token, "sender_id": "<script>"},
     )
     assert bad.status_code == 400
 
@@ -1025,7 +1051,7 @@ async def test_admin_enters_push_and_turnstile(
          "GOOGLE_APP_ID": "1:5678:ios:c2", "API_KEY": "AIzaSyC-ios"}
     )  # fmt: skip
     r = await client.post(
-        "/admin/stores-fcm-app",
+        follow_redirects=True, url="/admin/stores-fcm-app",
         data={"csrf_token": token},
         files={"android_file": ("google-services.json", json.dumps(services), "application/json"),
                "ios_files": ("GoogleService-Info.plist", plist, "application/xml")},
@@ -1046,7 +1072,8 @@ async def test_admin_enters_push_and_turnstile(
          "GOOGLE_APP_ID": "1:5678:ios:b1", "API_KEY": "AIzaSyD-bortle"}
     )  # fmt: skip
     r = await client.post(
-        "/admin/stores-fcm-app",
+        follow_redirects=True,
+        url="/admin/stores-fcm-app",
         data={"csrf_token": token},
         files={"ios_files": ("GoogleService-Info.plist", bortle_plist, "application/xml")},
     )
@@ -1062,7 +1089,8 @@ async def test_admin_enters_push_and_turnstile(
     assert (await new_client.get("/api/v1/push/config")).json()["ios_app_id"] == "1:5678:ios:c2"
     unknown = plistlib.dumps({"BUNDLE_ID": "com.example", "GCM_SENDER_ID": "5678"})
     r = await client.post(
-        "/admin/stores-fcm-app",
+        follow_redirects=True,
+        url="/admin/stores-fcm-app",
         data={"csrf_token": token},
         files={"ios_files": ("GoogleService-Info.plist", unknown, "application/xml")},
     )
@@ -1071,21 +1099,22 @@ async def test_admin_enters_push_and_turnstile(
     other = plistlib.dumps({"BUNDLE_ID": "org.allskyhub.app", "GCM_SENDER_ID": "9999",
                             "GOOGLE_APP_ID": "1:9999:ios:x", "API_KEY": "AIzaSyX"})  # fmt: skip
     r = await client.post(
-        "/admin/stores-fcm-app",
+        follow_redirects=True, url="/admin/stores-fcm-app",
         data={"csrf_token": token},
         files={"android_file": ("google-services.json", json.dumps(services), "application/json"),
                "ios_files": ("GoogleService-Info.plist", other, "application/xml")},
     )  # fmt: skip
     assert "verschiedenen Projekten" in r.text
     r = await client.post(
-        "/admin/stores-fcm-app",
+        follow_redirects=True,
+        url="/admin/stores-fcm-app",
         data={"csrf_token": token},
         files={"ios_files": ("GoogleService-Info.plist", b"<not a plist", "application/xml")},
     )
     assert "keine Plist-Datei" in r.text
 
     r = await client.post(
-        "/admin/stores/turnstile",
+        follow_redirects=True, url="/admin/stores/turnstile",
         data={"csrf_token": token, "password": PASSWORD, "site_key": "0x4AAAAAAAsite",
               "token": "0x4AAAAAAAsecret-value"},
     )  # fmt: skip
@@ -1227,12 +1256,16 @@ async def test_other_app_android_release(
     token = csrf_from((await client.get("/admin")).text)
     form = {"csrf_token": token, "app": "bortle", "action": "android"}
 
-    assert (await client.post("/admin/stores-other", data=form)).status_code == 400  # no key
+    assert (
+        await client.post(follow_redirects=True, url="/admin/stores-other", data=form)
+    ).status_code == 400  # no key
     hub.ensure_keys(stores.Report(), email)  # allskyhub's key is not bortle's
-    assert (await client.post("/admin/stores-other", data=form)).status_code == 400
+    assert (
+        await client.post(follow_redirects=True, url="/admin/stores-other", data=form)
+    ).status_code == 400
     secret, meta = stores.make_android_upload(bortle.title)
     hub.vault.put(bortle.android_upload, secret, meta, email)
-    r = await client.post("/admin/stores-other", data=form)
+    r = await client.post(follow_redirects=True, url="/admin/stores-other", data=form)
     assert r.status_code == 200, r.text
     spool = tmp_path / "android-release"
     assert (spool / "request").read_text() == f"app=bortle\n{email}\n"
@@ -1240,7 +1273,9 @@ async def test_other_app_android_release(
     assert hub.android_job().state == "idle"
     assert "Android-Release bauen" not in r.text  # one build at a time, either app
     build = {"csrf_token": token, "platform": "android"}
-    assert (await client.post("/admin/stores-build", data=build)).status_code == 400
+    assert (
+        await client.post(follow_redirects=True, url="/admin/stores-build", data=build)
+    ).status_code == 400
 
     (spool / "request").unlink()
     answers = tmp_path / "release-bortle"

@@ -91,13 +91,17 @@ async def test_deploy_request(
     csrf = csrf_from((await client.get("/admin")).text)
 
     r = await client.post(
-        "/admin/deploy", data={"sha": NEW, "password": "wrong", "csrf_token": csrf}
+        follow_redirects=True,
+        url="/admin/deploy",
+        data={"sha": NEW, "password": "wrong", "csrf_token": csrf},
     )
     assert r.status_code == 400
     assert "Passwort stimmt nicht" in r.text
 
     r = await client.post(
-        "/admin/deploy", data={"sha": NEW, "password": PASSWORD, "csrf_token": csrf}
+        follow_redirects=True,
+        url="/admin/deploy",
+        data={"sha": NEW, "password": PASSWORD, "csrf_token": csrf},
     )
     assert r.status_code == 400
     assert "nicht grün" in r.text
@@ -105,19 +109,25 @@ async def test_deploy_request(
 
     monkeypatch.setattr(app.state, "github", FakeGitHub())
     stale = await client.post(
-        "/admin/deploy", data={"sha": "c" * 40, "password": PASSWORD, "csrf_token": csrf}
+        follow_redirects=True,
+        url="/admin/deploy",
+        data={"sha": "c" * 40, "password": PASSWORD, "csrf_token": csrf},
     )
     assert stale.status_code == 400
 
     r = await client.post(
-        "/admin/deploy", data={"sha": NEW, "password": PASSWORD, "csrf_token": csrf}
+        follow_redirects=True,
+        url="/admin/deploy",
+        data={"sha": NEW, "password": PASSWORD, "csrf_token": csrf},
     )
     assert r.status_code == 200
     assert request_file.read_text().splitlines() == [NEW, email]
     assert "wartet auf den Server" in r.text
 
     again = await client.post(
-        "/admin/deploy", data={"sha": NEW, "password": PASSWORD, "csrf_token": csrf}
+        follow_redirects=True,
+        url="/admin/deploy",
+        data={"sha": NEW, "password": PASSWORD, "csrf_token": csrf},
     )
     assert "läuft schon ein Deploy" in again.text
     assert (await client.get("/admin/deploy/job")).status_code == 200
@@ -132,7 +142,7 @@ async def test_mail_test(
     monkeypatch.setattr(app.state, "github", FakeGitHub())
     mailer: MemoryMailer = app.state.mailer
     csrf = csrf_from((await client.get("/admin")).text)
-    r = await client.post("/admin/mail-test", data={"csrf_token": csrf})
+    r = await client.post(follow_redirects=True, url="/admin/mail-test", data={"csrf_token": csrf})
     assert r.status_code == 200
     assert mailer.sent[-1].to == email
 
@@ -147,10 +157,12 @@ async def test_admin_gifts_plus(
     csrf = csrf_from((await client.get("/account")).text)
     gift = {"device_id": dev.device_id, "gift": "true", "csrf_token": csrf}
     # Not an admin: as if the route did not exist.
-    assert (await client.post("/admin/plus", data=gift)).status_code == 404
+    assert (
+        await client.post(follow_redirects=True, url="/admin/plus", data=gift)
+    ).status_code == 404
 
     monkeypatch.setattr(settings, "admin_emails", await owner_email(app, dev.device_id))
-    r = await client.post("/admin/plus", data=gift)
+    r = await client.post(follow_redirects=True, url="/admin/plus", data=gift)
     assert r.status_code == 200
     assert "Plus für" in r.text
     assert "geschenkt" in r.text
@@ -160,9 +172,15 @@ async def test_admin_gifts_plus(
         assert device is not None
         assert device.plus_gift
 
-    r = await client.post("/admin/plus", data={"device_id": "nope", "csrf_token": csrf})
+    r = await client.post(
+        follow_redirects=True, url="/admin/plus", data={"device_id": "nope", "csrf_token": csrf}
+    )
     assert r.status_code == 400
-    r = await client.post("/admin/plus", data={"device_id": dev.device_id, "csrf_token": csrf})
+    r = await client.post(
+        follow_redirects=True,
+        url="/admin/plus",
+        data={"device_id": dev.device_id, "csrf_token": csrf},
+    )
     assert "Geschenk" in r.text
     assert "Noch keine Kamera mit Plus" in r.text
 
@@ -259,11 +277,15 @@ async def test_github_token_and_failures_kept(
     token = csrf_from((await client.get("/admin")).text)
     secret = "github_pat_" + "A1b2" * 10
     r = await client.post(
-        "/admin/stores/github", data={"csrf_token": token, "password": PASSWORD, "token": "nope"}
+        follow_redirects=True,
+        url="/admin/stores/github",
+        data={"csrf_token": token, "password": PASSWORD, "token": "nope"},
     )
     assert r.status_code == 400
     r = await client.post(
-        "/admin/stores/github", data={"csrf_token": token, "password": PASSWORD, "token": secret}
+        follow_redirects=True,
+        url="/admin/stores/github",
+        data={"csrf_token": token, "password": PASSWORD, "token": secret},
     )
     assert "5000 Abrufe pro Stunde" in r.text
     assert secret not in r.text

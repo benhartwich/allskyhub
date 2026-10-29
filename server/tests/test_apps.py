@@ -267,7 +267,7 @@ async def test_public_apk_download(
     """Benjamin, 2026-10-29: a public download link for the Android app."""
     # The limit's windows are fixed (epoch-aligned): one with minutes left, so the test's
     # downloads all count in it (CI failed at 20:00, 2026-10-29, across the full hour).
-    window = next(w for w in (3600, 86400, 7 * 86400) if w - time.time() % w > 300)
+    window = next(w for w in (3600, 86400, 7 * 86400, 10**6) if w - time.time() % w > 300)
     monkeypatch.setattr(ratelimit, "APK_PER_IP", (ratelimit.Limit(10, window),))
     out = tmp_path / "release"
     hub = stores.Stores(tmp_path / "store", "benhartwich/allskyhub", release_out=out)

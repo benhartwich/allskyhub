@@ -1181,7 +1181,9 @@ class Stores:
                     r = await client.get(f"{CODEMAGIC}/builds/{b['id']}", headers=auth)
                     if r.status_code == 200:
                         status = str(_dict(_dict(r.json()).get("data")).get("status", status))
-                except httpx.HTTPError:
+                except (httpx.HTTPError, ValueError):
+                    # ValueError: an empty 200 for a build of a deleted app (Vinventory,
+                    # 2026-10-29), which took the whole apps page down.
                     pass
                 out.append({**b, "status": status})
         finally:

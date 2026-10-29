@@ -1610,3 +1610,16 @@ async def test_no_play_edit_while_the_android_build_runs(tmp_path: Path) -> None
     assert [(s.state, s.text) for s in report.steps] == [("fail", stores.ANDROID_BUSY)]
     report = await hub.push_listing()
     assert [(s.state, s.text) for s in report.steps] == [("fail", stores.ANDROID_BUSY)]
+
+
+async def test_a_build_codemagic_no_longer_knows_keeps_the_page(tmp_path: Path) -> None:
+    """Vinventory, 2026-10-29: after its Codemagic app was deleted, a build's status came
+    back as an empty 200, and the apps page answered 500."""
+    hub = stores.Stores(
+        tmp_path / "store",
+        "benhartwich/allskyhub",
+        httpx.AsyncClient(transport=httpx.MockTransport(lambda r: httpx.Response(200))),
+    )
+    hub.vault.put("codemagic", *stores.parse_codemagic("t" * 40), by="a")
+    hub.vault.add_build({"id": "GONE", "platform": "ios", "at": "x", "app": "vinventory"})
+    assert [b["status"] for b in await hub.recent_builds()] == ["unbekannt"]

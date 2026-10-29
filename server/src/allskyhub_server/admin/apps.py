@@ -38,7 +38,7 @@ CM_DONE = frozenset({"finished"})
 CM_FAILED = frozenset({"failed", "canceled", "timeout", "skipped"})
 ACTIONS = (
     "setup", "build-android", "build-ios", "play-listing", "appstore",
-    "review-play", "review-appstore",
+    "review-play", "review-appstore", "apk",
 )  # fmt: skip
 # What the stores say, kept this long before the page asks again.
 LIVE_MAX_AGE = dt.timedelta(minutes=10)
@@ -79,6 +79,7 @@ class Card:
         default_factory=lambda: list[tuple[str, dict[str, Any]]]()
     )
     live_at: str = ""  # when Apple and Google were last asked
+    apk: dict[str, Any] | None = None  # the APK for /download/<key>.apk (Stores.apk)
 
     @property
     def waiting(self) -> bool:
@@ -340,7 +341,11 @@ async def cards(stores: Stores) -> list[Card]:
             )
         )
         listing = stores.listing_state(app)
-        for name, result in (("Google-Play-Eintrag", listing), ("App Store", pushed)):
+        found = stores.apk(key)
+        card.apk = found[1] if found else None
+        results = (("Google-Play-Eintrag", listing), ("App Store", pushed),
+                   ("APK", stores.apk_state(app)))  # fmt: skip
+        for name, result in results:
             if result:
                 card.results.append((name, result))
         out.append(card)

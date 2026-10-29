@@ -5,6 +5,10 @@ belongs to root (the hub only reads it):
 ``latest.json`` (build number, version, commit, size, SHA-256) and the APK it names. The test
 app asks for ``/app/android/test.json`` and offers an update when the build is newer.
 Public: the app is open source, and Android installs an update only with the same key.
+
+``/download/<app>.apk`` is the store app itself: Google's universal APK of the newest App
+Bundle, fetched on the admin's app page (Stores.fetch_apk), public as Benjamin chose
+(2026-10-29).
 """
 
 from __future__ import annotations
@@ -14,9 +18,10 @@ import re
 from pathlib import Path
 from typing import Any
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import FileResponse, JSONResponse, Response
 
+from allskyhub_server.admin import stores as admin_stores
 from allskyhub_server.web.deps import SettingsDep
 
 router = APIRouter()
@@ -66,4 +71,19 @@ async def test_apk(name: str, settings: SettingsDep) -> Response:
         media_type="application/vnd.android.package-archive",
         filename=name,
         headers={"Cache-Control": "public, max-age=86400, immutable"},
+    )
+
+
+@router.get("/download/{key}.apk")
+async def store_apk(request: Request, key: str) -> Response:
+    stores: admin_stores.Stores = request.app.state.stores
+    found = stores.apk(key)
+    if found is None:
+        raise HTTPException(404)
+    path, facts = found
+    return FileResponse(
+        path,
+        media_type="application/vnd.android.package-archive",
+        filename=f"{key}-{facts.get('version', '')}-{facts.get('build', '')}.apk",
+        headers={"Cache-Control": "no-cache"},
     )

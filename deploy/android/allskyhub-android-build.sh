@@ -104,7 +104,7 @@ main() {
         # process), never on a command line or into .git/config.
         local token
         token=$(timeout 5 runuser -u "$HUB_USER" -- cat -- "$STORE/github.secret" 2>/dev/null || true)
-        if [[ ! $token =~ ^(github_pat_|ghp_)[A-Za-z0-9_]{20,250}$ ]]; then
+        if [[ ! $token =~ ^(github_pat_|ghp_)[A-Za-z0-9_]{20,255}$ ]]; then
             echo 'FEHLER: Das Repository ist privat; erst auf der Admin-Seite ein GitHub-Token mit Lesezugriff darauf hinterlegen.'
             answer "$RELEASE" state failed
             return
@@ -203,7 +203,9 @@ release_build() {
     # A further app's Firebase identifiers, if the admin page has them (fcm_app_<app>.json).
     timeout 5 runuser -u "$HUB_USER" -- cat -- "$STORE/fcm_app_$app.json" \
         > "$KEY_TMP/fcm.json" 2>/dev/null || true
-    python3 - "$KEY_TMP/secret.json" "$KEY_TMP" "$PREFIX" "$KEY_TMP/fcm.json" <<'PY'
+    # The Firebase names follow the app's key, as in its Codemagic group (stores.fcm_defines:
+    # BORTLE_FCM_*, VINVENTORY_FCM_*), whatever its signing variables are called.
+    python3 - "$KEY_TMP/secret.json" "$KEY_TMP" "$PREFIX" "$KEY_TMP/fcm.json" "${app^^}" <<'PY'
 import base64, json, os, re, sys
 key = json.load(open(sys.argv[1]))
 prefix = sys.argv[3]
@@ -223,7 +225,7 @@ with open(os.path.join(sys.argv[2], "keystore.env"), "w") as f:
     for name in fields if isinstance(fcm, dict) else ():
         value = fcm.get(name)
         if isinstance(value, str) and re.fullmatch(r"[A-Za-z0-9:._-]{1,200}", value):
-            f.write("%s_FCM_%s=%s\n" % (prefix, name.upper(), value))
+            f.write("%s_FCM_%s=%s\n" % (sys.argv[5], name.upper(), value))
 PY
     # React Native's build needs more than Flutter's: at 8 and 12 GB the memory limit
     # killed it (2026-10-29), as its native code compiled on every core the container

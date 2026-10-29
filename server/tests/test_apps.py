@@ -255,6 +255,12 @@ async def test_public_apk_download(
     assert r.headers["content-type"] == "application/vnd.android.package-archive"
     assert "vinventory-0.1.0-33.apk" in r.headers["content-disposition"]
     assert (await client.get("/download/nope.apk")).status_code == 404
+    # Some 100 MB each: ten an hour per IP (review of #354), the test APK's included.
+    for _ in range(9):
+        assert (await client.get("/download/vinventory.apk")).status_code == 200
+    r = await client.get("/download/vinventory.apk")
+    assert r.status_code == 429
+    assert int(r.headers["retry-after"]) > 0
 
     email = await make_account(client)
     monkeypatch.setattr(settings, "admin_emails", email)

@@ -22,7 +22,8 @@ from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import FileResponse, JSONResponse, Response
 
 from allskyhub_server.admin import stores as admin_stores
-from allskyhub_server.web.deps import SettingsDep
+from allskyhub_server.auth import ratelimit
+from allskyhub_server.web.deps import SettingsDep, client_ip
 
 router = APIRouter()
 
@@ -31,6 +32,19 @@ APK = re.compile(r"^allskyhub-test-\d{1,9}\.apk$")
 
 def _folder(android_dir: Path) -> Path:
     return android_dir / "android-test"
+
+
+async def _limit(request: Request, settings: SettingsDep) -> None:
+    """Each APK download counts, per IP and across all (ratelimit.APK_*)."""
+    engine = request.app.state.engine
+    try:
+        await ratelimit.hit(engine, f"apk:ip:{client_ip(request, settings)}", ratelimit.APK_PER_IP)
+        await ratelimit.hit(engine, "apk:all", ratelimit.APK_ALL)
+    except ratelimit.RateLimitedError as exc:
+        raise HTTPException(
+            429, "Zu viele Downloads. Bitte später erneut versuchen.",
+            {"Retry-After": str(exc.retry_after)},
+        ) from None  # fmt: skip
 
 
 def latest(android_dir: Path) -> dict[str, Any] | None:
@@ -54,18 +68,19 @@ async def test_build(settings: SettingsDep) -> Response:
 
 
 @router.get("/app/android/allskyhub-test.apk")
-async def test_apk_latest(settings: SettingsDep) -> Response:
+async def test_apk_latest(request: Request, settings: SettingsDep) -> Response:
     info = latest(settings.android_dir)
     if info is None:
         raise HTTPException(404)
-    return await test_apk(str(info["file"]), settings)
+    return await test_apk(request, str(info["file"]), settings)
 
 
 @router.get("/app/android/{name}")
-async def test_apk(name: str, settings: SettingsDep) -> Response:
+async def test_apk(request: Request, name: str, settings: SettingsDep) -> Response:
     path = _folder(settings.android_dir) / name
     if not APK.match(name) or not path.is_file():
         raise HTTPException(404)
+    await _limit(request, settings)
     return FileResponse(
         path,
         media_type="application/vnd.android.package-archive",
@@ -75,11 +90,12 @@ async def test_apk(name: str, settings: SettingsDep) -> Response:
 
 
 @router.get("/download/{key}.apk")
-async def store_apk(request: Request, key: str) -> Response:
+async def store_apk(request: Request, key: str, settings: SettingsDep) -> Response:
     stores: admin_stores.Stores = request.app.state.stores
     found = stores.apk(key)
     if found is None:
         raise HTTPException(404)
+    await _limit(request, settings)
     path, facts = found
     return FileResponse(
         path,

@@ -75,6 +75,10 @@ CLAIM_PER_IP = (Limit(30, 600),)
 # Roadmap H5: test posts to a Discord webhook.
 DISCORD_TEST = (Limit(5, 600),)
 MAP_SEARCH_PER_IP = (Limit(20, 60), Limit(200, 3600))
+# Public APKs (/download/<app>.apk, /app/android/…) are some 100 MB each: a script must not
+# burn the server's bandwidth (review of #354). The cap across all is ~50 GB a day.
+APK_PER_IP = (Limit(10, 3600),)
+APK_ALL = (Limit(500, 86400),)
 
 
 async def login(engine: AsyncEngine, email: str, ip: str) -> None:

@@ -8,7 +8,7 @@ from __future__ import annotations
 import logging
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, Form, Request
+from fastapi import APIRouter, Depends, Form, HTTPException, Request
 from fastapi.responses import Response
 
 from allskyhub_server.admin import apps, appstore
@@ -39,8 +39,6 @@ async def apps_page(
     request: Request,
     session: SessionInfo,
     status_code: int = 200,
-    *,
-    refresh: bool = False,
     **extra: object,
 ) -> Response:
     if request.method == "POST":  # reloading must not run the action again
@@ -56,8 +54,6 @@ async def apps_page(
             "cards": cards,
             "titles": TITLES,
             "android_busy": stores.android_busy(),
-            # Reload by itself while something builds, only on a GET (never re-posts).
-            "refresh": refresh and any(c.waiting for c in cards),
             "accounts": [
                 e
                 for e in stores.vault.entries()
@@ -74,7 +70,26 @@ async def apps_page(
 async def apps_view(request: Request, session: CurrentSession, settings: SettingsDep) -> Response:
     admin_only(session, settings)
     apps.start_live(request.app.state.stores)  # the stores' own word, in the background
-    return await apps_page(request, session, refresh=True)
+    return await apps_page(request, session)
+
+
+@router.get("/admin/apps/card/{key}")
+async def app_card(
+    request: Request, session: CurrentSession, settings: SettingsDep, key: str
+) -> Response:
+    """One app's card, polled by itself while something of it is on its way
+    (Benjamin, 2026-10-29: "echte aktualisierung nach aktionen")."""
+    admin_only(session, settings)
+    stores: admin_stores.Stores = request.app.state.stores
+    found = await apps.cards(stores, only=key)
+    if not found:
+        raise HTTPException(404)
+    return render(
+        request,
+        "_app_card.html",
+        {"card": found[0], "titles": TITLES, "android_busy": stores.android_busy()},
+        session=session,
+    )
 
 
 @router.post("/admin/apps")

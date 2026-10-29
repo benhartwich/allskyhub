@@ -66,6 +66,7 @@ async def apps_page(
 @router.get("/admin/apps")
 async def apps_view(request: Request, session: CurrentSession, settings: SettingsDep) -> Response:
     admin_only(session, settings)
+    apps.start_live(request.app.state.stores)  # the stores' own word, in the background
     return await apps_page(request, session, refresh=True)
 
 

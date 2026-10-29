@@ -14,6 +14,7 @@ from allskyhub_server.admin import apps, appstore, stores
 from allskyhub_server.admin.stores import AndroidJob
 from allskyhub_server.settings import Settings
 from tests.helpers import csrf_from, make_account
+from tests.test_stores import ISSUER, _p8, _play_json  # pyright: ignore[reportPrivateUsage]
 
 
 def _job(state: str = "ok", version: str = "1.1.0", at: str = "2026-10-28T14:13:47Z") -> AndroidJob:
@@ -53,6 +54,75 @@ def test_android_steps() -> None:
     # A review from before the newest build does not count for it.
     old = {**sent, "at": "2026-10-27T00:00:00+00:00"}
     assert apps.android_row("1.1.0", True, _job(), old, "").action == "review-play"
+
+
+def test_rows_follow_what_the_stores_say() -> None:
+    """Benjamin, 2026-10-29: rows said "failed" for apps submitted by hand in the
+    consoles. What Google and Apple have now comes first."""
+    refused = {"at": "2026-10-28T15:00:00+00:00", "steps": [
+        {"title": "Google Play: Produktion", "state": "fail", "text": "Nein."}]}  # fmt: skip
+    play = {"production": [{"name": "1.1.0", "status": "completed", "codes": ["323"]}]}
+    for job in (_job(), _job("failed")):  # a failed later upload of the same build too
+        row = apps.android_row("1.1.0", True, job, refused, "", play)
+        assert (row.tone, row.action) == ("done", None), row
+    draft = {"production": [{"status": "draft", "codes": ["323"]}]}
+    assert "Entwurf" in apps.android_row("1.1.0", True, _job(), None, "", draft).status
+    other = {"production": [{"status": "completed", "codes": ["322"]}]}
+    assert apps.android_row("1.1.0", True, _job(), None, "", other).action == "review-play"
+    # A newer version in the repository still asks for a new build.
+    assert apps.android_row("1.2.0", True, _job(), None, "", play).action == "build-android"
+
+    build: dict[str, Any] = {"id": "CM", "status": "finished", "at": "2026-10-28T14:09:56+00:00"}
+    failed = {"at": "2026-10-28T15:00:00+00:00", "steps": [
+        {"title": "Prüfung", "state": "fail", "text": "409"}]}  # fmt: skip
+    waiting = [{"version": "1.1.0", "state": "WAITING_FOR_REVIEW"},
+               {"version": "1.0", "state": "DEVELOPER_REJECTED"}]  # fmt: skip
+    row = apps.ios_row(True, build, None, failed, waiting, "1.1.0")
+    assert (row.tone, row.status) == ("done", "Version 1.1.0 wartet bei Apple auf die Prüfung.")
+    live = [{"version": "1.1.0", "state": "READY_FOR_SALE"}]
+    assert apps.ios_row(True, None, None, None, live, "1.1.0").status.endswith("im App Store.")
+    rejected = [{"version": "1.1.0", "state": "REJECTED"}]
+    row = apps.ios_row(True, build, None, None, rejected, "1.1.0")
+    assert (row.tone, row.action) == ("fail", "review-appstore")
+    # Another version waiting does not count for this one.
+    assert apps.ios_row(True, None, None, None, waiting, "1.2.0").action == "build-ios"
+
+
+async def test_live_state_from_both_stores(tmp_path: Path) -> None:
+    def answer(request: httpx.Request) -> httpx.Response:
+        path = request.url.path
+        if request.url.host == "oauth2.googleapis.com":
+            return httpx.Response(200, json={"access_token": "t"})
+        if path.endswith("/edits") and request.method == "POST":
+            return httpx.Response(200, json={"id": "E1"})
+        if path.endswith("/edits/E1/tracks"):
+            return httpx.Response(200, json={"tracks": [{"track": "production", "releases": [
+                {"name": "17", "status": "completed", "versionCodes": ["17"]}]}]})  # fmt: skip
+        if path.endswith("/edits/E1") and request.method == "DELETE":
+            return httpx.Response(204)
+        if path == "/v1/apps":
+            return httpx.Response(200, json={"data": [{"id": "A1"}]})
+        if path == "/v1/apps/A1/appStoreVersions":
+            return httpx.Response(200, json={"data": [{"id": "V1", "attributes": {
+                "versionString": "0.3.0", "appVersionState": "IN_REVIEW"}}]})  # fmt: skip
+        return httpx.Response(404)
+
+    hub = stores.Stores(
+        tmp_path / "store",
+        "benhartwich/allskyhub",
+        httpx.AsyncClient(transport=httpx.MockTransport(answer)),
+    )
+    assert apps.start_live(hub)  # no keys yet: nothing to ask, the time still recorded
+    await hub.jobs[apps.LIVE_JOB]
+    assert apps.live_of(hub, "bortle").get("play") is None
+    hub.vault.put("play", *stores.parse_play(_play_json()), by="a")
+    hub.vault.put("asc", *stores.parse_asc(_p8(), "2X9R4HXF34", ISSUER), by="a")
+    assert apps.start_live(hub) is False  # asked a moment ago
+    assert apps.start_live(hub, force=True) is True
+    await hub.jobs[apps.LIVE_JOB]
+    live = apps.live_of(hub, "bortle")
+    assert live["play"]["production"] == [{"name": "17", "status": "completed", "codes": ["17"]}]
+    assert live["apple"] == [{"version": "0.3.0", "state": "IN_REVIEW"}]
 
 
 def test_ios_steps() -> None:

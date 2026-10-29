@@ -12,10 +12,14 @@
 #                                          (allskyhub-server play-upload). A request
 #                                          whose first line is "app=bortle" builds the
 #                                          bortle app (github.com/benhartwich/bortle-app)
-#                                          the same way, with its own upload key
+#                                          the same way, with its own upload key;
+#                                          "app=vinventory" the Expo app of the private
+#                                          github.com/benhartwich/vinventory (cloned with
+#                                          the hub's GitHub token)
 #
-# Flutter and Gradle run in a container (ghcr.io/cirruslabs/flutter), limited in CPU and
-# memory so the hub keeps its share. dl.google.com does not answer HTTP/1.1 from here, so
+# Flutter and Gradle run in a container (ghcr.io/cirruslabs/flutter; for the Expo app
+# reactnativecommunity/react-native-android), limited in CPU and memory so the hub keeps
+# its share. dl.google.com does not answer HTTP/1.1 from here, so
 # Google's Maven repository goes through maven-google-proxy.py.
 set -euo pipefail
 
@@ -48,6 +52,10 @@ main() {
     # (admin/stores.py OTHER_APPS), each with its clone, key, variables and answers.
     local app=allskyhub APP_DIR=app KEY_KIND=android_upload PREFIX=ALLSKYHUB
     local PACKAGE=org.allskyhub.app SRC=$BASE/src DEFINES=
+    # flutter, or expo: React Native with expo prebuild and Gradle, in EXPO_IMAGE (pinned
+    # like IMAGE; react-native-android v22.0: Node 22, JDK 17, Android SDK).
+    local KIND=flutter PRIVATE=
+    local EXPO_IMAGE=${ALLSKYHUB_EXPO_IMAGE:-reactnativecommunity/react-native-android@sha256:e817ea1959719c97c05adbc55348ebe21d286cec2caed1f18ad3c4b88c08cbf7}
 
     install -d -m 755 "$BASE"
     mkdir -p "$BASE/maven-google"
@@ -71,6 +79,12 @@ main() {
             done
             REPO_URL=${ALLSKYHUB_BORTLE_REPO_URL:-https://github.com/benhartwich/bortle-app.git}
             RELEASE=${ALLSKYHUB_BORTLE_RELEASE_OUT:-$BASE/release-bortle}
+        elif [[ $first == app=vinventory ]]; then
+            app=vinventory APP_DIR=apps/mobile KEY_KIND=vinventory_android_upload
+            PREFIX=VINVENTORY_UPLOAD PACKAGE=eu.vinventory.app SRC=$BASE/src-vinventory
+            KIND=expo PRIVATE=1
+            REPO_URL=${ALLSKYHUB_VINVENTORY_REPO_URL:-https://github.com/benhartwich/vinventory.git}
+            RELEASE=${ALLSKYHUB_VINVENTORY_RELEASE_OUT:-$BASE/release-vinventory}
         fi
         install -d -m 755 "$RELEASE"
         rm -f -- "$RELEASE/log"
@@ -84,10 +98,27 @@ main() {
         flock -n 9 || exit 0
     fi
 
+    if [[ -n $PRIVATE ]]; then
+        # A private repository, with the hub's read-only GitHub token (admin page,
+        # Version): read as the hub, handed to git in its environment only (root's own
+        # process), never on a command line or into .git/config.
+        local token
+        token=$(timeout 5 runuser -u "$HUB_USER" -- cat -- "$STORE/github.secret" 2>/dev/null || true)
+        if [[ ! $token =~ ^(github_pat_|ghp_)[A-Za-z0-9_]{20,250}$ ]]; then
+            echo 'FEHLER: Das Repository ist privat; erst auf der Admin-Seite ein GitHub-Token mit Lesezugriff darauf hinterlegen.'
+            answer "$RELEASE" state failed
+            return
+        fi
+        export GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=http.https://github.com/.extraheader
+        GIT_CONFIG_VALUE_0="Authorization: Basic $(printf 'x-access-token:%s' "$token" | base64 -w0)"
+        export GIT_CONFIG_VALUE_0
+        unset token
+    fi
     if [[ ! -d $SRC/.git ]]; then
         git clone --quiet "$REPO_URL" "$SRC"
     fi
     git -C "$SRC" fetch --quiet origin "$BRANCH"
+    unset GIT_CONFIG_COUNT GIT_CONFIG_KEY_0 GIT_CONFIG_VALUE_0
     local tree=
     if [[ $force != --release ]]; then
         tree=$(git -C "$SRC" rev-parse FETCH_HEAD:app)
@@ -103,7 +134,13 @@ main() {
     local commit build version
     commit=$(git -C "$SRC" rev-parse --short=7 HEAD)
     build=$(git -C "$SRC" rev-list --count HEAD)
-    version=$(sed -n 's/^version: *\([0-9.]*\).*/\1/p' "$SRC/$APP_DIR/pubspec.yaml")
+    if [[ $KIND == expo ]]; then
+        version=$(python3 -c 'import json, sys; print(json.load(open(sys.argv[1]))["expo"]["version"])' \
+            "$SRC/$APP_DIR/app.json")
+        [[ $version =~ ^[0-9]+(\.[0-9]+){0,2}$ ]] || version=
+    else
+        version=$(sed -n 's/^version: *\([0-9.]*\).*/\1/p' "$SRC/$APP_DIR/pubspec.yaml")
+    fi
     echo "$app: build $build ($version, $commit)"
 
     python3 "$HERE/maven-google-proxy.py" "$PROXY_HOST" "$PROXY_PORT" "$BASE/maven-google" &
@@ -188,21 +225,40 @@ with open(os.path.join(sys.argv[2], "keystore.env"), "w") as f:
         if isinstance(value, str) and re.fullmatch(r"[A-Za-z0-9:._-]{1,200}", value):
             f.write("%s_FCM_%s=%s\n" % (prefix, name.upper(), value))
 PY
-    docker run --rm --name allskyhub-android-release --cpus 6 --memory 8g \
-        -v "$SRC:/work" \
-        -v allskyhub-android-pub-cache:/root/.pub-cache \
-        -v allskyhub-android-gradle:/root/.gradle \
-        -v "$HERE/maven-google.init.gradle:/root/.gradle/init.d/maven-google.gradle:ro" \
-        -v "$HERE/gradle.properties:/root/.gradle/gradle.properties:ro" \
-        -v "$KEY_TMP/upload.p12:/keys/upload.p12:ro" \
-        --env-file "$KEY_TMP/keystore.env" \
-        -e "${PREFIX}_KEYSTORE=/keys/upload.p12" \
-        -e ALLSKYHUB_MAVEN_GOOGLE="http://$PROXY_HOST:$PROXY_PORT/" \
-        -w "/work/$APP_DIR" "$IMAGE" \
-        sh -c "flutter pub get && flutter build appbundle --release --build-number=$build$DEFINES"
+    # React Native's build needs more than Flutter's: at 8 and 12 GB the memory limit
+    # killed it (2026-10-29), as its native code compiled on every core the container
+    # saw, for four ABIs. Six cores visible, three Gradle workers, the two phone ABIs.
+    local limits=(--cpus 6 --memory 8g)
+    [[ $KIND == expo ]] && limits=(--cpus 6 --cpuset-cpus 0-5 --memory 12g)
+    local run=(docker run --rm --name allskyhub-android-release "${limits[@]}"
+        -v "$SRC:/work"
+        -v allskyhub-android-gradle:/root/.gradle
+        -v "$HERE/maven-google.init.gradle:/root/.gradle/init.d/maven-google.gradle:ro"
+        -v "$HERE/gradle.properties:/root/.gradle/gradle.properties:ro"
+        -v "$KEY_TMP/upload.p12:/keys/upload.p12:ro"
+        --env-file "$KEY_TMP/keystore.env"
+        -e "${PREFIX}_KEYSTORE=/keys/upload.p12"
+        -e ALLSKYHUB_MAVEN_GOOGLE="http://$PROXY_HOST:$PROXY_PORT/")
+    local aab
+    if [[ $KIND == expo ]]; then
+        # The workspace root installs (npm workspaces), the app's native project is made
+        # fresh by expo prebuild; its config plugin signs from <PREFIX>_* and takes the
+        # version code from VINVENTORY_VERSION_CODE.
+        "${run[@]}" -v allskyhub-android-npm:/root/.npm -e CI=1 \
+            -e "VINVENTORY_VERSION_CODE=$build" -w /work "$EXPO_IMAGE" \
+            sh -c "npm ci --no-audit --no-fund && cd $APP_DIR \
+                && npx expo prebuild --platform android --clean --no-install \
+                && cd android && ./gradlew --no-daemon --max-workers=3 \
+                    -PreactNativeArchitectures=arm64-v8a,armeabi-v7a bundleRelease"
+        aab=$SRC/$APP_DIR/android/app/build/outputs/bundle/release/app-release.aab
+    else
+        "${run[@]}" -v allskyhub-android-pub-cache:/root/.pub-cache \
+            -w "/work/$APP_DIR" "$IMAGE" \
+            sh -c "flutter pub get && flutter build appbundle --release --build-number=$build$DEFINES"
+        aab=$SRC/$APP_DIR/build/app/outputs/bundle/release/app-release.aab
+    fi
     rm -rf "$KEY_TMP"
 
-    local aab=$SRC/$APP_DIR/build/app/outputs/bundle/release/app-release.aab
     local name=$app-$build.aab
     install -m 644 "$aab" "$RELEASE/$name"
     printf '{"build": %d, "version": "%s", "commit": "%s", "built_at": "%s", "size": %d, "file": "%s"}\n' \

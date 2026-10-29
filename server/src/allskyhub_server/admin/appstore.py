@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import asyncio
 import hashlib
+import json
 import logging
 import re
 from collections.abc import Callable, Coroutine
@@ -44,18 +45,27 @@ LOCALES = ("de-DE", "en-US")  # the first is the primary language chosen when cr
 
 
 def app_version(pubspec: Path = LISTING.parents[1] / "pubspec.yaml", default: str = "1.0.0") -> str:
-    """The app's version (``version: 1.1.0+1`` in app/pubspec.yaml), for the App Store
-    version: Apple ties it to the build's CFBundleShortVersionString, and each update
-    needs a new one."""
+    """The app's version (``version: 1.1.0+1`` in app/pubspec.yaml, or ``expo.version``
+    in an Expo app's app.json), for the App Store version: Apple ties it to the build's
+    CFBundleShortVersionString, and each update needs a new one."""
     try:
+        if pubspec.suffix == ".json":
+            found = str(_dict(_dict(json.loads(pubspec.read_text())).get("expo")).get("version"))
+            return found if re.fullmatch(r"\d+(\.\d+){0,2}", found) else default
         for line in pubspec.read_text().splitlines():
             if line.startswith("version:"):
                 found = line.split(":", 1)[1].strip().split("+", 1)[0]
                 if re.fullmatch(r"\d+(\.\d+){0,2}", found):
                     return found
-    except OSError:
+    except (OSError, ValueError):
         pass
     return default
+
+
+def listing_version(stores: Stores, app: OtherApp) -> str:
+    """A further app's version, from its repository as the last listing fetch left it
+    (listings/<key>/), else its fixed fallback."""
+    return app_version(stores.vault.root / "listings" / app.key / app.version_name, app.version)
 
 
 VERSION = app_version()
@@ -731,9 +741,9 @@ async def push_report(stores: Stores, app: OtherApp | None = None) -> Report:
         else:
             # A further app's texts and screenshots: store/ of its repository's main.
             store = await stores.fetch_listing(client, app)
-            # The version of its repository's pubspec.yaml, fetched with store/.
+            # Its version (pubspec.yaml or app.json), fetched with store/.
             p = profile(app)
-            p = replace(p, version=app_version(store.parent / "pubspec.yaml", p.version))
+            p = replace(p, version=listing_version(stores, app))
             await push(client, stores.asc_auth, report, store / "appstore", store / "play", p)
     except StoreError as exc:
         report.add(TITLE, "fail", str(exc))
@@ -877,9 +887,8 @@ async def submit_report(stores: Stores, app: OtherApp | None = None) -> Report:
     client = stores.client or httpx.AsyncClient(timeout=UPLOAD_TIMEOUT)
     try:
         p = profile(app)
-        if app is not None:  # its pubspec, as the last listing push fetched it
-            pubspec = stores.vault.root / "listings" / app.key / "pubspec.yaml"
-            p = replace(p, version=app_version(pubspec, p.version))
+        if app is not None:  # its version, as the last listing push fetched it
+            p = replace(p, version=listing_version(stores, app))
         await submit(client, stores.asc_auth, report, p)
     except StoreError as exc:
         report.add("Prüfung", "fail", str(exc))

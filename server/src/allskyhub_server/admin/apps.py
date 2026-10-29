@@ -89,8 +89,7 @@ def version_of(stores: Stores, app: OtherApp | None) -> str:
     repository (the copy of the last listing fetch), else its fixed fallback."""
     if app is None:
         return appstore.VERSION
-    pubspec = stores.vault.root / "listings" / app.key / "pubspec.yaml"
-    return appstore.app_version(pubspec, app.version)
+    return appstore.listing_version(stores, app)
 
 
 def android_row(

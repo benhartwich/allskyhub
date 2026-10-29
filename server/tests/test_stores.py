@@ -1597,3 +1597,16 @@ async def test_age_rating_with_an_apps_own_answers() -> None:
     assert appstore.profile(stores.OTHER_APPS["vinventory"]).age_rating == own
     await appstore._age_rating(api, "INFO")  # pyright: ignore[reportPrivateUsage]
     assert sent[-1]["alcoholTobaccoOrDrugUseOrReferences"] == "NONE"
+
+
+async def test_no_play_edit_while_the_android_build_runs(tmp_path: Path) -> None:
+    """allsky's review of #351: the build's upload holds an edit, so neither the
+    submission nor the listing push opens one meanwhile, whichever page starts them."""
+    hub = stores.Stores(tmp_path / "store", "benhartwich/allskyhub", release_out=tmp_path / "rel")
+    hub.vault.put("play", *stores.parse_play(_play_json()), by="a")
+    (tmp_path / "rel").mkdir()
+    (tmp_path / "rel" / "state").write_text("running\n")
+    report = await hub.submit_play()
+    assert [(s.state, s.text) for s in report.steps] == [("fail", stores.ANDROID_BUSY)]
+    report = await hub.push_listing()
+    assert [(s.state, s.text) for s in report.steps] == [("fail", stores.ANDROID_BUSY)]

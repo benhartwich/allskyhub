@@ -124,6 +124,15 @@ async def test_live_state_from_both_stores(tmp_path: Path) -> None:
     assert live["play"]["production"] == [{"name": "17", "status": "completed", "codes": ["17"]}]
     assert live["apple"] == [{"version": "0.3.0", "state": "IN_REVIEW"}]
 
+    # Never a Play edit while an App Bundle goes up: it would expire the upload's edit.
+    answers = tmp_path / "release-bortle"
+    answers.mkdir(parents=True, exist_ok=True)
+    (answers / "state").write_text("running\n")
+    hub.release_out = tmp_path / "release"
+    await apps.refresh_live(hub)
+    assert "play" not in apps.live_of(hub, "bortle")
+    assert apps.live_of(hub, "bortle")["apple"]  # Apple is still asked
+
 
 def test_ios_steps() -> None:
     build: dict[str, Any] = {"id": "CM", "app_id": "A", "at": "2026-10-28T14:09:56+00:00"}

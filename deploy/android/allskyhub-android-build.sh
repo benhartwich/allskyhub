@@ -104,7 +104,7 @@ main() {
         # process), never on a command line or into .git/config.
         local token
         token=$(timeout 5 runuser -u "$HUB_USER" -- cat -- "$STORE/github.secret" 2>/dev/null || true)
-        if [[ ! $token =~ ^(github_pat_|ghp_)[A-Za-z0-9_]{20,250}$ ]]; then
+        if [[ ! $token =~ ^(github_pat_|ghp_)[A-Za-z0-9_]{20,255}$ ]]; then
             echo 'FEHLER: Das Repository ist privat; erst auf der Admin-Seite ein GitHub-Token mit Lesezugriff darauf hinterlegen.'
             answer "$RELEASE" state failed
             return

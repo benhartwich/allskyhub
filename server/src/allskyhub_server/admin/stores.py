@@ -58,6 +58,9 @@ MAX_UPLOAD = 64 * 1024
 TIMEOUT = 20.0
 UPLOAD_TIMEOUT = 600.0  # an App Bundle is some 50 MB
 TRACK = "internal"
+# While the root helper's build runs, its upload (another process) may hold a Play edit;
+# Google would expire it if the hub opened one for the listing or the submission.
+ANDROID_BUSY = "Erst wenn der Android-Build fertig ist (sein Upload braucht Google für sich)."
 RELEASE_OUT = Path("/var/lib/allskyhub-android/release")  # deploy/android, root-owned
 # The store listing: texts, graphics and screenshots in the repository (app/store/play);
 # screenshots uploaded on the admin page take the place of the repository's.
@@ -1365,6 +1368,9 @@ class Stores:
         if not self.vault.has("play"):
             report.add(title, "warn", "Kein Google-Play-Dienstkonto hinterlegt.")
             return report
+        if self.android_busy():
+            report.add(title, "fail", ANDROID_BUSY)
+            return report
         client = self._http()
         try:
             async with self.play_edits:
@@ -1533,6 +1539,9 @@ class Stores:
         report = Report()
         if not self.vault.has("play"):
             report.add("Store-Eintrag", "warn", "Kein Google-Play-Dienstkonto hinterlegt.")
+            return report
+        if self.android_busy():
+            report.add("Store-Eintrag", "fail", ANDROID_BUSY)
             return report
         client = self._client or httpx.AsyncClient(timeout=UPLOAD_TIMEOUT)
         try:

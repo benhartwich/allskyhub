@@ -100,11 +100,6 @@ async def apps_action(
                 else "Codemagic baut (etwa 20 Minuten) und schickt den Build nach TestFlight."
             )
             return await apps_page(request, session, notice=f"{name}: {notice}")
-        if action in ("play-listing", "review-play") and stores.android_busy():
-            # The build's upload holds an edit; another one would expire it.
-            return await apps_page(
-                request, session, 409, error=f"{name}: Erst wenn der Android-Build fertig ist."
-            )
         if action == "play-listing":
             started = stores.start_listing(by, other)
         elif action == "appstore":

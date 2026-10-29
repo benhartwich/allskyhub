@@ -233,6 +233,11 @@ async def test_setup_registers_everything(tmp_path: Path) -> None:
     builds = await hub.recent_builds()
     assert builds[0]["status"] == "building"
     assert stores.build_url(builds[0]) == "https://codemagic.io/app/APP1/build/BUILD1"
+    # An app card polls every ten seconds: Codemagic is asked again only after a while.
+    asked = sum(1 for x in fake.seen if "/builds/BUILD1" in str(x[1]))
+    assert asked >= 1
+    await hub.recent_builds()
+    assert sum(1 for x in fake.seen if "/builds/BUILD1" in str(x[1])) == asked
 
 
 async def test_a_play_app_without_any_upload_is_a_warning(tmp_path: Path) -> None:
@@ -933,7 +938,8 @@ async def test_admin_page_offers_the_further_app(
     monkeypatch.setattr(app.state, "stores", stores.Stores(tmp_path, "benhartwich/allskyhub"))
     page = await client.get("/admin/apps")
     assert 'id="app-bortle"' in page.text
-    assert page.text.count("Noch nicht eingerichtet.") == 6  # three apps, both stores
+    # Three apps, both stores: in the card and in "Was ist zu tun?".
+    assert page.text.count("Noch nicht eingerichtet.") == 12
     page = await client.get("/admin")
     token = csrf_from(page.text)
     r = await client.post(

@@ -15,6 +15,21 @@
 </section>
 {% endif %}
 
+{% from "_pending.html" import pending %}
+<section class="card stack">
+  <h2>Was ist zu tun?</h2>
+  <div class="store-rows">
+    {% for card in cards %}
+    <div class="store-row">
+      <strong><a href="#app-{{ card.key }}">{{ card.title }}</a></strong>
+      <span>{{ pending(card) }}{% for row in card.rows if row.tone in ('todo', 'fail') %}<br><span class="small">{{ row.store }}: {{ row.status }}</span>{% endfor %}</span>
+      <span></span>
+    </div>
+    {% endfor %}
+  </div>
+  <p class="muted small">Neue Commits: Änderungen auf <code>main</code> in den Ordnern der App seit ihrem letzten Build (Android: dessen Commit, iOS: Start des Codemagic-Builds), von GitHub alle zehn Minuten. Dann neu bauen und, wenn die Version neu ist, einreichen.</p>
+</section>
+
 {% for card in cards %}
 {% include "_app_card.html" %}
 {% endfor %}

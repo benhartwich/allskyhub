@@ -1,0 +1,4 @@
+{# main's new app commits against a platform's last build (admin/apps.py pending). #}
+{% macro pending(card) -%}
+{% for platform, label in (('android', 'Android'), ('ios', 'iOS')) %}{% set n = card.pending.get(platform) %}<span class="{{ 'muted' if n is none else ('tone-done' if n == 0 else 'tone-todo') }}">{{ label }} {% if n is none %}– unbekannt{% elif n == 0 %}✓ aktuell{% else %}→ {{ n }}{% if n >= 100 %}+{% endif %} neue{% if n == 1 %}r{% endif %} Commit{% if n != 1 %}s{% endif %}{% endif %}</span>{% if not loop.last %} · {% endif %}{% endfor %}
+{%- endmacro %}

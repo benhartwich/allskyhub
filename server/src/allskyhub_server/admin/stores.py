@@ -50,6 +50,7 @@ from allskyhub_server.devices.images import jpeg_size
 log = logging.getLogger(__name__)
 
 PACKAGE = "org.allskyhub.app"  # Android application id and iOS bundle id
+APP_PATHS = ("app",)  # allskyhub's commits that change the app (OtherApp.app_paths)
 APP_NAME = "allskyhub"
 GROUP = "allskyhub_store"  # Codemagic variable group, read by codemagic.yaml
 WORKFLOWS = {"ios": "ios-release"}  # Android builds on the hub's server (deploy/android)
@@ -72,6 +73,7 @@ CONTACT_WEBSITE = "https://allskyhub.org"
 SCREENSHOTS = (2, 8)
 SCREENSHOT_MAX = 8 * 1024 * 1024
 LOG_TAIL = 60
+CM_STATUS_TTL = 25.0  # seconds a Codemagic build status is reused (Stores.recent_builds)
 APK_MAX = 300 * 1024 * 1024  # a universal APK holds every ABI; Vinventory's is some 100 MB
 
 CODEMAGIC = "https://codemagic.io/api/v3"
@@ -148,6 +150,9 @@ class OtherApp:
     test_apk: bool = False
     # App Store age-rating answers other than "none"/"no" (appstore.AGE_RATING).
     age_rating: dict[str, Any] = field(default_factory=dict[str, Any])
+    # The folders whose commits change the app (admin/apps.py, "N neue Commits"); empty:
+    # the whole repository.
+    app_paths: tuple[str, ...] = ()
 
     @property
     def version_name(self) -> str:
@@ -211,6 +216,7 @@ OTHER_APPS = {
         version_file="apps/mobile/app.json",
         private=True,
         test_apk=True,
+        app_paths=("apps/mobile", "packages/shared", "package-lock.json"),
         # A wine cellar: alcohol throughout (its store/README.md: 17+ at Apple).
         age_rating={"alcoholTobaccoOrDrugUseOrReferences": "FREQUENT_OR_INTENSE"},
     ),
@@ -726,6 +732,8 @@ class Stores:
         # Google's universal APKs for the public download (/download/<app>.apk), next to
         # the vault, never in it: the folder is served.
         self.apk_dir = root.parent / "apk"
+        # Codemagic's answer per build, briefly: an app card polls every ten seconds.
+        self._cm_status: dict[str, tuple[float, str]] = {}
 
     @property
     def client(self) -> httpx.AsyncClient | None:
@@ -1186,11 +1194,17 @@ class Stores:
                 if b.get("id") == "local":
                     out.append(b)
                     continue
+                build_id = str(b["id"])
+                cached = self._cm_status.get(build_id)
+                if cached is not None and time.monotonic() - cached[0] < CM_STATUS_TTL:
+                    out.append({**b, "status": cached[1]})
+                    continue
                 status = "unbekannt"
                 try:
-                    r = await client.get(f"{CODEMAGIC}/builds/{b['id']}", headers=auth)
+                    r = await client.get(f"{CODEMAGIC}/builds/{build_id}", headers=auth)
                     if r.status_code == 200:
                         status = str(_dict(_dict(r.json()).get("data")).get("status", status))
+                        self._cm_status[build_id] = (time.monotonic(), status)
                 except (httpx.HTTPError, ValueError):
                     # ValueError: an empty 200 for a build of a deleted app (Vinventory,
                     # 2026-10-29), which took the whole apps page down.

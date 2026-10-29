@@ -389,3 +389,61 @@ async def test_a_flash_only_for_its_session(
     shown = await client.get(url)
     assert shown.status_code == 400
     assert "Unbekannte App" in shown.text
+
+
+async def test_which_app_needs_a_new_build(tmp_path: Path) -> None:
+    """Benjamin, 2026-10-29: see which apps have a new state and need a new build."""
+    out = tmp_path / "release"
+    hub = stores.Stores(tmp_path / "store", "benhartwich/allskyhub", release_out=out)
+    vinventory = stores.OTHER_APPS["vinventory"]
+    done = tmp_path / "release-vinventory"
+    done.mkdir()
+    (done / "vinventory-32.aab").write_bytes(b"x")
+    latest = {"build": 32, "version": "0.1.0", "commit": "20cbf47",
+              "built_at": "2026-10-29T09:12:14Z", "file": "vinventory-32.aab"}  # fmt: skip
+    (done / "latest.json").write_text(json.dumps(latest))
+    hub.vault.add_build({"id": "B1", "platform": "ios", "app": "vinventory",
+                         "at": "2026-10-29T08:00:00+00:00"})  # fmt: skip
+
+    def commit(sha: str, date: str) -> dict[str, Any]:
+        return {"sha": sha, "commit": {"message": f"{sha}\n\nbody", "committer": {"date": date}}}
+
+    c1, c2 = commit("c1", "2026-10-29T07:00:00Z"), commit("c2", "2026-10-29T11:00:00Z")
+    c3, built = commit("c3", "2026-10-29T12:00:00Z"), commit("20cbf47aa", "2026-10-29T08:58:44Z")
+    by_path = {"apps/mobile": [c3, built], "packages/shared": [c2], "package-lock.json": [c3, c1]}
+    asked: list[dict[str, str]] = []
+
+    def answer(request: httpx.Request) -> httpx.Response:
+        assert request.url.path == "/repos/benhartwich/vinventory/commits"
+        asked.append(dict(request.url.params))
+        return httpx.Response(200, json=by_path[request.url.params["path"]])
+
+    client = httpx.AsyncClient(transport=httpx.MockTransport(answer))
+    since = apps._since(hub, vinventory)  # pyright: ignore[reportPrivateUsage]
+    assert since == "2026-10-28T08:00:00+00:00"  # the older build, a day earlier
+    commits = await apps.main_commits(client, hub, vinventory, since)
+    assert [c["sha"] for c in commits] == ["c3", "c2", "20cbf47aa", "c1"]
+    assert commits[0]["title"] == "c3"
+    assert {a["path"] for a in asked} == set(vinventory.app_paths)
+    assert all(a["sha"] == "main" and a["since"] == since for a in asked)
+
+    assert apps.pending(commits, "20cbf47", "2026-10-29T09:12:14Z") == 2  # Android: c3, c2
+    assert apps.pending(commits, "", "2026-10-29T08:00:00+00:00") == 3  # iOS: all after
+    assert apps.pending(commits, "c3", "") == 0
+    assert apps.pending(None, "c3", "") is None
+    assert apps.pending(commits, "", "") is None
+
+    hub.vault.write_json(apps.live_file("vinventory"), {"at": "2026-10-29T12:30:00+00:00",
+                                                         "commits": commits})  # fmt: skip
+    card = (await apps.cards(hub, only="vinventory"))[0]
+    assert card.pending == {"android": 2, "ios": 3}
+    # bortle: the whole repository, no path.
+    asked.clear()
+
+    def whole(request: httpx.Request) -> httpx.Response:
+        asked.append(dict(request.url.params))
+        return httpx.Response(200, json=[])
+
+    client = httpx.AsyncClient(transport=httpx.MockTransport(whole))
+    assert await apps.main_commits(client, hub, stores.OTHER_APPS["bortle"], since) == []
+    assert "path" not in asked[0]

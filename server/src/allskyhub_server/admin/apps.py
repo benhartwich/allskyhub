@@ -15,12 +15,15 @@ import asyncio
 import datetime as dt
 import logging
 from dataclasses import dataclass, field
-from typing import Any
+from typing import Any, cast
 
 import httpx
 
 from allskyhub_server.admin import appstore
+from allskyhub_server.admin.deploy import API as GITHUB
+from allskyhub_server.admin.deploy import github_headers
 from allskyhub_server.admin.stores import (
+    APP_PATHS,
     OTHER_APPS,
     PACKAGE,
     AndroidJob,
@@ -29,6 +32,7 @@ from allskyhub_server.admin.stores import (
     StoreError,
     Stores,
     build_url,
+    github_token,
 )
 
 log = logging.getLogger(__name__)
@@ -54,6 +58,9 @@ APPLE_REVIEW = {
     "READY_FOR_DISTRIBUTION": "ist im App Store",
 }
 APPLE_REJECTED = {"REJECTED", "METADATA_REJECTED", "INVALID_BINARY"}
+# main's commits read per app and path at most (GitHub's page); more show as "100+".
+COMMITS_MAX = 100
+COMMITS_DEFAULT_DAYS = 30  # how far back when no build is known
 
 
 @dataclass(frozen=True)
@@ -79,6 +86,9 @@ class Card:
         default_factory=lambda: list[tuple[str, dict[str, Any]]]()
     )
     live_at: str = ""  # when Apple and Google were last asked
+    # main's commits that change the app and are newer than the platform's last build:
+    # {"android": n, "ios": n}; None where unknown (no build, GitHub not asked yet).
+    pending: dict[str, int | None] = field(default_factory=dict[str, int | None])
     apk: dict[str, Any] | None = None  # the APK for /download/<key>.apk (Stores.apk)
     test: AndroidJob | None = None  # the server's test APK (OtherApp.test_apk)
 
@@ -136,10 +146,99 @@ async def refresh_live(stores: Stores) -> None:
                     found["play"] = await stores.play_tracks(app.package if app else PACKAGE)
                 except (StoreError, httpx.HTTPError, KeyError, ValueError) as exc:
                     log.info("live state %s at Google: %s", key, exc)
+            try:
+                found["commits"] = await main_commits(client, stores, app, _since(stores, app))
+            except (StoreError, httpx.HTTPError, KeyError, ValueError) as exc:
+                log.info("main's commits of %s: %s", key, exc)
             stores.vault.write_json(live_file(key), found)
     finally:
         if client is not stores.client:
             await client.aclose()
+
+
+# Which app needs a new build (Benjamin, 2026-10-29: "welche Apps einen neuen Stand haben
+# und entsprechend neu gebaut und eingereicht werden müssen"): main's commits that touch
+# the app's folders, against each platform's last build.
+
+
+def _when(text: object) -> dt.datetime | None:
+    try:
+        when = dt.datetime.fromisoformat(str(text))
+    except ValueError:
+        return None
+    return when if when.tzinfo else when.replace(tzinfo=dt.UTC)
+
+
+def _ios_build(stores: Stores, key: str) -> dict[str, Any] | None:
+    """The newest iOS build started here (Codemagic builds main as it is then)."""
+    return next(
+        (b for b in stores.vault.builds()
+         if b.get("platform") == "ios" and str(b.get("app") or "allskyhub") == key),
+        None,
+    )  # fmt: skip
+
+
+def _since(stores: Stores, app: OtherApp | None) -> str:
+    """From the older of the two last builds on, a day earlier for clock skew."""
+    key = app.key if app else "allskyhub"
+    bases = [
+        _when((stores.android_job(app).latest or {}).get("built_at")),
+        _when((_ios_build(stores, key) or {}).get("at")),
+    ]
+    known = [b for b in bases if b is not None]
+    start = (
+        min(known) - dt.timedelta(days=1)
+        if len(known) == len(bases)
+        else dt.datetime.now(dt.UTC) - dt.timedelta(days=COMMITS_DEFAULT_DAYS)
+    )
+    return start.isoformat(timespec="seconds")
+
+
+async def main_commits(
+    client: httpx.AsyncClient, stores: Stores, app: OtherApp | None, since: str
+) -> list[dict[str, str]]:
+    """main's commits since ``since`` that touch the app, newest first (sha, date, title)."""
+    repo = app.repo if app else stores.repo
+    paths = app.app_paths if app else APP_PATHS
+    headers = github_headers(github_token(stores.vault))
+    found: dict[str, dict[str, str]] = {}
+    for path in paths or ("",):
+        params = {"sha": "main", "since": since, "per_page": str(COMMITS_MAX)}
+        if path:
+            params["path"] = path
+        r = await client.get(f"{GITHUB}/repos/{repo}/commits", params=params, headers=headers)
+        if r.status_code != 200:
+            raise StoreError(f"GitHub antwortet HTTP {r.status_code}.")
+        body: Any = r.json()
+        for c in cast(list[Any], body) if isinstance(body, list) else []:
+            if not isinstance(c, dict):
+                continue
+            item = cast(dict[str, Any], c)
+            commit = cast(dict[str, Any], item.get("commit") or {})
+            committer = cast(dict[str, Any], commit.get("committer") or {})
+            sha = str(item.get("sha", ""))
+            if sha:
+                found[sha] = {
+                    "sha": sha,
+                    "date": str(committer.get("date", "")),
+                    "title": str(commit.get("message", "")).split("\n", 1)[0][:120],
+                }
+    return sorted(found.values(), key=lambda c: c["date"], reverse=True)
+
+
+def pending(commits: list[dict[str, str]] | None, sha: str, at: str) -> int | None:
+    """How many of main's app commits a build of ``sha`` (or, without one, started at
+    ``at``) does not have; None when that is not known."""
+    if commits is None:
+        return None
+    if sha:
+        for i, c in enumerate(commits):
+            if c["sha"].startswith(sha):
+                return i
+    base = _when(at)
+    if base is None:
+        return None
+    return sum(1 for c in commits if (d := _when(c["date"])) is not None and d > base)
 
 
 def start_live(stores: Stores, *, force: bool = False) -> bool:
@@ -318,6 +417,12 @@ async def cards(stores: Stores, only: str | None = None) -> list[Card]:
         latest_file = str((job.latest or {}).get("file", ""))
         live = live_of(stores, key)
         card.live_at = str(live.get("at", ""))
+        commits = cast(list[dict[str, str]] | None, live.get("commits"))
+        card.pending = {
+            "android": pending(commits, str((job.latest or {}).get("commit", "")),
+                               str((job.latest or {}).get("built_at", ""))),
+            "ios": pending(commits, "", str((_ios_build(stores, key) or {}).get("at", ""))),
+        }  # fmt: skip
         card.rows.append(
             android_row(
                 version,

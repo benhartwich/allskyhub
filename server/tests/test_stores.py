@@ -17,7 +17,7 @@ from cryptography.hazmat.primitives.asymmetric.utils import encode_dss_signature
 from cryptography.hazmat.primitives.serialization import pkcs12
 from fastapi import FastAPI
 
-from allskyhub_server.admin import appstore, stores
+from allskyhub_server.admin import apps, appstore, stores
 from allskyhub_server.settings import Settings
 from tests.helpers import PASSWORD, csrf_from, make_account
 
@@ -913,7 +913,7 @@ async def test_admin_page_offers_the_further_app(
     monkeypatch.setattr(app.state, "stores", stores.Stores(tmp_path, "benhartwich/allskyhub"))
     page = await client.get("/admin/apps")
     assert 'id="app-bortle"' in page.text
-    assert page.text.count("Noch nicht eingerichtet.") == 4  # both apps, both stores
+    assert page.text.count("Noch nicht eingerichtet.") == 6  # three apps, both stores
     page = await client.get("/admin")
     token = csrf_from(page.text)
     r = await client.post(
@@ -1515,6 +1515,54 @@ def test_a_further_apps_version_comes_with_its_store(tmp_path: Path) -> None:
     assert not (tmp_path / "bortle" / "lib").exists()
     (store.parent / "pubspec.yaml").write_text("version: ../evil\n")
     assert appstore.app_version(store.parent / "pubspec.yaml", "0.2.0") == "0.2.0"
+
+
+async def test_an_expo_app_from_a_private_repository(tmp_path: Path) -> None:
+    """Vinventory, 2026-10-29: its store files come with the GitHub token, its version
+    from apps/mobile/app.json."""
+    import io
+    import tarfile
+
+    files = {
+        "store/appstore/de-DE/name.txt": b"Vinventory",
+        "apps/mobile/app.json": json.dumps({"expo": {"version": "0.4.1"}}).encode(),
+        "apps/mobile/src/index.tsx": b"export {}",
+        "app.json": b"{}",  # another one at the root is not its version
+    }
+    out = io.BytesIO()
+    with tarfile.open(fileobj=out, mode="w:gz") as tar:
+        for name, data in files.items():
+            info = tarfile.TarInfo(f"benhartwich-vinventory-1147cc4/{name}")
+            info.size = len(data)
+            tar.addfile(info, io.BytesIO(data))
+    seen: list[httpx.Request] = []
+
+    def answer(request: httpx.Request) -> httpx.Response:
+        seen.append(request)
+        assert request.url.host == "api.github.com"
+        assert request.url.path == "/repos/benhartwich/vinventory/tarball/main"
+        return httpx.Response(200, content=out.getvalue())
+
+    client = httpx.AsyncClient(transport=httpx.MockTransport(answer))
+    hub = stores.Stores(tmp_path / "store", "benhartwich/allskyhub", client)
+    app = stores.OTHER_APPS["vinventory"]
+    with pytest.raises(stores.StoreError, match="GitHub-Token"):
+        await hub.fetch_listing(client, app)
+    assert not seen  # never anonymously
+    assert apps.version_of(hub, app) == "0.1.0"  # its fallback until the first fetch
+
+    token = "github_pat_" + "a" * 40
+    hub.vault.put("github", *stores.parse_github(token), by="a")
+    store = await hub.fetch_listing(client, app)
+    assert seen[0].headers["Authorization"] == f"Bearer {token}"
+    assert (store / "appstore" / "de-DE" / "name.txt").read_text() == "Vinventory"
+    assert not (store.parent / "apps").exists()
+    assert apps.version_of(hub, app) == "0.4.1"
+    assert appstore.listing_version(hub, app) == "0.4.1"
+    (store.parent / "app.json").write_text('{"expo": {"version": "../evil"}}')
+    assert appstore.listing_version(hub, app) == "0.1.0"
+    (store.parent / "app.json").write_text("not json")
+    assert appstore.listing_version(hub, app) == "0.1.0"
 
 
 def test_app_store_version_follows_pubspec(tmp_path: Path) -> None:

@@ -43,6 +43,7 @@ from cryptography.hazmat.primitives.asymmetric.utils import decode_dss_signature
 from cryptography.hazmat.primitives.serialization import pkcs12
 from cryptography.x509.oid import NameOID
 
+from allskyhub_server.admin.deploy import github_headers
 from allskyhub_server.devices.images import jpeg_size
 
 log = logging.getLogger(__name__)
@@ -88,6 +89,7 @@ TITLES = {
     "github": "GitHub-Token (nur lesen)",
     # Further apps' own upload keys (OtherApp.android_upload), made on their setup.
     "bortle_android_upload": "bortle: Android-Upload-Schlüssel",
+    "vinventory_android_upload": "Vinventory: Android-Upload-Schlüssel",
 }
 UPLOADED = ("play", "asc", "codemagic", "youtube", "fcm", "turnstile", "github")
 GITHUB_TOKEN = re.compile(r"^(github_pat_|ghp_)[A-Za-z0-9_]{20,255}$")
@@ -131,6 +133,15 @@ class OtherApp:
     categories: tuple[str, str] = ("", "")
     version: str = "1.0.0"
     what_to_test: dict[str, str] = field(default_factory=dict[str, str])
+    # Where its version is: a Flutter app's pubspec.yaml, or an Expo app's app.json.
+    version_file: str = "pubspec.yaml"
+    # A private repository: its store files come with the hub's GitHub token.
+    private: bool = False
+
+    @property
+    def version_name(self) -> str:
+        """The version file's name in the hub's copy of the listing (listings/<key>/)."""
+        return Path(self.version_file).name
 
     @property
     def fcm_file(self) -> str:
@@ -165,16 +176,43 @@ OTHER_APPS = {
             "Feedback is welcome through TestFlight.",
         },
     ),
+    # Benjamin, 2026-10-29: Vinventory, an Expo app (React Native) in a private repository;
+    # Android built on the hub's server like the others (deploy/android, app=vinventory).
+    "vinventory": OtherApp(
+        key="vinventory",
+        title="Vinventory",
+        package="eu.vinventory.app",
+        name="Vinventory",
+        repo="benhartwich/vinventory",
+        codemagic_name="vinventory",
+        group="vinventory_store",
+        contact_email="support@webinx.eu",
+        website="https://vinventory.eu",
+        privacy_url="https://vinventory.eu/datenschutz",
+        categories=("FOOD_AND_DRINK", "LIFESTYLE"),
+        version="0.1.0",
+        what_to_test={
+            "de-DE": "Anmelden per E-Mail-Link, eine Flasche scannen (Vorder- und Rückseite), "
+            "im Keller öffnen und bewerten, unter Pairen ein Gericht eingeben.",
+            "en-US": "Sign in with the e-mail link, scan a bottle (front and back), open and "
+            "rate it in the cellar, and enter a dish under Pairing.",
+        },
+        version_file="apps/mobile/app.json",
+        private=True,
+    ),
 }
 # A repository's store folder, downloaded for a listing push (codeload, no API quota).
 LISTING_TARBALL = "https://codeload.github.com/{repo}/tar.gz/refs/heads/main"
+# A private one through the API with the token (it redirects to a short-lived codeload link).
+PRIVATE_TARBALL = "https://api.github.com/repos/{repo}/tarball/main"
 LISTING_MAX_BYTES = 200_000_000
 
 
-def extract_listing(tarball: bytes, dest: Path) -> Path:
-    """Unpack only ``store/`` and ``pubspec.yaml`` of a GitHub tarball into ``dest``
-    (replaced), with the tarfile data filter: no links, devices or paths outside.
-    Returns ``dest/store``."""
+def extract_listing(tarball: bytes, dest: Path, version_file: str = "pubspec.yaml") -> Path:
+    """Unpack only ``store/`` and the file with the app's version (``pubspec.yaml``, or
+    an Expo app's ``app.json``, kept under its own name) of a GitHub tarball into
+    ``dest`` (replaced), with the tarfile data filter: no links, devices or paths
+    outside. Returns ``dest/store``."""
     import io
     import shutil
     import tarfile
@@ -186,12 +224,13 @@ def extract_listing(tarball: bytes, dest: Path) -> Path:
         members: list[tarfile.TarInfo] = []
         for m in tar.getmembers():
             parts = m.name.split("/", 1)  # "<repo>-<sha>/store/..."
-            wanted = len(parts) == 2 and (
-                (parts[1].startswith("store/") and (m.isfile() or m.isdir()))
-                or (parts[1] == "pubspec.yaml" and m.isfile())  # its version
-            )
-            if wanted:
+            if len(parts) != 2:
+                continue
+            if parts[1].startswith("store/") and (m.isfile() or m.isdir()):
                 m.name = parts[1]
+                members.append(m)
+            elif parts[1] == version_file and m.isfile():  # its version
+                m.name = Path(version_file).name
                 members.append(m)
         tar.extractall(dest, members=members, filter="data")
     store = dest / "store"
@@ -1458,13 +1497,21 @@ class Stores:
 
     async def fetch_listing(self, client: httpx.AsyncClient, app: OtherApp) -> Path:
         """A further app's ``store/`` from its repository's main branch, fresh."""
-        r = await client.get(
-            LISTING_TARBALL.format(repo=app.repo), timeout=UPLOAD_TIMEOUT, follow_redirects=True
-        )
+        url, headers = LISTING_TARBALL.format(repo=app.repo), {}
+        if app.private:
+            token = github_token(self.vault)
+            if token is None:
+                raise StoreError(
+                    f"{app.repo} ist privat: erst ein GitHub-Token mit Lesezugriff darauf "
+                    "hinterlegen."
+                )
+            url, headers = PRIVATE_TARBALL.format(repo=app.repo), github_headers(token)
+        r = await client.get(url, headers=headers, timeout=UPLOAD_TIMEOUT, follow_redirects=True)
         if r.status_code != 200 or len(r.content) > LISTING_MAX_BYTES:
-            raise StoreError(f"Store-Dateien von {app.repo} nicht ladbar ({r.status_code}).")
+            hint = " (hat das GitHub-Token Lesezugriff darauf?)" if app.private else ""
+            raise StoreError(f"Store-Dateien von {app.repo} nicht ladbar ({r.status_code}){hint}.")
         dest = self.vault.root / "listings" / app.key
-        return await asyncio.to_thread(extract_listing, r.content, dest)
+        return await asyncio.to_thread(extract_listing, r.content, dest, app.version_file)
 
     async def _push_listing(
         self, client: httpx.AsyncClient, report: Report, other: OtherApp | None = None

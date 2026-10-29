@@ -44,6 +44,19 @@ Admin page → App-Stores → "Android-Release bauen" leaves a request in
   only: then roll it out in the Play Console. The very first bundle of a new app must be
   uploaded by hand there; the admin page links the file.
 
+Further apps (admin/stores.py `OTHER_APPS`) come from the request's first line,
+`app=<key>`, each with its own clone, upload key and answer folder (`release-<key>`):
+
+- `app=bortle`: Flutter, github.com/benhartwich/bortle-app, as above.
+- `app=vinventory`: Expo (React Native), the private github.com/benhartwich/vinventory,
+  cloned with the hub's read-only GitHub token (admin page → Version; it needs read
+  access to that repository), handed to git in root's environment only. Built in
+  `reactnativecommunity/react-native-android` (pinned by digest; 12 GB, six cores
+  visible, three Gradle workers, ABIs arm64-v8a and armeabi-v7a: with more, the memory
+  limit killed it): `npm ci` at the root, `expo prebuild` and `gradlew bundleRelease` in
+  `apps/mobile`. Its config plugin signs from `VINVENTORY_UPLOAD_*` and takes the
+  version code from `VINVENTORY_VERSION_CODE` (the commit count).
+
 The hub only drops `request` into its folder; root never writes there (anything in a
 folder the hub owns could be a symlink). The answers, state (`running`, `ok`, `built` =
 first upload by hand, `failed`), log, `latest.json` and the newest three App Bundles,

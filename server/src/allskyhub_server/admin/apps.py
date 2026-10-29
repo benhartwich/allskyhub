@@ -120,7 +120,9 @@ async def refresh_live(stores: Stores) -> None:
                     )
                 except (StoreError, httpx.HTTPError, KeyError, ValueError) as exc:
                     log.info("live state %s at Apple: %s", key, exc)
-            if stores.vault.has("play"):
+            # Not while an App Bundle goes up: Google lets a new edit expire the upload's
+            # (vinventory build 25, 2026-10-29: "This edit has expired").
+            if stores.vault.has("play") and not stores.android_busy():
                 try:
                     found["play"] = await stores.play_tracks(app.package if app else PACKAGE)
                 except (StoreError, httpx.HTTPError, KeyError, ValueError) as exc:

@@ -709,6 +709,9 @@ class Stores:
         self.listing = LISTING
         self._listing_task: asyncio.Task[Report] | None = None
         self.jobs: dict[str, asyncio.Task[Report]] = {}  # background pushes (appstore.py)
+        # Google expires an open edit when another one is opened for the app: every edit
+        # here holds this lock, and the apps page's look at Play skips while it is held.
+        self.play_edits = asyncio.Lock()
         self.screenshot_dir = root / "screenshots"
 
     @property
@@ -763,11 +766,13 @@ class Stores:
             report.add(title, "fail", str(exc))
             return
         auth = {"Authorization": f"Bearer {token}"}
-        r = await client.post(f"{PLAY}/applications/{PACKAGE}/edits", headers=auth)
+        async with self.play_edits:
+            r = await client.post(f"{PLAY}/applications/{PACKAGE}/edits", headers=auth)
+            if r.status_code == 200:
+                edit = _dict(r.json()).get("id")
+                if isinstance(edit, str):
+                    await client.delete(f"{PLAY}/applications/{PACKAGE}/edits/{edit}", headers=auth)
         if r.status_code == 200:
-            edit = _dict(r.json()).get("id")
-            if isinstance(edit, str):
-                await client.delete(f"{PLAY}/applications/{PACKAGE}/edits/{edit}", headers=auth)
             report.add(title, "ok", f"Zugriff auf {PACKAGE} in der Play Console.")
         elif r.status_code == 404:
             report.add(
@@ -1322,29 +1327,35 @@ class Stores:
         try:
             auth = {"Authorization": f"Bearer {await self._play_token(client)}"}
             app = f"{PLAY}/applications/{package}"
-            r = await client.post(f"{app}/edits", headers=auth)
-            if r.status_code != 200:
-                raise StoreError(f"Google Play: {_message(r)}")
-            edit = str(_dict(r.json())["id"])
-            try:
-                r = await client.get(f"{app}/edits/{edit}/tracks", headers=auth)
-            finally:
-                await client.delete(f"{app}/edits/{edit}", headers=auth)
-            if r.status_code != 200:
-                raise StoreError(f"Google Play: {_message(r)}")
-            return {
-                str(t.get("track")): [
-                    {
-                        "name": str(x.get("name", "")),
-                        "status": str(x.get("status", "")),
-                        "codes": [str(c) for c in _list_any(x.get("versionCodes"))],
-                    }
-                    for x in _list(t.get("releases"))
-                ]
-                for t in _list(_dict(r.json()).get("tracks"))
-            }
+            async with self.play_edits:
+                return await self._tracks(client, auth, app)
         finally:
             await self._close(client)
+
+    async def _tracks(
+        self, client: httpx.AsyncClient, auth: dict[str, str], app: str
+    ) -> dict[str, list[dict[str, Any]]]:
+        r = await client.post(f"{app}/edits", headers=auth)
+        if r.status_code != 200:
+            raise StoreError(f"Google Play: {_message(r)}")
+        edit = str(_dict(r.json())["id"])
+        try:
+            r = await client.get(f"{app}/edits/{edit}/tracks", headers=auth)
+        finally:
+            await client.delete(f"{app}/edits/{edit}", headers=auth)
+        if r.status_code != 200:
+            raise StoreError(f"Google Play: {_message(r)}")
+        return {
+            str(t.get("track")): [
+                {
+                    "name": str(x.get("name", "")),
+                    "status": str(x.get("status", "")),
+                    "codes": [str(c) for c in _list_any(x.get("versionCodes"))],
+                }
+                for x in _list(t.get("releases"))
+            ]
+            for t in _list(_dict(r.json()).get("tracks"))
+        }
 
     async def submit_play(self, package: str = PACKAGE) -> Report:
         """The newest App Bundle of the internal test into production, which sends it to
@@ -1356,7 +1367,8 @@ class Stores:
             return report
         client = self._http()
         try:
-            state, text = await self._submit_play(client, package)
+            async with self.play_edits:
+                state, text = await self._submit_play(client, package)
             report.add(title, state, text)
         except StoreError as exc:
             report.add(title, "fail", str(exc))
@@ -1524,7 +1536,8 @@ class Stores:
             return report
         client = self._client or httpx.AsyncClient(timeout=UPLOAD_TIMEOUT)
         try:
-            await self._push_listing(client, report, other)
+            async with self.play_edits:
+                await self._push_listing(client, report, other)
         except StoreError as exc:
             report.add("Store-Eintrag", "fail", str(exc))
         except httpx.HTTPError as exc:

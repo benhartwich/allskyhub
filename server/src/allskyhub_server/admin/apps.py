@@ -122,7 +122,9 @@ async def refresh_live(stores: Stores) -> None:
                     log.info("live state %s at Apple: %s", key, exc)
             # Not while an App Bundle goes up: Google lets a new edit expire the upload's
             # (vinventory build 25, 2026-10-29: "This edit has expired").
-            if stores.vault.has("play") and not stores.android_busy():
+            # Nor while the hub has an edit of its own open (listing, submission).
+            busy = stores.android_busy() or stores.play_edits.locked()
+            if stores.vault.has("play") and not busy:
                 try:
                     found["play"] = await stores.play_tracks(app.package if app else PACKAGE)
                 except (StoreError, httpx.HTTPError, KeyError, ValueError) as exc:

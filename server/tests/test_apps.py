@@ -12,6 +12,7 @@ from fastapi import FastAPI
 
 from allskyhub_server.admin import apps, appstore, stores
 from allskyhub_server.admin.stores import AndroidJob
+from allskyhub_server.auth import ratelimit
 from allskyhub_server.settings import Settings
 from tests.helpers import csrf_from, make_account
 from tests.test_stores import ISSUER, _p8, _play_json  # pyright: ignore[reportPrivateUsage]
@@ -263,6 +264,9 @@ async def test_public_apk_download(
     tmp_path: Path,
 ) -> None:
     """Benjamin, 2026-10-29: a public download link for the Android app."""
+    # The limit's windows are fixed hours: here a day, so a test across the full hour
+    # still counts in one window (CI failed at 20:00, 2026-10-29).
+    monkeypatch.setattr(ratelimit, "APK_PER_IP", (ratelimit.Limit(10, 86400),))
     out = tmp_path / "release"
     hub = stores.Stores(tmp_path / "store", "benhartwich/allskyhub", release_out=out)
     monkeypatch.setattr(app.state, "stores", hub)
@@ -473,7 +477,9 @@ async def test_the_last_ios_build_from_codemagic(tmp_path: Path) -> None:
         assert request.url.params["appId"] == "APP2"
         ios, fin = "ios-release", "finished"
         return httpx.Response(200, json={"builds": [
-            {"workflowId": ios, "status": fin, "startedAt": "2026-10-28T10:00:00.000+0000"},
+            # A codemagic.yaml workflow: its name in fileWorkflowId.
+            {"workflowId": "6ae1", "fileWorkflowId": ios, "status": fin,
+             "startedAt": "2026-10-28T10:00:00.000+0000"},
             {"workflowId": ios, "status": "failed", "startedAt": "2026-10-29T10:00:00.000+0000"},
             {"workflowId": "android", "status": fin, "startedAt": "2026-10-29T11:00:00.000+0000"},
             {"workflowId": ios, "status": fin, "startedAt": "2026-10-27T10:00:00.000+0000"},

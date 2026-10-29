@@ -227,11 +227,12 @@ with open(os.path.join(sys.argv[2], "keystore.env"), "w") as f:
         if isinstance(value, str) and re.fullmatch(r"[A-Za-z0-9:._-]{1,200}", value):
             f.write("%s_FCM_%s=%s\n" % (sys.argv[5], name.upper(), value))
 PY
-    # React Native's build needs more than Flutter's: at 8 and 12 GB the memory limit
-    # killed it (2026-10-29), as its native code compiled on every core the container
-    # saw, for four ABIs. Six cores visible, three Gradle workers, the two phone ABIs.
+    # React Native's build needs more than Flutter's: a fresh one was killed at 8 and 12 GB
+    # (2026-10-29: Gradle, Kotlin daemon, R8 and clang for every core the container saw).
+    # 16 GB, four cores visible, two Gradle workers, Kotlin in Gradle's own process, the
+    # two phone ABIs: 12–17 minutes in trials here.
     local limits=(--cpus 6 --memory 8g)
-    [[ $KIND == expo ]] && limits=(--cpus 6 --cpuset-cpus 0-5 --memory 12g)
+    [[ $KIND == expo ]] && limits=(--cpus 4 --cpuset-cpus 0-3 --memory 16g)
     local run=(docker run --rm --name allskyhub-android-release "${limits[@]}"
         -v "$SRC:/work"
         -v allskyhub-android-gradle:/root/.gradle
@@ -246,11 +247,14 @@ PY
         # The workspace root installs (npm workspaces), the app's native project is made
         # fresh by expo prebuild; its config plugin signs from <PREFIX>_* and takes the
         # version code from VINVENTORY_VERSION_CODE.
-        "${run[@]}" -v allskyhub-android-npm:/root/.npm -e CI=1 \
+        # The image points GRADLE_USER_HOME elsewhere; back to /root/.gradle, where the
+        # cache volume, the Maven proxy's init script and gradle.properties are.
+        "${run[@]}" -v allskyhub-android-npm:/root/.npm -e CI=1 -e GRADLE_USER_HOME=/root/.gradle \
             -e "VINVENTORY_VERSION_CODE=$build" -w /work "$EXPO_IMAGE" \
             sh -c "npm ci --no-audit --no-fund && cd $APP_DIR \
                 && npx expo prebuild --platform android --clean --no-install \
-                && cd android && ./gradlew --no-daemon --max-workers=3 \
+                && cd android && ./gradlew --no-daemon --max-workers=2 \
+                    -Pkotlin.compiler.execution.strategy=in-process \
                     -PreactNativeArchitectures=arm64-v8a,armeabi-v7a bundleRelease"
         aab=$SRC/$APP_DIR/android/app/build/outputs/bundle/release/app-release.aab
     else

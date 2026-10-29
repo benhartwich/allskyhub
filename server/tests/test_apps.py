@@ -473,7 +473,9 @@ async def test_the_last_ios_build_from_codemagic(tmp_path: Path) -> None:
         assert request.url.params["appId"] == "APP2"
         ios, fin = "ios-release", "finished"
         return httpx.Response(200, json={"builds": [
-            {"workflowId": ios, "status": fin, "startedAt": "2026-10-28T10:00:00.000+0000"},
+            # A codemagic.yaml workflow: its name in fileWorkflowId.
+            {"workflowId": "6ae1", "fileWorkflowId": ios, "status": fin,
+             "startedAt": "2026-10-28T10:00:00.000+0000"},
             {"workflowId": ios, "status": "failed", "startedAt": "2026-10-29T10:00:00.000+0000"},
             {"workflowId": "android", "status": fin, "startedAt": "2026-10-29T11:00:00.000+0000"},
             {"workflowId": ios, "status": fin, "startedAt": "2026-10-27T10:00:00.000+0000"},

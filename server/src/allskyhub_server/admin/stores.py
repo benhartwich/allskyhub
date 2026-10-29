@@ -1167,11 +1167,19 @@ class Stores:
             await self._close(client)
         if r.status_code != 200:
             raise StoreError(f"Codemagic: {_message(r)}")
+        builds = _list(_dict(r.json()).get("builds"))
+        # A codemagic.yaml workflow is named in fileWorkflowId; workflowId is then
+        # Codemagic's own id (2026-10-29: allskyhub and bortle stayed "unbekannt").
         started = [
             str(b.get("startedAt", ""))
-            for b in _list(_dict(r.json()).get("builds"))
-            if b.get("workflowId") == workflow and b.get("status") == "finished"
+            for b in builds
+            if workflow in (b.get("fileWorkflowId"), b.get("workflowId"))
+            and b.get("status") == "finished"
         ]
+        if not any(started):
+            seen = {(b.get("fileWorkflowId"), b.get("workflowId"), b.get("status")) for b in builds}
+            log.info("no finished %s build of %s at Codemagic: %s", workflow, app_id, sorted(
+                seen, key=str)[:20])  # fmt: skip
         return max((s for s in started if s), default=None)
 
     def other_app_id(self, app: OtherApp) -> str | None:

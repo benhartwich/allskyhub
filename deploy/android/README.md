@@ -51,9 +51,10 @@ Further apps (admin/stores.py `OTHER_APPS`) come from the request's first line,
 - `app=vinventory`: Expo (React Native), the private github.com/benhartwich/vinventory,
   cloned with the hub's read-only GitHub token (admin page → Version; it needs read
   access to that repository), handed to git in root's environment only. Built in
-  `reactnativecommunity/react-native-android` (pinned by digest; 12 GB, six cores
-  visible, three Gradle workers, ABIs arm64-v8a and armeabi-v7a: with more, the memory
-  limit killed it): `npm ci` at the root, `expo prebuild` and `gradlew bundleRelease` in
+  `reactnativecommunity/react-native-android` (pinned by digest; 16 GB, four cores
+  visible, two Gradle workers, Kotlin in-process, ABIs arm64-v8a and armeabi-v7a: a
+  fresh build was killed at 8 and 12 GB; `GRADLE_USER_HOME` set back to `/root/.gradle`,
+  which the image moves): `npm ci` at the root, `expo prebuild` and `gradlew bundleRelease` in
   `apps/mobile`. Its config plugin signs from `VINVENTORY_UPLOAD_*` and takes the
   version code from `VINVENTORY_VERSION_CODE` (the commit count).
 

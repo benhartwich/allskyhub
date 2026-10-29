@@ -196,7 +196,7 @@ async def test_apps_page_and_actions(
     assert 'id="app-allskyhub"' in page.text
     assert 'id="app-bortle"' in page.text
     assert "Version 1.1.0" in page.text
-    assert 'http-equiv="refresh"' not in page.text  # nothing builds
+    assert "hx-trigger" not in page.text  # nothing on its way: no card polls
     token = csrf_from(page.text)
 
     def act(app_key: str, action: str) -> dict[str, str]:
@@ -226,7 +226,15 @@ async def test_apps_page_and_actions(
     assert "Der Server baut das App Bundle" in r.text
     page = await client.get(str(r.url))  # the browser's reload
     assert "Der Server baut das App Bundle" not in page.text  # the notice only once
-    assert 'http-equiv="refresh"' in page.text  # while it builds
+    # While it builds, the card polls itself (no reload of the whole page).
+    assert 'hx-get="/admin/apps/card/allskyhub"' in page.text
+    assert 'hx-get="/admin/apps/card/bortle"' not in page.text
+    card = await client.get("/admin/apps/card/allskyhub")
+    assert card.status_code == 200
+    assert 'id="app-allskyhub"' in card.text
+    assert "<html" not in card.text
+    assert "Der Server baut gerade" in card.text
+    assert (await client.get("/admin/apps/card/nope")).status_code == 404
 
     # Built and in the internal test: the next step is the review; its result stays.
     (tmp_path / "android-release" / "request").unlink()

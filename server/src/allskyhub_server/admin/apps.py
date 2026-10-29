@@ -84,7 +84,12 @@ class Card:
 
     @property
     def waiting(self) -> bool:
-        return any(r.tone == "wait" for r in self.rows) or bool(self.test and self.test.busy)
+        """Something of this app is on its way: the card then polls itself."""
+        return (
+            any(r.tone == "wait" for r in self.rows)
+            or bool(self.test and self.test.busy)
+            or any(result.get("running") for _, result in self.results)
+        )
 
 
 def live_file(key: str) -> str:
@@ -298,11 +303,14 @@ def ios_row(
                "review-appstore", "Zur Prüfung einreichen")  # fmt: skip
 
 
-async def cards(stores: Stores) -> list[Card]:
+async def cards(stores: Stores, only: str | None = None) -> list[Card]:
+    """Every app's card, or only the one with the key ``only`` (a card polling itself)."""
     builds = await stores.recent_builds(limit=10)
     out: list[Card] = []
     for app in (None, *OTHER_APPS.values()):
         key = app.key if app else "allskyhub"
+        if only is not None and key != only:
+            continue
         version = version_of(stores, app)
         job = stores.android_job(app)
         card = Card(key, app.title if app else "allskyhub",

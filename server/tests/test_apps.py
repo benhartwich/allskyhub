@@ -133,6 +133,14 @@ async def test_live_state_from_both_stores(tmp_path: Path) -> None:
     assert "play" not in apps.live_of(hub, "bortle")
     assert apps.live_of(hub, "bortle")["apple"]  # Apple is still asked
 
+    # Nor while the hub has a Play edit of its own open.
+    (answers / "state").write_text("ok\n")
+    async with hub.play_edits:
+        await apps.refresh_live(hub)
+    assert "play" not in apps.live_of(hub, "bortle")
+    await apps.refresh_live(hub)
+    assert apps.live_of(hub, "bortle")["play"]
+
 
 def test_ios_steps() -> None:
     build: dict[str, Any] = {"id": "CM", "app_id": "A", "at": "2026-10-28T14:09:56+00:00"}

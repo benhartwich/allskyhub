@@ -343,7 +343,16 @@ class Vault:
         return cast(list[dict[str, Any]], raw) if isinstance(raw, list) else []
 
     def add_build(self, build: dict[str, Any]) -> None:
-        self._write("builds.json", json.dumps([build, *self.builds()][:10]).encode())
+        """The newest ten, and each app's newest per platform (Android builds pushed the
+        iOS ones out, and the apps page lost what its last iOS build was)."""
+        builds = [build, *self.builds()]
+        kept = builds[:10]
+        seen = {(str(b.get("app", "")), b.get("platform")) for b in kept}
+        for b in builds[10:]:
+            if (key := (str(b.get("app", "")), b.get("platform"))) not in seen:
+                seen.add(key)
+                kept.append(b)
+        self._write("builds.json", json.dumps(kept).encode())
 
 
 def _now() -> str:
@@ -1137,6 +1146,33 @@ class Stores:
         finally:
             await self._close(client)
         return report
+
+    async def last_ios_build(self, app: OtherApp | None = None) -> str | None:
+        """When Codemagic started the app's newest finished iOS release build (its own
+        record, also for builds started there): what TestFlight has is main as of then."""
+        app_id = (
+            self.other_app_id(app) if app else (self.vault.meta("codemagic") or {}).get("app_id")
+        )
+        if not isinstance(app_id, str) or not self.vault.has("codemagic"):
+            return None
+        workflow = app.workflow if app else WORKFLOWS["ios"]
+        client = self._http()
+        try:
+            r = await client.get(
+                f"{CODEMAGIC_V1}/builds",
+                params={"appId": app_id},
+                headers=self._cm_auth("Build-Liste"),
+            )
+        finally:
+            await self._close(client)
+        if r.status_code != 200:
+            raise StoreError(f"Codemagic: {_message(r)}")
+        started = [
+            str(b.get("startedAt", ""))
+            for b in _list(_dict(r.json()).get("builds"))
+            if b.get("workflowId") == workflow and b.get("status") == "finished"
+        ]
+        return max((s for s in started if s), default=None)
 
     def other_app_id(self, app: OtherApp) -> str | None:
         value = (self.vault.meta("codemagic") or {}).get(f"{app.key}_app_id")

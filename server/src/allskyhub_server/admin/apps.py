@@ -147,6 +147,10 @@ async def refresh_live(stores: Stores) -> None:
                 except (StoreError, httpx.HTTPError, KeyError, ValueError) as exc:
                     log.info("live state %s at Google: %s", key, exc)
             try:
+                found["ios_built"] = await stores.last_ios_build(app)
+            except (StoreError, httpx.HTTPError, KeyError, ValueError) as exc:
+                log.info("last iOS build of %s: %s", key, exc)
+            try:
                 found["commits"] = await main_commits(client, stores, app, _since(stores, app))
             except (StoreError, httpx.HTTPError, KeyError, ValueError) as exc:
                 log.info("main's commits of %s: %s", key, exc)
@@ -178,12 +182,17 @@ def _ios_build(stores: Stores, key: str) -> dict[str, Any] | None:
     )  # fmt: skip
 
 
+def _ios_at(stores: Stores, key: str, live: dict[str, Any]) -> str:
+    """The start of the last iOS build: Codemagic's own record, else the hub's."""
+    return str(live.get("ios_built") or (_ios_build(stores, key) or {}).get("at", ""))
+
+
 def _since(stores: Stores, app: OtherApp | None) -> str:
     """From the older of the two last builds on, a day earlier for clock skew."""
     key = app.key if app else "allskyhub"
     bases = [
         _when((stores.android_job(app).latest or {}).get("built_at")),
-        _when((_ios_build(stores, key) or {}).get("at")),
+        _when(_ios_at(stores, key, live_of(stores, key))),
     ]
     known = [b for b in bases if b is not None]
     start = (
@@ -421,7 +430,7 @@ async def cards(stores: Stores, only: str | None = None) -> list[Card]:
         card.pending = {
             "android": pending(commits, str((job.latest or {}).get("commit", "")),
                                str((job.latest or {}).get("built_at", ""))),
-            "ios": pending(commits, "", str((_ios_build(stores, key) or {}).get("at", ""))),
+            "ios": pending(commits, "", _ios_at(stores, key, live)),
         }  # fmt: skip
         card.rows.append(
             android_row(

@@ -207,18 +207,19 @@ release_build() {
         cp -- "$KEYS/$app-test.p12" "$KEY_TMP/upload.p12"
         cp -- "$KEYS/$app-test.env" "$KEY_TMP/keystore.env"
     else
-        store_key || return 0
+        if [[ ! -f $STORE/$KEY_KIND.secret ]]; then
+            echo 'FEHLER: Kein Upload-Schlüssel, erst auf der Admin-Seite „Prüfen und einrichten“.'
+            answer "$RELEASE" state failed
+            return
+        fi
+        # Called plainly: in an `||` or `if` errexit and the ERR trap would be off inside.
+        store_key
     fi
     signed_build
 }
 
-# The hub's upload key into KEY_TMP; fails (with the reason in the log) when there is none.
+# The hub's upload key (and the app's Firebase identifiers) into KEY_TMP.
 store_key() {
-    [[ -f $STORE/$KEY_KIND.secret ]] || {
-        echo 'FEHLER: Kein Upload-Schlüssel, erst auf der Admin-Seite „Prüfen und einrichten“.'
-        answer "$RELEASE" state failed
-        return 1
-    }
     # Read as the hub: the key is the hub's, and a symlink there must not reach root's files.
     runuser -u "$HUB_USER" -- cat -- "$STORE/$KEY_KIND.secret" > "$KEY_TMP/secret.json"
     # A further app's Firebase identifiers, if the admin page has them (fcm_app_<app>.json).
@@ -257,10 +258,12 @@ variant_key() {
     install -d -m 700 "$KEYS"
     local password
     password=$(head -c 24 /dev/urandom | base64 | tr -d '/+=')
-    docker run --rm -v "$KEYS:/keys" "$EXPO_IMAGE" keytool -genkeypair -noprompt \
+    # The password through the environment, not on a command line (/proc/*/cmdline).
+    KS_PASS=$password docker run --rm -e KS_PASS -v "$KEYS:/keys" "$EXPO_IMAGE" \
+        keytool -genkeypair -noprompt \
         -keystore "/keys/$app-test.p12" -storetype PKCS12 -alias test -keyalg RSA \
         -keysize 4096 -validity 10000 -dname "CN=$app test builds" \
-        -storepass "$password" -keypass "$password"
+        -storepass:env KS_PASS -keypass:env KS_PASS
     chmod 600 "$KEYS/$app-test.p12"
     (umask 077; printf '%s_KEYSTORE_PASSWORD=%s\n%s_KEY_ALIAS=test\n%s_KEY_PASSWORD=%s\n' \
         "$PREFIX" "$password" "$PREFIX" "$PREFIX" "$password" > "$KEYS/$app-test.env")

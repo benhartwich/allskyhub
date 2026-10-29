@@ -92,14 +92,19 @@ async def test_apk(request: Request, name: str, settings: SettingsDep) -> Respon
 @router.get("/download/{key}.apk")
 async def store_apk(request: Request, key: str, settings: SettingsDep) -> Response:
     stores: admin_stores.Stores = request.app.state.stores
+    test = stores.test_apk(key)  # <key>-test: the server's own build
     found = stores.apk(key)
-    if found is None:
+    if test is not None:
+        path, filename = test, test.name
+    elif found is not None:
+        path, facts = found
+        filename = f"{key}-{facts.get('version', '')}-{facts.get('build', '')}.apk"
+    else:
         raise HTTPException(404)
     await _limit(request, settings)
-    path, facts = found
     return FileResponse(
         path,
         media_type="application/vnd.android.package-archive",
-        filename=f"{key}-{facts.get('version', '')}-{facts.get('build', '')}.apk",
+        filename=filename,
         headers={"Cache-Control": "no-cache"},
     )

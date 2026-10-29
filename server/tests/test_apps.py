@@ -275,3 +275,61 @@ async def test_public_apk_download(
     task = hub.jobs["apk-bortle.json"]
     await task
     assert "Kein Google-Play-Dienstkonto" in (await client.get("/admin/apps")).text
+
+
+async def test_vinventory_test_apk(
+    app: FastAPI,
+    client: httpx.AsyncClient,
+    settings: Settings,
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    """Benjamin, 2026-10-29: Google's APK sends to Play; a plain test APK from the server."""
+    out = tmp_path / "release"
+    hub = stores.Stores(tmp_path / "store", "benhartwich/allskyhub", release_out=out)
+    monkeypatch.setattr(app.state, "stores", hub)
+    email = await make_account(client)
+    monkeypatch.setattr(settings, "admin_emails", email)
+    page = await client.get("/admin/apps")
+    assert "Test-APK" in page.text
+    assert page.text.count('value="build-test-apk"') == 1  # Vinventory only
+    token = csrf_from(page.text)
+    r = await client.post(
+        "/admin/apps", data={"csrf_token": token, "app": "bortle", "action": "build-test-apk"}
+    )
+    assert "keine Test-APK" in r.text
+    r = await client.post(
+        "/admin/apps", data={"csrf_token": token, "app": "vinventory", "action": "build-test-apk"}
+    )
+    assert "baut die Test-APK" in r.text
+    assert (
+        (tmp_path / "android-release" / "request").read_text().startswith("app=vinventory-test\n")
+    )
+    vinventory = stores.OTHER_APPS["vinventory"]
+    assert hub.test_job(vinventory).state == "requested"
+    assert hub.android_job(vinventory).state == "idle"  # not the store build
+    assert hub.android_busy()
+    with pytest.raises(stores.StoreError):
+        hub.request_android(email, vinventory)
+
+    # The root helper built it.
+    (tmp_path / "android-release" / "request").unlink()
+    done = tmp_path / "release-vinventory-test"
+    done.mkdir()
+    (done / "state").write_text("ok\n")
+    (done / "vinventory-test-41.apk").write_bytes(b"PK\x03\x04test")
+    latest = {"build": 41, "version": "0.1.0", "commit": "128ea0c",
+              "file": "vinventory-test-41.apk"}  # fmt: skip
+    (done / "latest.json").write_text(json.dumps(latest))
+    page = await client.get("/admin/apps")
+    assert 'href="/download/vinventory-test.apk"' in page.text
+    assert "Build 41" in page.text
+    r = await client.get("/download/vinventory-test.apk")
+    assert r.status_code == 200
+    assert r.content == b"PK\x03\x04test"
+    assert "vinventory-test-41.apk" in r.headers["content-disposition"]
+    assert (await client.get("/download/bortle-test.apk")).status_code == 404
+    assert (await client.get("/download/vinventory-test-test.apk")).status_code == 404
+    # A latest.json naming another file is not served.
+    (done / "latest.json").write_text(json.dumps({**latest, "file": "../store/play.secret"}))
+    assert (await client.get("/download/vinventory-test.apk")).status_code == 404

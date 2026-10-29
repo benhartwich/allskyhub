@@ -30,6 +30,7 @@ TITLES = {
     "review-play": "Android zur Prüfung einreichen",
     "review-appstore": "iOS zur Prüfung einreichen",
     "apk": "APK zum Herunterladen holen",
+    "build-test-apk": "Test-APK bauen",
 }
 
 
@@ -107,6 +108,12 @@ async def apps_action(
             started = appstore.start(stores, by, other)
         elif action == "apk":
             started = stores.start_apk(by, other)
+        elif action == "build-test-apk":
+            if other is None:
+                raise admin_stores.StoreError("Für diese App gibt es keine Test-APK.")
+            stores.request_test_apk(by, other)
+            return await apps_page(request, session, notice=f"{name}: Der Server baut die "
+                                   "Test-APK (gut 10 Minuten).")  # fmt: skip
         else:
             store = action.removeprefix("review-")
             if store == "play":

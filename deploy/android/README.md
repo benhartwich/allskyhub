@@ -57,6 +57,14 @@ Further apps (admin/stores.py `OTHER_APPS`) come from the request's first line,
   which the image moves): `npm ci` at the root, `expo prebuild` and `gradlew bundleRelease` in
   `apps/mobile`. Its config plugin signs from `VINVENTORY_UPLOAD_*` and takes the
   version code from `VINVENTORY_VERSION_CODE` (the commit count).
+- `app=vinventory-test`: the same build as a test APK (`assembleRelease`,
+  `VINVENTORY_VARIANT=test`): package `eu.vinventory.app.test`, "Vinventory Test", no
+  Firebase, beside the store app. Google's universal APK of the store build sends users
+  to Play (automatic protection), so this one is signed with a key of this server, made on
+  the first run: `/var/lib/allskyhub-android/keys/vinventory-test.{p12,env}` (root only;
+  back it up with the folder, an update installs only with the same key). Answers in
+  `release-vinventory-test/`; the hub serves the newest APK at
+  `/download/vinventory-test.apk` (public, rate-limited). Admin page → Apps → "Test-APK bauen".
 
 The hub only drops `request` into its folder; root never writes there (anything in a
 folder the hub owns could be a symlink). The answers, state (`running`, `ok`, `built` =

@@ -20,6 +20,8 @@
 #                                          eu.vinventory.app.test, signed with a key of
 #                                          this server, published for the hub's
 #                                          /download/vinventory-test.apk, no upload
+#                                          "app=currywursttest" the Flutter app of the
+#                                          private github.com/benhartwich/currywursttest-app
 #
 # Flutter and Gradle run in a container (ghcr.io/cirruslabs/flutter; for the Expo app
 # reactnativecommunity/react-native-android), limited in CPU and memory so the hub keeps
@@ -92,6 +94,14 @@ main() {
             if [[ $first == app=vinventory-test ]]; then
                 VARIANT=test PACKAGE=eu.vinventory.app.test RELEASE=$BASE/release-vinventory-test
             fi
+        elif [[ $first == app=currywursttest ]]; then
+            # Flutter at the root of a private repository, cloned with the token like
+            # Vinventory's; its Gradle file signs from CURRYWURSTTEST_*.
+            app=currywursttest APP_DIR=. KEY_KIND=currywursttest_android_upload
+            PREFIX=CURRYWURSTTEST PACKAGE=com.currywursttest.app SRC=$BASE/src-currywursttest
+            PRIVATE=1
+            REPO_URL=${ALLSKYHUB_CURRYWURSTTEST_REPO_URL:-https://github.com/benhartwich/currywursttest-app.git}
+            RELEASE=${ALLSKYHUB_CURRYWURSTTEST_RELEASE_OUT:-$BASE/release-currywursttest}
         fi
         install -d -m 755 "$RELEASE"
         rm -f -- "$RELEASE/log"

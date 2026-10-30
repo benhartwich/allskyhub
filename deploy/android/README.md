@@ -57,6 +57,10 @@ Further apps (admin/stores.py `OTHER_APPS`) come from the request's first line,
   which the image moves): `npm ci` at the root, `expo prebuild` and `gradlew bundleRelease` in
   `apps/mobile`. Its config plugin signs from `VINVENTORY_UPLOAD_*` and takes the
   version code from `VINVENTORY_VERSION_CODE` (the commit count).
+- `app=currywursttest`: Flutter at the root of the private
+  github.com/benhartwich/currywursttest-app, cloned with the token like Vinventory's
+  (it needs read access to that repository too). Its Gradle file signs from
+  `CURRYWURSTTEST_*`.
 - `app=vinventory-test`: the same build as a test APK (`assembleRelease`,
   `VINVENTORY_VARIANT=test`): package `eu.vinventory.app.test`, "Vinventory Test", no
   Firebase, beside the store app. Google's universal APK of the store build sends users

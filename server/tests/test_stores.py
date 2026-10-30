@@ -938,8 +938,8 @@ async def test_admin_page_offers_the_further_app(
     monkeypatch.setattr(app.state, "stores", stores.Stores(tmp_path, "benhartwich/allskyhub"))
     page = await client.get("/admin/apps")
     assert 'id="app-bortle"' in page.text
-    # Three apps, both stores: in the card and in "Was ist zu tun?".
-    assert page.text.count("Noch nicht eingerichtet.") == 12
+    # Four apps, both stores: in the card and in "Was ist zu tun?".
+    assert page.text.count("Noch nicht eingerichtet.") == 16
     page = await client.get("/admin")
     token = csrf_from(page.text)
     r = await client.post(
@@ -1605,6 +1605,29 @@ async def test_an_expo_app_from_a_private_repository(tmp_path: Path) -> None:
     assert appstore.listing_version(hub, app) == "0.1.0"
     (store.parent / "app.json").write_text("not json")
     assert appstore.listing_version(hub, app) == "0.1.0"
+
+
+def test_currywursttest_on_the_same_accounts(tmp_path: Path) -> None:
+    """Benjamin, 2026-10-30: Currywurst Test with the same keys, its own upload key, built
+    on the server from its private repository, user content in the age rating."""
+    app = stores.OTHER_APPS["currywursttest"]
+    assert (app.package, app.group, app.codemagic_name) == (
+        "com.currywursttest.app",
+        "currywursttest_store",
+        "currywursttest-app",
+    )
+    assert app.private
+    assert not app.test_apk
+    assert app.android_upload in stores.TITLES
+    assert appstore.profile(app).age_rating == {"userGeneratedContent": True}
+
+    hub = stores.Stores(tmp_path / "store", "benhartwich/allskyhub", release_out=tmp_path / "rel")
+    secret, meta = stores.make_android_upload(app.title)
+    hub.vault.put(app.android_upload, secret, meta, "a")
+    hub.request_android("a", app)
+    assert (hub.release_dir / "request").read_text() == "app=currywursttest\na\n"
+    assert hub.android_job(app).state == "requested"
+    assert hub.android_job(stores.OTHER_APPS["bortle"]).state == "idle"
 
 
 def test_app_store_version_follows_pubspec(tmp_path: Path) -> None:

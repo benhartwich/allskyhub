@@ -104,6 +104,14 @@ CAPABILITIES = {
     "PUSH_NOTIFICATIONS": "Push-Benachrichtigungen",
     "ASSOCIATED_DOMAINS": "Associated Domains",
 }
+# Entitlement keys of an app's Runner.entitlements and the capability each needs: what the
+# app's main branch names is switched on, nobody keeps a second list.
+ENTITLEMENT_CAPABILITIES = {
+    "aps-environment": "PUSH_NOTIFICATIONS",
+    "com.apple.developer.associated-domains": "ASSOCIATED_DOMAINS",
+}
+GITHUB_API = "https://api.github.com"
+GITHUB_ACCESS = "GitHub-Zugriff"
 UPLOADED = ("play", "asc", "codemagic", "youtube", "fcm", "turnstile", "github")
 GITHUB_TOKEN = re.compile(r"^(github_pat_|ghp_)[A-Za-z0-9_]{20,255}$")
 # The app's own Firebase registration (public identifiers, not in the vault's secrets).
@@ -159,8 +167,10 @@ class OtherApp:
     # The folders whose commits change the app (admin/apps.py, "N neue Commits"); empty:
     # the whole repository.
     app_paths: tuple[str, ...] = ()
-    # Apple capabilities of its bundle id (CAPABILITIES); App Links need Associated Domains.
+    # Apple capabilities of its bundle id (CAPABILITIES) besides those its entitlements name.
     capabilities: tuple[str, ...] = ("PUSH_NOTIFICATIONS",)
+    # Its iOS entitlements in the repository, read on setup (ENTITLEMENT_CAPABILITIES).
+    entitlements: str = "ios/Runner/Runner.entitlements"
 
     @property
     def version_name(self) -> str:
@@ -254,8 +264,6 @@ OTHER_APPS = {
         private=True,
         # Ratings, photos and suggestions by users, moderated (report and block in the app).
         age_rating={"userGeneratedContent": True},
-        # Login link, /imbiss/ and /test/ as Universal Links (ios/Runner/Runner.entitlements).
-        capabilities=("PUSH_NOTIFICATIONS", "ASSOCIATED_DOMAINS"),
     ),
 }
 # A repository's store folder, downloaded for a listing push (codeload, no API quota).
@@ -993,8 +1001,12 @@ class Stores:
         report: Report,
         name: str = APP_NAME,
         repo: str | None = None,
+        private: bool = False,
     ) -> str | None:
-        """The Codemagic app of the repository: the one there, or added now."""
+        """The Codemagic app of the repository: the one there, or added now. A private
+        repository is never added here: added by its address, Codemagic cannot read it
+        (Currywurst Test, 2026-10-30: "Invalid username or token"); it has to come through
+        Codemagic's GitHub integration, and is then found by its name."""
         auth = self._cm_auth("Codemagic-App")
         r = await client.get(f"{CODEMAGIC}/user/apps", params={"page_size": 100}, headers=auth)
         if r.status_code != 200:
@@ -1007,6 +1019,16 @@ class Stores:
                 app_id = str(app["id"])
                 report.add(TITLES["codemagic"], "ok", "Die App ist in Codemagic vorhanden.")
                 return app_id
+        if private:
+            report.add(
+                TITLES["codemagic"],
+                "fail",
+                f"{repo} ist privat; Codemagic liest es nur über seine GitHub-Integration. In "
+                f"GitHub der Codemagic-App Zugriff auf {repo} geben, dann in Codemagic "
+                f"„Add application“ → GitHub → {repo} (Name {name} lassen), danach hier "
+                "noch einmal einrichten.",
+            )
+            return None
         body: dict[str, Any] = {"repositoryUrl": f"https://github.com/{repo or self.repo}.git"}
         r = await client.get(f"{CODEMAGIC}/user/teams", headers=auth)
         teams = _list(_dict(r.json()).get("data")) if r.status_code == 200 else []
@@ -1181,14 +1203,17 @@ class Stores:
         client = self._http()
         try:
             try:
-                await self._check_asc(client, report, app.package, app.name, app.capabilities)
+                capabilities = await self._repo_checks(client, report, app)
+                await self._check_asc(client, report, app.package, app.name, capabilities)
             except httpx.HTTPError as exc:
                 report.add("Verbindung", "fail", f"{type(exc).__name__}")
             if not self.vault.has("codemagic"):
                 report.add(TITLES["codemagic"], "warn", "Noch nicht hochgeladen.")
                 return report
             try:
-                app_id = await self._cm_app(client, report, app.codemagic_name, app.repo)
+                app_id = await self._cm_app(
+                    client, report, app.codemagic_name, app.repo, app.private
+                )
                 if app_id:
                     self.vault.update_meta("codemagic", **{f"{app.key}_app_id": app_id})
                     public = fcm_defines(app, self.vault.read_json(app.fcm_file))
@@ -1198,6 +1223,56 @@ class Stores:
         finally:
             await self._close(client)
         return report
+
+    async def _repo_checks(
+        self, client: httpx.AsyncClient, report: Report, app: OtherApp
+    ) -> tuple[str, ...]:
+        """What setup can know from the repository before a build fails on it: for a private
+        one whether the hub's GitHub token reads it (the server's Android build clones with
+        it), and the capabilities its iOS entitlements need. Returns the capabilities."""
+        headers = github_headers(None)
+        if app.private:
+            token = github_token(self.vault)
+            if token is None:
+                report.add(
+                    GITHUB_ACCESS,
+                    "fail",
+                    f"{app.repo} ist privat: erst unter Version ein GitHub-Token mit Lesezugriff "
+                    "darauf hinterlegen.",
+                )
+                return app.capabilities
+            headers = github_headers(token)
+            r = await client.get(f"{GITHUB_API}/repos/{app.repo}", headers=headers)
+            if r.status_code != 200:
+                report.add(
+                    GITHUB_ACCESS,
+                    "fail",
+                    f"Das GitHub-Token liest {app.repo} nicht ({r.status_code}). In GitHub → "
+                    "Settings → Developer settings → Fine-grained tokens beim Token des Hubs "
+                    f"unter „Repository access“ {app.repo} hinzufügen, Contents: Read-only.",
+                )
+                return app.capabilities
+            report.add(GITHUB_ACCESS, "ok", f"Das GitHub-Token liest {app.repo}.")
+        r = await client.get(
+            f"{GITHUB_API}/repos/{app.repo}/contents/{app.entitlements}",
+            params={"ref": "main"},
+            headers={**headers, "Accept": "application/vnd.github.raw"},
+        )
+        if r.status_code == 404:  # no entitlements (an Expo app makes them on its build)
+            return app.capabilities
+        try:
+            if r.status_code != 200:
+                raise ValueError(r.status_code)
+            keys = _dict(plistlib.loads(r.content)).keys()
+        except (plistlib.InvalidFileException, ValueError, ExpatError) as exc:
+            report.add(
+                "Fähigkeiten",
+                "warn",
+                f"{app.entitlements} nicht lesbar ({exc}); nur die Grundausstattung.",
+            )
+            return app.capabilities
+        named = [ENTITLEMENT_CAPABILITIES[k] for k in keys if k in ENTITLEMENT_CAPABILITIES]
+        return tuple(dict.fromkeys([*app.capabilities, *named]))
 
     async def last_ios_build(self, app: OtherApp | None = None) -> str | None:
         """When Codemagic started the app's newest finished iOS release build (its own

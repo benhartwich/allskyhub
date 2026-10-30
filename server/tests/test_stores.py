@@ -1001,15 +1001,28 @@ async def test_push_capability_on_and_old_profiles_gone(tmp_path: Path) -> None:
     assert ("DELETE", "/v1/profiles/P2") in seen
 
 
-async def test_associated_domains_for_currywursttest(tmp_path: Path) -> None:
-    """Benjamin, 2026-10-30: Currywurst Test's Universal Links need Associated Domains on
-    its bundle id, also right after the hub registered it; old profiles go once."""
-    seen: list[tuple[str, str]] = []
-    switched: list[str] = []
+ENTITLEMENTS = b"""<?xml version="1.0" encoding="UTF-8"?>
+<plist version="1.0"><dict>
+<key>com.apple.developer.associated-domains</key>
+<array><string>applinks:currywursttest.com</string></array>
+</dict></plist>"""
+
+
+def _setup_answers(
+    seen: list[tuple[str, str]], switched: list[str], repo_status: int = 200
+) -> httpx.MockTransport:
+    """Apple, GitHub and Codemagic for a private app's setup; Codemagic knows no app."""
 
     def answer(request: httpx.Request) -> httpx.Response:
         path = request.url.path
         seen.append((request.method, path))
+        if request.url.host == "api.github.com":
+            assert request.headers["authorization"].startswith("Bearer github_pat_")
+            if path == "/repos/benhartwich/currywursttest-app":
+                return httpx.Response(repo_status, json={})
+            if path.endswith("/contents/ios/Runner/Runner.entitlements"):
+                assert request.url.params["ref"] == "main"
+                return httpx.Response(200, content=ENTITLEMENTS)
         if path == "/v1/bundleIds" and request.method == "GET":
             return httpx.Response(200, json={"data": []})
         if path == "/v1/bundleIds":
@@ -1025,17 +1038,47 @@ async def test_associated_domains_for_currywursttest(tmp_path: Path) -> None:
             return httpx.Response(204)
         if path == "/v1/apps":
             return httpx.Response(200, json={"data": []})
+        if path == "/api/v3/user/apps":
+            return httpx.Response(200, json={"data": []})
         return httpx.Response(404, json={"message": path})
 
-    client = httpx.AsyncClient(transport=httpx.MockTransport(answer))
+    return httpx.MockTransport(answer)
+
+
+async def test_setup_reads_the_capabilities_from_the_entitlements(tmp_path: Path) -> None:
+    """Benjamin, 2026-10-30: "Einrichten" went wrong three times for Currywurst Test. Its
+    entitlements name Associated Domains, so that is switched on (right after registering,
+    old profiles go once); the token's access is checked; a private repository is not added
+    to Codemagic by its address, which Codemagic cannot read."""
+    seen: list[tuple[str, str]] = []
+    switched: list[str] = []
+    client = httpx.AsyncClient(transport=_setup_answers(seen, switched))
     hub = stores.Stores(tmp_path, "benhartwich/allskyhub", client)
     hub.vault.put("asc", *stores.parse_asc(_p8(), "2X9R4HXF34", ISSUER), by="a")
+    hub.vault.put("github", *stores.parse_github("github_pat_" + "a" * 40), by="a")
+    hub.vault.put("codemagic", *stores.parse_codemagic("c" * 40), by="a")
     report = await hub.setup_other(stores.OTHER_APPS["currywursttest"], "a")
+    states = {s.title: s.state for s in report.steps}
     assert switched == ["PUSH_NOTIFICATIONS", "ASSOCIATED_DOMAINS"]
-    step = next(s for s in report.steps if s.title == "Associated Domains")
-    assert step.state == "ok"
+    assert states[stores.GITHUB_ACCESS] == "ok"
+    assert states["Associated Domains"] == "ok"
     assert seen.count(("DELETE", "/v1/profiles/P1")) == 1
-    assert stores.OTHER_APPS["bortle"].capabilities == ("PUSH_NOTIFICATIONS",)
+    assert states[stores.TITLES["codemagic"]] == "fail"
+    step = next(s for s in report.steps if s.title == stores.TITLES["codemagic"])
+    assert "GitHub-Integration" in step.text
+    assert not any(m == "POST" and p == "/apps" for m, p in seen)  # never by its address
+
+
+async def test_setup_names_a_token_without_access(tmp_path: Path) -> None:
+    seen: list[tuple[str, str]] = []
+    client = httpx.AsyncClient(transport=_setup_answers(seen, [], repo_status=404))
+    hub = stores.Stores(tmp_path, "benhartwich/allskyhub", client)
+    hub.vault.put("github", *stores.parse_github("github_pat_" + "a" * 40), by="a")
+    report = await hub.setup_other(stores.OTHER_APPS["currywursttest"], "a")
+    step = next(s for s in report.steps if s.title == stores.GITHUB_ACCESS)
+    assert step.state == "fail"
+    assert "Repository access" in step.text
+    assert not any(p.endswith("Runner.entitlements") for _, p in seen)
 
 
 async def test_admin_enters_push_and_turnstile(

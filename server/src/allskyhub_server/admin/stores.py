@@ -99,6 +99,11 @@ TITLES = {
     "vinventory_android_upload": "Vinventory: Android-Upload-Schlüssel",
     "currywursttest_android_upload": "Currywurst Test: Android-Upload-Schlüssel",
 }
+# Apple capabilities the hub switches on for a bundle id, with their report titles.
+CAPABILITIES = {
+    "PUSH_NOTIFICATIONS": "Push-Benachrichtigungen",
+    "ASSOCIATED_DOMAINS": "Associated Domains",
+}
 UPLOADED = ("play", "asc", "codemagic", "youtube", "fcm", "turnstile", "github")
 GITHUB_TOKEN = re.compile(r"^(github_pat_|ghp_)[A-Za-z0-9_]{20,255}$")
 # The app's own Firebase registration (public identifiers, not in the vault's secrets).
@@ -154,6 +159,8 @@ class OtherApp:
     # The folders whose commits change the app (admin/apps.py, "N neue Commits"); empty:
     # the whole repository.
     app_paths: tuple[str, ...] = ()
+    # Apple capabilities of its bundle id (CAPABILITIES); App Links need Associated Domains.
+    capabilities: tuple[str, ...] = ("PUSH_NOTIFICATIONS",)
 
     @property
     def version_name(self) -> str:
@@ -247,6 +254,8 @@ OTHER_APPS = {
         private=True,
         # Ratings, photos and suggestions by users, moderated (report and block in the app).
         age_rating={"userGeneratedContent": True},
+        # Login link, /imbiss/ and /test/ as Universal Links (ios/Runner/Runner.entitlements).
+        capabilities=("PUSH_NOTIFICATIONS", "ASSOCIATED_DOMAINS"),
     ),
 }
 # A repository's store folder, downloaded for a listing push (codeload, no API quota).
@@ -869,6 +878,7 @@ class Stores:
         report: Report,
         package: str = PACKAGE,
         name: str = APP_NAME,
+        capabilities: tuple[str, ...] = ("PUSH_NOTIFICATIONS",),
     ) -> None:
         title = TITLES["asc"]
         if not self.vault.has("asc"):
@@ -887,7 +897,9 @@ class Stores:
         ]  # fmt: skip
         if found:
             report.add("Bundle-ID", "ok", f"{package} ist bei Apple registriert.")
-            await self._push_capability(client, report, auth, str(found[0]["id"]), package)
+            await self._capabilities(
+                client, report, auth, str(found[0]["id"]), package, capabilities
+            )
         else:
             body = {
                 "data": {
@@ -900,6 +912,9 @@ class Stores:
                 report.add("Bundle-ID", "fail", f"Anlegen ging nicht ({_message(r)}).")
                 return
             report.add("Bundle-ID", "ok", f"{package} bei Apple angelegt.")
+            created = _dict(_dict(r.json()).get("data")).get("id")
+            if isinstance(created, str):
+                await self._capabilities(client, report, auth, created, package, capabilities)
         r = await client.get(f"{ASC}/apps", params={"filter[bundleId]": package}, headers=auth)
         if r.status_code == 200 and _list(_dict(r.json()).get("data")):
             report.add(title, "ok", "Die App ist in App Store Connect angelegt.")
@@ -913,50 +928,59 @@ class Stores:
         else:
             report.add(title, "fail", _message(r))
 
-    async def _push_capability(
+    async def _capabilities(
         self,
         client: httpx.AsyncClient,
         report: Report,
         auth: dict[str, str],
         bundle_id: str,
         package: str,
+        wanted: tuple[str, ...],
     ) -> None:
-        """Push notifications for the bundle id (stage 5). Switching it on makes the App
-        Store provisioning profiles outdated: they are deleted, so the next release build
-        (fetch-signing-files --create) makes a new one with the capability."""
-        title = "Push-Benachrichtigungen"
+        """The bundle id's capabilities: push (stage 5), and for an app with App Links
+        Associated Domains (its entitlements name them; without the capability the
+        profile does not match and the build fails). Switching one on makes the App Store
+        provisioning profiles outdated: they are deleted, so the next release build
+        (fetch-signing-files --create) makes a new one with it."""
         r = await client.get(f"{ASC}/bundleIds/{bundle_id}/bundleIdCapabilities", headers=auth)
         if r.status_code != 200:
-            report.add(title, "warn", f"Nicht prüfbar ({_message(r)}).")
+            for kind in wanted:
+                report.add(CAPABILITIES[kind], "warn", f"Nicht prüfbar ({_message(r)}).")
             return
-        kinds = {
+        have = {
             _dict(c.get("attributes")).get("capabilityType")
             for c in _list(_dict(r.json()).get("data"))
         }
-        if "PUSH_NOTIFICATIONS" in kinds:
-            report.add(title, "ok", f"Für {package} eingeschaltet.")
-            return
-        body = {
-            "data": {
-                "type": "bundleIdCapabilities",
-                "attributes": {"capabilityType": "PUSH_NOTIFICATIONS"},
-                "relationships": {"bundleId": {"data": {"type": "bundleIds", "id": bundle_id}}},
+        switched: list[str] = []
+        for kind in wanted:
+            if kind in have:
+                report.add(CAPABILITIES[kind], "ok", f"Für {package} eingeschaltet.")
+                continue
+            body = {
+                "data": {
+                    "type": "bundleIdCapabilities",
+                    "attributes": {"capabilityType": kind},
+                    "relationships": {"bundleId": {"data": {"type": "bundleIds", "id": bundle_id}}},
+                }
             }
-        }
-        r = await client.post(f"{ASC}/bundleIdCapabilities", json=body, headers=auth)
-        if r.status_code != 201:
-            report.add(title, "fail", f"Einschalten ging nicht ({_message(r)}).")
+            r = await client.post(f"{ASC}/bundleIdCapabilities", json=body, headers=auth)
+            if r.status_code != 201:
+                report.add(CAPABILITIES[kind], "fail", f"Einschalten ging nicht ({_message(r)}).")
+                continue
+            switched.append(kind)
+        if not switched:
             return
         r = await client.get(f"{ASC}/bundleIds/{bundle_id}/profiles", headers=auth)
         stale = [str(p["id"]) for p in _list(_dict(r.json()).get("data"))] if r.is_success else []
         for profile in stale:
             await client.delete(f"{ASC}/profiles/{profile}", headers=auth)
-        report.add(
-            title,
-            "ok",
-            f"Für {package} eingeschaltet; {len(stale)} alte Profile gelöscht, der nächste "
-            "iOS-Build legt ein neues an.",
-        )
+        for kind in switched:
+            report.add(
+                CAPABILITIES[kind],
+                "ok",
+                f"Für {package} eingeschaltet; {len(stale)} alte Profile gelöscht, der nächste "
+                "iOS-Build legt ein neues an.",
+            )
 
     # Codemagic
 
@@ -1157,7 +1181,7 @@ class Stores:
         client = self._http()
         try:
             try:
-                await self._check_asc(client, report, app.package, app.name)
+                await self._check_asc(client, report, app.package, app.name, app.capabilities)
             except httpx.HTTPError as exc:
                 report.add("Verbindung", "fail", f"{type(exc).__name__}")
             if not self.vault.has("codemagic"):

@@ -1202,8 +1202,14 @@ class Stores:
             report.add(TITLES[app.android_upload], "ok", "Neu erzeugt.")
         client = self._http()
         try:
+            capabilities = app.capabilities
             try:
                 capabilities = await self._repo_checks(client, report, app)
+            except httpx.HTTPError as exc:  # GitHub away: Apple is still checked
+                report.add(
+                    GITHUB_ACCESS, "warn", f"GitHub nicht erreichbar ({type(exc).__name__})."
+                )
+            try:
                 await self._check_asc(client, report, app.package, app.name, capabilities)
             except httpx.HTTPError as exc:
                 report.add("Verbindung", "fail", f"{type(exc).__name__}")

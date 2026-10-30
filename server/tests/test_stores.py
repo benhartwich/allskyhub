@@ -1069,6 +1069,27 @@ async def test_setup_reads_the_capabilities_from_the_entitlements(tmp_path: Path
     assert not any(m == "POST" and p == "/apps" for m, p in seen)  # never by its address
 
 
+async def test_github_away_still_checks_apple(tmp_path: Path) -> None:
+    """allsky's review of #367: a GitHub timeout must not skip the Apple checks."""
+    seen: list[tuple[str, str]] = []
+    inner = _setup_answers(seen, [])
+
+    def answer(request: httpx.Request) -> httpx.Response:
+        if request.url.host == "api.github.com":
+            raise httpx.ConnectTimeout("slow", request=request)
+        return inner.handle_request(request)
+
+    client = httpx.AsyncClient(transport=httpx.MockTransport(answer))
+    hub = stores.Stores(tmp_path, "benhartwich/allskyhub", client)
+    hub.vault.put("asc", *stores.parse_asc(_p8(), "2X9R4HXF34", ISSUER), by="a")
+    hub.vault.put("github", *stores.parse_github("github_pat_" + "a" * 40), by="a")
+    report = await hub.setup_other(stores.OTHER_APPS["currywursttest"], "a")
+    states = {s.title: s.state for s in report.steps}
+    assert states[stores.GITHUB_ACCESS] == "warn"
+    assert states["Bundle-ID"] == "ok"
+    assert states["Push-Benachrichtigungen"] == "ok"
+
+
 async def test_setup_names_a_token_without_access(tmp_path: Path) -> None:
     seen: list[tuple[str, str]] = []
     client = httpx.AsyncClient(transport=_setup_answers(seen, [], repo_status=404))

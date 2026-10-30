@@ -97,6 +97,7 @@ TITLES = {
     # Further apps' own upload keys (OtherApp.android_upload), made on their setup.
     "bortle_android_upload": "bortle: Android-Upload-Schlüssel",
     "vinventory_android_upload": "Vinventory: Android-Upload-Schlüssel",
+    "currywursttest_android_upload": "Currywurst Test: Android-Upload-Schlüssel",
 }
 UPLOADED = ("play", "asc", "codemagic", "youtube", "fcm", "turnstile", "github")
 GITHUB_TOKEN = re.compile(r"^(github_pat_|ghp_)[A-Za-z0-9_]{20,255}$")
@@ -219,6 +220,33 @@ OTHER_APPS = {
         app_paths=("apps/mobile", "packages/shared", "package-lock.json"),
         # A wine cellar: alcohol throughout (its store/README.md: 17+ at Apple).
         age_rating={"alcoholTobaccoOrDrugUseOrReferences": "FREQUENT_OR_INTENSE"},
+    ),
+    # Benjamin, 2026-10-30: the Currywurst Test app (Flutter, private repository) on the
+    # same accounts and keys; Android built on the hub's server (app=currywursttest).
+    "currywursttest": OtherApp(
+        key="currywursttest",
+        title="Currywurst Test",
+        package="com.currywursttest.app",
+        name="Currywurst Test",
+        repo="benhartwich/currywursttest-app",
+        codemagic_name="currywursttest-app",
+        group="currywursttest_store",
+        contact_email="support@webinx.eu",
+        website="https://currywursttest.com",
+        privacy_url="https://currywursttest.com/seite/datenschutzerklaerung",
+        categories=("FOOD_AND_DRINK", "TRAVEL"),
+        version="0.1.0",
+        what_to_test={
+            "de-DE": "Imbisse in der Nähe und auf der Karte finden, Testberichte lesen, "
+            "per E-Mail-Code anmelden, einen Imbiss mit Fotos bewerten und einen neuen "
+            "melden. Rückmeldungen gern über TestFlight.",
+            "en-US": "Find snack bars nearby and on the map, read test reports, sign in "
+            "with the e-mail code, rate a snack bar with photos and suggest a new one. "
+            "Feedback is welcome through TestFlight.",
+        },
+        private=True,
+        # Ratings, photos and suggestions by users, moderated (report and block in the app).
+        age_rating={"userGeneratedContent": True},
     ),
 }
 # A repository's store folder, downloaded for a listing push (codeload, no API quota).

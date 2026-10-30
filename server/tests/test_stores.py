@@ -136,6 +136,9 @@ class FakeServices:
             if path == "/v1/bundleIds":
                 self.bundle = True
                 return httpx.Response(201, json={"data": {"id": "B1"}})
+            if path == "/v1/bundleIds/B1/bundleIdCapabilities":
+                push = {"attributes": {"capabilityType": "PUSH_NOTIFICATIONS"}}
+                return httpx.Response(200, json={"data": [push]})
             if path == "/v1/apps":
                 return httpx.Response(200, json={"data": []})
         if request.url.host in ("codemagic.io", "api.codemagic.io"):
@@ -205,6 +208,7 @@ async def test_setup_registers_everything(tmp_path: Path) -> None:
     assert states == {
         "Google-Play-Dienstkonto": "ok",
         "Bundle-ID": "ok",
+        "Push-Benachrichtigungen": "ok",  # right after registering
         "App-Store-Connect-API-Schlüssel": "warn",  # the app record is made by hand
         "Codemagic-API-Token": "ok",
         "Codemagic-Gruppe allskyhub_store": "ok",
@@ -855,6 +859,9 @@ async def test_a_further_app_shares_the_keys(tmp_path: Path) -> None:
                 return httpx.Response(200, json={"data": []})
             if path == "/v1/bundleIds":
                 return httpx.Response(201, json={"data": {"id": "B2"}})
+            if path == "/v1/bundleIds/B2/bundleIdCapabilities":
+                push = {"attributes": {"capabilityType": "PUSH_NOTIFICATIONS"}}
+                return httpx.Response(200, json={"data": [push]})
             if path == "/v1/apps":
                 return httpx.Response(200, json={"data": []})
         if path == "/api/v3/user/apps":
@@ -890,6 +897,7 @@ async def test_a_further_app_shares_the_keys(tmp_path: Path) -> None:
         "Schlüssel des iOS-Zertifikats": "ok",
         "bortle: Android-Upload-Schlüssel": "ok",  # its own, not allskyhub's
         "Bundle-ID": "ok",
+        "Push-Benachrichtigungen": "ok",
         "App-Store-Connect-API-Schlüssel": "warn",
         "Codemagic-API-Token": "ok",
         "Codemagic-Gruppe bortle_store": "ok",
@@ -991,6 +999,43 @@ async def test_push_capability_on_and_old_profiles_gone(tmp_path: Path) -> None:
     assert "2 alte Profile gelöscht" in step.text
     assert ("DELETE", "/v1/profiles/P1") in seen
     assert ("DELETE", "/v1/profiles/P2") in seen
+
+
+async def test_associated_domains_for_currywursttest(tmp_path: Path) -> None:
+    """Benjamin, 2026-10-30: Currywurst Test's Universal Links need Associated Domains on
+    its bundle id, also right after the hub registered it; old profiles go once."""
+    seen: list[tuple[str, str]] = []
+    switched: list[str] = []
+
+    def answer(request: httpx.Request) -> httpx.Response:
+        path = request.url.path
+        seen.append((request.method, path))
+        if path == "/v1/bundleIds" and request.method == "GET":
+            return httpx.Response(200, json={"data": []})
+        if path == "/v1/bundleIds":
+            return httpx.Response(201, json={"data": {"id": "B9"}})
+        if path == "/v1/bundleIds/B9/bundleIdCapabilities":
+            return httpx.Response(200, json={"data": []})
+        if path == "/v1/bundleIdCapabilities":
+            switched.append(json.loads(request.content)["data"]["attributes"]["capabilityType"])
+            return httpx.Response(201, json={"data": {"id": "C"}})
+        if path == "/v1/bundleIds/B9/profiles":
+            return httpx.Response(200, json={"data": [{"id": "P1"}]})
+        if path.startswith("/v1/profiles/"):
+            return httpx.Response(204)
+        if path == "/v1/apps":
+            return httpx.Response(200, json={"data": []})
+        return httpx.Response(404, json={"message": path})
+
+    client = httpx.AsyncClient(transport=httpx.MockTransport(answer))
+    hub = stores.Stores(tmp_path, "benhartwich/allskyhub", client)
+    hub.vault.put("asc", *stores.parse_asc(_p8(), "2X9R4HXF34", ISSUER), by="a")
+    report = await hub.setup_other(stores.OTHER_APPS["currywursttest"], "a")
+    assert switched == ["PUSH_NOTIFICATIONS", "ASSOCIATED_DOMAINS"]
+    step = next(s for s in report.steps if s.title == "Associated Domains")
+    assert step.state == "ok"
+    assert seen.count(("DELETE", "/v1/profiles/P1")) == 1
+    assert stores.OTHER_APPS["bortle"].capabilities == ("PUSH_NOTIFICATIONS",)
 
 
 async def test_admin_enters_push_and_turnstile(

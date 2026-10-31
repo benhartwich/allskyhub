@@ -1098,6 +1098,29 @@ async def test_github_away_still_checks_apple(tmp_path: Path) -> None:
     assert states["Push-Benachrichtigungen"] == "ok"
 
 
+async def test_entitlements_timeout_names_access_once(tmp_path: Path) -> None:
+    """allsky's review of #368: access read, then the entitlements time out; one
+    "GitHub-Zugriff" (ok), the capabilities fall back to the base set."""
+    seen: list[tuple[str, str]] = []
+    inner = _setup_answers(seen, [])
+
+    def answer(request: httpx.Request) -> httpx.Response:
+        if request.url.path.endswith("Runner.entitlements"):
+            raise httpx.ReadTimeout("slow", request=request)
+        return inner.handle_request(request)
+
+    client = httpx.AsyncClient(transport=httpx.MockTransport(answer))
+    hub = stores.Stores(tmp_path, "benhartwich/allskyhub", client)
+    hub.vault.put("asc", *stores.parse_asc(_p8(), "2X9R4HXF34", ISSUER), by="a")
+    hub.vault.put("github", *stores.parse_github("github_pat_" + "a" * 40), by="a")
+    report = await hub.setup_other(stores.OTHER_APPS["currywursttest"], "a")
+    access = [s.state for s in report.steps if s.title == stores.GITHUB_ACCESS]
+    assert access == ["ok"]
+    states = {s.title: s.state for s in report.steps}
+    assert states["Fähigkeiten"] == "warn"
+    assert states["Push-Benachrichtigungen"] == "ok"
+
+
 async def test_setup_names_a_token_without_access(tmp_path: Path) -> None:
     seen: list[tuple[str, str]] = []
     client = httpx.AsyncClient(transport=_setup_answers(seen, [], repo_status=404))
@@ -1951,7 +1974,8 @@ async def test_resubmit_after_apple_asked(tmp_path: Path) -> None:
             return httpx.Response(200, json={"data": {"id": "B1", "attributes": {"version": "9"}}})
         if path == "/v1/apps/A1/reviewSubmissions":
             assert request.url.params["filter[state]"] == "READY_FOR_REVIEW,UNRESOLVED_ISSUES"
-            return httpx.Response(200, json={"data": [
+            return httpx.Response(200, json={"data": [  # the handed-back one goes first
+                {"id": "S2", "attributes": {"state": "READY_FOR_REVIEW"}},
                 {"id": "S1", "attributes": {"state": "UNRESOLVED_ISSUES"}}]})  # fmt: skip
         if path == "/v1/reviewSubmissions/S1/items":
             assert request.url.params["include"] == "appStoreVersion"

@@ -1259,11 +1259,20 @@ class Stores:
                 )
                 return app.capabilities
             report.add(GITHUB_ACCESS, "ok", f"Das GitHub-Token liest {app.repo}.")
-        r = await client.get(
-            f"{GITHUB_API}/repos/{app.repo}/contents/{app.entitlements}",
-            params={"ref": "main"},
-            headers={**headers, "Accept": "application/vnd.github.raw"},
-        )
+        try:
+            r = await client.get(
+                f"{GITHUB_API}/repos/{app.repo}/contents/{app.entitlements}",
+                params={"ref": "main"},
+                headers={**headers, "Accept": "application/vnd.github.raw"},
+            )
+        except httpx.HTTPError as exc:  # access was checked; no second "GitHub-Zugriff"
+            report.add(
+                "Fähigkeiten",
+                "warn",
+                f"{app.entitlements} nicht ladbar ({type(exc).__name__}); "
+                "nur die Grundausstattung.",
+            )
+            return app.capabilities
         if r.status_code == 404:  # no entitlements (an Expo app makes them on its build)
             return app.capabilities
         try:

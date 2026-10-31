@@ -853,6 +853,8 @@ async def submit(client: httpx.AsyncClient, auth: Auth, report: Report, p: Profi
         **{"filter[platform]": "IOS", "filter[state]": OPEN_SUBMISSIONS},
     )
     if open_:
+        # The one Apple handed back first: its questions are what is being answered.
+        open_.sort(key=lambda x: _state(x) != "UNRESOLVED_ISSUES")
         submission = str(open_[0]["id"])
     else:
         body = {

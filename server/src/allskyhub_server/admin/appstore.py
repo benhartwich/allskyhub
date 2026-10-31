@@ -4,8 +4,9 @@ Name, subtitle, keywords and promotional text (app/store/appstore), the descript
 the Play listing (app/store/play), the iPhone screenshots and the newest processed build
 go to the iOS version in preparation, through the App Store Connect API with the hub's
 key. The build also goes to an external TestFlight group with a public link. Apple's API
-does not take the privacy answers, the review contact with the test account or the
-price; those stay for App Store Connect itself.
+does not take the privacy answers or the price, and the review contact with the test
+account stays as entered there; those stay for App Store Connect itself. The notes for
+App Review come from store/appstore/review_notes.txt.
 """
 
 from __future__ import annotations
@@ -120,6 +121,11 @@ WHAT_TO_TEST = {
     "forecast. Feedback is welcome through TestFlight.",
 }
 STATE_FILE = "appstore.json"
+# App Review's notes, one text for all languages (Apple's reviewers read English).
+REVIEW_NOTES = "review_notes.txt"
+NOTES_MAX = 4000
+# Submissions the hub can (re)submit: still open, or handed back with Apple's questions.
+OPEN_SUBMISSIONS = "READY_FOR_REVIEW,UNRESOLVED_ISSUES"
 
 
 @dataclass(frozen=True)
@@ -329,6 +335,7 @@ async def push(
     if version is not None:
         await _soft(report, "Versionsnummer", _version_string(api, version, p.version))
         await _version_texts(api, report, version, root, play, p)
+        await _soft(report, "Prüfnotizen", _review_notes(api, str(version["id"]), root))
 
     builds = await api.items(
         "/builds",
@@ -388,8 +395,9 @@ async def push(
     report.add(
         "Noch in App Store Connect",
         "warn",
-        "App-Datenschutz, Preis und Länder, Kontakt und Testkonto für die Prüfung; dann "
-        "hier „zur Prüfung einreichen“.",
+        "App-Datenschutz, Preis und Länder, Kontakt und Testkonto für die Prüfung, die "
+        "Bildschirmaufnahme als Anhang unter App-Review-Informationen; dann hier „zur "
+        "Prüfung einreichen“.",
     )
 
 
@@ -454,6 +462,34 @@ async def _version_texts(
             "ok",
             f"Version {number}, {len(shots)} iPhone-Screenshots.",
         )
+
+
+async def _review_notes(api: _Api, version: str, root: Path) -> str:
+    """The notes for App Review (Benjamin, 2026-10-31: Guideline 2.1 asked every app for
+    its purpose, how to reach its features, its services and regional differences). Only
+    the notes: contact and test account stay as entered in App Store Connect."""
+    path = root / REVIEW_NOTES
+    if not path.is_file():
+        raise StoreError(f"{REVIEW_NOTES} fehlt in store/appstore.")
+    notes = path.read_text().strip()
+    if len(notes) > NOTES_MAX:
+        raise StoreError(f"{REVIEW_NOTES} hat {len(notes)} Zeichen, Apple nimmt {NOTES_MAX}.")
+    r = await api.client.request(
+        "GET", f"{ASC}/appStoreVersions/{version}/appStoreReviewDetail", headers=api.auth()
+    )
+    if r.status_code >= 300 and r.status_code != 404:
+        raise StoreError(f"Prüfnotizen: {_message(r)}")
+    detail = _dict(_dict(r.json()).get("data")) if r.status_code < 300 and r.content else {}
+    if _dict(detail.get("attributes")).get("notes") == notes:
+        return f"Unverändert ({len(notes)} Zeichen)."
+    await api.upsert(
+        str(detail["id"]) if detail.get("id") else None,
+        "appStoreReviewDetails",
+        {"notes": notes},
+        {"relationships": {"appStoreVersion": _rel("appStoreVersions", version)}},
+        "Prüfnotizen",
+    )
+    return f"{len(notes)} Zeichen übertragen."
 
 
 async def _soft(report: Report, title: str, step: Coroutine[Any, Any, str]) -> None:
@@ -814,7 +850,7 @@ async def submit(client: httpx.AsyncClient, auth: Auth, report: Report, p: Profi
     open_ = await api.items(
         f"/apps/{app_id}/reviewSubmissions",
         "Einreichungen",
-        **{"filter[platform]": "IOS", "filter[state]": "READY_FOR_REVIEW"},
+        **{"filter[platform]": "IOS", "filter[state]": OPEN_SUBMISSIONS},
     )
     if open_:
         submission = str(open_[0]["id"])
@@ -831,13 +867,29 @@ async def submit(client: httpx.AsyncClient, auth: Auth, report: Report, p: Profi
                 (await api.call("POST", "/reviewSubmissions", "Einreichung", body=body)).get("data")
             )["id"]
         )
-    items = await api.items(f"/reviewSubmissions/{submission}/items", "Einreichung")
-    has = any(
-        _dict(_dict(_dict(i.get("relationships")).get("appStoreVersion")).get("data")).get("id")
-        == version["id"]
-        for i in items
+    items = await api.items(
+        f"/reviewSubmissions/{submission}/items", "Einreichung", include="appStoreVersion"
     )
-    if not has:
+    mine = [
+        i
+        for i in items
+        if _dict(_dict(_dict(i.get("relationships")).get("appStoreVersion")).get("data")).get("id")
+        == version["id"]
+    ]
+    # Apple's questions answered (the notes, the recording): the rejected item resolved.
+    for item in mine:
+        if _state(item) == "REJECTED":
+            body = {
+                "data": {
+                    "type": "reviewSubmissionItems",
+                    "id": item["id"],
+                    "attributes": {"resolved": True},
+                }
+            }
+            await api.call(
+                "PATCH", f"/reviewSubmissionItems/{item['id']}", "Beanstandung erledigt", body=body
+            )
+    if not mine:
         body = {
             "data": {
                 "type": "reviewSubmissionItems",

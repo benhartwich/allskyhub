@@ -1,0 +1,29 @@
+PURPOSE AND AUDIENCE
+allskyhub is the companion app for all-sky cameras: small cameras (a Raspberry Pi with a fisheye lens) that photograph the whole night sky. It is for amateur astronomers, meteor and aurora watchers, schools and anyone curious about the night sky. Without the app, owners of such cameras have to set up FTP servers and port forwarding to see their pictures; with allskyhub the camera connects out to our server (allskyhub.org) and the app shows the live sky, the night's meteors and aurora, timelapses and the clear hours for tonight. People without a camera can watch public cameras and learn about the sky.
+
+HOW TO USE IT
+No account is needed for the main features. After launch:
+1. Explore: a globe with public cameras. Tap a camera to see its live image, last night's timelapse and events (meteors, aurora).
+2. Sky: tonight's clear hours from the cloud forecast, aurora chance, a sky calendar, and the sky view (point the phone at the sky to find planets and stars).
+3. Take part: report the sky brightness, a fireball or an aurora sighting. Reporting needs a free reporter account (email only, sign-up protected by Cloudflare Turnstile); the reporter's name is never shown.
+Signing in (Take part → "I have an account · Sign in") with the demo account in the Sign-In Information adds the tab "Mine" with the account's cameras and the account page. A new camera is paired with the code it shows; this needs the camera hardware, so the demo account already has a camera.
+
+ACCOUNTS AND USER CONTENT
+Account deletion: Mine → Account → Delete account, confirmed once, deletes the account on the server, unpairs its cameras and deletes their pictures and pages.
+User content: aurora photos are shown to others only after we approve them by hand. Every photo has "Report this photo"; reported photos are reviewed again and removed. Reports carry no names, so there is no one to block.
+There is no paid content and no in-app purchase.
+
+EXTERNAL SERVICES
+- allskyhub.org: our own server (open source, AGPL); accounts, cameras, pictures.
+- Open-Meteo: cloud forecast.
+- NOAA SWPC: aurora forecast.
+- EUMETSAT: lightning data from the Meteosat satellites.
+- NASA Black Marble and OpenStreetMap: map layers.
+- Cloudflare Turnstile: spam protection for the reporter sign-up.
+- Firebase Cloud Messaging: push notifications, only when the person switches one on.
+
+REGIONS
+The app works the same in every region. Texts are German and English. Satellite lightning data covers Europe and Africa (Meteosat's view); elsewhere that layer is empty.
+
+REGULATION
+Not a regulated field; no protected third-party material. All data sources are used under their public licences.

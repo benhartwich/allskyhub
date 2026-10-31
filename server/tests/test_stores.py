@@ -639,6 +639,7 @@ async def test_push_appstore(tmp_path: Path) -> None:
     version_state = ["PREPARE_FOR_SUBMISSION"]
     beta_contact: list[dict[str, Any]] = []
     busy_review: list[bool] = []
+    review_notes: list[str] = []
 
     def answer(request: httpx.Request) -> httpx.Response:
         path, method = request.url.path, request.method
@@ -694,6 +695,9 @@ async def test_push_appstore(tmp_path: Path) -> None:
                 return httpx.Response(
                     422, json={"errors": [{"code": "ENTITY_ERROR", "detail": detail}]}
                 )
+        if method == "PATCH" and path == "/v1/appStoreReviewDetails/RD":
+            assert body["data"]["attributes"].keys() == {"notes"}
+            review_notes.append(body["data"]["attributes"]["notes"])
         if method == "PATCH" and "/appScreenshots/" in path:
             assert body["data"]["attributes"]["uploaded"] is True
             assert len(body["data"]["attributes"]["sourceFileChecksum"]) == 32
@@ -764,16 +768,20 @@ async def test_push_appstore(tmp_path: Path) -> None:
         ("Versionsnummer", "ok"),
         ("Texte und Screenshots de-DE", "ok"),
         ("Texte und Screenshots en-US", "ok"),
+        ("Prüfnotizen", "ok"),
         ("Build", "ok"),
         ("TestFlight-Link", "ok"),
         ("TestFlight-Prüfung", "ok"),
         ("Noch in App Store Connect", "warn"),
     ], report.steps
+    # The notes for App Review, from app/store/appstore; contact and test account stay.
+    assert review_notes[0] == (appstore.APPSTORE / appstore.REVIEW_NOTES).read_text().strip()
+    assert len(review_notes[0]) <= appstore.NOTES_MAX
     # The version in preparation takes the app's version (Apple ties it to the build).
     assert report.steps[3].text == f"1.0 → {appstore.VERSION}"
     assert ("PATCH", "/v1/appStoreVersions/V1") in calls
     # The public TestFlight group, made once, with the build in it and sent to review.
-    assert report.steps[7].text == "https://tf.example/join/X"
+    assert report.steps[8].text == "https://tf.example/join/X"
     assert created["betaGroups"][0]["publicLinkEnabled"] is True
     assert ("POST", "/v1/betaGroups/betaGroups-1/relationships/builds") in calls
     assert [a["locale"] for a in created["betaAppLocalizations"]] == ["de-DE", "en-US"]
@@ -1884,3 +1892,90 @@ async def test_no_universal_apk_yet(tmp_path: Path) -> None:
     assert "keine universelle APK" in report.steps[0].text
     assert hub.apk("bortle") is None
     assert "Noch kein App Bundle" in (await hub.fetch_apk(None)).steps[0].text
+
+
+async def test_review_notes_from_the_repository(tmp_path: Path) -> None:
+    """Benjamin, 2026-10-31: Apple's Guideline 2.1 asked every app for notes on purpose,
+    use, services and regions; they go from store/appstore/review_notes.txt."""
+    seen: list[tuple[str, str, Any]] = []
+    detail: dict[str, Any] = {}
+
+    def answer(request: httpx.Request) -> httpx.Response:
+        body = json.loads(request.content) if request.content else None
+        seen.append((request.method, request.url.path, body))
+        if request.method == "GET":
+            if not detail:  # no review details yet
+                return httpx.Response(404, json={"errors": [{"detail": "none"}]})
+            return httpx.Response(200, json={"data": detail})
+        return httpx.Response(201, json={"data": {"id": "RD"}})
+
+    api = appstore._Api(  # pyright: ignore[reportPrivateUsage]
+        httpx.AsyncClient(transport=httpx.MockTransport(answer)), lambda: {}
+    )
+    notes = appstore._review_notes  # pyright: ignore[reportPrivateUsage]
+    with pytest.raises(stores.StoreError, match=r"review_notes\.txt fehlt"):
+        await notes(api, "V1", tmp_path)
+
+    (tmp_path / appstore.REVIEW_NOTES).write_text("PURPOSE\nSee the sky.\n")
+    assert await notes(api, "V1", tmp_path) == "20 Zeichen übertragen."
+    method, path, body = seen[-1]
+    assert (method, path) == ("POST", "/v1/appStoreReviewDetails")
+    assert body["data"]["attributes"] == {"notes": "PURPOSE\nSee the sky."}
+    assert body["data"]["relationships"]["appStoreVersion"]["data"]["id"] == "V1"
+
+    detail.update(id="RD", attributes={"notes": "PURPOSE\nSee the sky.", "contactPhone": "+49"})
+    seen.clear()
+    assert await notes(api, "V1", tmp_path) == "Unverändert (20 Zeichen)."
+    assert [m for m, _, _ in seen] == ["GET"]
+
+    (tmp_path / appstore.REVIEW_NOTES).write_text("x" * (appstore.NOTES_MAX + 1))
+    with pytest.raises(stores.StoreError, match="4001 Zeichen"):
+        await notes(api, "V1", tmp_path)
+
+
+async def test_resubmit_after_apple_asked(tmp_path: Path) -> None:
+    """A submission Apple handed back (UNRESOLVED_ISSUES): its rejected item is marked
+    resolved and the same submission goes back, no second one."""
+    seen: list[tuple[str, str, Any]] = []
+
+    def answer(request: httpx.Request) -> httpx.Response:
+        path, method = request.url.path, request.method
+        body = json.loads(request.content) if request.content else None
+        seen.append((method, path, body))
+        if path == "/v1/apps":
+            return httpx.Response(200, json={"data": [{"id": "A1"}]})
+        if path == "/v1/apps/A1/appStoreVersions":
+            return httpx.Response(200, json={"data": [{"id": "V1", "attributes": {
+                "versionString": "0.2.0", "appVersionState": "REJECTED"}}]})  # fmt: skip
+        if path == "/v1/appStoreVersions/V1/build":
+            return httpx.Response(200, json={"data": {"id": "B1", "attributes": {"version": "9"}}})
+        if path == "/v1/apps/A1/reviewSubmissions":
+            assert request.url.params["filter[state]"] == "READY_FOR_REVIEW,UNRESOLVED_ISSUES"
+            return httpx.Response(200, json={"data": [
+                {"id": "S1", "attributes": {"state": "UNRESOLVED_ISSUES"}}]})  # fmt: skip
+        if path == "/v1/reviewSubmissions/S1/items":
+            assert request.url.params["include"] == "appStoreVersion"
+            return httpx.Response(200, json={"data": [{"id": "I1", "attributes": {
+                "state": "REJECTED"}, "relationships": {"appStoreVersion": {
+                "data": {"type": "appStoreVersions", "id": "V1"}}}}]})  # fmt: skip
+        if method == "PATCH":
+            return httpx.Response(200, json={"data": {}})
+        return httpx.Response(404)
+
+    hub = stores.Stores(
+        tmp_path / "store",
+        "benhartwich/allskyhub",
+        httpx.AsyncClient(transport=httpx.MockTransport(answer)),
+    )
+    hub.vault.put("asc", *stores.parse_asc(_p8(), "2X9R4HXF34", ISSUER), by="a")
+    report = await appstore.submit_report(hub, stores.OTHER_APPS["bortle"])
+    assert [(s.state, s.text) for s in report.steps] == [
+        ("ok", "Version 0.2.0 mit Build 9 ist zur Prüfung eingereicht.")
+    ]
+    writes = [(m, p, b) for m, p, b in seen if m != "GET"]
+    assert writes == [
+        ("PATCH", "/v1/reviewSubmissionItems/I1", {"data": {
+            "type": "reviewSubmissionItems", "id": "I1", "attributes": {"resolved": True}}}),
+        ("PATCH", "/v1/reviewSubmissions/S1", {"data": {
+            "type": "reviewSubmissions", "id": "S1", "attributes": {"submitted": True}}}),
+    ]  # fmt: skip

@@ -97,7 +97,7 @@ class Passes:
     ) -> None:
         """One day round: the aircraft up now from each camera; passes that ended are kept."""
         for device_id, lat, lon, zone in cameras:
-            for plane in tracks.planes(now, lat, lon, min_elevation=MIN_ALT):
+            for plane in tracks.planes(now, lat, lon, min_elevation=MIN_ALT, device_id=device_id):
                 key = (device_id, plane.hex)
                 found = self.open.get(key)
                 if found is not None:

@@ -48,6 +48,10 @@ RADIUS_KM = 150.0
 MAX_NM = 250  # adsb.lol's largest radius
 MAX_AGE_S = 60.0  # a position older than this is not taken
 RECEIVER_WINS = dt.timedelta(seconds=30)
+# A camera's relay (SPEC §6.3 aircraft) is about now; and at most this many aircraft per
+# receiver are kept (security review 2026-11-04: fixes far in the future were never pruned).
+RECEIVER_SKEW = dt.timedelta(seconds=60)
+RECEIVER_MAX_AIRCRAFT = 500
 DEAD_RECKON = dt.timedelta(seconds=30)
 # Longer without positions: the window is not covered. adsb.lol times out or answers 429
 # now and then; a few failed fetches in a row still leave a straight line between fixes.
@@ -199,16 +203,26 @@ class _Track:
 
 class Tracks:
     """Positions per source and ICAO address, kept ``KEEP``; and when each camera's area
-    was last covered (adsb.lol fetches and the camera's own relays)."""
+    was last covered (adsb.lol fetches and the camera's own relays). A receiver's
+    positions are kept per camera and count only for that camera (SPEC §7.8: the owner's
+    receiver), so no camera can put aircraft on another owner's meteors."""
 
     def __init__(self) -> None:
-        self._tracks: dict[Source, dict[str, _Track]] = {"adsb.lol": {}, "receiver": {}}
+        self._tracks: dict[str, dict[str, _Track]] = {"adsb.lol": {}}
         self._covered: dict[str, list[dt.datetime]] = {}
         # Registration and type code per ICAO address (roadmap H9), while it has positions.
         self.info: dict[str, tuple[str | None, str | None]] = {}
 
-    def add(self, source: Source, hex_: str, fix: Fix) -> None:
-        self._tracks[source].setdefault(hex_.lower(), _Track()).add(fix)
+    def add(self, source: Source, hex_: str, fix: Fix, device_id: str = "") -> None:
+        pool = "adsb.lol" if source == "adsb.lol" else f"receiver:{device_id}"
+        tracks = self._tracks.setdefault(pool, {})
+        if (
+            source == "receiver"
+            and hex_.lower() not in tracks
+            and len(tracks) >= RECEIVER_MAX_AIRCRAFT
+        ):
+            return
+        tracks.setdefault(hex_.lower(), _Track()).add(fix)
         if fix.registration or fix.type_code:
             self.info[hex_.lower()] = (fix.registration, fix.type_code)
 
@@ -219,13 +233,15 @@ class Tracks:
 
     def prune(self, now: dt.datetime) -> None:
         oldest = now - KEEP
-        for tracks in self._tracks.values():
+        for pool, tracks in list(self._tracks.items()):
             for key in list(tracks):
                 fixes = [f for f in tracks[key].fixes if f.at >= oldest]
                 if fixes:
                     tracks[key].fixes = fixes
                 else:
                     del tracks[key]
+            if not tracks and pool != "adsb.lol":
+                del self._tracks[pool]
         for key in list(self.info):
             if all(key not in tracks for tracks in self._tracks.values()):
                 del self.info[key]
@@ -245,14 +261,14 @@ class Tracks:
             return False
         return all(b - a <= FETCH_GAP for a, b in itertools.pairwise(inside))
 
-    def at(self, t: dt.datetime) -> dict[str, Fix]:
-        """Every aircraft's position at ``t``; the receiver's while it is fresh."""
+    def at(self, t: dt.datetime, device_id: str = "") -> dict[str, Fix]:
+        """Every aircraft's position at ``t``; the camera's receiver's while it is fresh."""
         out: dict[str, Fix] = {}
         for key, track in self._tracks["adsb.lol"].items():
             fix = track.at(t)
             if fix is not None:
                 out[key] = fix
-        for key, track in self._tracks["receiver"].items():
+        for key, track in self._tracks.get(f"receiver:{device_id}", {}).items():
             fix = track.at(t)
             newest = track.fixes[-1].at if track.fixes else None
             if fix is not None and newest is not None and t - newest <= RECEIVER_WINS:
@@ -260,11 +276,16 @@ class Tracks:
         return out
 
     def planes(
-        self, t: dt.datetime, lat: float, lon: float, min_elevation: float = 0.0
+        self,
+        t: dt.datetime,
+        lat: float,
+        lon: float,
+        min_elevation: float = 0.0,
+        device_id: str = "",
     ) -> list[Plane]:
         """The aircraft above ``min_elevation`` from a camera at ``t``, nearest first."""
         out: list[Plane] = []
-        for key, fix in self.at(t).items():
+        for key, fix in self.at(t, device_id).items():
             if (
                 fix.alt_m is None
                 or abs(fix.lat - lat) > 3
@@ -332,6 +353,7 @@ def match(
     start: dt.datetime,
     end: dt.datetime,
     track_ends: tuple[tuple[float, float], tuple[float, float]],
+    device_id: str = "",
 ) -> Plane | None:
     """The nearest aircraft whose apparent path over ``start - 30 s .. end + 30 s`` passes
     within 2° of both ends of the meteor's track ((altitude, azimuth) each), above 5° for
@@ -341,7 +363,7 @@ def match(
     seen: dict[str, Plane] = {}
     t = start - WINDOW
     while t <= end + WINDOW:
-        for plane in tracks.planes(t, lat, lon, min_elevation=-10.0):
+        for plane in tracks.planes(t, lat, lon, min_elevation=-10.0, device_id=device_id):
             paths.setdefault(plane.hex, []).append(unit(plane.elevation, plane.azimuth))
             if plane.elevation >= MATCH_MIN_ELEVATION:
                 best = seen.get(plane.hex)
@@ -624,14 +646,24 @@ class Watch:
         if day_round:
             await self.passes.update(self.tracks, by_day, now)
 
-    def receive(self, device_id: str, at: dt.datetime, positions: Iterable[Any]) -> None:
-        """SPEC §6.3 ``aircraft`` from the camera's own receiver."""
+    def receive(
+        self,
+        device_id: str,
+        at: dt.datetime,
+        positions: Iterable[Any],
+        now: dt.datetime | None = None,
+    ) -> None:
+        """SPEC §6.3 ``aircraft`` from the camera's own receiver; a relay not about now is
+        dropped (the camera's clock is trusted for frames, not for the hub's memory)."""
+        now = now or dt.datetime.now(dt.UTC)
+        if abs(at - now) > RECEIVER_SKEW:
+            return
         for p in positions:
             fix = Fix(
                 at - dt.timedelta(seconds=p.seen_s), p.lat, p.lon, p.alt_m, p.track_deg,
                 p.speed_kn, p.flight,
             )  # fmt: skip
-            self.tracks.add("receiver", p.hex, fix)
+            self.tracks.add("receiver", p.hex, fix, device_id)
         self.tracks.covered(device_id, at)
 
     async def check_meteors(self, now: dt.datetime) -> set[str]:
@@ -700,7 +732,7 @@ class Watch:
 
         best: tuple[float, str, str] | None = None
         if with_aircraft:
-            plane = match(self.tracks, *place, event.start, event.end, ends)
+            plane = match(self.tracks, *place, event.start, event.end, ends, event.device_id)
             if plane is not None:
                 best = (plane.distance_km, "aircraft", plane.detail)
         catalogue = await self.satellites.get() if self.satellites is not None else None

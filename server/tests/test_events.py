@@ -160,3 +160,21 @@ async def test_unpairing_removes_events(
         from allskyhub_server.models import EventRecord
 
         assert await db.scalar(select(func.count()).select_from(EventRecord)) == 0
+
+
+async def test_events_per_night_are_capped(
+    client: httpx.AsyncClient, live_app: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Security review 2026-11-04: a camera cannot fill the disk with endless events."""
+    from allskyhub_server.api import device
+
+    monkeypatch.setattr(device, "EVENTS_PER_NIGHT", 1)
+    dev = FakeDevice()
+    token = await paired_token(client, dev)
+    async with device_ws(live_app, token) as ws:
+        await send(ws, meteor())
+        await expect_request(ws)
+        second = meteor().model_copy(update={"id": event_id(EventKind.METEOR, START, 2)})
+        await send(ws, second)
+        with pytest.raises(TimeoutError):  # dropped: no picture asked for
+            await asyncio.wait_for(ws.recv(), 0.3)

@@ -94,6 +94,18 @@ async def test_fireball_matched_with_cameras_and_others(
     assert r.status_code == 422
     assert (await new_client.post("/api/v1/sightings/fireball", json=body)).status_code == 401
 
+    # A private camera (no public page, not in the network) is never counted: reports
+    # around it would find where it stands (security review 2026-11-04).
+    async with maker() as db:
+        await db.execute(
+            update(Device).where(Device.id == device_id).values(public_slug=None, network=False)
+        )
+        await db.commit()
+    hidden = await new_client.get(
+        f"/api/v1/sightings/fireball/{first.json()['id']}", headers=_auth(one)
+    )
+    assert hidden.json()["cameras"] == []
+
 
 async def test_aurora_photo_waits_for_approval(
     app: FastAPI,

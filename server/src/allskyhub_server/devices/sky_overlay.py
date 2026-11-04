@@ -81,7 +81,7 @@ def _altitude(metres: float | None) -> str:
 
 
 def build_aircraft(
-    status: dict[str, Any] | None, at: dt.datetime, tracks: Tracks
+    status: dict[str, Any] | None, at: dt.datetime, tracks: Tracks, device_id: str = ""
 ) -> AircraftOverlay | None:
     """None without a usable lens or place; an empty overlay when no aircraft is up."""
     found = orientation(status)
@@ -100,10 +100,10 @@ def build_aircraft(
     trails: dict[str, list[tuple[float, float]]] = {}
     t = at - TRAIL
     while t < at:
-        for plane in tracks.planes(t, float(lat), float(lon)):
+        for plane in tracks.planes(t, float(lat), float(lon), device_id=device_id):
             trails.setdefault(plane.hex, []).append(pixel(plane.elevation, plane.azimuth))
         t += TRAIL_STEP
-    for plane in tracks.planes(at, float(lat), float(lon)):
+    for plane in tracks.planes(at, float(lat), float(lon), device_id=device_id):
         x, y = pixel(plane.elevation, plane.azimuth)
         points = [*trails.get(plane.hex, []), (x, y)]
         trail = "M" + "L".join(f"{px:.1f} {py:.1f}" for px, py in points) if len(points) > 1 else ""

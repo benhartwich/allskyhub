@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import datetime as dt
+from types import SimpleNamespace
 from typing import Any
 
 import httpx
@@ -210,3 +211,29 @@ async def test_camera_page_has_the_switch(app: FastAPI, client: httpx.AsyncClien
         device.public_profile = profile.model_copy(update={"sections": sections}).model_dump()
         await db.commit()
     assert 'data-overlay-toggle="air"' not in (await client.get(f"/sky/{slug}/now")).text
+
+
+def test_a_receiver_counts_only_for_its_camera() -> None:
+    """Security review 2026-11-04: one camera's relays never label another's meteors."""
+    tracks = Tracks()
+    tracks.add("receiver", "abc123", _fix(T0, 48.2, 14.0), "cam-a")
+    assert "abc123" in tracks.at(T0, "cam-a")
+    assert tracks.at(T0, "cam-b") == {}
+    assert tracks.at(T0) == {}
+
+
+def test_relays_not_about_now_are_dropped() -> None:
+    position = SimpleNamespace(
+        hex="abc123", seen_s=0.0, lat=48.2, lon=14.0, alt_m=9000.0, track_deg=None,
+        speed_kn=None, flight=None,
+    )  # fmt: skip
+    hub = aircraft.Watch.__new__(aircraft.Watch)
+    hub.tracks = Tracks()
+    future = T0 + dt.timedelta(days=3000)
+    hub.receive("cam", future, [position], now=T0)
+    assert hub.tracks.at(future, "cam") == {}
+    hub.receive("cam", T0, [position], now=T0 + dt.timedelta(seconds=5))
+    assert "abc123" in hub.tracks.at(T0, "cam")
+    for n in range(aircraft.RECEIVER_MAX_AIRCRAFT + 10):
+        hub.tracks.add("receiver", f"{n:06x}", _fix(T0, 48.0, 14.0), "cam2")
+    assert len(hub.tracks.at(T0, "cam2")) == aircraft.RECEIVER_MAX_AIRCRAFT

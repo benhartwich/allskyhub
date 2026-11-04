@@ -122,3 +122,26 @@ async def test_switching_the_page_off_removes_the_domain(
         await domains.sync(db, app.state.settings.data_dir)
         await db.commit()
     assert (app.state.settings.data_dir / "domains" / "sky.example.net.remove").is_file()
+
+
+async def test_domain_requests_are_limited(
+    app: FastAPI,
+    client: httpx.AsyncClient,
+    new_client: httpx.AsyncClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Security review 2026-11-04: each request stops nginx briefly (certbot standalone)."""
+    device_id, _ = await _public(app, client, new_client)
+
+    async def here(domain: str, base_url: str) -> bool:
+        return True
+
+    monkeypatch.setattr(domains, "points_here", here)
+    url = f"/cameras/{device_id}/public/domain"
+    for n in range(3):
+        data = {"domain": f"sky{n}.example.net", "csrf_token": await home_csrf(client)}
+        assert (await client.post(url, data=data)).status_code == 303
+    data = {"domain": "sky9.example.net", "csrf_token": await home_csrf(client)}
+    r = await client.post(url, data=data)
+    assert r.status_code == 429  # (the page shows no form while a domain is pending)
+    assert not (app.state.settings.data_dir / "domains" / "sky9.example.net.request").exists()

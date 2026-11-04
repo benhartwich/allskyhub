@@ -447,14 +447,19 @@ async def public_domain(
     """Roadmap #17: the public page under the owner's own domain."""
     device = await _own_device(db, session, device_id)
     try:
+        await ratelimit.hit(
+            request.app.state.engine, f"domain:user:{session.user.id}", ratelimit.DOMAIN_PER_USER
+        )
         await domains.request(db, device, domain, settings.base_url, settings.data_dir)
-    except domains.DomainError as exc:
+    except (domains.DomainError, ratelimit.RateLimitedError) as exc:
+        limited = isinstance(exc, ratelimit.RateLimitedError)
+        error = "Zu viele Versuche. Bitte später erneut versuchen." if limited else str(exc)
         return render(
             request,
             "public_edit.html",
-            {**_public_edit_context(device), "domain_error": str(exc), "domain_value": domain},
+            {**_public_edit_context(device), "domain_error": error, "domain_value": domain},
             session=session,
-            status_code=400,
+            status_code=429 if limited else 400,
         )
     await db.commit()
     return RedirectResponse(f"/cameras/{device.id}/public/edit#domain", status_code=303)

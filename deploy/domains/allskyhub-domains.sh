@@ -17,9 +17,11 @@ ENABLED=/etc/nginx/sites-enabled
 DOMAIN_RE='^([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,63}$'
 
 answer() {  # answer <domain> <ok|failed|removed> [message]
+    # Written as the hub, never by root: the folder is the hub's, and a link planted there
+    # must not make root write elsewhere (security review 2026-11-04).
     local file="$SPOOL/$1.$2"
-    printf '%s\n' "${3:-}" > "$file"
-    chown allskyhub-server:allskyhub-server "$file"
+    rm -f -- "$file"
+    printf '%s\n' "${3:-}" | runuser -u allskyhub-server -- tee -- "$file" >/dev/null
     rm -f -- "$SPOOL/$1.request" "$SPOOL/$1.remove"
 }
 
@@ -39,6 +41,27 @@ points_here() {
         grep -qxF -- "$ip" <<<"$mine" || return 1
     done <<<"$theirs"
 }
+
+# Another site of this server already answers for the name (security review 2026-11-04:
+# the domain points here for every site on the server, so pointing here proves nothing).
+served_elsewhere() {
+    local d=$1 f line name names
+    for f in "$ENABLED"/* /etc/nginx/conf.d/*.conf; do
+        [[ -e $f && $(basename -- "$f") != "allskyhub-domain-$d.conf" ]] || continue
+        while read -r line; do
+            read -ra names <<<"$line"
+            for name in "${names[@]}"; do
+                name=${name,,}
+                [[ $name == "$d" ]] && return 0
+                [[ $name == "*."* && $d == *"${name#\*}" ]] && return 0
+                [[ $name == .* && ( $d == "${name#.}" || $d == *"$name" ) ]] && return 0
+            done
+        done < <(sed -n 's/^[[:space:]]*server_name[[:space:]]\+\([^;]*\);.*/\1/p' -- "$f")
+    done
+    return 1
+}
+
+ours() { [[ -e "$SITES/allskyhub-domain-$1.conf" ]]; }
 
 write_site() {
     local d=$1 conf="$SITES/allskyhub-domain-$1.conf"
@@ -82,6 +105,10 @@ setup() {
     if ! points_here "$d"; then
         answer "$d" failed "Die Domain zeigt nicht auf $HUB_HOST (DNS prüfen)."; return
     fi
+    if served_elsewhere "$d" || { [[ -e /etc/letsencrypt/live/$d ]] && ! ours "$d"; }; then
+        answer "$d" failed "Diese Domain gehört zu einer anderen Seite auf diesem Server."
+        return
+    fi
     if ! certbot certonly --standalone --non-interactive --agree-tos --keep-until-expiring \
             --cert-name "$d" -d "$d" \
             --pre-hook "systemctl stop nginx" --post-hook "systemctl start nginx" \
@@ -100,7 +127,9 @@ setup() {
 
 teardown() {
     local d=$1
-    if ! valid "$d"; then answer "$d" removed; return; fi
+    if ! valid "$d" || ! ours "$d"; then  # never another site's certificate
+        answer "$d" removed; return
+    fi
     rm -f -- "$ENABLED/allskyhub-domain-$d.conf" "$SITES/allskyhub-domain-$d.conf"
     nginx -t >/dev/null 2>&1 && systemctl reload nginx
     certbot delete --non-interactive --cert-name "$d" >>/var/log/allskyhub-domains.log 2>&1 || true

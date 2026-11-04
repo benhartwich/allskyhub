@@ -72,6 +72,9 @@ DEVICE_TOKEN_PER_IP = (Limit(30, 60),)
 # SPEC §6.2 step 3: codes have 31^6 values; this keeps guessing hopeless.
 CLAIM_PER_USER = (Limit(10, 600), Limit(30, 86400))
 CLAIM_PER_IP = (Limit(30, 600),)
+# Security review 2026-11-04: every own-domain request stops nginx for a few seconds
+# (certbot standalone), for every site on the server.
+DOMAIN_PER_USER = (Limit(3, 3600), Limit(10, 86400))
 # Roadmap H5: test posts to a Discord webhook.
 DISCORD_TEST = (Limit(5, 600),)
 MAP_SEARCH_PER_IP = (Limit(20, 60), Limit(200, 3600))

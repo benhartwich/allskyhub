@@ -497,3 +497,9 @@ table.stats.ovf-list th, table.stats.ovf-list td { text-align: left; }
 @media (max-width: 640px) { .store-row { grid-template-columns: 1fr; gap: 6px; } }
 .tone-done { color: var(--ok); } .tone-wait { color: var(--warn); } .tone-fail { color: var(--danger); }
 .row-links.wrap { flex-wrap: wrap; gap: 8px; justify-content: flex-start; }
+/* Admin › Konten */
+.search-row { display: flex; gap: 8px; align-items: flex-end; flex-wrap: wrap; }
+.search-row label { flex: 1 1 220px; }
+.search-row label.narrow { flex: 0 1 180px; }
+table.stats.users-list th, table.stats.users-list td { text-align: left; }
+h1.break { overflow-wrap: anywhere; }

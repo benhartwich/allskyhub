@@ -76,6 +76,7 @@ from allskyhub_server.web import (
     routes_report,
     routes_showers,
     routes_stores,
+    routes_users,
 )
 from allskyhub_server.web.deps import LoginRequiredError
 from allskyhub_server.web.image_download import LatestImage
@@ -360,6 +361,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(routes_showers.router)
     app.include_router(routes_local.router)
     app.include_router(routes_admin.router)
+    app.include_router(routes_users.router)
     app.include_router(routes_stores.router)
     app.include_router(routes_apps.router)
     app.include_router(routes_app_builds.router)

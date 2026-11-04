@@ -1,0 +1,104 @@
+{% extends "base.html" %}
+{% block title %}{{ account.email }} · Konten · allskyhub{% endblock %}
+{% block content %}
+<div class="page-head"><h1 class="break">{{ account.email }}</h1><p class="muted"><a href="/admin">Admin</a> › <a href="/admin/users">Konten</a> › Konto</p></div>
+
+<section class="card stack">
+  <h2>Überblick</h2>
+  <dl class="facts">
+    <dt>Art</dt><dd>{{ kinds.get(account.kind, account.kind) }}{% if is_admin_account %} · Admin{% endif %}</dd>
+    <dt>Status</dt><dd class="{{ 'ok' if account.is_active else 'warn' }}">{{ 'aktiv' if account.is_active else ('unbestätigt' if account.kind == 'reporter' else 'gesperrt') }}</dd>
+    <dt>Angelegt</dt><dd>{{ account.created_at | localtime }}</dd>
+    <dt>Zuletzt im Web</dt><dd>{{ web_seen | localtime if web_seen else 'nie' }}</dd>
+    <dt>Zuletzt in der App</dt><dd>{{ app_seen | localtime if app_seen else 'nie' }}</dd>
+    <dt>Angemeldet</dt><dd>{{ web_count }} Browser, {{ app_count }} App</dd>
+  </dl>
+</section>
+
+{% macro confirm() %}<label>Dein Passwort<input type="password" name="password" autocomplete="current-password" required></label>{% endmacro %}
+
+<section class="card stack">
+  <h2>Kameras</h2>
+  {% if own or shared %}
+  <div class="table-scroll"><table class="stats users-list">
+    <tr><th>Kamera</th><th>Rolle</th><th></th></tr>
+    {% for device in own %}<tr><td><a href="/cameras/{{ device.id }}">{{ device.name }}</a></td><td>Besitzer</td><td></td></tr>{% endfor %}
+    {% for device, role in shared %}
+    <tr><td>{{ device.name }}</td><td>{{ roles.get(role, role) }}</td>
+      <td><details><summary>Freigabe entfernen</summary>
+        <form method="post" action="/admin/users/{{ account.id }}/unshare" class="stack">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token }}"><input type="hidden" name="device_id" value="{{ device.id }}">
+          {{ confirm() }}<button type="submit" class="secondary">Entfernen</button>
+        </form></details></td></tr>
+    {% endfor %}
+  </table></div>
+  {% else %}<p class="muted">Keine Kameras.</p>{% endif %}
+  {% if cameras %}
+  <details>
+    <summary>Kamera freigeben</summary>
+    <form method="post" action="/admin/users/{{ account.id }}/share" class="stack">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+      <label>Kamera<select name="device_id">{% for id, name, owner in cameras %}<option value="{{ id }}">{{ name }} ({{ owner }})</option>{% endfor %}</select></label>
+      <label>Rolle<select name="role">{% for key, label in roles.items() %}<option value="{{ key }}">{{ label }}</option>{% endfor %}</select></label>
+      {{ confirm() }}
+      <p class="muted small">Auch Kameras anderer Besitzer, z. B. für die Testkonten von Apple und Google; der Besitzer sieht die Freigabe bei seiner Kamera und kann sie entfernen.</p>
+      <button type="submit" class="secondary">Freigeben</button>
+    </form>
+  </details>
+  {% endif %}
+</section>
+
+{% if is_self %}
+<section class="card"><p class="muted">Das ist dein eigenes Konto: Passwort, Abmelden und Löschen unter <a href="/account">Konto</a>.</p></section>
+{% else %}
+<section class="card stack">
+  <h2>Zugang</h2>
+  <details>
+    <summary>Link zum Zurücksetzen mailen</summary>
+    <form method="post" action="/admin/users/{{ account.id }}/reset-link" class="stack">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">{{ confirm() }}
+      <button type="submit" class="secondary">Link mailen</button>
+    </form>
+  </details>
+  <details>
+    <summary>Überall abmelden</summary>
+    <form method="post" action="/admin/users/{{ account.id }}/sign-out" class="stack">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">{{ confirm() }}
+      <button type="submit" class="secondary">Abmelden</button>
+    </form>
+  </details>
+  <details>
+    <summary>{{ 'Sperren' if account.is_active else 'Entsperren' }}</summary>
+    <form method="post" action="/admin/users/{{ account.id }}/lock" class="stack">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+      <input type="hidden" name="locked" value="{{ 'true' if account.is_active else 'false' }}">
+      {{ confirm() }}
+      <p class="muted small">{{ 'Ein gesperrtes Konto kann sich nicht anmelden und wird überall abgemeldet; Kameras und Daten bleiben.' if account.is_active else 'Danach kann sich das Konto wieder anmelden.' }}</p>
+      <button type="submit" class="secondary">{{ 'Sperren' if account.is_active else 'Entsperren' }}</button>
+    </form>
+  </details>
+  <details>
+    <summary>Passwort direkt setzen (z. B. Testkonto für Apple/Google)</summary>
+    <form method="post" action="/admin/users/{{ account.id }}/password" class="stack">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+      <label>Neues Passwort<input type="password" name="new_password" minlength="{{ min_password }}" required autocomplete="new-password" placeholder="mindestens {{ min_password }} Zeichen"></label>
+      {{ confirm() }}
+      <p class="muted small">Am besten nur Buchstaben und Ziffern: Prüfer tippen es von Hand ab. Das Konto wird überall abgemeldet.</p>
+      <button type="submit">Setzen</button>
+    </form>
+  </details>
+  <p class="muted small">Jede Aktion fragt dein Passwort ab und steht mit deiner Adresse im Log des Hubs.</p>
+</section>
+
+<section class="card stack">
+  <h2>Konto löschen</h2>
+  <p class="muted small">Entkoppelt die eigenen Kameras und löscht ihre Bilder, Ereignisse und Seiten; Freigaben an andere entfallen. Lässt sich nicht rückgängig machen.</p>
+  <form method="post" action="/admin/users/{{ account.id }}/delete" class="stack">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <label>Zur Bestätigung die E-Mail-Adresse<input name="confirm_email" required maxlength="254" autocomplete="off" placeholder="{{ account.email }}"></label>
+    {{ confirm() }}
+    <button type="submit" class="danger">Endgültig löschen</button>
+  </form>
+</section>
+{% endif %}
+{% endblock %}

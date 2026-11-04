@@ -1,0 +1,39 @@
+{% extends "base.html" %}
+{% block title %}Konten · Admin · allskyhub{% endblock %}
+{% block content %}
+<div class="page-head"><h1>Konten</h1><p class="muted"><a href="/admin">Admin</a> › Konten</p></div>
+
+<section class="card stack">
+  <form method="get" action="/admin/users" class="search-row">
+    <label>Suchen<input name="q" value="{{ q }}" placeholder="E-Mail-Adresse" maxlength="254"></label>
+    <label class="narrow">Art<select name="kind">{% for key, label in filters.items() %}<option value="{{ key }}"{% if key == kind %} selected{% endif %}>{{ label }}</option>{% endfor %}</select></label>
+    <button type="submit" class="secondary">Filtern</button>
+  </form>
+  <div class="table-scroll"><table class="stats users-list">
+    <tr><th>E-Mail</th><th>Art</th><th>Kameras</th><th>Zuletzt aktiv</th><th>Angelegt</th><th>Status</th></tr>
+    {% for row in rows %}
+    <tr>
+      <td><a href="/admin/users/{{ row.user.id }}">{{ row.user.email }}</a>{% if row.user.email.lower() in admins %} <span class="badge">Admin</span>{% endif %}</td>
+      <td>{{ kinds.get(row.user.kind, row.user.kind) }}</td>
+      <td>{% if row.own %}{{ row.own }} eigene{% endif %}{% if row.own and row.shared %}, {% endif %}{% if row.shared %}{{ row.shared }} geteilt{% endif %}{% if not row.own and not row.shared %}–{% endif %}</td>
+      <td>{{ row.last_active | localtime if row.last_active else 'nie' }}</td>
+      <td>{{ row.user.created_at | localtime }}</td>
+      <td>{% if row.user.is_active %}<span class="badge ok">aktiv</span>{% elif row.user.kind == 'reporter' %}<span class="badge warn">unbestätigt</span>{% else %}<span class="badge warn">gesperrt</span>{% endif %}</td>
+    </tr>
+    {% else %}
+    <tr><td colspan="6" class="muted">Keine Konten gefunden.</td></tr>
+    {% endfor %}
+  </table></div>
+  <p class="muted small">{{ rows | length }}{% if rows | length >= limit %}+ (die neuesten {{ limit }}; bitte suchen){% endif %} angezeigt · {{ totals.get('owner', 0) }} Kamera-Konten, {{ totals.get('reporter', 0) }} Melder insgesamt. Zugangsanfragen stehen weiter auf der <a href="/admin">Admin-Seite</a>.</p>
+</section>
+
+<section class="card stack">
+  <h2>Neues Konto einladen</h2>
+  <form method="post" action="/admin/users/invite" class="search-row">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <label>E-Mail-Adresse<input type="email" name="email" required maxlength="254" placeholder="name@example.org" autocomplete="off"></label>
+    <button type="submit">Einladung senden</button>
+  </form>
+  <p class="muted small">Konten entstehen nur per Einladung; der Link gilt 7 Tage und nur einmal.</p>
+</section>
+{% endblock %}

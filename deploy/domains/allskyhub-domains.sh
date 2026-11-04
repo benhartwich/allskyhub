@@ -56,7 +56,7 @@ served_elsewhere() {
                 [[ $name == "*."* && $d == *"${name#\*}" ]] && return 0
                 [[ $name == .* && ( $d == "${name#.}" || $d == *"$name" ) ]] && return 0
             done
-        done < <(sed -n 's/^[[:space:]]*server_name[[:space:]]\+\([^;]*\);.*/\1/p' -- "$f")
+        done < <(tr '\n' ' ' <"$f" | grep -o 'server_name[[:space:]][^;]*' | cut -c13-)
     done
     return 1
 }
@@ -109,6 +109,8 @@ setup() {
         answer "$d" failed "Diese Domain gehört zu einer anderen Seite auf diesem Server."
         return
     fi
+    local had_cert=''
+    [[ -e /etc/letsencrypt/live/$d ]] && had_cert=1
     if ! certbot certonly --standalone --non-interactive --agree-tos --keep-until-expiring \
             --cert-name "$d" -d "$d" \
             --pre-hook "systemctl stop nginx" --post-hook "systemctl start nginx" \
@@ -121,6 +123,9 @@ setup() {
         answer "$d" ok
     else
         rm -f -- "$ENABLED/allskyhub-domain-$d.conf" "$SITES/allskyhub-domain-$d.conf"
+        # The certificate just made goes too, else the domain would count as another's.
+        [[ -n $had_cert ]] || certbot delete --non-interactive --cert-name "$d" \
+            >>/var/log/allskyhub-domains.log 2>&1 || true
         answer "$d" failed "Die nginx-Konfiguration ließ sich nicht laden."
     fi
 }

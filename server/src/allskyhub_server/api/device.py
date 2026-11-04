@@ -88,6 +88,9 @@ router = APIRouter(prefix="/device/v1")
 NIGHT_ID = r"^\d{8}$"
 FRAME_NAME = r"^[A-Za-z0-9_-][A-Za-z0-9._-]{0,127}$"  # never "." or ".."
 _FRAME_NAME = re.compile(FRAME_NAME.removeprefix("^").removesuffix("$"))
+# Security review 2026-11-04: each new event makes the hub fetch pictures; a camera that
+# announces endless events would fill the disk. A stormy night has a few hundred.
+EVENTS_PER_NIGHT = 3000
 
 
 def _now() -> dt.datetime:
@@ -790,6 +793,16 @@ async def _on_event(
             )
         )
         is_new = previous is None
+        if is_new:
+            count = await db.scalar(
+                select(func.count()).where(
+                    EventRecord.device_id == conn.device_id,
+                    EventRecord.night_id == body.night_id,
+                )
+            )
+            if (count or 0) >= EVENTS_PER_NIGHT:
+                log.warning("too many events in one night", extra={"device_id": conn.device_id})
+                return
         # SPEC §6.4 image_rev: a higher revision means the device replaced the picture.
         replaced = not is_new and image_rev(body.data) > image_rev(previous or {})
         update_values: dict[str, Any] = dict(values)

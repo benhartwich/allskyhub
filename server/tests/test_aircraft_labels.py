@@ -171,9 +171,10 @@ async def test_the_cameras_receiver_feeds_the_hub(
     async with device_ws(live_app, token) as ws:
         await send(ws, body)
         for _ in range(100):
-            if watch.tracks.at(at).get("abc123"):
+            if watch.tracks.at(at, dev.device_id).get("abc123"):
                 break
             await asyncio.sleep(0.05)
-    fix = watch.tracks.at(at - dt.timedelta(seconds=2))["abc123"]
+    fix = watch.tracks.at(at - dt.timedelta(seconds=2), dev.device_id)["abc123"]
+    assert watch.tracks.at(at) == {}  # only for this camera
     assert (fix.flight, fix.alt_m) == ("AUA12", 9000.0)
     assert watch.tracks.covers(dev.device_id, at, at)

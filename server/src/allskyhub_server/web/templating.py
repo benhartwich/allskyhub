@@ -114,7 +114,7 @@ def air_overlay(device: Any) -> Any:
     if device.latest_image_at is None or aircraft.current is None:
         return None
     at = overlay.image_time(device.last_frame, device.latest_image_at)
-    return overlay.build_aircraft(device.last_status, at, aircraft.current.tracks)
+    return overlay.build_aircraft(device.last_status, at, aircraft.current.tracks, device.id)
 
 
 # SPEC §7.11 status.heater reasons.

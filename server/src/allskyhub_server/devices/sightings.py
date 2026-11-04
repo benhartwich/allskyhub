@@ -103,8 +103,13 @@ async def match(db: AsyncSession, report: FireballReport) -> FireballMatches:
     ).all()
     cameras: list[CameraMatch] = []
     for event, device in rows:
+        # Security review 2026-11-04: only cameras that share anyway (public page or the
+        # network), measured from 0.1° like on the map; else reports placed around a
+        # private camera would find where it stands, about 1 km close.
         place = _place(device)
-        if place is None or distance_km(here, place) > MATCH_KM:
+        if place is None or (device.public_slug is None and not device.network):
+            continue
+        if distance_km(here, (round(place[0], 1), round(place[1], 1))) > MATCH_KM:
             continue
         shows = device.public_slug is not None and public.profile(device).sections.events
         image = (

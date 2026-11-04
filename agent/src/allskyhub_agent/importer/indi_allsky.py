@@ -226,6 +226,7 @@ class IndiAllskyImporter(FilePlacer):
         self.camera_id = camera_id if camera_id is not None else (found[0].id if found else 0)
         self.settings = IndiAllskySettings.load(db, self.camera_id)
         self._root = (image_folder or self.settings.image_folder).resolve()
+        self._sources = [self._root]
 
     # --- the database --------------------------------------------------------------------
     def _rows(self, sql: str, params: tuple[object, ...] = ()) -> list[sqlite3.Row]:
@@ -245,13 +246,7 @@ class IndiAllskyImporter(FilePlacer):
         if not isinstance(filename, str) or not filename:
             return None
         path = Path(filename)
-        try:
-            path = (path if path.is_absolute() else self._root / path).resolve()
-        except (OSError, RuntimeError):
-            return None
-        if not path.is_relative_to(self._root) or not path.is_file():
-            return None
-        return path
+        return self._source(path if path.is_absolute() else self._root / path)
 
     def _at(self, value: object) -> datetime | None:
         local = _local(value)
@@ -334,12 +329,13 @@ class IndiAllskyImporter(FilePlacer):
                 continue
             known.add(src.name)
             dest = self._store.night_dir(night) / src.name
-            self._place(src, dest, report, dry)
+            if self._place(src, dest, report, dry) is None:
+                continue
             if not dry:
                 thumb = self._store.night_dir(night) / "thumbnails" / src.name
                 if not thumb.exists():
                     try:
-                        thumbnail(src, thumb)
+                        thumbnail(dest, thumb)  # the checked file, now the agent's
                         self._chown(thumb)
                     except OSError:
                         log.warning("%s: unreadable, no thumbnail", src)
@@ -408,14 +404,14 @@ class IndiAllskyImporter(FilePlacer):
                     poster = self._poster(night, is_night, row)
                     if poster is not None:
                         thumbnail(poster, thumb)
-                    length = video_duration(src)
+                    length = video_duration(folder / name)
                     fps, count = _num(row["framerate"]), _num(row["frames"])
                     if length is None and fps and count:
                         length = round(count / fps, 1)
                     if length is not None:
                         durations.setdefault(manifest, {})[name] = length
                 else:
-                    thumbnail(src, thumb)
+                    thumbnail(folder / name, thumb)
                 if thumb.exists():
                     self._chown(thumb)
             except OSError:

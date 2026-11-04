@@ -156,7 +156,8 @@ class AllskyImporter(FilePlacer):
         owner: tuple[int, int] | None = None,
         progress: Callable[[str], None] = print,
     ) -> None:
-        super().__init__(copy, owner)
+        super().__init__(copy, owner, (allsky_home, allsky_home / "images",
+                                       allsky_home / "html" / "allsky"))  # fmt: skip
         self._home = allsky_home
         self._images = allsky_home / "images"
         self._store = store
@@ -239,12 +240,13 @@ class AllskyImporter(FilePlacer):
                 report.images_skipped += 1
                 continue
             dest = self._store.night_dir(nid) / src.name
-            self._place(src, dest, report, dry)
+            if self._place(src, dest, report, dry) is None:
+                continue
             if not dry:
                 thumb = self._store.night_dir(nid) / "thumbnails" / src.name
                 if not thumb.exists():
                     try:
-                        thumbnail(src, thumb)
+                        thumbnail(dest, thumb)  # the checked file, now the agent's
                         self._chown(thumb)
                     except OSError:
                         log.warning("%s: unreadable, no thumbnail", src)
@@ -286,13 +288,14 @@ class AllskyImporter(FilePlacer):
                     poster = next((src_dir / "videothumbnail").glob("*.jpg"), None)
                     if poster is None:
                         poster = web / "videos" / "thumbnails" / f"allsky-{date}.jpg"
-                    if poster.is_file():
+                    poster = self._source(poster)
+                    if poster is not None:
                         thumbnail(poster, thumb)
-                    duration = video_duration(src)
+                    duration = video_duration(night / name)
                     if duration is not None:
                         durations[name] = duration
                 else:
-                    thumbnail(src, thumb)
+                    thumbnail(night / name, thumb)
                 if thumb.exists():
                     self._chown(thumb)
             except OSError:
@@ -341,7 +344,8 @@ class AllskyImporter(FilePlacer):
                 if dry:
                     report.nights.add(night_id(start, self._tz))
                     continue
-                picture = src_dir / str(m.get("file") or "")
+                # A "file" may be absolute or hold "..": only files of Allsky's folders.
+                picture = self._source(src_dir / str(m.get("file") or ""))
                 event = self._events.import_event(
                     EventKind.METEOR,
                     night_id(start, self._tz),
@@ -361,7 +365,7 @@ class AllskyImporter(FilePlacer):
                         "azimuth_deg": None,
                         "altitude_deg": None,
                     },
-                    picture if picture.is_file() else None,
+                    picture,
                 )
                 if event is None:
                     report.meteors -= 1
@@ -412,9 +416,9 @@ class AllskyImporter(FilePlacer):
             if dry:
                 report.nights.add(nid)
                 continue
-            picture = folder / str(r.get("file") or "")
+            picture = self._source(folder / str(r.get("file") or ""))
             area = r.get("area")
-            pixels = _pixels(picture)
+            pixels = _pixels(picture) if picture is not None else None
             frac = (
                 round(min(1.0, float(area) / pixels), 4)
                 if isinstance(area, int | float) and pixels
@@ -439,7 +443,7 @@ class AllskyImporter(FilePlacer):
                     "azimuth_deg": None,
                     "altitude_deg": None,
                 },
-                picture if picture.is_file() else None,
+                picture,
             )
             if event is None:
                 report.lightning -= 1
@@ -519,7 +523,7 @@ class AllskyImporter(FilePlacer):
                     "azimuth_deg": _COMPASS.get(str(best_row.get("dir", ""))),
                     "altitude_deg": None,
                 },
-                best_pic,
+                self._source(best_pic),
             )
             if event is None:
                 report.episodes -= 1

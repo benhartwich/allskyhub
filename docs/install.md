@@ -189,7 +189,9 @@ images with their metadata (from Allsky's database where it has them, else from 
 name), keogram, star trails and timelapse, and the meteors of the meteor module. Images
 are hard-linked when Allsky's folder is on the same disk, so this needs no extra space;
 only the agent's thumbnails are new. Run it as root (hard links to another user's files
-need it), first as a dry run:
+need it); it then works as the agent's user and only reads with root's rights, and it never
+takes over a file that lies outside Allsky's folders or belongs to root or the agent (a
+link, say). First as a dry run:
 
 ```bash
 sudo /opt/allskyhub-agent/current/.venv/bin/allskyhub-agent import-allsky \

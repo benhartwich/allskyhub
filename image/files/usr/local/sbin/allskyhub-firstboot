@@ -15,4 +15,5 @@ fi
 rfkill unblock wifi || true
 
 install -d -o allskyhub -g allskyhub -m 0750 /var/lib/allskyhub-agent
-touch /var/lib/allskyhub-agent/.firstboot-done
+# As the agent: root never follows a link in the agent's folder (security review 2026-11-04).
+runuser -u allskyhub -- touch /var/lib/allskyhub-agent/.firstboot-done

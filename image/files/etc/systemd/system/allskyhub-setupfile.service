@@ -6,7 +6,9 @@ Before=allskyhub-agent.service
 [Service]
 Type=oneshot
 # The boot partition belongs to root; the agent reads its copy and deletes it when applied.
-ExecStart=/usr/bin/install -o allskyhub -g allskyhub -m 0600 /boot/firmware/allskyhub-setup.json /var/lib/allskyhub-agent/setup.json
+# Written by the agent, never by root: a link planted in the agent's folder must not make
+# root write elsewhere (security review 2026-11-04).
+ExecStart=/bin/sh -c 'runuser -u allskyhub -- sh -c "umask 077; cat > /var/lib/allskyhub-agent/setup.json.tmp && mv -f -- /var/lib/allskyhub-agent/setup.json.tmp /var/lib/allskyhub-agent/setup.json" < /boot/firmware/allskyhub-setup.json'
 ExecStart=/usr/bin/rm -f /boot/firmware/allskyhub-setup.json
 
 [Install]

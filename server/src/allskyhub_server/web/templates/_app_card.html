@@ -45,8 +45,8 @@
   <details data-fold="apps-{{ card.key }}-more">
     <summary>Mehr: neu bauen, Store-Einträge, Protokolle</summary>
     <div class="row-links wrap">
-      {% for action in ('build-android', 'build-ios', 'play-listing', 'appstore', 'apk', 'setup') %}
-      {% if not (action == 'build-android' and android_busy) %}
+      {% for action in ('build-android', 'build-ios', 'build-screenshots', 'take-screenshots', 'play-listing', 'appstore', 'apk', 'setup') %}
+      {% if not (action == 'build-android' and android_busy) and (card.screenshots or action not in ('build-screenshots', 'take-screenshots')) %}
       <form method="post" action="/admin/apps" class="inline">
         <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
         <input type="hidden" name="app" value="{{ card.key }}">
@@ -56,7 +56,7 @@
       {% endif %}
       {% endfor %}
     </div>
-    <p class="muted small">Gebaut wird immer <code>main</code>: Android auf diesem Server (danach im internen Test bei Google Play), iOS bei Codemagic (danach in TestFlight). Die Store-Texte und Screenshots kommen aus dem Repository. „Einrichten“ prüft die Zugänge und legt fehlende Schlüssel an. „APK zum Herunterladen holen“ lädt Googles installierbare APK des letzten App Bundles und stellt sie öffentlich zum Download.</p>
+    <p class="muted small">Gebaut wird immer <code>main</code>: Android auf diesem Server (danach im internen Test bei Google Play), iOS bei Codemagic (danach in TestFlight). Die Store-Texte kommen aus dem Repository, die Screenshots auch, außer „Screenshots erzeugen“ (die echte App bei Codemagic im Simulator und Emulator) und danach „Screenshots übernehmen“ hat neuere geholt. „Einrichten“ prüft die Zugänge und legt fehlende Schlüssel an. „APK zum Herunterladen holen“ lädt Googles installierbare APK des letzten App Bundles und stellt sie öffentlich zum Download.</p>
     {% if card.android and card.android.latest %}
     <p class="small">Letztes App Bundle: <a href="/admin/stores-android/{{ card.android.latest.file }}">{{ card.android.latest.file }}</a> <span class="muted">· Version {{ card.android.latest.version }} ({{ card.android.latest.build }})</span></p>
     {% endif %}

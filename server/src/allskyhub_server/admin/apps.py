@@ -42,7 +42,8 @@ CM_DONE = frozenset({"finished"})
 CM_FAILED = frozenset({"failed", "canceled", "timeout", "skipped"})
 ACTIONS = (
     "setup", "build-android", "build-ios", "play-listing", "appstore",
-    "review-play", "review-appstore", "apk", "build-test-apk",
+    "review-play", "review-appstore", "apk", "build-test-apk", "build-screenshots",
+    "take-screenshots",
 )  # fmt: skip
 # What the stores say, kept this long before the page asks again.
 LIVE_MAX_AGE = dt.timedelta(minutes=10)
@@ -91,6 +92,7 @@ class Card:
     pending: dict[str, int | None] = field(default_factory=dict[str, int | None])
     apk: dict[str, Any] | None = None  # the APK for /download/<key>.apk (Stores.apk)
     test: AndroidJob | None = None  # the server's test APK (OtherApp.test_apk)
+    screenshots: bool = False  # its codemagic.yaml can make store screenshots
 
     @property
     def waiting(self) -> bool:
@@ -423,6 +425,9 @@ async def cards(stores: Stores, only: str | None = None) -> list[Card]:
         job = stores.android_job(app)
         card = Card(key, app.title if app else "allskyhub",
                     app.package if app else "org.allskyhub.app", version, android=job)  # fmt: skip
+        # allskyhub's own come from sample data (app/test/store): the owner's screens
+        # need an account a simulator run would not have.
+        card.screenshots = bool(app and app.screenshots)
         latest_file = str((job.latest or {}).get("file", ""))
         live = live_of(stores, key)
         card.live_at = str(live.get("at", ""))

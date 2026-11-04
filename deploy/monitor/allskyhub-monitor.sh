@@ -21,10 +21,12 @@ mkdir -p "$STATE_DIR"
 notify() {  # title, message, priority
   echo "allskyhub-monitor: $1: $2"
   [ -n "${ALLSKYHUB_MONITOR_NTFY_URL:-}" ] || return 0
-  auth=()
-  [ -n "${ALLSKYHUB_MONITOR_NTFY_TOKEN:-}" ] && auth=(-H "Authorization: Bearer $ALLSKYHUB_MONITOR_NTFY_TOKEN")
-  curl -fsS -m 15 "${auth[@]}" -H "Title: $1" -H "Priority: $3" -H "Tags: telescope" \
-    -d "$2" "$ALLSKYHUB_MONITOR_NTFY_URL" >/dev/null || echo "allskyhub-monitor: ntfy failed" >&2
+  # The token through stdin (curl -H @-), never on the command line (/proc/*/cmdline).
+  local auth=""
+  [ -n "${ALLSKYHUB_MONITOR_NTFY_TOKEN:-}" ] && auth="Authorization: Bearer $ALLSKYHUB_MONITOR_NTFY_TOKEN"
+  printf '%s\n' "$auth" | curl -fsS -m 15 -H @- -H "Title: $1" -H "Priority: $3" \
+    -H "Tags: telescope" -d "$2" "$ALLSKYHUB_MONITOR_NTFY_URL" >/dev/null \
+    || echo "allskyhub-monitor: ntfy failed" >&2
 }
 
 report() {  # name, ok|fail, message

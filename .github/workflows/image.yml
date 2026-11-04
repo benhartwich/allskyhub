@@ -92,7 +92,6 @@ jobs:
       contents: write
     env:
       GH_TOKEN: ${{ github.token }}
-      UPDATE_KEY: ${{ secrets.ALLSKYHUB_UPDATE_KEY }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
         with:
@@ -121,6 +120,9 @@ jobs:
           python3 tools/release/release_notes.py "$VERSION" > "$RUNNER_TEMP/notes.md"
           echo "VERSION=$VERSION" >> "$GITHUB_ENV"
       - name: manifest and signature
+        # The signing key only for this step, not the whole job (security review 2026-11-04).
+        env:
+          UPDATE_KEY: ${{ secrets.ALLSKYHUB_UPDATE_KEY }}
         run: |
           [ -n "$UPDATE_KEY" ] || { echo "::error::secret ALLSKYHUB_UPDATE_KEY is not set"; exit 1; }
           BUNDLE="dist/allskyhub-agent-$VERSION-arm64.tar.xz"

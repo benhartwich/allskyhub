@@ -19,23 +19,29 @@ main() {
     local HUB_USER=${ALLSKYHUB_HUB_USER:-allskyhub-server}
     local HUB_URL=${ALLSKYHUB_HUB_URL:-https://allskyhub.org}
 
+    local LOCK=${ALLSKYHUB_DEPLOY_LOCK:-/run/allskyhub-deploy.lock}
+
     [[ -f $SPOOL/request ]] || exit 0
-    exec 9>"$SPOOL/.lock"
+    # The lock outside the spool, and everything in the spool read and written as the hub,
+    # never by root: the folder is the hub's, and a link planted there must not make root
+    # read or write elsewhere (security review 2026-11-04).
+    exec 9>"$LOCK"
     flock -n 9 || exit 0
+    as_hub() { runuser -u "$HUB_USER" -- "$@"; }
 
     local sha
-    sha=$(head -n 1 -- "$SPOOL/request" | tr -d '[:space:]')
+    sha=$(as_hub head -n 1 -- "$SPOOL/request" 2>/dev/null | tr -d '[:space:]') || true
     rm -f -- "$SPOOL/request"
     answer() {  # answer <file> <text>
-        printf '%s\n' "$2" > "$SPOOL/$1"
-        chown "$HUB_USER:$HUB_USER" "$SPOOL/$1"
-        chmod 640 "$SPOOL/$1"
+        rm -f -- "$SPOOL/$1"
+        # shellcheck disable=SC2016  # $1 is the inner shell's
+        printf '%s\n' "$2" | as_hub sh -c 'umask 027; cat > "$1"' _ "$SPOOL/$1"
     }
-    : > "$SPOOL/log"
-    chown "$HUB_USER:$HUB_USER" "$SPOOL/log"
-    chmod 640 "$SPOOL/log"
-    say() { printf '%s %s\n' "$(date '+%H:%M:%S')" "$*" >> "$SPOOL/log"; }
-    run() { "$@" >> "$SPOOL/log" 2>&1; }
+    rm -f -- "$SPOOL/log"
+    # shellcheck disable=SC2016  # $1 is the inner shell's
+    as_hub sh -c 'umask 027; : > "$1"' _ "$SPOOL/log"
+    say() { printf '%s %s\n' "$(date '+%H:%M:%S')" "$*" | as_hub tee -a -- "$SPOOL/log" >/dev/null; }
+    run() { "$@" 2>&1 | as_hub tee -a -- "$SPOOL/log" >/dev/null; }
 
     if [[ ! $sha =~ ^[0-9a-f]{40}$ ]]; then
         answer target ""

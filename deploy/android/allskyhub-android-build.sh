@@ -131,14 +131,18 @@ main() {
         export GIT_CONFIG_VALUE_0
         unset token
     fi
+    # Security review 2026-11-04: the builds run third-party code (Gradle plugins, npm
+    # scripts) in containers that see the checkout. They never see its .git (a tmpfs over
+    # it, see below), and root's git here runs no hooks or fsmonitor all the same.
+    src_git() { git -c core.hooksPath=/dev/null -c core.fsmonitor=false -C "$SRC" "$@"; }
     if [[ ! -d $SRC/.git ]]; then
-        git clone --quiet "$REPO_URL" "$SRC"
+        git -c core.hooksPath=/dev/null clone --quiet "$REPO_URL" "$SRC"
     fi
-    git -C "$SRC" fetch --quiet origin "$BRANCH"
+    src_git fetch --quiet origin "$BRANCH"
     unset GIT_CONFIG_COUNT GIT_CONFIG_KEY_0 GIT_CONFIG_VALUE_0
     local tree=
     if [[ $force != --release ]]; then
-        tree=$(git -C "$SRC" rev-parse FETCH_HEAD:app)
+        tree=$(src_git rev-parse FETCH_HEAD:app)
         # No published build yet (also right after the move into BASE): build even if
         # app/ is unchanged.
         if [[ $force == "" && -f $OUT/latest.json && -f $BASE/last-tree &&
@@ -146,11 +150,11 @@ main() {
             exit 0
         fi
     fi
-    git -C "$SRC" checkout --quiet --force --detach FETCH_HEAD
-    git -C "$SRC" clean --quiet -fdx -- "$APP_DIR"
+    src_git checkout --quiet --force --detach FETCH_HEAD
+    src_git clean --quiet -fdx -- "$APP_DIR"
     local commit build version
-    commit=$(git -C "$SRC" rev-parse --short=7 HEAD)
-    build=$(git -C "$SRC" rev-list --count HEAD)
+    commit=$(src_git rev-parse --short=7 HEAD)
+    build=$(src_git rev-list --count HEAD)
     if [[ $KIND == expo ]]; then
         version=$(python3 -c 'import json, sys; print(json.load(open(sys.argv[1]))["expo"]["version"])' \
             "$SRC/$APP_DIR/app.json")
@@ -172,9 +176,9 @@ main() {
     test_key "$KEYS" "$IMAGE"
 
     docker run --rm --name allskyhub-android-build --cpus 6 --memory 8g \
-        -v "$SRC:/work" \
-        -v allskyhub-android-pub-cache:/root/.pub-cache \
-        -v allskyhub-android-gradle:/root/.gradle \
+        -v "$SRC:/work" --tmpfs /work/.git \
+        -v "allskyhub-android-pub-cache-$app:/root/.pub-cache" \
+        -v "allskyhub-android-gradle-$app:/root/.gradle" \
         -v "$HERE/maven-google.init.gradle:/root/.gradle/init.d/maven-google.gradle:ro" \
         -v "$HERE/gradle.properties:/root/.gradle/gradle.properties:ro" \
         -v "$KEYS/test.keystore:/keys/test.keystore:ro" \
@@ -188,6 +192,7 @@ main() {
             --dart-define=ALLSKYHUB_BUILD=$build"
 
     local apk=$SRC/app/build/app/outputs/flutter-apk/app-release.apk
+    build_output "$apk"
     local name=allskyhub-test-$build.apk
     install -d -m 755 "$OUT"
     install -m 644 "$apk" "$OUT/$name"
@@ -241,6 +246,9 @@ store_key() {
 import base64, json, os, re, sys
 key = json.load(open(sys.argv[1]))
 prefix = sys.argv[3]
+# It goes into an --env-file: a newline would add any variable (JAVA_TOOL_OPTIONS …).
+if not re.fullmatch(r"[A-Za-z0-9+/=_-]{8,200}", str(key.get("password", ""))):
+    sys.exit("upload key: unexpected password format")
 os.umask(0o077)
 with open(os.path.join(sys.argv[2], "upload.p12"), "wb") as f:
     f.write(base64.b64decode(key["p12"]))
@@ -289,8 +297,9 @@ signed_build() {
     local limits=(--cpus 6 --memory 8g)
     [[ $KIND == expo ]] && limits=(--cpus 4 --cpuset-cpus 0-3 --memory 16g)
     local run=(docker run --rm --name allskyhub-android-release "${limits[@]}"
-        -v "$SRC:/work"
-        -v allskyhub-android-gradle:/root/.gradle
+        -v "$SRC:/work" --tmpfs /work/.git
+        # Caches per app: one app's build must not plant code in another's (its upload key).
+        -v "allskyhub-android-gradle-$app:/root/.gradle"
         -v "$HERE/maven-google.init.gradle:/root/.gradle/init.d/maven-google.gradle:ro"
         -v "$HERE/gradle.properties:/root/.gradle/gradle.properties:ro"
         -v "$KEY_TMP/upload.p12:/keys/upload.p12:ro"
@@ -305,7 +314,8 @@ signed_build() {
         # version code from VINVENTORY_VERSION_CODE.
         # The image points GRADLE_USER_HOME elsewhere; back to /root/.gradle, where the
         # cache volume, the Maven proxy's init script and gradle.properties are.
-        "${run[@]}" -v allskyhub-android-npm:/root/.npm -e CI=1 -e GRADLE_USER_HOME=/root/.gradle \
+        "${run[@]}" -v "allskyhub-android-npm-$app:/root/.npm" -e CI=1 -e GRADLE_USER_HOME=/root/.gradle \
+            -e EXPO_NO_GIT_STATUS=1 \
             -e "VINVENTORY_VERSION_CODE=$build" -e "VINVENTORY_VARIANT=$VARIANT" \
             -w /work "$EXPO_IMAGE" \
             sh -c "npm ci --no-audit --no-fund && cd $APP_DIR \
@@ -315,7 +325,7 @@ signed_build() {
                     -PreactNativeArchitectures=arm64-v8a,armeabi-v7a $task"
         aab=$SRC/$APP_DIR/android/app/build/outputs/bundle/release/app-release.aab
     else
-        "${run[@]}" -v allskyhub-android-pub-cache:/root/.pub-cache \
+        "${run[@]}" -v "allskyhub-android-pub-cache-$app:/root/.pub-cache" \
             -w "/work/$APP_DIR" "$IMAGE" \
             sh -c "flutter pub get && flutter build appbundle --release --build-number=$build$DEFINES"
         aab=$SRC/$APP_DIR/build/app/outputs/bundle/release/app-release.aab
@@ -327,6 +337,7 @@ signed_build() {
     fi
 
     local name=$app-$build.aab
+    build_output "$aab"
     install -m 644 "$aab" "$RELEASE/$name"
     printf '{"build": %d, "version": "%s", "commit": "%s", "built_at": "%s", "size": %d, "file": "%s"}\n' \
         "$build" "$version" "$commit" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$(stat -c %s "$aab")" "$name" \
@@ -350,6 +361,7 @@ signed_build() {
 # The test APK into RELEASE (release-<app>-test), where the hub reads it; no upload.
 publish_variant() {  # publish_variant <apk>
     local apk=$1 name=$app-test-$build.apk size sha
+    build_output "$apk"
     size=$(stat -c %s "$apk")
     sha=$(sha256sum "$apk" | cut -d' ' -f1)
     install -m 644 "$apk" "$RELEASE/$name"
@@ -361,6 +373,15 @@ publish_variant() {  # publish_variant <apk>
     trap - ERR
     answer "$RELEASE" state ok
     echo "$name gebaut ($size Bytes)."
+}
+
+# What a build left is copied by root and published: only a plain file, never a link the
+# container made (to /etc/shadow, say).
+build_output() {
+    if [[ ! -f $1 || -L $1 ]]; then
+        echo "FEHLER: $1 fehlt oder ist kein normales File."
+        return 1
+    fi
 }
 
 answer() {  # answer <root-owned dir> <file> <text>: replaced atomically, readable by all
@@ -406,10 +427,11 @@ test_key() {
     install -d -m 700 "$keys"
     local password
     password=$(head -c 24 /dev/urandom | base64 | tr -d '/+=')
-    docker run --rm -v "$keys:/keys" "$image" keytool -genkeypair -noprompt \
+    KS_PASS=$password docker run --rm -e KS_PASS -v "$keys:/keys" "$image" \
+        keytool -genkeypair -noprompt \
         -keystore /keys/test.keystore -storetype PKCS12 -alias test -keyalg RSA -keysize 4096 \
         -validity 10000 -dname "CN=allskyhub test builds" \
-        -storepass "$password" -keypass "$password"
+        -storepass:env KS_PASS -keypass:env KS_PASS
     chmod 600 "$keys/test.keystore"
     (umask 077; printf 'ALLSKYHUB_KEYSTORE_PASSWORD=%s\nALLSKYHUB_KEY_ALIAS=test\nALLSKYHUB_KEY_PASSWORD=%s\n' \
         "$password" "$password" > "$keys/keystore.env")

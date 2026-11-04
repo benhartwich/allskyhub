@@ -17,7 +17,7 @@ from allskyhub_server.auth.sessions import SessionInfo
 from allskyhub_server.web import flash
 from allskyhub_server.web.deps import CurrentSession, SettingsDep, csrf_protect
 from allskyhub_server.web.render import render
-from allskyhub_server.web.routes_admin import admin_only
+from allskyhub_server.web.routes_admin import admin_only, confirmed
 
 router = APIRouter(dependencies=[Depends(csrf_protect)])
 log = logging.getLogger(__name__)
@@ -173,4 +173,36 @@ async def apps_action(
         request, session,
         notice=f"{name}: {TITLES[action]} gestartet; das dauert ein bis zwei Minuten. "
         "Danach die Seite neu laden.",
+    )  # fmt: skip
+
+
+@router.post("/admin/apps/review-account")
+async def review_account(
+    request: Request,
+    session: CurrentSession,
+    settings: SettingsDep,
+    app: Annotated[str, Form(max_length=32)],
+    login: Annotated[str, Form(max_length=254)],
+    secret: Annotated[str, Form(max_length=256)],
+    password: Annotated[str, Form(max_length=1024)],
+) -> Response:
+    """The demo account a further app's screenshot run signs in with; "Einrichten" puts
+    it into the app's Codemagic group <key>_screenshots. Never shown again."""
+    admin_only(session, settings)
+    other = admin_stores.OTHER_APPS.get(app)
+    if other is None or not other.review_vars:
+        return await apps_page(request, session, 400, error="Diese App braucht kein Demo-Konto.")
+    if not await confirmed(request, session, password):
+        return await apps_page(request, session, 400, error="Dein Passwort stimmt nicht.")
+    try:
+        value, meta = admin_stores.parse_review(login, secret)
+    except admin_stores.StoreError as exc:
+        return await apps_page(request, session, 400, error=f"{other.title}: {exc}")
+    stores: admin_stores.Stores = request.app.state.stores
+    stores.vault.put(other.review, value, meta, session.user.email)
+    log.info("demo account for %s screenshots set by %s", other.key, session.user.email)
+    return await apps_page(
+        request, session,
+        notice=f"{other.title}: Demo-Konto gespeichert. Jetzt „Einrichten“, dann „Screenshots "
+        "erzeugen“.",
     )  # fmt: skip

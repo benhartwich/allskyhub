@@ -4,7 +4,9 @@
 set -eu
 FILE=/var/lib/allskyhub-agent/wifi-country
 [ -f "$FILE" ] || exit 0
-country=$(head -c 3 "$FILE" | tr -d '\n')
+# Read as the agent: root never follows a link in the agent's folder (security review
+# 2026-11-04).
+country=$(runuser -u allskyhub -- head -c 3 -- "$FILE" | tr -d '\n')
 case "$country" in
     [A-Z][A-Z]) ;;
     *) echo "invalid Wi-Fi country '$country'"; exit 1 ;;

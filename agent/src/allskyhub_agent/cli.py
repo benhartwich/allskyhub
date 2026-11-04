@@ -56,6 +56,7 @@ from allskyhub_agent.discovery import Announcer, host_name, local_ipv4
 from allskyhub_agent.hub.identity import DEFAULT_KEY_PATH, DeviceIdentity
 from allskyhub_agent.hub.pairing import PairingState
 from allskyhub_agent.hub.public import PublicPage
+from allskyhub_agent.importer import privileges
 from allskyhub_agent.importer.allsky import AllskyImporter, AllskySettings
 from allskyhub_agent.importer.backlog import BACKLOG_NAME, Backlog
 from allskyhub_agent.importer.common import ImportReport
@@ -242,6 +243,7 @@ def run_import(args: argparse.Namespace) -> int:
     data: Path = args.data
     st = data.stat()
     owner = (st.st_uid, st.st_gid)
+    as_root = privileges.drop_to(*owner)
     store = ImageStore(data, tz)
     allsky = AllskySettings.load(args.source)
     camera = current.camera if current.camera != "auto" else None
@@ -249,6 +251,8 @@ def run_import(args: argparse.Namespace) -> int:
     importer = AllskyImporter(
         args.source, store, EventStore(store), tz, profile, copy=args.copy, owner=owner
     )
+    if as_root:
+        importer.refused_owners = frozenset({0, owner[0]})
     print(f"Allsky in {args.source}: {allsky.location or 'no place'}, {allsky.camera_name}, "
           f"{allsky.latitude}, {allsky.longitude}")  # fmt: skip
     only = set(args.nights.split(",")) if args.nights else None
@@ -272,6 +276,7 @@ def run_import_indi(args: argparse.Namespace) -> int:
     data: Path = args.data
     st = data.stat()
     owner = (st.st_uid, st.st_gid)
+    as_root = privileges.drop_to(*owner)
     store = ImageStore(data, tz)
     db: Path = args.db
     if not db.is_file():
@@ -294,6 +299,8 @@ def run_import_indi(args: argparse.Namespace) -> int:
     importer = IndiAllskyImporter(db, store, tz, profile, camera_id=cam_id,
                                   image_folder=args.images, copy=args.copy,
                                   owner=owner)  # fmt: skip
+    if as_root:
+        importer.refused_owners = frozenset({0, owner[0]})
     print(
         f"indi-allsky in {db}: {indi.location or 'no place'}, {indi.camera_name}, "
         f"{indi.latitude}, {indi.longitude}, images in {args.images or indi.image_folder}"

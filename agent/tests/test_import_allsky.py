@@ -16,7 +16,7 @@ from PIL import Image as PILImage
 
 from allskyhub_agent.cli import run_import
 from allskyhub_agent.detect.events import EventStore
-from allskyhub_agent.importer import common
+from allskyhub_agent.importer import common, privileges
 from allskyhub_agent.importer.allsky import AllskyImporter, AllskySettings, coordinate
 from allskyhub_agent.importer.backlog import Backlog
 from allskyhub_agent.products.build import night_products
@@ -304,3 +304,48 @@ def test_website_only_nights_keep_products_not_frames(tmp_path: Path) -> None:
     oldest = (datetime.now(UTC) - datetime(2025, 10, 12, tzinfo=UTC)).days
     assert s.keep_days <= max(oldest_frames + 2, AgentSettings().keep_days)
     assert s.keep_product_days >= oldest
+
+
+def test_links_out_of_allsky_are_never_taken_over(tmp_path: Path) -> None:
+    """Security review 2026-11-04: the import runs as root; a link in Allsky's folders, or a
+    meteor "file" with ".." or an absolute path, must not bring another file over."""
+    home = make_allsky(tmp_path)
+    secret = tmp_path / "secret.jpg"
+    _jpeg(secret, 99)
+    day = home / "images" / "20261011"
+    (day / "image-20261011220000.jpg").symlink_to(secret)
+    (day / "keogram" / "keogram-20261011.jpg").unlink()
+    (day / "keogram" / "keogram-20261011.jpg").symlink_to(secret)
+    (day / "meteors" / "meteors-20261012031500.json").write_text(json.dumps([
+        {"time": "20261012031500", "file": "../../../../secret.jpg", "length": 106.6},
+        {"time": "20261012031600", "file": str(secret), "length": 106.6},
+    ]))  # fmt: skip
+    imp, store, events = make_importer(tmp_path, home)
+    r = imp.run()
+    assert r.unsupported == {"not a file in the imported folders": 2}
+    assert r.images == 3  # the link is no image of Allsky's
+    names = {f.name for f in store.read_index("20261011")}
+    assert "image-20261011220000.jpg" not in names
+    assert not (store.night_dir("20261011") / "image-20261011220000.jpg").exists()
+    assert not (store.night_dir("20261011") / "keogram.jpg").exists()
+    meteors = events.night_events("20261011")
+    assert len(meteors) == 2
+    assert not any(m.has_image for m in meteors)
+    assert secret.stat().st_nlink == 1  # never hard-linked
+
+
+def test_files_of_refused_owners_are_never_taken_over(tmp_path: Path) -> None:
+    """Started as root, files of root or of the agent are not Allsky's (cli.py)."""
+    home = make_allsky(tmp_path)
+    imp, store, _ = make_importer(tmp_path, home)
+    imp.refused_owners = frozenset({os.getuid()})  # this test's files stand for root's
+    r = imp.run(only={"20261011"})
+    assert (r.images, r.linked, r.copied) == (0, 0, 0)
+    assert store.read_index("20261011") == []
+
+
+@pytest.mark.skipif(os.geteuid() == 0, reason="as root it would really drop root")
+def test_privileges_only_change_for_root() -> None:
+    assert privileges.drop_to(4242, 4242) is False
+    with privileges.capability(privileges.CAP_FOWNER):
+        pass  # a no-op without a drop

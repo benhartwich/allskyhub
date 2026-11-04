@@ -20,7 +20,8 @@ if [ "$ok" -ne 1 ]; then
     mv "$KEY.tmp" "$KEY"
 fi
 install -d -o allskyhub -g allskyhub -m 0750 /var/lib/allskyhub-agent
-umask 077
-printf '%s\n' "$key" > "$COPY.tmp"
-chown allskyhub:allskyhub "$COPY.tmp"
-mv "$COPY.tmp" "$COPY"
+# Written by the agent itself, never by root: the folder is the agent's, and a link planted
+# there must not make root write elsewhere (security review 2026-11-04). The key goes
+# through stdin, never on a command line.
+# shellcheck disable=SC2016  # $1 is the inner shell's
+printf '%s\n' "$key" | runuser -u allskyhub -- sh -c 'umask 077; cat > "$1.tmp" && mv -f -- "$1.tmp" "$1"' _ "$COPY"

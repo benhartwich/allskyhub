@@ -614,7 +614,7 @@ def make_handler(
             tls.on_change()
 
         def _login_needed(self, path: str) -> bool:
-            if auth is None or not auth.paired or path in _OPEN or path.startswith(_DESIGN):
+            if auth is None or not auth.locked or path in _OPEN or path.startswith(_DESIGN):
                 return False
             return not auth.valid(self._cookie(SESSION_COOKIE))
 
@@ -806,6 +806,16 @@ def make_handler(
                     self._text(HTTPStatus.NOT_FOUND, "no hub configured")
                     return
                 info = asdict(pairing.info())
+                if (
+                    auth is not None
+                    and auth.locked
+                    and not auth.valid(self._cookie(SESSION_COOKIE))
+                    and not self._from_setup_network()
+                ):
+                    # Unpaired but locked by the last owner's offline code (security review
+                    # 2026-11-04): the new pairing code only after a login, or in the setup
+                    # network, else anyone in the network could pair the camera to themselves.
+                    info["pairing_code"] = info["expires_in"] = None
                 info["setup_mode"] = setup is not None and setup.active
                 err = setup.last_error if setup is not None else None
                 info["last_error"] = err.value if err is not None else None

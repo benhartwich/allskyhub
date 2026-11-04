@@ -996,7 +996,8 @@ names the setting. A browser `POST` whose `Origin` is not the address the UI was
 under is refused with `403` (cross-site request forgery); requests without `Origin`
 (the app, scripts) are not affected. No page may be framed (`X-Frame-Options: DENY`).
 
-**Unpaired**, nothing changes: no login. **Paired**, every page and API of the local UI
+**Unpaired**, nothing changes: no login, unless the camera still has the offline code of
+its last pairing (see Unpairing below). **Paired**, every page and API of the local UI
 needs a local session, except `GET /api/setup` (no secrets; the app's onboarding polls
 it), `GET /api/health` (version and frame count for the updater and the watchdog, §8),
 the login routes below and the static files. There are two ways to log in; both
@@ -1051,8 +1052,20 @@ connection from 127.0.0.1 or ::1, as for `<base>`). The agent stores only a hash
 with the way of login and the time, persistently in its data directory (mode 0600), so
 sessions survive restarts and updates. Logging out deletes it.
 
-**Unpairing.** When the hub says the device is no longer paired (close code 4403 or
-`paired: false`), the agent deletes all sessions, the offline verifier and the hub keys.
+**Unpairing** (security review, Benjamin 2026-11-04). When the hub says the device is no
+longer paired (close code 4403, `paired: false` or a token refused with 403, also after the
+account was deleted), the agent deletes the hub keys and the sessions opened through the
+hub (login A). It keeps the offline verifier and the sessions opened with the code: while
+it has a verifier the local UI stays locked as if paired, so unpairing on the hub does not
+open the camera to the whole network. In that state `GET /api/setup` shows the new
+`pairing_code` (and `expires_in`) only with a session or in the setup network (§7.1),
+else `null`, so nobody else in the network can pair the camera to their account; the login
+page hides login A and says the camera is unpaired. Without a verifier the camera is open
+as before. The lock ends with the next pairing that follows a pairing code from the hub
+(possibly another owner's): then the agent deletes the old verifier and all sessions. A
+pairing that comes back without a new pairing code (a token refused once) is the same and
+keeps them. Without the code only a reset helps: writing the SD card again (or deleting
+`local_auth.json` in the data directory).
 
 **Public page.** The local UI manages the public page (§6.8) through the agent, which
 forwards to `GET` and `PUT /device/v1/public`. Writing needs a session. While the hub is

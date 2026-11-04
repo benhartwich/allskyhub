@@ -191,16 +191,68 @@ def test_sessions_expire_after_30_days(tmp_path: Path) -> None:
     assert not auth.valid(token)
 
 
-def test_unpairing_forgets_everything(tmp_path: Path, verifier: str) -> None:
+def test_clear_forgets_everything(tmp_path: Path, verifier: str) -> None:
     auth, _, _ = make_auth(tmp_path)
+    auth.mark_paired()
     auth.set_verifier(verifier)
     auth.set_hub_keys([Hub().hub_key])
     token = auth.open_session("code")
     auth.clear()
-    assert not auth.paired
+    assert not auth.locked
     assert not auth.has_code
     assert not auth.valid(token)
     assert json.loads((tmp_path / "local_auth.json").read_text())["hub_keys"] == []
+
+
+def test_unpairing_keeps_the_offline_code(tmp_path: Path, verifier: str) -> None:
+    """Security review 2026-11-04: unpaired on the hub (or the account deleted), the local UI
+    stays locked with the offline code; the hub keys and the hub's sessions go."""
+    auth, wall, mono = make_auth(tmp_path)
+    auth.mark_paired()
+    auth.set_verifier(verifier)
+    auth.set_hub_keys([Hub().hub_key])
+    by_code, by_hub = auth.open_session("code"), auth.open_session("hub", "user-1")
+    auth.mark_unpaired(code_given=False)
+    assert not auth.paired
+    assert auth.locked
+    assert auth.valid(by_code)
+    assert not auth.valid(by_hub)
+    assert auth.check_code(CODE) == "ok"
+    data = json.loads((tmp_path / "local_auth.json").read_text())
+    assert data["hub_keys"] == []
+    assert LocalAuth(tmp_path / "local_auth.json", DEVICE, clock=wall, monotonic=mono).locked
+
+
+def test_unpairing_without_a_code_opens_the_ui(tmp_path: Path) -> None:
+    auth, _, _ = make_auth(tmp_path)
+    auth.mark_paired()
+    token = auth.open_session("hub", "user-1")
+    auth.mark_unpaired(code_given=True)
+    assert not auth.locked
+    assert not auth.valid(token)
+
+
+def test_a_new_pairing_forgets_the_old_code(tmp_path: Path, verifier: str) -> None:
+    auth, _, _ = make_auth(tmp_path)
+    auth.mark_paired()
+    auth.set_verifier(verifier)
+    token = auth.open_session("code")
+    auth.mark_unpaired(code_given=True)  # the hub gave a pairing code: maybe a new owner
+    auth.mark_paired()
+    assert not auth.has_code
+    assert not auth.valid(token)
+    assert auth.locked  # paired: login through the new owner's hub account
+
+
+def test_back_to_the_same_pairing_keeps_the_code(tmp_path: Path, verifier: str) -> None:
+    """A token refused once (no pairing code given) and then paired again is the same
+    pairing: the owner's code stays."""
+    auth, _, _ = make_auth(tmp_path)
+    auth.mark_paired()
+    auth.set_verifier(verifier)
+    auth.mark_unpaired(code_given=False)
+    auth.mark_paired()
+    assert auth.has_code
 
 
 def test_valid_assertion_gives_the_user(tmp_path: Path) -> None:
@@ -291,7 +343,7 @@ class Client:
 def server(tmp_path: Path) -> Iterator[tuple[WebServer, LocalAuth, PairingState]]:
     pairing = PairingState(DEVICE, "https://hub.example", "sim", "0.1.0")
     auth = LocalAuth(tmp_path / "local_auth.json", DEVICE)
-    pairing.watch(auth.mark_paired, auth.clear)
+    pairing.watch(auth.mark_paired, auth.mark_unpaired)
     web = WebServer(LiveState(), "127.0.0.1", 0, pairing, auth=auth)
     web.start()
     yield web, auth, pairing
@@ -371,18 +423,41 @@ def test_reverse_proxy_on_loopback_sets_base_and_secure(
     assert "HttpOnly" in cookie
 
 
-def test_unpairing_locks_out_again(
+def test_unpairing_keeps_the_ui_locked(
     server: tuple[WebServer, LocalAuth, PairingState], verifier: str
 ) -> None:
+    """Security review 2026-11-04: after unpairing only the offline code opens the UI, and
+    the new pairing code is shown only after that login."""
     web, auth, pairing = server
     pairing.set_paired()
     auth.set_verifier(verifier)
+    pairing.set_unpaired("ABC234", 900, time.monotonic())
     c = Client(web.port)
-    c.request("POST", "/local-login/code", {"code": CODE})
-    pairing.set_unpaired("ABC234", 900, 0.0)
-    assert not auth.has_code
-    pairing.set_paired()
     assert c.request("GET", "/api/status").status == 401
+    conn = http.client.HTTPConnection("127.0.0.1", web.port, timeout=10)
+    conn.request("GET", "/api/setup", headers={"Host": "cam.local"})
+    assert json.loads(conn.getresponse().read())["pairing_code"] is None
+    c.request("POST", "/local-login/code", {"code": CODE})
+    assert c.request("GET", "/api/status").status == 200
+    conn = http.client.HTTPConnection("127.0.0.1", web.port, timeout=10)
+    conn.request(
+        "GET",
+        "/api/setup",
+        headers={"Host": "cam.local", "Cookie": f"ash_session={c.cookies['ash_session']}"},
+    )
+    assert json.loads(conn.getresponse().read())["pairing_code"] == "ABC234"
+    pairing.set_paired()  # a new pairing: the old code is gone
+    assert not auth.has_code
+    assert c.request("GET", "/api/status").status == 401
+
+
+def test_unpairing_without_a_code_needs_no_login(
+    server: tuple[WebServer, LocalAuth, PairingState],
+) -> None:
+    web, _, pairing = server
+    pairing.set_paired()
+    pairing.set_unpaired("ABC234", 900, time.monotonic())
+    assert Client(web.port).request("GET", "/api/status").status == 200
 
 
 def test_page_files_and_design_are_open(server: tuple[WebServer, LocalAuth, PairingState]) -> None:

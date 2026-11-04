@@ -93,6 +93,10 @@ the camera is paired, it asks for a login ([SPEC §7.4](SPEC.md)):
 - **Offline code:** for when the internet is down. You create it on the hub under the
   camera's settings.
 
+If you remove the camera from your account (or delete the account), a camera with an
+offline code stays locked: log in with the code to see the new pairing code. Without the
+code, write the SD card again.
+
 ### 2.6 Install on an existing Raspberry Pi, next to Allsky
 
 If a Pi already runs [Allsky](https://github.com/AllskyTeam/allsky), the agent can run on it

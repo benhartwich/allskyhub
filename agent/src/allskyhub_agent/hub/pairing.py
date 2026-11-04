@@ -34,10 +34,11 @@ class PairingState:
         self._code_deadline: float | None = None
         self._connected = False
         self._on_paired: Callable[[], None] | None = None
-        self._on_unpaired: Callable[[], None] | None = None
+        self._on_unpaired: Callable[[bool], None] | None = None
 
-    def watch(self, on_paired: Callable[[], None], on_unpaired: Callable[[], None]) -> None:
-        """Called on every answer from the hub about pairing (the local login, SPEC §7.4)."""
+    def watch(self, on_paired: Callable[[], None], on_unpaired: Callable[[bool], None]) -> None:
+        """Called on every answer from the hub about pairing (the local login, SPEC §7.4);
+        `on_unpaired` gets whether the hub gave a pairing code."""
         self._on_paired, self._on_unpaired = on_paired, on_unpaired
 
     def set_unpaired(self, code: str | None, expires_in: int | None, now: float) -> None:
@@ -46,7 +47,7 @@ class PairingState:
             self._code = code
             self._code_deadline = now + expires_in if code and expires_in else None
         if self._on_unpaired is not None:
-            self._on_unpaired()
+            self._on_unpaired(code is not None)
 
     def set_paired(self) -> None:
         with self._lock:

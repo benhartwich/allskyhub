@@ -807,7 +807,7 @@ def main(argv: list[str] | None = None) -> int:
         pairing = PairingState(identity.device_id, hub_url, profile_id, __version__)
         # SPEC §7.4: a paired camera's local UI needs a login.
         local_auth = LocalAuth(args.data / "local_auth.json", identity.device_id)
-        pairing.watch(local_auth.mark_paired, local_auth.clear)
+        pairing.watch(local_auth.mark_paired, local_auth.mark_unpaired)
 
         def status() -> Status | None:
             f = live.last_frame()

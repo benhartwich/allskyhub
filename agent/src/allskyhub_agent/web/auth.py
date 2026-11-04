@@ -4,7 +4,8 @@ Two ways to open a session: a hub-signed assertion (single sign-on with the alls
 account) or the camera's offline code, of which the hub sends only an Argon2id verifier
 (SPEC §6.5 `local_access`). Sessions, the verifier and the hub keys are kept in one JSON
 file in the data directory (mode 0600); only hashes of the session cookies are stored.
-Unpairing deletes all of it.
+Unpairing deletes the hub keys and the sessions opened through the hub; the offline code
+keeps the local UI locked until the camera is paired again (security review 2026-11-04).
 """
 
 from __future__ import annotations
@@ -81,6 +82,9 @@ class LocalAuth:
         self._sessions: dict[str, dict[str, Any]] = {}
         # Kept across restarts: a paired camera that cannot reach the hub stays locked.
         self._paired = False
+        # Unpaired and the hub gave a new pairing code: the next pairing may be another
+        # owner's, who must not be bound to the previous owner's offline code.
+        self._new_pairing = False
         self._verifier: str | None = None
         self._hub_keys: list[HubKey] = []
         self._load()
@@ -95,6 +99,7 @@ class LocalAuth:
             return
         d = cast(dict[str, Any], data)
         self._paired = d.get("paired") is True
+        self._new_pairing = d.get("new_pairing") is True
         sessions = d.get("sessions")
         if isinstance(sessions, dict):
             self._sessions = {
@@ -121,6 +126,7 @@ class LocalAuth:
     def _save(self) -> None:
         data = {
             "paired": self._paired,
+            "new_pairing": self._new_pairing,
             "sessions": self._sessions,
             "verifier": self._verifier,
             "hub_keys": [k.model_dump() for k in self._hub_keys],
@@ -151,26 +157,63 @@ class LocalAuth:
             self._save()
 
     def mark_paired(self) -> None:
+        """Paired; a new pairing after unpairing starts without the old offline code and
+        its sessions (the new hub sends its own `local_access`)."""
         with self._lock:
-            if not self._paired:
-                self._paired = True
-                self._save()
+            if self._paired:
+                return
+            self._paired = True
+            if self._new_pairing:
+                self._new_pairing = False
+                self._verifier, self._sessions = None, {}
+            self._save()
+
+    def mark_unpaired(self, code_given: bool) -> None:
+        """Unpaired (SPEC §7.4): the hub keys and the hub's sessions go. The offline code
+        and its sessions stay, so the local UI stays locked (security review 2026-11-04:
+        after unpairing on the hub or deleting the account it was open to the whole
+        network); without a code it is open as before. `code_given`: the hub gave a new
+        pairing code, so the next pairing may be another owner's."""
+        with self._lock:
+            sessions = (
+                {h: s for h, s in self._sessions.items() if s.get("method") == "code"}
+                if self._verifier is not None
+                else {}
+            )
+            new_pairing = self._new_pairing or code_given
+            if (
+                not self._paired
+                and not self._hub_keys
+                and sessions == self._sessions
+                and new_pairing == self._new_pairing
+            ):
+                return
+            self._paired, self._new_pairing = False, new_pairing
+            self._sessions, self._hub_keys = sessions, []
+            self._nonces.clear()
+            self._save()
 
     def clear(self) -> None:
-        """Unpaired (SPEC §7.4): forget sessions, the verifier and the hub keys."""
+        """Forget everything: sessions, the verifier and the hub keys."""
         with self._lock:
             if not (self._paired or self._sessions or self._verifier or self._hub_keys):
                 return
-            self._paired = False
+            self._paired = self._new_pairing = False
             self._sessions, self._verifier, self._hub_keys = {}, None, []
             self._nonces.clear()
             self._save()
 
     @property
     def paired(self) -> bool:
-        """Whether the local UI needs a login (SPEC §7.4)."""
         with self._lock:
             return self._paired
+
+    @property
+    def locked(self) -> bool:
+        """Whether the local UI needs a login (SPEC §7.4): paired, or unpaired with the
+        offline code of the last pairing."""
+        with self._lock:
+            return self._paired or self._verifier is not None
 
     @property
     def has_code(self) -> bool:

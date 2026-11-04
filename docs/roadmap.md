@@ -167,6 +167,7 @@ again in the code. Benjamin decided the open questions on 2026-10-13.
 | S7 | ✅ Image: nftables input filter, narrower polkit rule for NetworkManager, reboot by day for security updates | agent | SPEC §8; reboot: #215 |
 | S8 | ✅ Wi-Fi credentials without control characters | agent | #204 |
 | S9 | ✅ Update end to end in CI: the built image boots in a container, installs a newer signed release, rolls it back when asked and rolls back a broken one by itself; a release is published only after it passed | agent | Benjamin, 2026-10-17; `tools/e2e/update-e2e.sh`, job `update-e2e` |
+| S10 | ✅ After unpairing (or deleting the account) a camera with an offline code stays locked; the new pairing code only after that login or in the setup network | agent | Security review 2026-11-04, Benjamin's OK the same day; SPEC §7.4 Unpairing |
 
 Leftovers of the hub audit (2026-10-13), done 2026-10-14 after Benjamin's "Mach alles":
 

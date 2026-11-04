@@ -22,7 +22,9 @@
 <main class="auth">
   <h1 data-i18n="heading">Kamera anmelden</h1>
   <p class="msg error" id="error" role="alert" hidden></p>
-  <section class="card stack">
+  <p class="msg" id="unpaired" hidden data-i18n="unpaired">Diese Kamera ist entkoppelt. Melde dich mit dem
+    Offline-Code an oder setze sie zurück (SD-Karte neu bespielen).</p>
+  <section class="card stack" id="hub-login">
     <a class="button" href="local-login/start" data-i18n="hub">Mit allskyhub anmelden</a>
     <p class="muted small" data-i18n="hubHelp">Mit dem Konto, dem diese Kamera gehört.</p>
   </section>
@@ -54,6 +56,7 @@ const TEXTS = {
     locked: "Zu viele Fehlversuche. Bitte 15 Minuten warten oder mit allskyhub anmelden.",
     no_code: "Für diese Kamera ist kein Offline-Code eingerichtet.",
     failed: "Die Anmeldung über allskyhub hat nicht geklappt. Bitte noch einmal versuchen.",
+    unpaired: "Diese Kamera ist entkoppelt. Melde dich mit dem Offline-Code an oder setze sie zurück (SD-Karte neu bespielen).",
   },
   en: {
     title: "Log in – allskyhub camera",
@@ -68,6 +71,7 @@ const TEXTS = {
     locked: "Too many failed attempts. Please wait 15 minutes or log in with allskyhub.",
     no_code: "No offline code is set up for this camera.",
     failed: "Logging in through allskyhub did not work. Please try again.",
+    unpaired: "This camera is unpaired. Log in with the offline code or reset it (write the SD card again).",
   },
 };
 const LANG = (navigator.language || "").toLowerCase().startsWith("de") ? "de" : "en";
@@ -84,6 +88,13 @@ if (e && MESSAGES[e]) {
   el.textContent = MESSAGES[e];
   el.hidden = false;
 }
+// Unpaired but still locked with the last owner's offline code (security review
+// 2026-11-04): the hub no longer knows the camera, so only the code works.
+fetch("api/setup").then((r) => r.json()).then((info) => {
+  if (info.paired) return;
+  document.getElementById("hub-login").hidden = true;
+  document.getElementById("unpaired").hidden = false;
+}).catch(() => {});
 </script>
 </body>
 </html>

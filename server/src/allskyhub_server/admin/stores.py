@@ -222,6 +222,7 @@ OTHER_APPS = {
             "en-US": "Sign in to bortle.eu or your own server, plan and follow sessions. "
             "Feedback is welcome through TestFlight.",
         },
+        screenshots=True,  # bortle-app#4
     ),
     # Benjamin, 2026-10-29: Vinventory, an Expo app (React Native) in a private repository;
     # Android built on the hub's server like the others (deploy/android, app=vinventory).

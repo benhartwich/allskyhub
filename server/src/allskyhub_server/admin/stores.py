@@ -251,6 +251,7 @@ OTHER_APPS = {
         app_paths=("apps/mobile", "packages/shared", "package-lock.json"),
         # A wine cellar: alcohol throughout (its store/README.md: 17+ at Apple).
         age_rating={"alcoholTobaccoOrDrugUseOrReferences": "FREQUENT_OR_INTENSE"},
+        screenshots=True,  # vinventory#8
     ),
     # Benjamin, 2026-10-30: the Currywurst Test app (Flutter, private repository) on the
     # same accounts and keys; Android built on the hub's server (app=currywursttest).

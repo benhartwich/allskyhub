@@ -7,6 +7,7 @@ import base64
 import hashlib
 import json
 import plistlib
+from dataclasses import replace
 from pathlib import Path
 from typing import Any
 
@@ -2078,5 +2079,6 @@ async def test_screenshots_from_codemagic(tmp_path: Path) -> None:
 
 async def test_screenshots_only_where_the_workflow_is() -> None:
     hub = stores.Stores.__new__(stores.Stores)
+    app = replace(stores.OTHER_APPS["vinventory"], screenshots=False)
     with pytest.raises(stores.StoreError, match="noch keine Screenshots"):
-        await hub.build("screenshots", "a", app=stores.OTHER_APPS["vinventory"])
+        await hub.build("screenshots", "a", app=app)

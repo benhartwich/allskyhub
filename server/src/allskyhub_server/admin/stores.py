@@ -30,6 +30,7 @@ import os
 import plistlib
 import re
 import secrets as _random
+import shutil
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -54,6 +55,16 @@ APP_PATHS = ("app",)  # allskyhub's commits that change the app (OtherApp.app_pa
 APP_NAME = "allskyhub"
 GROUP = "allskyhub_store"  # Codemagic variable group, read by codemagic.yaml
 WORKFLOWS = {"ios": "ios-release"}  # Android builds on the hub's server (deploy/android)
+# Store screenshots from the real app (Benjamin, 2026-11-04: "wieso machen wir keine
+# Screenshots beim iOS- und APK-Build?"): a manual Codemagic workflow drives the app in an
+# iPhone simulator and an Android emulator and keeps the pictures as artefacts named
+# <store>_<locale>_<NN-name>.png; "Screenshots übernehmen" fetches them into the vault,
+# and the listing pushes take them before the repository's.
+SCREENSHOT_WORKFLOW = "store-screenshots"
+SHOT_NAME = re.compile(r"^(appstore|play)_(de-DE|en-US)_(\d{2}-[a-z0-9-]{1,40})\.png$")
+IPHONE_SHOT = (1290, 2796)  # appstore.DISPLAY_TYPE, APP_IPHONE_67
+SHOTS_MAX = {"appstore": 10, "play": 8}
+SHOT_MAX_BYTES = 8_000_000
 PLATFORMS = ("android", "ios")
 KEY_ALIAS = "upload"
 MAX_UPLOAD = 64 * 1024
@@ -171,6 +182,8 @@ class OtherApp:
     capabilities: tuple[str, ...] = ("PUSH_NOTIFICATIONS",)
     # Its iOS entitlements in the repository, read on setup (ENTITLEMENT_CAPABILITIES).
     entitlements: str = "ios/Runner/Runner.entitlements"
+    # Its codemagic.yaml has the store-screenshots workflow (SCREENSHOT_WORKFLOW).
+    screenshots: bool = False
 
     @property
     def version_name(self) -> str:
@@ -264,6 +277,7 @@ OTHER_APPS = {
         private=True,
         # Ratings, photos and suggestions by users, moderated (report and block in the app).
         age_rating={"userGeneratedContent": True},
+        screenshots=True,
     ),
 }
 # A repository's store folder, downloaded for a listing push (codeload, no API quota).
@@ -1332,6 +1346,8 @@ class Stores:
         self, platform: str, by: str, branch: str = "main", app: OtherApp | None = None
     ) -> str:
         """Start a release build; the build id (Codemagic's, or "local")."""
+        if platform == "screenshots" and app is not None and not app.screenshots:
+            raise StoreError("Diese App macht noch keine Screenshots bei Codemagic.")
         if platform == "android":
             self.request_android(by, app)
             return "local"
@@ -1339,7 +1355,10 @@ class Stores:
         app_id = self.other_app_id(app) if app else meta.get("app_id")
         if not isinstance(app_id, str):
             raise StoreError("Erst „Prüfen und einrichten“, dann bauen.")
-        workflow = app.workflow if app else WORKFLOWS[platform]
+        if platform == "screenshots":
+            workflow = SCREENSHOT_WORKFLOW
+        else:
+            workflow = app.workflow if app else WORKFLOWS[platform]
         client = self._http()
         try:
             r = await client.post(
@@ -1399,6 +1418,97 @@ class Stores:
         finally:
             await self._close(client)
         return out
+
+    def generated_dir(self, key: str) -> Path:
+        """The screenshots an app made at Codemagic: ``<store>/<locale>/NN-name.png``."""
+        return self.vault.root / "generated" / key
+
+    async def take_screenshots(self, app: OtherApp | None = None) -> Report:
+        """The newest finished store-screenshots build's pictures into ``generated_dir``,
+        checked like an upload: PNG, the App Store's iPhone size, Play's proportions."""
+        report = Report()
+        key = app.key if app else "allskyhub"
+        meta = self.vault.meta("codemagic") or {}
+        app_id = self.other_app_id(app) if app else meta.get("app_id")
+        if not isinstance(app_id, str) or not self.vault.has("codemagic"):
+            report.add("Screenshots", "fail", "Erst „Einrichten“, dann Screenshots erzeugen.")
+            return report
+        client = self._http()
+        try:
+            auth = self._cm_auth("Screenshots")
+            r = await client.get(f"{CODEMAGIC_V1}/builds", params={"appId": app_id}, headers=auth)
+            if r.status_code != 200:
+                raise StoreError(f"Codemagic: {_message(r)}")
+            done = [
+                b
+                for b in _list(_dict(r.json()).get("builds"))
+                if SCREENSHOT_WORKFLOW in (b.get("fileWorkflowId"), b.get("workflowId"))
+                and b.get("status") == "finished"
+            ]
+            if not done:
+                raise StoreError("Noch kein fertiger Lauf „Screenshots erzeugen“ bei Codemagic.")
+            build = max(done, key=lambda b: str(b.get("startedAt", "")))
+            artefacts = _list(build.get("artefacts"))
+            if not artefacts and build.get("_id"):
+                r = await client.get(f"{CODEMAGIC_V1}/builds/{build['_id']}", headers=auth)
+                if r.status_code == 200:
+                    artefacts = _list(_dict(_dict(r.json()).get("build")).get("artefacts"))
+            found: dict[str, dict[str, list[tuple[str, bytes]]]] = {}
+            for a in artefacts:
+                m = SHOT_NAME.fullmatch(str(a.get("name", "")))
+                url = str(a.get("url", ""))
+                if m is None or not url.startswith(("https://api.codemagic.io/", CODEMAGIC_V1)):
+                    continue
+                store, locale, name = m.groups()
+                r = await client.get(url, headers=auth, follow_redirects=True)
+                if r.status_code != 200 or len(r.content) > SHOT_MAX_BYTES:
+                    raise StoreError(f"{a.get('name')}: nicht ladbar ({r.status_code}).")
+                size, suffix = image_size(r.content)
+                if suffix != ".png" or size is None:
+                    raise StoreError(f"{a.get('name')}: kein PNG.")
+                short, long = sorted(size)
+                fits = (
+                    size == IPHONE_SHOT
+                    if store == "appstore"
+                    else short >= 320 and long <= 3840 and long <= 2 * short
+                )
+                if not fits:
+                    raise StoreError(f"{a.get('name')}: {size[0]} x {size[1]} passt nicht.")
+                found.setdefault(store, {}).setdefault(locale, []).append((name, r.content))
+        except StoreError as exc:
+            report.add("Screenshots", "fail", str(exc))
+            return report
+        except httpx.HTTPError as exc:
+            report.add("Screenshots", "fail", f"Codemagic nicht erreichbar ({type(exc).__name__}).")
+            return report
+        finally:
+            await self._close(client)
+        if not found:
+            report.add("Screenshots", "fail", "Der letzte Lauf hat keine Screenshots abgelegt.")
+            return report
+        started = str(build.get("startedAt", ""))[:16].replace("T", " ")
+        for store, locales in found.items():
+            folder = self.generated_dir(key) / store
+            shutil.rmtree(folder, ignore_errors=True)
+            for locale, shots in locales.items():
+                (folder / locale).mkdir(mode=0o700, parents=True, exist_ok=True)
+                for name, data in sorted(shots)[: SHOTS_MAX[store]]:
+                    (folder / locale / f"{name}.png").write_bytes(data)
+            counts = ", ".join(
+                f"{loc}: {min(len(v), SHOTS_MAX[store])}" for loc, v in sorted(locales.items())
+            )
+            title = "App Store" if store == "appstore" else "Google Play"
+            report.add(
+                f"Screenshots {title}",
+                "ok",
+                f"{counts} (Lauf vom {started} UTC).",
+            )
+        report.add(
+            "Danach",
+            "ok",
+            "Sie gehen mit dem nächsten „App Store übertragen“ und „Play-Eintrag übertragen“ raus.",
+        )
+        return report
 
     # Android on the hub's server
 
@@ -1828,14 +1938,18 @@ class Stores:
 
     # Store listing
 
-    def screenshots(self, language: str | None = None, root: Path | None = None) -> list[Path]:
-        """The uploaded phone screenshots, else the repository's (made from the app with
-        sample data, app/test/store): the language's own (``<language>/screenshots``), else
-        the shared ones. With ``root`` (a further app's listing) only those."""
+    def screenshots(
+        self, language: str | None = None, root: Path | None = None, key: str = "allskyhub"
+    ) -> list[Path]:
+        """The uploaded phone screenshots, else those the app made at Codemagic
+        (``take_screenshots``), else the repository's (made from the app with sample data,
+        app/test/store): the language's own (``<language>/screenshots``), else the shared
+        ones. With ``root`` (a further app's listing) nothing uploaded."""
         listing = root or self.listing
         uploaded = [] if root is not None else [self.screenshot_dir]
+        made = [self.generated_dir(key) / "play" / language] if language else []
         own = [listing / language / "screenshots"] if language else []
-        for folder in (*uploaded, *own, listing / "screenshots"):
+        for folder in (*uploaded, *made, *own, listing / "screenshots"):
             if folder.is_dir():
                 found = sorted(p for p in folder.iterdir() if p.suffix in (".png", ".jpg"))
                 if found:
@@ -1990,7 +2104,9 @@ class Stores:
         if r.status_code != 200:
             raise StoreError(f"Kontaktdaten abgelehnt ({_message(r)}).")
         for language in LANGUAGES:
-            shots = self.screenshots(language, root if other else None)
+            shots = self.screenshots(
+                language, root if other else None, other.key if other else "allskyhub"
+            )
             texts = self.listing_texts(language, root)
             r = await client.put(f"{edit}/listings/{language}", json=texts, headers=auth)
             if r.status_code != 200:
@@ -2025,7 +2141,10 @@ class Stores:
         if r.status_code != 200:
             raise StoreError(f"Abschließen abgelehnt ({_message(r)}).")
         if any(
-            len(self.screenshots(lang, root if other else None)) < SCREENSHOTS[0]
+            len(
+                self.screenshots(lang, root if other else None, other.key if other else "allskyhub")
+            )
+            < SCREENSHOTS[0]
             for lang in LANGUAGES
         ):
             report.add(

@@ -32,6 +32,8 @@ TITLES = {
     "review-appstore": "iOS zur Prüfung einreichen",
     "apk": "APK zum Herunterladen holen",
     "build-test-apk": "Test-APK bauen",
+    "build-screenshots": "Screenshots erzeugen",
+    "take-screenshots": "Screenshots übernehmen",
 }
 
 
@@ -112,6 +114,16 @@ async def apps_action(
             report = await (stores.setup_other(other, by) if other else stores.setup(by))
             return await apps_page(
                 request, session, report=report, report_title=f"{name}: Einrichten"
+            )
+        if action == "build-screenshots":
+            await stores.build("screenshots", by, app=other)
+            return await apps_page(request, session, notice=f"{name}: Codemagic startet die App "
+                                   "im iPhone-Simulator und im Android-Emulator (etwa 20 Minuten); "
+                                   "danach „Screenshots übernehmen“.")  # fmt: skip
+        if action == "take-screenshots":
+            report = await stores.take_screenshots(other)
+            return await apps_page(
+                request, session, report=report, report_title=f"{name}: Screenshots übernehmen"
             )
         if action in ("build-android", "build-ios"):
             platform = action.removeprefix("build-")

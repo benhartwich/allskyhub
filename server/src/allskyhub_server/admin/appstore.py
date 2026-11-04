@@ -258,9 +258,12 @@ def texts(locale: str, root: Path = APPSTORE, play: Path = LISTING) -> dict[str,
     }
 
 
-def screenshots(locale: str, root: Path = APPSTORE) -> list[Path]:
-    folder = root / "screenshots" / locale
-    return sorted(folder.glob("*.png")) if folder.is_dir() else []
+def screenshots(locale: str, root: Path = APPSTORE, made: Path | None = None) -> list[Path]:
+    """Those the app made at Codemagic (``Stores.take_screenshots``), else the repository's."""
+    for folder in ((made / locale,) if made else ()) + (root / "screenshots" / locale,):
+        if folder.is_dir() and (found := sorted(folder.glob("*.png"))):
+            return found
+    return []
 
 
 async def push(
@@ -270,6 +273,7 @@ async def push(
     root: Path = APPSTORE,
     play: Path = LISTING,
     p: Profile = ALLSKYHUB,
+    made: Path | None = None,
 ) -> None:
     api = _Api(client, auth)
     apps = await api.items("/apps", "App", **{"filter[bundleId]": p.package})
@@ -334,7 +338,7 @@ async def push(
         )
     if version is not None:
         await _soft(report, "Versionsnummer", _version_string(api, version, p.version))
-        await _version_texts(api, report, version, root, play, p)
+        await _version_texts(api, report, version, root, play, p, made)
         await _soft(report, "Prüfnotizen", _review_notes(api, str(version["id"]), root))
 
     builds = await api.items(
@@ -426,6 +430,7 @@ async def _version_texts(
     root: Path,
     play: Path,
     p: Profile = ALLSKYHUB,
+    made: Path | None = None,
 ) -> None:
     """Texts and screenshots of the version in preparation, in both languages."""
     version_id = str(version["id"])
@@ -455,7 +460,7 @@ async def _version_texts(
             },
             f"Texte {locale}",
         )
-        shots = screenshots(locale, root)
+        shots = screenshots(locale, root, made)
         await _screenshots(api, localization, shots, locale)
         report.add(
             f"Texte und Screenshots {locale}",
@@ -780,14 +785,16 @@ async def push_report(stores: Stores, app: OtherApp | None = None) -> Report:
     client = stores.client or httpx.AsyncClient(timeout=UPLOAD_TIMEOUT)
     try:
         if app is None:
-            await push(client, stores.asc_auth, report)
+            made = stores.generated_dir("allskyhub") / "appstore"
+            await push(client, stores.asc_auth, report, made=made)
         else:
             # A further app's texts and screenshots: store/ of its repository's main.
             store = await stores.fetch_listing(client, app)
             # Its version (pubspec.yaml or app.json), fetched with store/.
             p = profile(app)
             p = replace(p, version=listing_version(stores, app))
-            await push(client, stores.asc_auth, report, store / "appstore", store / "play", p)
+            made = stores.generated_dir(app.key) / "appstore"
+            await push(client, stores.asc_auth, report, store / "appstore", store / "play", p, made)
     except StoreError as exc:
         report.add(TITLE, "fail", str(exc))
     except httpx.HTTPError as exc:

@@ -1357,7 +1357,7 @@ async def test_bortle_app_store_push_uses_its_profile(
 
     async def fake_push(
         client: object, auth: object, report: stores.Report, root: Path, play: Path,
-        p: appstore.Profile,
+        p: appstore.Profile, made: Path | None = None,
     ) -> None:  # fmt: skip
         calls.append((root, play, p))
         report.add("Name und Untertitel", "ok", "de-DE, en-US")
@@ -2003,3 +2003,80 @@ async def test_resubmit_after_apple_asked(tmp_path: Path) -> None:
         ("PATCH", "/v1/reviewSubmissions/S1", {"data": {
             "type": "reviewSubmissions", "id": "S1", "attributes": {"submitted": True}}}),
     ]  # fmt: skip
+
+
+def _png_header(width: int, height: int) -> bytes:
+    return b"\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR" + width.to_bytes(4) + height.to_bytes(4) + b"x"
+
+
+async def test_screenshots_from_codemagic(tmp_path: Path) -> None:
+    """Benjamin, 2026-11-04: screenshots of the real app, made at Codemagic, taken over by
+    the hub and pushed before the repository's."""
+    files = {
+        "appstore_de-DE_01-finden.png": _png_header(1290, 2796),
+        "appstore_de-DE_02-imbiss.png": _png_header(1290, 2796),
+        "play_de-DE_01-finden.png": _png_header(1080, 2160),
+        "notes.txt": b"x",
+    }
+    builds: list[dict[str, Any]] = [
+        {"_id": "OLD", "fileWorkflowId": "store-screenshots", "status": "finished",
+         "startedAt": "2026-11-01T10:00:00Z", "artefacts": []},
+        {"_id": "NEW", "fileWorkflowId": "store-screenshots", "status": "finished",
+         "startedAt": "2026-11-04T10:00:00Z", "artefacts": [
+             {"name": n, "url": f"https://api.codemagic.io/artifacts/NEW/{n}"} for n in files]},
+        {"_id": "IOS", "fileWorkflowId": "ios-release", "status": "finished",
+         "startedAt": "2026-11-05T10:00:00Z", "artefacts": []},
+    ]  # fmt: skip
+    seen: list[str] = []
+
+    def answer(request: httpx.Request) -> httpx.Response:
+        assert request.headers["x-auth-token"]
+        seen.append(request.url.path)
+        if request.url.path == "/builds":
+            assert request.url.params["appId"] == "APP3"
+            return httpx.Response(200, json={"builds": builds})
+        if request.url.path.startswith("/artifacts/NEW/"):
+            return httpx.Response(200, content=files[request.url.path.rsplit("/", 1)[1]])
+        return httpx.Response(404)
+
+    hub = stores.Stores(
+        tmp_path / "store",
+        "benhartwich/allskyhub",
+        httpx.AsyncClient(transport=httpx.MockTransport(answer)),
+    )
+    app = stores.OTHER_APPS["currywursttest"]
+    report = await hub.take_screenshots(app)
+    assert report.steps[0].state == "fail"  # no Codemagic token yet
+    hub.vault.put("codemagic", *stores.parse_codemagic("c" * 40), by="a")
+    hub.vault.update_meta("codemagic", currywursttest_app_id="APP3")
+    report = await hub.take_screenshots(app)
+    assert [(s.title, s.state) for s in report.steps] == [
+        ("Screenshots App Store", "ok"), ("Screenshots Google Play", "ok"), ("Danach", "ok"),
+    ], report.steps  # fmt: skip
+    assert "de-DE: 2" in report.steps[0].text
+    assert "/artifacts/NEW/notes.txt" not in seen
+    made = hub.generated_dir("currywursttest")
+    assert [p.name for p in appstore.screenshots("de-DE", tmp_path, made / "appstore")] == [
+        "01-finden.png", "02-imbiss.png",
+    ]  # fmt: skip
+    # English had none: the repository's stay.
+    (tmp_path / "screenshots" / "en-US").mkdir(parents=True)
+    (tmp_path / "screenshots" / "en-US" / "repo.png").write_bytes(b"x")
+    assert [p.name for p in appstore.screenshots("en-US", tmp_path, made / "appstore")] == [
+        "repo.png"
+    ]
+    play = hub.screenshots("de-DE", tmp_path, "currywursttest")
+    assert [p.name for p in play] == ["01-finden.png"]
+
+    # A wrong size is refused, and what was taken over stays.
+    files["appstore_de-DE_02-imbiss.png"] = _png_header(1170, 2532)
+    report = await hub.take_screenshots(app)
+    assert report.steps[0].state == "fail"
+    assert "1170 x 2532" in report.steps[0].text
+    assert len(appstore.screenshots("de-DE", tmp_path, made / "appstore")) == 2
+
+
+async def test_screenshots_only_where_the_workflow_is() -> None:
+    hub = stores.Stores.__new__(stores.Stores)
+    with pytest.raises(stores.StoreError, match="noch keine Screenshots"):
+        await hub.build("screenshots", "a", app=stores.OTHER_APPS["bortle"])

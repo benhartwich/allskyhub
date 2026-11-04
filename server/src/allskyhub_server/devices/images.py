@@ -22,13 +22,20 @@ class ImageStore:
     def __init__(self, root: Path) -> None:
         self.root = root
 
+    def _inside(self, device_id: str, path: Path) -> Path:
+        """Second line of defence (security review 2026-11-04): a path built from names a
+        camera sent never leaves that camera's folder, whatever got past the API."""
+        if not path.resolve().is_relative_to((self.root / device_id).resolve()):
+            raise ValueError(f"path outside the device folder: {path}")
+        return path
+
     def path(self, device_id: str, variant: FrameVariant) -> Path:
         """The newest image of a device."""
         return self.root / device_id / f"latest-{variant.value}.jpg"
 
     def frame_path(self, device_id: str, night_id: str, name: str, variant: FrameVariant) -> Path:
         """``night_id`` and ``name`` are validated by the API (no path separators)."""
-        return self.root / device_id / night_id / variant.value / name
+        return self._inside(device_id, self.root / device_id / night_id / variant.value / name)
 
     def save_frame(
         self, device_id: str, night_id: str, name: str, variant: FrameVariant, data: bytes
@@ -56,12 +63,17 @@ class ImageStore:
 
     def product_path(self, device_id: str, night_id: str, name: str, variant: FrameVariant) -> Path:
         """``name`` is one of the fixed product names (PRODUCT_NAMES)."""
-        return self.root / device_id / night_id / "products" / variant.value / name
+        return self._inside(
+            device_id, self.root / device_id / night_id / "products" / variant.value / name
+        )
 
     def delete_product(
         self, device_id: str, night_id: str, name: str, variant: FrameVariant
     ) -> None:
-        path = self.product_path(device_id, night_id, name, variant)
+        try:
+            path = self.product_path(device_id, night_id, name, variant)
+        except ValueError:  # a name that never was a file of this camera: nothing to delete
+            return
         path.unlink(missing_ok=True)
         for directory in (path.parent, path.parent.parent, path.parent.parent.parent):
             try:
@@ -73,7 +85,10 @@ class ImageStore:
         self, device_id: str, night_id: str, event_id: str, variant: EventVariant
     ) -> Path:
         """``event_id`` matches EVENT_ID_PATTERN (no path separators)."""
-        return self.root / device_id / night_id / "events" / variant.value / f"{event_id}.jpg"
+        return self._inside(
+            device_id,
+            self.root / device_id / night_id / "events" / variant.value / f"{event_id}.jpg",
+        )
 
     def save_event(
         self, device_id: str, night_id: str, event_id: str, variant: EventVariant, data: bytes
@@ -92,7 +107,10 @@ class ImageStore:
     def delete_event(
         self, device_id: str, night_id: str, event_id: str, variant: EventVariant
     ) -> None:
-        path = self.event_path(device_id, night_id, event_id, variant)
+        try:
+            path = self.event_path(device_id, night_id, event_id, variant)
+        except ValueError:  # a name that never was a file of this camera: nothing to delete
+            return
         path.unlink(missing_ok=True)
         for directory in (path.parent, path.parent.parent, path.parent.parent.parent):
             try:
@@ -101,7 +119,10 @@ class ImageStore:
                 break
 
     def delete_frame(self, device_id: str, night_id: str, name: str, variant: FrameVariant) -> None:
-        path = self.frame_path(device_id, night_id, name, variant)
+        try:
+            path = self.frame_path(device_id, night_id, name, variant)
+        except ValueError:  # a name that never was a file of this camera: nothing to delete
+            return
         path.unlink(missing_ok=True)
         # Drop empty variant and night directories.
         for directory in (path.parent, path.parent.parent):

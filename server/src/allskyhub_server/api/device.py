@@ -8,6 +8,7 @@ import datetime as dt
 import logging
 import os
 import pathlib
+import re
 import tempfile
 import time
 from collections.abc import Coroutine
@@ -86,6 +87,7 @@ router = APIRouter(prefix="/device/v1")
 
 NIGHT_ID = r"^\d{8}$"
 FRAME_NAME = r"^[A-Za-z0-9_-][A-Za-z0-9._-]{0,127}$"  # never "." or ".."
+_FRAME_NAME = re.compile(FRAME_NAME.removeprefix("^").removesuffix("$"))
 
 
 def _now() -> dt.datetime:
@@ -628,7 +630,12 @@ async def _on_frame(
     never as a thumbnail, so it stays out of the gallery, the loop and everything made from
     thumbnails (renders, month keograms), and out of the latest image between live views.
 
-    Every requested frame gets a ``Frame`` row with its metadata; uploads fill it in."""
+    Every requested frame gets a ``Frame`` row with its metadata; uploads fill it in.
+    A name the upload URL would refuse (a path, "..") is dropped here already: it would
+    end up in a file path when retention deletes the frame (security review 2026-11-04)."""
+    if not _FRAME_NAME.fullmatch(frame.name):
+        log.warning("frame with a bad name", extra={"device_id": conn.device_id})
+        return
     now = _now()
     async with maker() as db:
         device = await db.get(Device, conn.device_id)

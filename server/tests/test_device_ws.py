@@ -4,10 +4,13 @@ from __future__ import annotations
 
 import asyncio
 import logging
+from pathlib import Path
 
 import httpx
 import pytest
 from fastapi import FastAPI, WebSocketDisconnect
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncEngine
 
 from allskyhub_protocol import (
     CloseCode,
@@ -19,6 +22,8 @@ from allskyhub_protocol import (
     UploadFrameArgs,
 )
 from allskyhub_server.devices.connections import Connection, ConnectionRegistry
+from allskyhub_server.devices.images import ImageStore
+from allskyhub_server.models import Frame
 from tests.fake_device import FakeDevice
 from tests.helpers import home_csrf
 from tests.ws_helpers import (
@@ -172,3 +177,34 @@ async def test_hello_with_other_device_id_is_refused(
     async with device_ws(live_app, token) as ws:
         await send(ws, Hello(device_id="b" * 26, profile=dev.profile, agent_version="1"))
         assert await closed_with(ws) == CloseCode.REAUTH
+
+
+async def test_frame_with_a_path_as_name_is_dropped(
+    client: httpx.AsyncClient, live_app: str, engine: AsyncEngine
+) -> None:
+    """Security review 2026-11-04: a frame name is checked like the upload URL's, before it
+    gets a row (retention would turn it into a file path and delete that file)."""
+    dev = FakeDevice()
+    token = await paired_token(client, dev)
+    async with device_ws(live_app, token) as ws:
+        await send(ws, Hello(device_id=dev.device_id, profile=dev.profile, agent_version="0.2"))
+        await send(ws, frame_info("../../../../keys/x"))
+        with pytest.raises(TimeoutError):  # no upload asked for
+            await asyncio.wait_for(ws.recv(), 0.5)
+    async with engine.connect() as db:
+        rows = await db.execute(select(Frame.name).where(Frame.device_id == dev.device_id))
+    assert rows.scalars().all() == []
+
+
+def test_store_paths_stay_in_the_device_folder(tmp_path: Path) -> None:
+    store = ImageStore(tmp_path / "images")
+    secret = tmp_path / "keys" / "x"
+    secret.parent.mkdir()
+    secret.write_text("key")
+    (tmp_path / "images" / "dev" / "20261006" / "full").mkdir(parents=True)
+    with pytest.raises(ValueError, match="outside"):
+        store.frame_path("dev", "20261006", "../../../../keys/x", FrameVariant.FULL)
+    store.delete_frame("dev", "20261006", "../../../../keys/x", FrameVariant.FULL)
+    store.delete_product("dev", "20261006", "../../../../../keys/x", FrameVariant.FULL)
+    assert secret.read_text() == "key"
+    assert store.frame_path("dev", "20261006", "a.jpg", FrameVariant.FULL).name == "a.jpg"

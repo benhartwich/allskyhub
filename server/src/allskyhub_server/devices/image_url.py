@@ -47,6 +47,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from allskyhub_server.devices import station_detect
 from allskyhub_server.devices.images import ImageStore
+from allskyhub_server.i18n import pick, tr
 from allskyhub_server.mail.send import Mail, Mailer
 from allskyhub_server.models import Device, StationSource, User
 from allskyhub_sky.astro import sun_altitude
@@ -80,21 +81,26 @@ MASK_CHANGE = 20
 MASK_SHARE = 0.8
 MASK_MIN_FRAMES = 20
 
+# What the owner reads, German and English (the request's language, i18n.tr).
 ERRORS = {
     "bad_url": (
-        "Die Adresse ist ungültig (nur http oder https, Port 80 oder 443, ohne Zugangsdaten)."
+        "Die Adresse ist ungültig (nur http oder https, Port 80 oder 443, ohne Zugangsdaten).",
+        "The address is not valid (only http or https, port 80 or 443, no credentials).",
     ),
-    "not_public": "Die Adresse führt nicht ins öffentliche Internet.",
-    "unreachable": "Der Server ist nicht erreichbar.",
-    "timeout": "Der Server antwortet nicht rechtzeitig.",
-    "wrong_type": "Dort liegt kein JPEG- oder PNG-Bild.",
-    "too_large": "Das Bild ist zu groß (höchstens 8 MB, 50 MP bei JPEG, 16 MP bei PNG).",
-    "bad_image": "Das Bild lässt sich nicht lesen.",
-    "too_many_redirects": "Zu viele Weiterleitungen.",
-    "insecure_redirect": "Die Adresse leitet von https auf unverschlüsseltes http um.",
-    "busy": "Der Server bittet, später wiederzukommen.",
-    "http": "Der Server antwortet mit einem Fehler.",
-}
+    "not_public": ("Die Adresse führt nicht ins öffentliche Internet.",
+                   "The address does not lead to the public internet."),
+    "unreachable": ("Der Server ist nicht erreichbar.", "The server cannot be reached."),
+    "timeout": ("Der Server antwortet nicht rechtzeitig.", "The server does not answer in time."),
+    "wrong_type": ("Dort liegt kein JPEG- oder PNG-Bild.", "There is no JPEG or PNG image there."),
+    "too_large": ("Das Bild ist zu groß (höchstens 8 MB, 50 MP bei JPEG, 16 MP bei PNG).",
+                  "The image is too large (at most 8 MB, 50 MP for JPEG, 16 MP for PNG)."),
+    "bad_image": ("Das Bild lässt sich nicht lesen.", "The image cannot be read."),
+    "too_many_redirects": ("Zu viele Weiterleitungen.", "Too many redirects."),
+    "insecure_redirect": ("Die Adresse leitet von https auf unverschlüsseltes http um.",
+                          "The address redirects from https to unencrypted http."),
+    "busy": ("Der Server bittet, später wiederzukommen.", "The server asks to come back later."),
+    "http": ("Der Server antwortet mit einem Fehler.", "The server answers with an error."),
+}  # fmt: skip
 
 
 class FetchError(Exception):
@@ -106,7 +112,8 @@ class FetchError(Exception):
 
     @property
     def text(self) -> str:
-        return ERRORS.get(self.code, self.code) + (f" ({self.detail})" if self.detail else "")
+        de, en = ERRORS.get(self.code, (self.code, self.code))
+        return tr(de, en) + (f" ({self.detail})" if self.detail else "")
 
 
 Resolver = Callable[[str, int], Awaitable[list[str]]]
@@ -521,16 +528,28 @@ class Context:
 
 
 async def _mail_owner(
-    ctx: Context, db: AsyncSession, device: Device, subject: str, body: str
+    ctx: Context,
+    db: AsyncSession,
+    device: Device,
+    mail: Callable[[str], tuple[str, str]],
 ) -> None:
+    """``mail(lang)`` gives subject and body in the owner's language (User.lang)."""
     owner = await db.get(User, device.owner_id) if device.owner_id else None
     if owner is None or not ctx.mailer.enabled:
         return
+    subject, body = mail(owner.lang)
     await ctx.mailer.send(Mail(to=owner.email, subject=subject, body=body))
 
 
-def _station_page(ctx: Context, device: Device) -> str:
-    return f"{ctx.base_url.rstrip('/')}/stationen/{device.id}"
+def _station_page(ctx: Context, device: Device, lang: str = "de") -> str:
+    page = f"{ctx.base_url.rstrip('/')}/stationen/{device.id}"
+    return page + "?lang=en" if lang == "en" else page
+
+
+def error_text(error: FetchError, lang: str) -> str:
+    """The error in a stored language, for mails outside a request."""
+    de, en = ERRORS.get(error.code, (error.code, error.code))
+    return pick(lang, de, en) + (f" ({error.detail})" if error.detail else "")
 
 
 async def fetch_one(ctx: Context, device_id: str, now: dt.datetime) -> None:
@@ -554,12 +573,22 @@ async def fetch_one(ctx: Context, device_id: str, now: dt.datetime) -> None:
             if now - since >= PAUSE_AFTER:
                 source.state = "paused"
                 source.reason = f"Seit 24 Stunden nicht abrufbar: {exc.text}"[:500]
-                await _mail_owner(
-                    ctx, db, device, f"SharedSky: {device.name} pausiert",
-                    "Hallo,\n\ndas Bild deiner Station ist seit einem Tag nicht abrufbar:\n\n"
-                    f"{source.url}\n{exc.text}\n\nDie Station ist pausiert. Sobald es wieder "
-                    f"geht, setze sie hier fort:\n\n{_station_page(ctx, device)}\n\nallskyhub\n",
-                )  # fmt: skip
+                url, failed = source.url, exc
+
+                def paused(lang: str) -> tuple[str, str]:
+                    page, why = _station_page(ctx, device, lang), error_text(failed, lang)
+                    return pick(lang, f"SharedSky: {device.name} pausiert",
+                                f"SharedSky: {device.name} paused"), pick(
+                        lang,
+                        "Hallo,\n\ndas Bild deiner Station ist seit einem Tag nicht abrufbar:\n\n"
+                        f"{url}\n{why}\n\nDie Station ist pausiert. Sobald es wieder geht, "
+                        f"setze sie hier fort:\n\n{page}\n\nallskyhub\n",
+                        "Hello,\n\nyour station's image could not be fetched for a day:\n\n"
+                        f"{url}\n{why}\n\nThe station is paused. Once it works again, "
+                        f"resume it here:\n\n{page}\n\nallskyhub\n",
+                    )  # fmt: skip
+
+                await _mail_owner(ctx, db, device, paused)
             await db.commit()
             return
         source.errors, source.errors_since, source.last_error = 0, None, ""
@@ -655,13 +684,23 @@ async def _failed_orientation(
     status = dict(device.last_status or {})
     status["solve"] = {**solve, "fails": []}
     device.last_status = status
-    await _mail_owner(
-        ctx, db, device, f"SharedSky: {device.name} wird neu geprüft",
-        "Hallo,\n\ndas Bild deiner Station passt in drei klaren Nächten nicht zu ihrem Ort: "
-        "Die Ausrichtung an den Sternen schlug fehl. Hat sich die Kamera oder die Adresse "
-        "geändert? Ein Admin prüft die Station neu; bis dahin holt der Hub nichts ab.\n\n"
-        f"{_station_page(ctx, device)}\n\nallskyhub\n",
-    )  # fmt: skip
+
+    def again(lang: str) -> tuple[str, str]:
+        page = _station_page(ctx, device, lang)
+        return pick(lang, f"SharedSky: {device.name} wird neu geprüft",
+                    f"SharedSky: {device.name} is checked again"), pick(
+            lang,
+            "Hallo,\n\ndas Bild deiner Station passt in drei klaren Nächten nicht zu ihrem "
+            "Ort: Die Ausrichtung an den Sternen schlug fehl. Hat sich die Kamera oder die "
+            "Adresse geändert? Ein Admin prüft die Station neu; bis dahin holt der Hub nichts "
+            f"ab.\n\n{page}\n\nallskyhub\n",
+            "Hello,\n\nyour station's image hasn't matched its location on three clear "
+            "nights: orienting it by the stars failed. Did the camera or the address change? "
+            "An admin checks the station again; until then the hub fetches nothing.\n\n"
+            f"{page}\n\nallskyhub\n",
+        )  # fmt: skip
+
+    await _mail_owner(ctx, db, device, again)
     return True
 
 

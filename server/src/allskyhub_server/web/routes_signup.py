@@ -16,6 +16,7 @@ from fastapi import APIRouter, Depends, Form, HTTPException, Request
 from fastapi.responses import Response
 
 from allskyhub_server.auth import accounts, ratelimit, reporters
+from allskyhub_server.i18n import english, tr
 from allskyhub_server.mail.send import Mail, Mailer
 from allskyhub_server.web.deps import DbSession, SettingsDep, client_ip, csrf_protect
 from allskyhub_server.web.render import render
@@ -70,22 +71,29 @@ async def signup(
 ) -> Response:
     mailer = _enabled(request, settings)
     ip = client_ip(request, settings)
+    # Kept on every way back to the form, so a second try still leads to SharedSky.
+    weiter = weiter if weiter in NEXT else ""
     try:
         await ratelimit.hit(
             request.app.state.engine, f"owner-signup:{ip}", ratelimit.OWNER_SIGNUP_PER_IP
         )
     except ratelimit.RateLimitedError:
-        return _page(request, 429, error="Zu viele Versuche. Bitte später erneut.")
+        error = tr("Zu viele Versuche. Bitte später erneut.", "Too many tries. Please try later.")
+        return _page(request, 429, weiter=weiter, error=error)
     if not terms:
-        return _page(request, 400, email=email,
-                     error="Bitte AGB und Datenschutzerklärung bestätigen.")  # fmt: skip
+        error = tr("Bitte AGB und Datenschutzerklärung bestätigen.",
+                   "Please agree to the terms and the privacy policy.")  # fmt: skip
+        return _page(request, 400, email=email, weiter=weiter, error=error)
     if not await request.app.state.turnstile.verify(turnstile, ip):
-        error = "Die Prüfung gegen Bots hat nicht geklappt. Bitte noch einmal."
-        return _page(request, 400, email=email, error=error)
+        error = tr("Die Prüfung gegen Bots hat nicht geklappt. Bitte noch einmal.",
+                   "The check against bots did not work. Please try again.")  # fmt: skip
+        return _page(request, 400, email=email, weiter=weiter, error=error)
     try:
         user, token = await reporters.sign_up(db, email, password, kind=KIND)
     except accounts.AccountError as exc:
-        return _page(request, 400, email=email, error=exc.message)
+        return _page(request, 400, email=email, weiter=weiter, error=exc.message)
+    if token is not None:  # a new or still unconfirmed account: its mails in this language
+        user.lang = "en" if english() else "de"
     await db.commit()
     try:  # never a flood of mails to one address, from however many places
         await ratelimit.hit(
@@ -94,22 +102,33 @@ async def signup(
     except ratelimit.RateLimitedError:
         return _page(request, sent=True)
     base = settings.base_url.rstrip("/")
+    # The mail in the language of the page it came from, and its links keep it.
+    lang = {"lang": "en"} if english() else {}
     if token is not None:
-        query = {"token": token} | ({"weiter": weiter} if weiter in NEXT else {})
+        query = {"token": token} | ({"weiter": weiter} if weiter else {}) | lang
         link = f"{base}/konto/bestaetigen?{urlencode(query)}"
-        body = (
+        body = tr(
             "Hallo,\n\nmit diesem Link bestätigst du dein allskyhub-Konto (zwei Tage "
             f"gültig):\n\n{link}\n\nDanach kannst du eine allskyhub-Kamera koppeln oder deine "
             "Allsky-Kamera mit SharedSky verbinden.\n\nWarst du das nicht, ignoriere diese "
-            "Nachricht; ohne Bestätigung wird das Konto gelöscht.\n\nallskyhub\n"
+            "Nachricht; ohne Bestätigung wird das Konto gelöscht.\n\nallskyhub\n",
+            "Hello,\n\nthis link confirms your allskyhub account (it works for two days):"
+            f"\n\n{link}\n\nThen you can pair an allskyhub camera or connect your all-sky "
+            "camera to SharedSky.\n\nIf this wasn't you, just ignore this message; without "
+            "confirmation the account is deleted.\n\nallskyhub\n",
         )
     else:
-        body = (
+        suffix = f"?{urlencode(lang)}" if lang else ""
+        body = tr(
             "Hallo,\n\nfür diese Adresse gibt es schon ein allskyhub-Konto. Melde dich damit "
             f"an:\n\n{base}/login\n\nPasswort vergessen? Hier legst du ein neues fest:\n\n"
-            f"{base}/password/forgot\n\nallskyhub\n"
+            f"{base}/password/forgot\n\nallskyhub\n",
+            "Hello,\n\nthere already is an allskyhub account for this address. Sign in with "
+            f"it:\n\n{base}/login{suffix}\n\nForgot your password? Set a new one here:\n\n"
+            f"{base}/password/forgot{suffix}\n\nallskyhub\n",
         )
-    await mailer.send(Mail(to=user.email, subject="allskyhub: dein Konto", body=body))
+    subject = tr("allskyhub: dein Konto", "allskyhub: your account")
+    await mailer.send(Mail(to=user.email, subject=subject, body=body))
     return _page(request, sent=True)
 
 

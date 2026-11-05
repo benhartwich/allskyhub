@@ -1,20 +1,21 @@
 {% extends "base.html" %}
-{% block title %}Konto bestätigen · allskyhub{% endblock %}
+{% block lang %}{{ 'en' if en else 'de' }}{% endblock %}
+{% block title %}{{ t('Konto bestätigen', 'Confirm your account') }} · allskyhub{% endblock %}
 {% block content %}
 <div class="auth">
   {% if ask %}
-  <h1>Konto bestätigen</h1>
+  <h1>{{ t('Konto bestätigen', 'Confirm your account') }}</h1>
   <form method="post" action="/konto/bestaetigen" class="card stack">
     <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
     <input type="hidden" name="token" value="{{ token }}">
     {% if weiter %}<input type="hidden" name="weiter" value="{{ weiter }}">{% endif %}
-    <p>Ein Klick noch, dann bist du angemeldet.</p>
-    <button type="submit">Konto bestätigen</button>
+    <p>{{ t('Ein Klick noch, dann bist du angemeldet.', 'One more click and you are signed in.') }}</p>
+    <button type="submit">{{ t('Konto bestätigen', 'Confirm account') }}</button>
   </form>
   {% else %}
-  <h1>Link ungültig</h1>
+  <h1>{{ t('Link ungültig', 'Link not valid') }}</h1>
   <div class="card stack">
-    <p>Der Link ist abgelaufen oder wurde schon benutzt. <a href="/konto/anlegen">Neu anlegen</a> oder <a href="/login">anmelden</a>.</p>
+    <p>{% if en %}The link has expired or was already used. <a href="/konto/anlegen">Sign up again</a> or <a href="/login">sign in</a>.{% else %}Der Link ist abgelaufen oder wurde schon benutzt. <a href="/konto/anlegen">Neu anlegen</a> oder <a href="/login">anmelden</a>.{% endif %}</p>
   </div>
   {% endif %}
 </div>

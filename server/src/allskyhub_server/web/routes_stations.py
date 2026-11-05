@@ -24,6 +24,7 @@ from allskyhub_server.auth.sessions import SessionInfo
 from allskyhub_server.devices import image_url, map_tiles, pairing, stations
 from allskyhub_server.devices.images import ImageStore
 from allskyhub_server.devices.stations import SecretKey
+from allskyhub_server.i18n import pick, tr
 from allskyhub_server.mail.send import Mail, Mailer
 from allskyhub_server.models import Device, EventRecord, Frame, StationSource, User
 from allskyhub_server.settings import Settings
@@ -54,6 +55,10 @@ STATES = {
     "paused": "pausiert",
 }
 DOCS = "/entwickler/connect"
+
+
+def _wrong_password() -> str:
+    return tr("Dein Passwort stimmt nicht.", "Your password is wrong.")
 
 
 def _secret_key(request: Request) -> SecretKey:
@@ -117,10 +122,13 @@ def _place(lat: str, lon: str, elevation: str) -> _Place:
         el = float(elevation.replace(",", ".")) if elevation.strip() else None
     except ValueError:
         raise ValueError(
-            "Bitte den Ort auf der Karte setzen oder die Koordinaten eingeben."
-        ) from None
+            tr("Bitte den Ort auf der Karte setzen oder die Koordinaten eingeben.",
+               "Please set the location on the map or enter the coordinates.")
+        ) from None  # fmt: skip
     if not (-90 <= la <= 90 and -180 <= lo <= 180) or (el is not None and not -500 <= el <= 9000):
-        raise ValueError("Die Koordinaten liegen außerhalb der Erde.")
+        raise ValueError(
+            tr("Die Koordinaten liegen außerhalb der Erde.", "The coordinates are off the Earth.")
+        )
     return _Place(la, lo, el)
 
 
@@ -160,11 +168,14 @@ async def create(
         )  # fmt: skip
 
     if software not in SOFTWARE:
-        return again("Bitte die Software deiner Kamera wählen.")
+        return again(tr("Bitte die Software deiner Kamera wählen.",
+                        "Please choose your camera's software."))  # fmt: skip
     if not name.strip():
-        return again("Bitte einen Namen für die Station angeben.")
+        return again(tr("Bitte einen Namen für die Station angeben.",
+                        "Please give the station a name."))  # fmt: skip
     if not terms:
-        return again("Bitte den Teilnahmebedingungen zustimmen.")
+        return again(tr("Bitte den Teilnahmebedingungen zustimmen.",
+                        "Please agree to the terms."))  # fmt: skip
     place: _Place | None = None
     proof_bytes = b""
     if software == "image-url":
@@ -179,7 +190,8 @@ async def create(
         if proof is not None and proof.filename:
             proof_bytes = await proof.read(image_url.PROOF_MAX_UPLOAD + 1)
         if not proof_text.strip() and not proof_bytes:
-            return again("Bitte einen Nachweis angeben: einen Satz, einen Link oder ein Bild.")
+            return again(tr("Bitte einen Nachweis angeben: einen Satz, einen Link oder ein Bild.",
+                            "Please give a proof: a sentence, a link or an image."))  # fmt: skip
     user = await db.get(User, session.user.id)
     if user is None:
         raise HTTPException(404)
@@ -190,7 +202,7 @@ async def create(
                 image_url.store_proof(_proofs(settings), device.id, proof_bytes)
             except image_url.FetchError as exc:
                 await db.rollback()
-                return again(f"Das Nachweis-Bild: {exc.text}")
+                return again(tr("Das Nachweis-Bild: ", "The proof image: ") + exc.text)
         lens = {"focal_mm": float(focal_mm.replace(",", "."))} if _number(focal_mm) else None
         device.last_status = {
             "settings": {"latitude": place.lat, "longitude": place.lon,
@@ -310,7 +322,7 @@ async def new_secret(
     if device.software == "image-url":
         raise HTTPException(404)
     if not await confirmed(request, session, password):
-        return flash.redirect(request, session, back, 403, {"error": "Dein Passwort stimmt nicht."})
+        return flash.redirect(request, session, back, 403, {"error": _wrong_password()})
     secret = stations.rotate_secret(device, _secret_key(request))
     await db.commit()
     log.info("station secret renewed", extra={"device_id": device.id})
@@ -334,7 +346,7 @@ async def resume(
         session,
         f"/stationen/{device.id}",
         200,
-        {"notice": "Die Station holt wieder Bilder."},
+        {"notice": tr("Die Station holt wieder Bilder.", "The station fetches images again.")},
     )
 
 
@@ -355,7 +367,7 @@ async def remove(
             session,
             f"/stationen/{device.id}",
             403,
-            {"error": "Dein Passwort stimmt nicht."},
+            {"error": _wrong_password()},
         )
     source = await db.get(StationSource, device.id)
     if source is not None:
@@ -498,16 +510,29 @@ async def admin_decide(
     )
     mailer: Mailer = request.app.state.mailer
     if owner is not None and mailer.enabled:
+        # In the owner's language (User.lang), not the admin page's.
+        lang = owner.lang
         page = f"{settings.base_url.rstrip('/')}/stationen/{device.id}"
-        why = f"\nBegründung: {source.reason}\n" if source.reason else ""
+        if lang == "en":
+            page += "?lang=en"
+        why = (f"\n{pick(lang, 'Begründung', 'Reason')}: {source.reason}\n"
+               if source.reason else "")  # fmt: skip
         text = {
-            "approved": "ist freigegeben. Der Hub holt ab jetzt ihr Bild und misst mit.",
-            "declined": "wurde nicht freigegeben.",
-            "paused": "ist vorerst pausiert; der Hub holt kein Bild mehr ab.",
-        }[state]
+            "approved": pick(lang, "ist freigegeben. Der Hub holt ab jetzt ihr Bild und misst mit.",
+                             "is approved. From now on the hub fetches its image and measures "
+                             "along."),
+            "declined": pick(lang, "wurde nicht freigegeben.", "was not approved."),
+            "paused": pick(lang, "ist vorerst pausiert; der Hub holt kein Bild mehr ab.",
+                           "is paused for now; the hub fetches no more images."),
+        }[state]  # fmt: skip
+        word_en = {"approved": "approved", "declined": "declined", "paused": "paused"}[state]
         await mailer.send(Mail(
-            to=owner.email, subject=f"SharedSky: {device.name} {word}",
-            body=f"Hallo,\n\ndeine Station „{device.name}“ {text}\n{why}\n{page}\n\nallskyhub\n",
+            to=owner.email, subject=f"SharedSky: {device.name} {pick(lang, word, word_en)}",
+            body=pick(lang,
+                      f"Hallo,\n\ndeine Station „{device.name}“ {text}\n{why}\n{page}\n\n"
+                      "allskyhub\n",
+                      f"Hello,\n\nyour station \"{device.name}\" {text}\n{why}\n{page}\n\n"
+                      "allskyhub\n"),
         ))  # fmt: skip
     return flash.redirect(request, session, back, 200, {"notice": f"Station {word}."})
 

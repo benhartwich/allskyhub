@@ -11,6 +11,8 @@ from zoneinfo import ZoneInfo
 
 import allskyhub_design
 from fastapi.templating import Jinja2Templates
+from jinja2 import pass_context
+from jinja2.runtime import Context
 
 from allskyhub_server.devices import sky_overlay as overlay
 from allskyhub_server.devices.event_text import compass
@@ -133,6 +135,14 @@ def heater_text(heater: object) -> str:
     return text or ("an" if h.get("on") else "aus")
 
 
+@pass_context
+def t(context: Context, de: str, en: str) -> str:
+    """German or English by the page's language (``en`` from web/render.py, web/lang.py):
+    ``{{ t('Anmelden', 'Sign in') }}`` on the pages that have both."""
+    return en if context.get("en") else de
+
+
+cast(dict[str, Any], templates.env.globals)["t"] = t
 cast(dict[str, Any], templates.env.globals)["asset"] = asset
 # The app in the stores (Benjamin, 2026-10-28); iOS joins once Apple has released it.
 PLAY_STORE_URL = "https://play.google.com/store/apps/details?id=org.allskyhub.app"

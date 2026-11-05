@@ -1,52 +1,54 @@
 {% extends "base.html" %}
-{% block title %}Kamera verbinden · allskyhub{% endblock %}
+{% block lang %}{{ 'en' if en else 'de' }}{% endblock %}
+{% block title %}{{ t('Kamera verbinden', 'Connect a camera') }} · allskyhub{% endblock %}
 {% block head %}{% if software == 'image-url' %}<link rel="stylesheet" href="{{ asset('leaflet/leaflet.css') }}">
 <script src="{{ asset('leaflet/leaflet.js') }}" defer></script>
 <script src="{{ asset('station_map.js') }}" defer></script>{% endif %}{% endblock %}
 {% block content %}
-<div class="page-head"><h1>Kamera verbinden</h1><p class="muted"><a href="/">Meine Kameras</a> › Kamera verbinden</p></div>
-<p class="muted">Mit SharedSky misst deine Kamera gemeinsam mit den anderen im Netz: Bahnen von Feuerkugeln, Meteorströme, die Himmelshelligkeit. Deine Bilder bleiben deine. <a href="/mitmachen">Wie das funktioniert</a></p>
+{% set labels = {'indi-allsky': 'indi-allsky', 'image-url': t('Allsky / Bild-Adresse', 'Allsky / image address'), 'other': t('andere oder eigene Software', 'other or your own software')} %}
+<div class="page-head"><h1>{{ t('Kamera verbinden', 'Connect a camera') }}</h1><p class="muted"><a href="/">{{ t('Meine Kameras', 'My cameras') }}</a> › {{ t('Kamera verbinden', 'Connect a camera') }}</p></div>
+<p class="muted">{{ t('Mit SharedSky misst deine Kamera gemeinsam mit den anderen im Netz: Bahnen von Feuerkugeln, Meteorströme, die Himmelshelligkeit. Deine Bilder bleiben deine.', 'With SharedSky your camera measures together with the others in the network: fireball paths, meteor showers, sky brightness. Your images stay yours.') }} <a href="/mitmachen">{{ t('Wie das funktioniert', 'How it works') }}</a></p>
 {% if error %}<p class="msg error" role="alert">{{ error }}</p>{% endif %}
 
 <section class="card stack">
-  <h2>1. Welche Software nutzt deine Kamera?</h2>
+  <h2>{{ t('1. Welche Software nutzt deine Kamera?', '1. Which software does your camera run?') }}</h2>
   <div class="choice-row">
-    {% for key, label in choices.items() %}<a class="button {{ '' if software == key else 'secondary' }}" href="/stationen/neu?software={{ key }}" aria-current="{{ 'true' if software == key else 'false' }}">{{ label }}</a>{% endfor %}
+    {% for key in choices %}<a class="button {{ '' if software == key else 'secondary' }}" href="/stationen/neu?software={{ key }}" aria-current="{{ 'true' if software == key else 'false' }}">{{ labels.get(key, choices[key]) }}</a>{% endfor %}
   </div>
-  {% if software == 'indi-allsky' %}<p class="muted small">indi-allsky schickt seine Bilder selbst an den Hub (SyncAPI). Du trägst danach nur drei Werte in deiner indi-allsky-Konfiguration ein.</p>
-  {% elif software == 'image-url' %}<p class="muted small">Für Allsky und alle Kameras, die ihr neuestes Bild unter einer festen Adresse zeigen. Der Hub holt das Bild ab, nachdem ein Admin die Station geprüft hat. An deiner Kamera änderst du nichts.</p>
-  {% elif software == 'other' %}<p class="muted small">Für gekaufte und selbst geschriebene Software: eine offene Schnittstelle über HTTPS, <a href="/entwickler/connect">beschrieben für Entwickler</a>.</p>{% endif %}
+  {% if software == 'indi-allsky' %}<p class="muted small">{{ t('indi-allsky schickt seine Bilder selbst an den Hub (SyncAPI). Du trägst danach nur drei Werte in deiner indi-allsky-Konfiguration ein.', 'indi-allsky sends its images to the hub itself (SyncAPI). Afterwards you just enter three values in your indi-allsky configuration.') }}</p>
+  {% elif software == 'image-url' %}<p class="muted small">{{ t('Für Allsky und alle Kameras, die ihr neuestes Bild unter einer festen Adresse zeigen. Der Hub holt das Bild ab, nachdem ein Admin die Station geprüft hat. An deiner Kamera änderst du nichts.', 'For Allsky and every camera that shows its latest image at a fixed address. The hub fetches the image once an admin has checked the station. Nothing changes on your camera.') }}</p>
+  {% elif software == 'other' %}<p class="muted small">{{ t('Für gekaufte und selbst geschriebene Software: eine offene Schnittstelle über HTTPS,', 'For commercial and self-written software: an open interface over HTTPS,') }} <a href="/entwickler/connect">{{ t('beschrieben für Entwickler', 'described for developers') }}</a>.</p>{% endif %}
 </section>
 
 {% if software %}
 <form method="post" action="/stationen/neu" class="card stack" enctype="multipart/form-data">
   <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
   <input type="hidden" name="software" value="{{ software }}">
-  <h2>2. Deine Station</h2>
-  <label>Name der Station<input name="name" value="{{ form.name or '' }}" maxlength="100" required placeholder="Sternwarte Musterberg"></label>
+  <h2>{{ t('2. Deine Station', '2. Your station') }}</h2>
+  <label>{{ t('Name der Station', 'Station name') }}<input name="name" value="{{ form.name or '' }}" maxlength="100" required placeholder="{{ t('Sternwarte Musterberg', 'Hilltop Observatory') }}"></label>
   {% if software == 'image-url' %}
-  <label>Adresse des neuesten Bilds<input name="url" type="url" value="{{ form.url or '' }}" maxlength="2048" required placeholder="https://meine-kamera.example.org/allsky/image.jpg"></label>
-  <p class="muted small">Die Adresse, unter der deine Website oder deine Kamera immer das neueste Bild zeigt (JPEG oder PNG, Port 80 oder 443). Der Hub fragt alle 30 Sekunden bis 5 Minuten nach, je nachdem wie oft sich das Bild ändert, und holt es nur, wenn es neu ist. Den Traffic trägt dein Server.</p>
-  <div id="map" class="map map-small" role="region" aria-label="Karte: Standort der Kamera setzen"></div>
+  <label>{{ t('Adresse des neuesten Bilds', 'Address of the latest image') }}<input name="url" type="url" value="{{ form.url or '' }}" maxlength="2048" required placeholder="https://my-camera.example.org/allsky/image.jpg"></label>
+  <p class="muted small">{{ t('Die Adresse, unter der deine Website oder deine Kamera immer das neueste Bild zeigt (JPEG oder PNG, Port 80 oder 443). Der Hub fragt alle 30 Sekunden bis 5 Minuten nach, je nachdem wie oft sich das Bild ändert, und holt es nur, wenn es neu ist. Den Traffic trägt dein Server.', 'The address where your website or camera always shows the latest image (JPEG or PNG, port 80 or 443). The hub asks every 30 seconds to 5 minutes, depending on how often the image changes, and fetches it only when it is new. The traffic is on your server.') }}</p>
+  <div id="map" class="map map-small" role="region" aria-label="{{ t('Karte: Standort der Kamera setzen', "Map: set the camera's location") }}"></div>
   <script type="application/json" id="map-config">{{ map_config | tojson }}</script>
   <div class="search-row">
-    <label>Breite<input name="latitude" id="latitude" value="{{ form.latitude or '' }}" inputmode="decimal" required placeholder="48.30"></label>
-    <label>Länge<input name="longitude" id="longitude" value="{{ form.longitude or '' }}" inputmode="decimal" required placeholder="14.29"></label>
-    <label class="narrow">Höhe (m)<input name="elevation_m" value="{{ form.elevation_m or '' }}" inputmode="decimal" placeholder="450"></label>
+    <label>{{ t('Breite', 'Latitude') }}<input name="latitude" id="latitude" value="{{ form.latitude or '' }}" inputmode="decimal" required placeholder="48.30"></label>
+    <label>{{ t('Länge', 'Longitude') }}<input name="longitude" id="longitude" value="{{ form.longitude or '' }}" inputmode="decimal" required placeholder="14.29"></label>
+    <label class="narrow">{{ t('Höhe (m)', 'Elevation (m)') }}<input name="elevation_m" value="{{ form.elevation_m or '' }}" inputmode="decimal" placeholder="450"></label>
   </div>
-  <p class="muted small">Klick auf die Karte setzt den Ort. Er wird genau gebraucht, um Bahnen zu rechnen; öffentlich erscheint er nur gerundet.</p>
+  <p class="muted small">{{ t('Klick auf die Karte setzt den Ort. Er wird genau gebraucht, um Bahnen zu rechnen; öffentlich erscheint er nur gerundet.', 'A click on the map sets the location. The paths need it exactly; publicly it only appears rounded.') }}</p>
   <div class="search-row">
-    <label>Zeitzone der Kamera<input name="timezone" value="{{ form.timezone or 'Europe/Berlin' }}" maxlength="64" list="zones"></label>
-    <label class="narrow">Brennweite (mm, optional)<input name="focal_mm" value="{{ form.focal_mm or '' }}" inputmode="decimal" placeholder="1.55"></label>
+    <label>{{ t('Zeitzone der Kamera', "Camera's time zone") }}<input name="timezone" value="{{ form.timezone or 'Europe/Berlin' }}" maxlength="64" list="zones"></label>
+    <label class="narrow">{{ t('Brennweite (mm, optional)', 'Focal length (mm, optional)') }}<input name="focal_mm" value="{{ form.focal_mm or '' }}" inputmode="decimal" placeholder="1.55"></label>
   </div>
   <datalist id="zones"><option value="Europe/Berlin"><option value="Europe/Vienna"><option value="Europe/Zurich"><option value="Europe/London"><option value="Europe/Paris"><option value="Europe/Amsterdam"><option value="Europe/Prague"><option value="Europe/Warsaw"><option value="UTC"></datalist>
-  <h3>Nachweis, dass es deine Kamera ist</h3>
-  <p class="muted small">Ein Admin prüft jede Station von Hand. Hilfreich ist ein Screenshot der Einstellungsseite deiner Kamera, auf dem die Adresse steht, ein Foto der Kamera an ihrem Ort oder ein Link auf deine eigene Website mit dem Bild.</p>
-  <label>Ein paar Worte oder ein Link<textarea name="proof_text" maxlength="2000" rows="3">{{ form.proof_text or '' }}</textarea></label>
-  <label>Bild (optional, höchstens 5 MB)<input type="file" name="proof" accept="image/jpeg,image/png,image/webp"></label>
+  <h3>{{ t('Nachweis, dass es deine Kamera ist', "Proof that it's your camera") }}</h3>
+  <p class="muted small">{{ t('Ein Admin prüft jede Station von Hand. Hilfreich ist ein Screenshot der Einstellungsseite deiner Kamera, auf dem die Adresse steht, ein Foto der Kamera an ihrem Ort oder ein Link auf deine eigene Website mit dem Bild.', "An admin checks every station by hand. Helpful are a screenshot of your camera's settings page showing the address, a photo of the camera where it stands, or a link to your own website with the image.") }}</p>
+  <label>{{ t('Ein paar Worte oder ein Link', 'A few words or a link') }}<textarea name="proof_text" maxlength="2000" rows="3">{{ form.proof_text or '' }}</textarea></label>
+  <label>{{ t('Bild (optional, höchstens 5 MB)', 'Image (optional, at most 5 MB)') }}<input type="file" name="proof" accept="image/jpeg,image/png,image/webp"></label>
   {% endif %}
-  <label class="check"><input type="checkbox" name="terms" value="true" required> <span>Ich stimme den <a href="/mitmachen#bedingungen">Teilnahmebedingungen</a> zu: Meine Bilder bleiben meine; die Messwerte meiner Station werden mit ihrem Namen unter CC BY 4.0 geteilt.{% if software == 'image-url' %} Der Hub darf die Adresse oben abrufen.{% endif %}</span></label>
-  <button type="submit">{{ 'Zur Prüfung schicken' if software == 'image-url' else 'Station anlegen' }}</button>
+  <label class="check"><input type="checkbox" name="terms" value="true" required> <span>{% if en %}I agree to the <a href="/mitmachen#bedingungen">terms of SharedSky</a>: my images stay mine; my station's measurements are shared with its name under CC BY 4.0.{% if software == 'image-url' %} The hub may fetch the address above.{% endif %}{% else %}Ich stimme den <a href="/mitmachen#bedingungen">Teilnahmebedingungen</a> zu: Meine Bilder bleiben meine; die Messwerte meiner Station werden mit ihrem Namen unter CC BY 4.0 geteilt.{% if software == 'image-url' %} Der Hub darf die Adresse oben abrufen.{% endif %}{% endif %}</span></label>
+  <button type="submit">{% if software == 'image-url' %}{{ t('Zur Prüfung schicken', 'Send for checking') }}{% else %}{{ t('Station anlegen', 'Create station') }}{% endif %}</button>
 </form>
 {% endif %}
 {% endblock %}

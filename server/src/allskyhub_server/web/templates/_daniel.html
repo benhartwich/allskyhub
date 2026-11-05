@@ -1,5 +1,10 @@
 <section class="card stack voucher">
-  <h2>Gehäuse von Daniel Nimmervoll</h2>
+  <h2>{{ t('Gehäuse von Daniel Nimmervoll', "Daniel Nimmervoll's housing") }}</h2>
+  {% if en %}
+  <p>The weatherproof all-sky housing comes from <strong>Daniel Nimmervoll</strong> (Photography Nimmervoll e.U.) and his <a href="{{ shop }}" rel="noopener" target="_blank">liquidart-shop.at ↗</a>. He shows how to put it together step by step in his <a href="{{ videos }}" rel="noopener" target="_blank">videos ↗</a>.</p>
+  <p class="voucher-code">From an order of {{ voucher_from }}, the voucher code <code>{{ voucher }}</code> gives {{ voucher_off }} off, for example for the housing, dew shield and bracket together.</p>
+  {% else %}
   <p>Das wetterfeste Allsky-Gehäuse kommt von <strong>Daniel Nimmervoll</strong> (Photography Nimmervoll e.U.) aus seinem <a href="{{ shop }}" rel="noopener" target="_blank">liquidart-shop.at ↗</a>. Den Zusammenbau zeigt er Schritt für Schritt in seinen <a href="{{ videos }}" rel="noopener" target="_blank">Videos ↗</a>.</p>
   <p class="voucher-code">Ab {{ voucher_from }} Bestellwert gibt es mit dem Gutscheincode <code>{{ voucher }}</code> {{ voucher_off }} Rabatt, etwa für Gehäuse, Streulichtschutz und Halterung zusammen.</p>
+  {% endif %}
 </section>

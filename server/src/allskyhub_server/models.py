@@ -653,6 +653,11 @@ class MeteorPair(Base):
     # and whether the fireball alarm for this meteor went out.
     peak: Mapped[float | None] = mapped_column(Float)
     alerted: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
+    # All cameras of the meteor (devices/meteor_pairs.py: solved together; empty before
+    # 2026-11-05) and how far the ends may be off (one sigma, km; None: not known).
+    cameras: Mapped[list[str]] = mapped_column(JSONB, default=list, server_default="[]")
+    high_err_km: Mapped[float | None] = mapped_column(Float)
+    low_err_km: Mapped[float | None] = mapped_column(Float)
     created_at: Mapped[dt.datetime] = mapped_column(_tz(), server_default=func.now())
 
 

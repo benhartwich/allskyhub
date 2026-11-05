@@ -47,6 +47,21 @@
   {% endif %}
 </section>
 
+<section class="card stack" id="bildspeicher">
+  <h2>Bildspeicher</h2>
+  <div id="storage-job">{% include "_storage_job.html" %}</div>
+  {% if images_disk and images_disk.growable and not storage_job.busy %}
+  <form method="post" action="/admin/storage/grow" class="stack">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <label>Passwort zur Bestätigung<input type="password" name="password" autocomplete="current-password" required></label>
+    <p class="muted small">Vergrößert das Dateisystem auf die neue Größe der Platte. Das geht im laufenden Betrieb, Kameras und Seiten merken nichts davon.</p>
+    <button type="submit">Auf {{ '%.0f' | format(images_disk.disk_bytes / 1e9) }} GB vergrößern</button>
+  </form>
+  {% elif images_disk %}
+  <p class="muted small">Wird es eng (die Überwachung warnt ab 70 %): bei netcup den Local Block Storage erweitern, dann hier vergrößern.</p>
+  {% endif %}
+</section>
+
 <section class="card stack">
   <h2>Server</h2>
   <dl class="facts">

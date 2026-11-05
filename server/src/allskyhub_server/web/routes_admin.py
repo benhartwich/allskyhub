@@ -7,6 +7,7 @@ exist. Starting a deploy needs the password again.
 from __future__ import annotations
 
 import asyncio
+import logging
 import shutil
 import uuid
 from dataclasses import dataclass
@@ -17,7 +18,7 @@ from fastapi.responses import FileResponse, RedirectResponse, Response
 from sqlalchemy import delete, func, select
 from starlette.routing import Match
 
-from allskyhub_server.admin import deploy
+from allskyhub_server.admin import deploy, storage
 from allskyhub_server.admin import stores as admin_stores
 from allskyhub_server.auth import access_requests, ratelimit
 from allskyhub_server.auth.accounts import AccountError
@@ -33,6 +34,7 @@ from allskyhub_server.web import flash
 from allskyhub_server.web.deps import CurrentSession, DbSession, SettingsDep, csrf_protect
 from allskyhub_server.web.render import render
 
+log = logging.getLogger(__name__)
 router = APIRouter(dependencies=[Depends(csrf_protect)])
 
 UPDATE_STATES = {
@@ -129,6 +131,8 @@ async def page(
             "upstream_error": upstream_error,
             "github_token": stores.vault.has("github"),
             "job": deploy.job(settings.data_dir),
+            "images_disk": await asyncio.to_thread(storage.disk, settings.image_dir),
+            "storage_job": storage.job(settings.data_dir),
             "disk_free_gb": disk.free / 1e9,
             "disk_free_pct": 100 * disk.free / disk.total,
             "users": await db.scalar(select(func.count()).select_from(User)),
@@ -218,6 +222,43 @@ async def start_deploy(
         return await page(request, db, session, 400, error=str(exc))
     return await page(
         request, db, session, notice="Deploy angefordert. Der Server holt ihn gleich ab."
+    )
+
+
+@router.get("/admin/storage/job")
+async def storage_job(request: Request, session: CurrentSession, settings: SettingsDep) -> Response:
+    """The root helper's progress, polled by the page while the disk grows."""
+    admin_only(session, settings)
+    return render(
+        request,
+        "_storage_job.html",
+        {"storage_job": storage.job(settings.data_dir),
+         "images_disk": await asyncio.to_thread(storage.disk, settings.image_dir)},
+        session=session,
+    )  # fmt: skip
+
+
+@router.post("/admin/storage/grow")
+async def grow_storage(
+    request: Request,
+    db: DbSession,
+    session: CurrentSession,
+    settings: SettingsDep,
+    password: Annotated[str, Form(max_length=1024)],
+) -> Response:
+    """Grow the images' file system to the disk's new size (admin/storage.py)."""
+    admin_only(session, settings)
+    if not await confirmed(request, session, password):
+        return await page(request, db, session, 400, error="Das Passwort stimmt nicht.")
+    found = await asyncio.to_thread(storage.disk, settings.image_dir)
+    try:
+        storage.request(settings.data_dir, found, session.user.email)
+    except storage.StorageError as exc:
+        return await page(request, db, session, 400, error=str(exc))
+    device = found.device if found else None
+    log.info("admin storage grow", extra={"admin": session.user.email, "device": device})
+    return await page(
+        request, db, session, notice="Vergrößern angefordert. Der Server holt es gleich ab."
     )
 
 

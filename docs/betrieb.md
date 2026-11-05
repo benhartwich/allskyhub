@@ -290,5 +290,11 @@ Die Bilder des Hubs liegen seit 2026-11-05 auf einem eigenen netcup Local Block 
 - `/etc/fstab`: `UUID=… /srv/allskyhub-img ext4 defaults,noatime,nofail` und `/srv/allskyhub-img/images /var/lib/allskyhub-server/images none bind,nofail,…`. Der Pfad, die Rechte und das Backup (`/root/rsync.sh`, `rsync -aH` ohne `-x`) bleiben gleich.
 - `/etc/systemd/system/allskyhub-server.service.d/images-mount.conf`: `RequiresMountsFor=/var/lib/allskyhub-server/images`. Fehlt die Platte, startet der Hub nicht, statt still auf die Systemplatte zu schreiben.
 - Die Überwachung warnt ab 70 % belegt (`ALLSKYHUB_MONITOR_IMAGES_MAX_PCT`) und wenn der Speicher nicht eingehängt ist.
-- **Vergrößern:** im netcup-Kundenbereich den Local Block Storage erweitern, dann ohne Neustart `resize2fs /dev/vdb` (ext4 wächst im laufenden Betrieb). Prüfen mit `df -h /var/lib/allskyhub-server/images`.
+- **Vergrößern:** im netcup-Kundenbereich den Local Block Storage erweitern, dann auf der Admin-Seite in der Karte „Bildspeicher“ „Auf … GB vergrößern“ (mit Passwort). Der Hub legt dafür `storage/request` ab, `allskyhub-storage.path` startet `deploy/storage/allskyhub-storage.sh` als root; das Skript nimmt nichts aus der Anfrage, sondern immer die ext4-Platte unter `/srv/allskyhub-img` (`/dev/vd*`), und führt `resize2fs` aus (wächst im laufenden Betrieb). Protokoll auf der Karte und mit `journalctl -u allskyhub-storage`. Von Hand geht es auch: `resize2fs /dev/vdb`, prüfen mit `df -h /var/lib/allskyhub-server/images`.
+- Einrichten des Helfers (einmal):
+
+  ```
+  cp deploy/systemd/allskyhub-storage.* /etc/systemd/system/
+  systemctl daemon-reload && systemctl enable --now allskyhub-storage.path
+  ```
 - Die Kopie vom Umzug liegt in `/var/lib/allskyhub-server/images.old-root` und kann nach einigen Tagen gelöscht werden.

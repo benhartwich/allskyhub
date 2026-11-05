@@ -1,11 +1,12 @@
 {% extends "base.html" %}
 {% block title %}Erste Schritte · allskyhub{% endblock %}
 {% block content %}
+<p class="muted small"><a class="back" href="/start">Zurück zur Auswahl</a></p>
 <div class="page-head"><h1>Erste Schritte</h1></div>
 <ol class="wizard-steps" aria-label="Schritte">
   {% set names = {'hardware': 'Hardware', 'zusammenbau': 'Zusammenbau', 'image': 'Speicherkarte', 'koppeln': 'Koppeln'} %}
   {% for s in steps %}
-  <li class="{{ 'done' if loop.index0 < index }}{{ ' current' if s == step }}"><a href="/start?schritt={{ s }}"{% if s == step %} aria-current="step"{% endif %}><span class="wizard-num">{{ loop.index }}</span> {{ names[s] }}</a></li>
+  <li class="{{ 'done' if loop.index0 < index }}{{ ' current' if s == step }}"><a href="/start?kamera=nein&amp;schritt={{ s }}"{% if s == step %} aria-current="step"{% endif %}><span class="wizard-num">{{ loop.index }}</span> {{ names[s] }}</a></li>
   {% endfor %}
 </ol>
 
@@ -18,7 +19,7 @@
     <p><a href="/hardware">Liste zum Ausdrucken und Teilen</a></p>
   </section>
   <section class="card stack">
-    <h2>Ich habe schon eine Kamera</h2>
+    <h2>allskyhub auf deiner Allsky-Kamera</h2>
     <p class="muted">Läuft dein Pi mit ZWO-Kamera schon mit Allsky oder indi-allsky? allskyhub läuft daneben und übernimmt auf Wunsch deine bisherigen Bilder.</p>
     <p><a href="/allsky">Anleitung für bestehende Allsky-Kameras</a> (<a href="/allsky?lang=en" hreflang="en" lang="en">English</a>)</p>
   </section>
@@ -73,7 +74,7 @@
 {% endif %}
 
 <p class="wizard-nav">
-  {% if prev %}<a class="button secondary" href="/start?schritt={{ prev }}">Zurück</a>{% endif %}
-  {% if next %}<a class="button" href="/start?schritt={{ next }}">Weiter</a>{% endif %}
+  {% if prev %}<a class="button secondary" href="/start?kamera=nein&amp;schritt={{ prev }}">Zurück</a>{% endif %}
+  {% if next %}<a class="button" href="/start?kamera=nein&amp;schritt={{ next }}">Weiter</a>{% endif %}
 </p>
 {% endblock %}

@@ -217,7 +217,7 @@ async def test_voucher_and_image_download(app: FastAPI, client: httpx.AsyncClien
     await make_account(client)
     step = (await client.get("/start", params={"schritt": "image"})).text
     assert "Image 0.1.3 herunterladen (884 MB)" in step
-    assert "<code>allsky</code>" in (await client.get("/start")).text
+    assert "<code>allsky</code>" in (await client.get("/start?kamera=nein")).text
 
 
 async def test_without_github_the_download_goes_to_the_releases() -> None:
@@ -263,3 +263,26 @@ async def test_english_pages_and_switch(app: FastAPI, client: httpx.AsyncClient)
     r = await client.get("/sprache/en", params={"next": "//evil.example/"})
     assert r.headers["location"] == "/"
     assert (await client.get("/sprache/fr")).status_code == 404
+
+
+async def test_the_way_in(client: httpx.AsyncClient) -> None:
+    """Benjamin, 2026-11-05: three short questions instead of the building guide."""
+    await make_account(client)
+    first = await client.get("/start")
+    assert "Hast du schon eine Allsky-Kamera?" in first.text
+    assert 'href="/start?kamera=nein"' in first.text
+    software = await client.get("/start", params={"kamera": "ja"})
+    assert "Welche Software läuft darauf?" in software.text
+    r = await client.get("/start", params={"kamera": "ja", "software": "allskyhub"})
+    assert r.headers["location"] == "/cameras/pair"
+    goal = await client.get("/start", params={"kamera": "ja", "software": "indi-allsky"})
+    assert "Mitmachen (SharedSky)" in goal.text
+    assert "neben indi-allsky" in goal.text
+    join = {"kamera": "ja", "software": "allsky", "wahl": "mitmachen"}
+    r = await client.get("/start", params=join)
+    assert r.headers["location"] == "/stationen/neu?software=image-url"
+    r = await client.get("/start", params={**join, "wahl": "umsteigen"})
+    assert r.headers["location"] == "/allsky"
+    steps = await client.get("/start", params={"kamera": "nein"})
+    assert 'aria-current="step"' in steps.text
+    assert "Zurück zur Auswahl" in steps.text

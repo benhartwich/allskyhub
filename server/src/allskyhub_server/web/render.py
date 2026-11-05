@@ -25,6 +25,14 @@ def _is_admin(request: Request, session: SessionInfo | None) -> bool:
     return isinstance(email, str) and email.lower() in admins
 
 
+def open_signup(request: Request) -> bool:
+    return bool(
+        request.app.state.settings.open_signup
+        and request.app.state.turnstile.enabled
+        and data_mail_enabled(request)
+    )
+
+
 def data_mail_enabled(request: Request) -> bool:
     mailer = getattr(request.app.state, "mailer", None)
     return mailer is not None and bool(mailer.enabled)
@@ -49,9 +57,7 @@ def render(
         "mail_enabled": data_mail_enabled(request),
         "is_admin": _is_admin(request, session),
         # Self sign-up on /konto/anlegen (web/routes_signup.py): links only when it works.
-        "open_signup": request.app.state.settings.open_signup
-        and request.app.state.turnstile.enabled
-        and data_mail_enabled(request),
+        "open_signup": open_signup(request),
     }
     data["en"] = lang.is_en(request)
     data["path_now"] = request.url.path

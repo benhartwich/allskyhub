@@ -27,6 +27,10 @@ from allskyhub_server.web.routes_report import SIGNUP_CSP
 router = APIRouter(dependencies=[Depends(csrf_protect)])
 
 KIND = "owner"
+# Where the confirmation leads, by a fixed name (never an address from outside): someone
+# who came from /mitmachen wants to connect a camera, not build one (Benjamin, 2026-11-05).
+NEXT = {"sharedsky": "/start?kamera=ja"}
+FIRST_STEPS = "/start"
 
 
 def _enabled(request: Request, settings: SettingsDep) -> Mailer:
@@ -48,9 +52,9 @@ def _page(request: Request, status: int = 200, **context: object) -> Response:
 
 
 @router.get("/konto/anlegen")
-async def signup_form(request: Request, settings: SettingsDep) -> Response:
+async def signup_form(request: Request, settings: SettingsDep, weiter: str = "") -> Response:
     _enabled(request, settings)
-    return _page(request)
+    return _page(request, weiter=weiter if weiter in NEXT else "")
 
 
 @router.post("/konto/anlegen")
@@ -62,6 +66,7 @@ async def signup(
     password: Annotated[str, Form(max_length=1024)],
     terms: Annotated[bool, Form()] = False,
     turnstile: Annotated[str, Form(alias="cf-turnstile-response", max_length=2048)] = "",
+    weiter: Annotated[str, Form(max_length=20)] = "",
 ) -> Response:
     mailer = _enabled(request, settings)
     ip = client_ip(request, settings)
@@ -90,7 +95,8 @@ async def signup(
         return _page(request, sent=True)
     base = settings.base_url.rstrip("/")
     if token is not None:
-        link = f"{base}/konto/bestaetigen?{urlencode({'token': token})}"
+        query = {"token": token} | ({"weiter": weiter} if weiter in NEXT else {})
+        link = f"{base}/konto/bestaetigen?{urlencode(query)}"
         body = (
             "Hallo,\n\nmit diesem Link bestätigst du dein allskyhub-Konto (zwei Tage "
             f"gültig):\n\n{link}\n\nDanach kannst du eine allskyhub-Kamera koppeln oder deine "
@@ -108,13 +114,15 @@ async def signup(
 
 
 @router.get("/konto/bestaetigen")
-async def confirm_form(request: Request, db: DbSession, token: str = "") -> Response:
+async def confirm_form(
+    request: Request, db: DbSession, token: str = "", weiter: str = ""
+) -> Response:
     """A button to confirm: mail scanners fetch links, they do not post forms."""
     ok = await reporters.valid(db, token) is not None
     return render(
         request,
         "signup_confirmed.html",
-        {"ask": ok, "token": token},
+        {"ask": ok, "token": token, "weiter": weiter if weiter in NEXT else ""},
         status_code=200 if ok else 404,
     )
 
@@ -125,10 +133,11 @@ async def confirm(
     db: DbSession,
     settings: SettingsDep,
     token: Annotated[str, Form(max_length=100)],
+    weiter: Annotated[str, Form(max_length=20)] = "",
 ) -> Response:
     user = await reporters.confirm(db, token)
     if user is None or user.kind != KIND:
         await db.rollback()
         return render(request, "signup_confirmed.html", {"ask": False}, status_code=404)
     await db.commit()
-    return await start_session(request, db, settings, user.id, "/start")
+    return await start_session(request, db, settings, user.id, NEXT.get(weiter, FIRST_STEPS))

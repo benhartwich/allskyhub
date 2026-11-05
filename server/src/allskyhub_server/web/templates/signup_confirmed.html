@@ -7,6 +7,7 @@
   <form method="post" action="/konto/bestaetigen" class="card stack">
     <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
     <input type="hidden" name="token" value="{{ token }}">
+    {% if weiter %}<input type="hidden" name="weiter" value="{{ weiter }}">{% endif %}
     <p>Ein Klick noch, dann bist du angemeldet.</p>
     <button type="submit">Konto bestätigen</button>
   </form>

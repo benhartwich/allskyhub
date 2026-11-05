@@ -1,4 +1,5 @@
-// A fireball's path over the ground and its possible fall area (routes_fireballs.py), on
+// A fireball's path over the ground, its possible fall area and, with the winds aloft,
+// where each mass lands (routes_fireballs.py), on
 // the hub's map tiles like the camera map.
 (() => {
   const el = document.getElementById("map");
@@ -30,5 +31,11 @@
     const area = L.polygon(config.area, { color: warn, weight: 2, fillOpacity: 0.25 }).addTo(map);
     bounds = bounds.extend(area.getBounds());
   }
-  map.fitBounds(bounds, { padding: [30, 30], maxZoom: 11 });
+  // Where each mass lands with the winds aloft (devices/dark_flight.py).
+  for (const [lat, lon, mass] of config.landings || []) {
+    L.circleMarker([lat, lon], { radius: 3, color: warn, fillOpacity: 1 })
+      .bindTooltip(mass)
+      .addTo(map);
+  }
+  map.fitBounds(bounds, { padding: [30, 30], maxZoom: 12 });
 })();

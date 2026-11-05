@@ -658,6 +658,10 @@ class MeteorPair(Base):
     cameras: Mapped[list[str]] = mapped_column(JSONB, default=list, server_default="[]")
     high_err_km: Mapped[float | None] = mapped_column(Float)
     low_err_km: Mapped[float | None] = mapped_column(Float)
+    # Winds aloft above the end (devices/winds.py: source, run, levels) and the strewn
+    # field they give (devices/dark_flight.py: landings, outline); None until fetched.
+    wind: Mapped[dict[str, Any] | None] = mapped_column(JSONB)
+    strewn: Mapped[dict[str, Any] | None] = mapped_column(JSONB)
     created_at: Mapped[dt.datetime] = mapped_column(_tz(), server_default=func.now())
 
 

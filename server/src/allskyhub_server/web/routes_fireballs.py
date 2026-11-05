@@ -66,7 +66,29 @@ def _item(pair: MeteorPair) -> dict[str, Any]:
     return {"pair": pair, "area": fireball.fall_area(pair), "heading": fireball.heading(azimuth)}
 
 
+MASS_NAMES = {0.01: "10 g", 0.1: "100 g", 1.0: "1 kg", 10.0: "10 kg"}
+
+
+def _strewn(pair: MeteorPair) -> list[dict[str, str]]:
+    """Each mass of the dark flight (devices/dark_flight.py): how far from below the end of
+    the glow and in which direction, over both speeds tried."""
+    landings: list[dict[str, Any]] = (pair.strewn or {}).get("landings") or []
+    rows: list[dict[str, str]] = []
+    for mass, name in MASS_NAMES.items():
+        mine = [x for x in landings if x.get("mass_kg") == mass]
+        if not mine:
+            continue
+        kms = sorted(float(x["km_from_end"]) for x in mine)
+        span = f"{kms[0]:.1f}" if kms[-1] - kms[0] < 0.1 else f"{kms[0]:.1f}–{kms[-1]:.1f}"
+        mid = sum(float(x["azimuth_deg"]) for x in mine) / len(mine)
+        rows.append({"mass": name, "km": span.replace(".", ","),
+                     "where": fireball.compass(mid)})  # fmt: skip
+    return rows
+
+
 def _map_config(pair: MeteorPair, area: fireball.FallArea | None) -> dict[str, Any]:
+    strewn: dict[str, Any] = pair.strewn or {}
+    landings: list[dict[str, Any]] = strewn.get("landings") or []
     return {
         "maxZoom": map_tiles.MAX_ZOOM,
         "layers": {
@@ -74,7 +96,8 @@ def _map_config(pair: MeteorPair, area: fireball.FallArea | None) -> dict[str, A
         },
         "path": [[pair.high_lat, pair.high_lon], [pair.low_lat, pair.low_lon]],
         "heights": [round(pair.high_km), round(pair.low_km)],
-        "area": [list(p) for p in area.outline()] if area else None,
+        "area": strewn.get("outline") or ([list(p) for p in area.outline()] if area else None),
+        "landings": [[x["lat"], x["lon"], MASS_NAMES.get(x["mass_kg"], "")] for x in landings],
     }
 
 
@@ -139,6 +162,8 @@ async def fireball_page(
             "end_km": fireball.METEORITE_END_KM,
             "fireball_form": science.FIREBALL_FORM,
             "gmn": await _gmn(db, pair),
+            "strewn": _strewn(pair),
+            "wind": pair.wind,
             "gmn_source": gmn.SOURCE,
             "gmn_shower": gmn.shower_name,
         },

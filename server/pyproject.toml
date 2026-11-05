@@ -33,6 +33,11 @@ dependencies = [
   # Aurora photos sent from the app are re-encoded before they are kept, which drops their
   # metadata (place, camera); already in the workspace through the agent.
   "pillow>=9.4",
+  # Winds aloft for a meteorite's dark flight (fireball package C) come from NOAA's GFS as
+  # GRIB2; ecCodes (Apache-2.0) reads it, its wheels ship the library. Hub only.
+  "eccodes>=2.37",
+  # The library itself; eccodes' wheels ask for it, its sdist (which the lock reads) not.
+  "eccodeslib>=2.37",
 ]
 
 [tool.uv.sources]

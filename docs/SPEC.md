@@ -1517,10 +1517,28 @@ versioned on its own (`connect/v1`) and changes only additively.
 A connected camera is a *station* of its owner's account, shown and paired like an
 allskyhub camera (meteor pairs, fireballs, showers, sky brightness, aurora), with the
 same privacy: its exact place is used for measurements and shown publicly only rounded
-(as in §6.8). Creating one asks for the software (indi-allsky, Allsky, other) and the
-owner's consent to the terms (images stay theirs; measurements are shared under CC BY
-4.0 with the station's name, §10.6). The hub then shows, once, the station's id and a
-secret of 64 hex characters; a new secret can be made at any time and ends the old one.
+(as in §6.8), and it takes part in matching sightings by eye (fireball reports) only by
+the rules for cameras: with a public page or in the network, at a rounded place. Its id
+is a device id (ULID, 26 characters, the same namespace). Creating one asks for the
+software (indi-allsky, Allsky, other) and the owner's consent to the terms (images stay
+theirs; measurements are shared under CC BY 4.0 with the station's name, §10.6). The hub
+then shows, once, the station's id and a secret of 64 hex characters; a new secret can
+be made at any time and ends the old one. For `connect/v1` the hub keeps only a hash of
+the secret (as for local logins, §7.4); an indi-allsky station's secret is kept
+encrypted with a key of the hub's vault, because indi-allsky's signature (§10.3) needs it
+in clear on the receiving side.
+
+**Clock.** `clock_synced` is the station's own word; the hub also checks it. A frame
+whose `time` lies more than 120 s plus its exposure before or more than 60 s after the
+moment it arrived counts as a wrong clock, and three such frames in a row make the
+station's clock untrusted until 10 frames in a row are within. Only meteors of a station
+with a trusted clock (both its word and the hub's check) are paired.
+
+**Limits and keeping.** As for cameras: at most 3000 events a night, at most one frame a
+minute kept. Thumbnails are kept like a camera's (§4.5, the owner's plan), full frames
+of events like event images, and at most 2 GB per station; above that the oldest full
+frames go first. When the owner removes a station, its images, its exact place and its
+secret are deleted at once; what stays is §10.6.
 
 The hub works out the station's orientation itself (§4.8, the same acceptance) from clear
 night frames, at most 3 tries a night and again after 7 days, and asks for a full frame
@@ -1537,19 +1555,28 @@ missing optional ones are null.
 - `PUT /station` — `{name, latitude, longitude, elevation_m, software, software_version,
   lens: {focal_mm, f_ratio, projection} | null, width, height, clock_synced}`. Sent at
   start and on changes; answers `{orientation: {...} | null, want_full_frame}`.
+  `width` × `height` is the full frame as the station saves it (after any crop), the
+  image that `POST /frames` sends in full and `POST /events` sends; pixel positions
+  (`track`) and the orientation are in that frame. A change of size drops the
+  orientation, which the hub then solves anew.
 - `POST /frames` — multipart: `metadata` (JSON `{time, exposure_s, gain, night,
   clock_synced, stars | null, sky_brightness | null}`, `time` = mid-exposure) and `image`
   (JPEG). By default a thumbnail (longest side ≤ 640 px); the full frame when the last
   answer had `want_full_frame`. At most one a minute is kept; answers
   `{want_full_frame}`.
-- `POST /events` — multipart: `metadata` (JSON `{kind: "meteor", start, end, peak 0..1,
-  track: [[x, y], …] (pixels of the full frame, 2–32 points along the streak),
+- `POST /events` — multipart: `metadata` (JSON `{kind: "meteor", start, end, peak 0..1 |
+  null, track: [[x, y], …] (pixels of the full frame, 2–32 points along the streak),
   clock_synced}`) and `image` (the full frame the meteor is on). The hub turns the track
   into directions with the station's orientation and handles it as an event of §6.4;
-  answers `{id}`.
+  answers `{id}`. `peak` is optional: without it the hub measures the track's
+  brightness in the image itself, on the same 0..1 scale as §6.4, for the fireball
+  threshold.
 
-Errors answer `{error: "<code>"}` with 400 (bad request), 401 (unknown station or
-secret), 413 (too large), 429 (too often; `Retry-After`).
+Errors answer `{error: "<code>"}`: 400 `bad_request` (a field missing or out of range,
+with `field`), `bad_image` (not a readable JPEG) or `wrong_size` (not `width` ×
+`height` where the full frame is required); 401 `unauthorized` (unknown station or
+secret); 413 `too_large`; 429 `too_often` or `night_full` (3000 events), with
+`Retry-After`.
 
 ### 10.3 indi-allsky without installing anything
 
@@ -1560,16 +1587,19 @@ user = station id and API key = secret, and sets images to every frame. The hub 
 `lens*`, `width`, `height`, `name`) and `<base>/sync/v1/image` (`createDate` in Unix seconds at the exposure's start, `exposure`,
 `gain`, `night`, `sqm`, `stars`, `detections` and the JPEG), authenticated like
 indi-allsky does: `Authorization: Bearer <user>:<hmac>` with
-HMAC-SHA3-512(secret, floor(unix time / skew) ‖ metadata JSON), checked against the
-current and the last few time windows. Other SyncAPI paths answer 200 and are dropped.
+HMAC-SHA3-512(secret, decimal floor(unix time / 300) ‖ metadata JSON bytes), checked
+against the windows n, n − 1, n + 1, n − 2, n − 3 and n − 4 (n the current one; long
+uploads take time), as indi-allsky's own server does. Other SyncAPI paths answer 200 and are dropped.
 The hub keeps a thumbnail of each image and the full frame only for images with
 `detections` > 0 and when it asked for one; it runs its own meteor detection on those.
 
 ### 10.4 Allsky
 
 A module `allsky_sharedsky` for the Allsky module system sends `PUT /station` and, after
-each image, `POST /frames` and, when Allsky's meteor detection (`allsky_meteordetect`)
-confirmed one, `POST /events`. It is published for the AllskyTeam's module repository and
+each image, `POST /frames` and, when the meteor detection of the AllskyTeam's module
+repository (`allsky_meteordetect`, "Meteor Detection (temporal)", which sets
+`AS_METEORCOUNT` and the meteor image's path) confirmed one, `POST /events`. It is
+offered to the AllskyTeam's module repository after talking with its maintainers, and
 until then installable from this repository.
 
 ### 10.5 Developer documentation

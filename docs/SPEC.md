@@ -1503,3 +1503,87 @@ depends on the hub (rule 1), so nothing here reacts to the hub being unreachable
 - **M3 – app:** Flutter app (pairing, live view, settings, push), Codemagic builds.
 - **M4 – products and detections:** timelapse, keogram, startrails, detection modules.
 - **M5 – image and updates:** Pi image build (`docs/image.md`), signed A/B updates.
+
+## 10. Connected cameras (SharedSky, draft)
+
+Benjamin, 2026-11-05: cameras running other software (indi-allsky, Allsky, own code) join
+the network for joint measurements, as simply as possible: a free account, "Kamera
+verbinden", copy two values. No MQTT, no FTP, no port forwarding: the camera sends over
+HTTPS to the hub. This is a separate interface from the device protocol (§6); it is
+versioned on its own (`connect/v1`) and changes only additively.
+
+### 10.1 Station
+
+A connected camera is a *station* of its owner's account, shown and paired like an
+allskyhub camera (meteor pairs, fireballs, showers, sky brightness, aurora), with the
+same privacy: its exact place is used for measurements and shown publicly only rounded
+(as in §6.8). Creating one asks for the software (indi-allsky, Allsky, other) and the
+owner's consent to the terms (images stay theirs; measurements are shared under CC BY
+4.0 with the station's name, §10.6). The hub then shows, once, the station's id and a
+secret of 64 hex characters; a new secret can be made at any time and ends the old one.
+
+The hub works out the station's orientation itself (§4.8, the same acceptance) from clear
+night frames, at most 3 tries a night and again after 7 days, and asks for a full frame
+when it needs one (§10.3, `want_full_frame`). Without an orientation and a trusted clock
+(`clock_synced`), a station's meteors are kept but never paired.
+
+### 10.2 Open API (`connect/v1`)
+
+Base `https://<hub>/api/connect/v1`, JSON in UTF-8, times ISO 8601 UTC. Each request
+carries `Authorization: Bearer <station id>:<secret>` over HTTPS. Limits per station:
+120 requests a minute, frames ≤ 8 MB, a thumbnail ≤ 300 kB. Unknown fields are ignored,
+missing optional ones are null.
+
+- `PUT /station` — `{name, latitude, longitude, elevation_m, software, software_version,
+  lens: {focal_mm, f_ratio, projection} | null, width, height, clock_synced}`. Sent at
+  start and on changes; answers `{orientation: {...} | null, want_full_frame}`.
+- `POST /frames` — multipart: `metadata` (JSON `{time, exposure_s, gain, night,
+  clock_synced, stars | null, sky_brightness | null}`, `time` = mid-exposure) and `image`
+  (JPEG). By default a thumbnail (longest side ≤ 640 px); the full frame when the last
+  answer had `want_full_frame`. At most one a minute is kept; answers
+  `{want_full_frame}`.
+- `POST /events` — multipart: `metadata` (JSON `{kind: "meteor", start, end, peak 0..1,
+  track: [[x, y], …] (pixels of the full frame, 2–32 points along the streak),
+  clock_synced}`) and `image` (the full frame the meteor is on). The hub turns the track
+  into directions with the station's orientation and handles it as an event of §6.4;
+  answers `{id}`.
+
+Errors answer `{error: "<code>"}` with 400 (bad request), 401 (unknown station or
+secret), 413 (too large), 429 (too often; `Retry-After`).
+
+### 10.3 indi-allsky without installing anything
+
+indi-allsky's SyncAPI (its upload to a remote indi-allsky server) is understood as is: in
+its configuration the owner enables SyncAPI with base URL `https://<hub>/indi-allsky`,
+user = station id and API key = secret, and sets images to every frame. The hub accepts
+`POST|PUT <base>/sync/v1/camera` (station data: `latitude`, `longitude`, `elevation`,
+`lens*`, `width`, `height`, `name`) and `<base>/sync/v1/image` (`createDate` in Unix seconds at the exposure's start, `exposure`,
+`gain`, `night`, `sqm`, `stars`, `detections` and the JPEG), authenticated like
+indi-allsky does: `Authorization: Bearer <user>:<hmac>` with
+HMAC-SHA3-512(secret, floor(unix time / skew) ‖ metadata JSON), checked against the
+current and the last few time windows. Other SyncAPI paths answer 200 and are dropped.
+The hub keeps a thumbnail of each image and the full frame only for images with
+`detections` > 0 and when it asked for one; it runs its own meteor detection on those.
+
+### 10.4 Allsky
+
+A module `allsky_sharedsky` for the Allsky module system sends `PUT /station` and, after
+each image, `POST /frames` and, when Allsky's meteor detection (`allsky_meteordetect`)
+confirmed one, `POST /events`. It is published for the AllskyTeam's module repository and
+until then installable from this repository.
+
+### 10.5 Developer documentation
+
+The hub serves the open API's documentation at `/entwickler/connect` (German and English),
+with an example in Python and in curl, and a test mode: a station can send to
+`/api/connect/v1/test/…`, which checks every field and answers what it understood, stores
+nothing and counts no limits beyond the 120 a minute.
+
+### 10.6 Terms and credit
+
+A station's images are its owner's: the hub shows them only where the owner allowed and
+always with the station's name. Its measurements (times, tracks, trajectories, rates,
+sky brightness) are shared under CC BY 4.0 with the station's name as credit, which is
+what lets the hub pass them to partners. Every result page names the stations behind it.
+The owner can leave at any time; their measurements already in joint results stay, under
+their name or, if they ask, as "eine Station im Netz".

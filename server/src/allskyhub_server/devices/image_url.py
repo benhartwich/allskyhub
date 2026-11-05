@@ -72,6 +72,8 @@ FAILED_NIGHTS = 3
 # Proof pictures on the request (re-encoded, no metadata): at most this big.
 PROOF_MAX_UPLOAD = 5 * 1024 * 1024
 PROOF_EDGE = 1600
+# A proof picture needs no more; decoding stays small (allsky's review of #399).
+PROOF_MAX_PIXELS = 25_000_000
 # The overlay mask (§10.7): a pixel that changed in this part of the frames is overlay.
 MASK_SIDE = 320
 MASK_CHANGE = 20
@@ -135,13 +137,22 @@ def check_url(url: str) -> SplitResult:
     return parts
 
 
+NAT64 = ipaddress.IPv6Network("64:ff9b::/96")
+
+
 def public(ip: str, own: frozenset[str]) -> bool:
     try:
         address = ipaddress.ip_address(ip)
     except ValueError:
         return False
-    if isinstance(address, ipaddress.IPv6Address) and address.ipv4_mapped is not None:
-        address = address.ipv4_mapped
+    if isinstance(address, ipaddress.IPv6Address):
+        # IPv4 inside IPv6 is checked as the IPv4 it reaches: mapped (::ffff:0:0/96), NAT64
+        # (64:ff9b::/96, global to Python but private behind a NAT64) and 6to4 (2002::/16).
+        embedded = address.ipv4_mapped or address.sixtofour
+        if address in NAT64:
+            embedded = ipaddress.IPv4Address(int(address) & 0xFFFFFFFF)
+        if embedded is not None:
+            address = embedded
     return (
         address.is_global
         and not address.is_multicast
@@ -230,7 +241,11 @@ class Fetcher:
             except httpx.HTTPError as exc:
                 raise FetchError("unreachable", type(exc).__name__) from exc
             if isinstance(found, str):
-                current = urljoin(current, found)
+                following = urljoin(current, found)
+                # An address given with https never falls back to plain http.
+                if urlsplit(url).scheme == "https" and urlsplit(following).scheme != "https":
+                    raise FetchError("insecure_redirect")
+                current = following
                 continue
             return found
         raise FetchError("too_many_redirects")
@@ -441,8 +456,9 @@ def store_proof(root: Path, device_id: str, data: bytes) -> None:
         with Image.open(io.BytesIO(data)) as img:
             if img.format not in ("JPEG", "PNG", "WEBP", "MPO"):
                 raise FetchError("bad_image")
-            if img.size[0] * img.size[1] > JPEG_MAX_PIXELS:
+            if img.size[0] * img.size[1] > PROOF_MAX_PIXELS:
                 raise FetchError("too_large")
+            img.draft("RGB", (PROOF_EDGE, PROOF_EDGE))  # JPEG decodes at about the size kept
             img.load()
             picture = ImageOps.exif_transpose(img).convert("RGB")
     except (UnidentifiedImageError, OSError, Image.DecompressionBombError) as exc:

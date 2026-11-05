@@ -78,9 +78,9 @@ def _render(
     img = r.normal(28.0, 2.0, (H, W)).astype(np.float32)
     ra, dec, mag = localfit._stars()  # pyright: ignore[reportPrivateUsage]
     alt, az = alt_az(ra, dec, sidereal_deg(at, LON), LAT)
-    order = np.argsort(mag)
+    mags = [float(m) for m in mag.tolist()]
     drawn = 0
-    for i in order.tolist():
+    for i in sorted(range(len(mags)), key=mags.__getitem__):
         if alt[i] < 5 or mag[i] > 4.0:
             continue
         if max_stars is not None and drawn >= max_stars:
@@ -240,7 +240,7 @@ def test_a_bright_meteor_carries_its_fitted_track(tmp_path: Path) -> None:
 def _off_circle(point: list[float]) -> float:
     """Degrees from the great circle through the true ends A and B."""
     n = np.cross(sky_unit(*A), sky_unit(*B))
-    n = n / float(np.linalg.norm(n))
+    n = n / math.sqrt(float(n @ n))
     return abs(math.degrees(math.asin(float(sky_unit(*point) @ n))))
 
 

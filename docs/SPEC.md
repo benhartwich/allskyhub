@@ -1528,11 +1528,16 @@ the secret (as for local logins, §7.4); an indi-allsky station's secret is kept
 encrypted with a key of the hub's vault, because indi-allsky's signature (§10.3) needs it
 in clear on the receiving side.
 
-**Clock.** `clock_synced` is the station's own word; the hub also checks it. A frame
-whose `time` lies more than 120 s plus its exposure before or more than 60 s after the
-moment it arrived counts as a wrong clock, and three such frames in a row make the
-station's clock untrusted until 10 frames in a row are within. Only meteors of a station
-with a trusted clock (both its word and the hub's check) are paired.
+**Clock.** `clock_synced` is the station's own word; the hub also checks it against the
+moment a frame arrives. A frame whose `time` lies more than 60 s after its arrival
+always counts as a wrong clock. A frame that is too old (more than 120 s plus its
+exposure before its arrival) counts only while the station sends live: when its last
+three frames came about as fast as they were taken (the gaps between their `time`s and
+between their arrivals differ by less than half); a station catching up after an
+outage sends faster than it took them, and those frames do not judge its clock. Three
+wrong frames in a row make the clock untrusted until 10 judged frames in a row are
+right. Only meteors of a station with a trusted clock (both its word and the hub's
+check) are paired.
 
 **Limits and keeping.** As for cameras: at most 3000 events a night, at most one frame a
 minute kept. Thumbnails are kept like a camera's (§4.5, the owner's plan), full frames

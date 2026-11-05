@@ -15,6 +15,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from allskyhub_server.auth import ratelimit
+from allskyhub_server.i18n import pick
 from allskyhub_server.mail.send import Mail, Mailer
 from allskyhub_server.models import User
 
@@ -39,16 +40,22 @@ async def warn(app: FastAPI, email: str, base_url: str) -> None:
     except ratelimit.RateLimitedError:
         return
     base = base_url.rstrip("/")
-    body = (
+    # The owner's language, not that of whoever is guessing.
+    body = pick(
+        user.lang,
         "Hallo,\n\nbei deinem allskyhub-Konto ist gerade sehr oft ein falsches Passwort "
         "eingegeben worden. Wir haben die Anmeldung deshalb für eine Weile gesperrt.\n\n"
         "Warst du das selbst, kannst du diese Nachricht ignorieren. Sonst versucht vielleicht "
         "jemand, dein Passwort zu erraten. Lege dann bitte ein neues fest, das du nirgends "
-        f"sonst verwendest:\n\n{base}/password/forgot\n\nallskyhub\n"
+        f"sonst verwendest:\n\n{base}/password/forgot\n\nallskyhub\n",
+        "Hello,\n\nsomeone just entered a wrong password for your allskyhub account many "
+        "times, so signing in is blocked for a while.\n\nIf that was you, ignore this "
+        "message. Otherwise someone may be trying to guess your password: please set a new "
+        f"one you use nowhere else:\n\n{base}/password/forgot?lang=en\n\nallskyhub\n",
     )
-    await mailer.send(
-        Mail(to=user.email, subject="allskyhub: viele falsche Anmeldungen", body=body)
-    )
+    subject = pick(user.lang, "allskyhub: viele falsche Anmeldungen",
+                   "allskyhub: many failed sign-ins")  # fmt: skip
+    await mailer.send(Mail(to=user.email, subject=subject, body=body))
 
 
 def warn_later(app: FastAPI, email: str, ip: str, base_url: str) -> None:

@@ -79,6 +79,9 @@ class User(Base):
     alert_lon: Mapped[float | None] = mapped_column(Float)
     alert_radius_km: Mapped[int] = mapped_column(Integer, default=300, server_default="300")
     alert_tz: Mapped[str | None] = mapped_column(String(64))
+    # "de" or "en": mails to the user outside a request (station checked, paused), set at
+    # sign-up and by the language switch (i18n.pick, web/lang.py; 2026-11-05).
+    lang: Mapped[str] = mapped_column(String(2), default="de", server_default="de")
     notify_aurora_near: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
     notify_fireball_near: Mapped[bool] = mapped_column(
         Boolean, default=False, server_default="false"

@@ -21,16 +21,15 @@ import time
 from dataclasses import dataclass
 from datetime import datetime
 from functools import cache
-from pathlib import Path
 
 import numpy as np
 import numpy.typing as npt
 
-from allskyhub_agent.calib.solve import Gray, Solution, alt_az, sidereal_deg, star_map
+from allskyhub_solve.solve import STARS_MAG4, Gray, Solution, alt_az, sidereal_deg, star_map
 
 F = npt.NDArray[np.float64]
 
-STARS = Path(__file__).with_name("stars_mag4.json")  # Hipparcos to V 4.0
+STARS = STARS_MAG4  # Hipparcos to V 4.0
 MAX_MAG = 4.0
 NEAR_DEG = 15.0  # stars this close to the track
 MAX_CORRECTION_DEG = 1.0  # each of the three angles

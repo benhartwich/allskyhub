@@ -10,7 +10,8 @@ overlay helper for Allsky (scripts/utilities/constellation_overlay.py).
    place and kept only if it clearly outshines its neighbourhood; the lens
    r = a1*t + a3*t^3 (t = zenith angle / 90°), the centre, the rotation and, with
    enough stars, a small tilt of the camera are fitted while the search window shrinks.
-4. Only a clear winner is accepted: many stars, a small error and no rival close to it.
+4. Only a clear winner is accepted: many stars, a small error and no rival close to it
+   (`accept`, the same rule for the camera and for the hub's connected stations, §10.1).
 
 The original used SciPy for the fit and for neighbour searches; here a small
 Levenberg-Marquardt with soft-L1 weights and grid lookups do that with numpy only.
@@ -35,7 +36,12 @@ import numpy.typing as npt
 F = npt.NDArray[np.float64]
 Gray = npt.NDArray[np.uint8]
 
-CATALOGUE = Path(__file__).with_name("bright_stars.json")
+# The star catalogues (Hipparcos): the bright stars the solver matches, and all stars to
+# V 4 and V 5 for the local fit, the cloud map and star trails.
+DATA = Path(__file__).parent / "data"
+CATALOGUE = DATA / "bright_stars.json"
+STARS_MAG4 = DATA / "stars_mag4.json"
+STARS_MAG5 = DATA / "stars_mag5.json"
 MAX_TILT = 20.0  # degrees the camera's axis may lean
 
 
@@ -471,6 +477,35 @@ def residuals(pairs: F, p: list[float], flip: float) -> tuple[float, float]:
     return float(np.sqrt(np.mean(e**2))), float(np.sqrt(np.mean(deg**2)))
 
 
+# SPEC §4.8: a solution is accepted only as a clear winner (camera and hub alike).
+MIN_STARS = 12
+MAX_RMS_DEG = 0.6
+RIVAL_SHARE = 0.7  # a different solution with this share of the winner's stars is too close
+
+
+@dataclass(frozen=True)
+class Verdict:
+    """Whether a plate solve is accepted (SPEC §4.8) and, if not, why."""
+
+    ok: bool
+    reason: str = ""  # "" if accepted: "few stars", "no match", "large error", "close rival"
+
+    def __bool__(self) -> bool:
+        return self.ok
+
+
+def accept(stars: int, rms_deg: float, rival_stars: int = 0) -> Verdict:
+    """SPEC §4.8: at least MIN_STARS stars, at most MAX_RMS_DEG RMS, and no other solution
+    (another centre, rotation or mirror sense) with RIVAL_SHARE of the stars."""
+    if stars < MIN_STARS:
+        return Verdict(False, "few stars")
+    if not math.isfinite(rms_deg) or rms_deg > MAX_RMS_DEG:
+        return Verdict(False, "large error")
+    if rival_stars >= RIVAL_SHARE * stars:
+        return Verdict(False, "close rival")
+    return Verdict(True)
+
+
 def solve(
     gray: Gray, utc: datetime, lat: float, lon: float, static: Gray | None = None
 ) -> Solution | None:
@@ -479,11 +514,18 @@ def solve(
     `static`: another frame of the same night, about half an hour away; points at the
     same place in both are text or hot pixels, not stars.
     """
+    return solve_verdict(gray, utc, lat, lon, static)[0]
+
+
+def solve_verdict(
+    gray: Gray, utc: datetime, lat: float, lon: float, static: Gray | None = None
+) -> tuple[Solution | None, Verdict]:
+    """Like `solve`, with why a frame gave no solution."""
     h, w = gray.shape
     stat = detect(static, 3000) if static is not None and static.shape == gray.shape else None
     dets = detect(gray, 400, stat)
-    if len(dets) < 12:
-        return None
+    if len(dets) < MIN_STARS:
+        return None, Verdict(False, "few stars")
     cat = catalogue(utc, lat, lon)
     stars = star_map(gray)
     sky = sky_region(gray)
@@ -497,7 +539,7 @@ def solve(
         if rms_deg < 0.75:
             results.append((len(pairs), p, pairs, flip, rms_px, rms_deg))
     if not results:
-        return None
+        return None, Verdict(False, "no match")
     results.sort(key=lambda r: -r[0])
     n, p, _pairs, flip, rms_px, rms_deg = results[0]
     rivals = [
@@ -506,14 +548,15 @@ def solve(
         or abs((r[1][4] - p[4] + 180) % 360 - 180) > 3
         or r[3] != flip
     ]  # fmt: skip
-    if n < 12 or rms_deg > 0.6 or (rivals and rivals[0][0] >= 0.7 * n):
-        return None
+    verdict = accept(n, rms_deg, rivals[0][0] if rivals else 0)
+    if not verdict:
+        return None, verdict
     return Solution(
         cx=round(p[0], 2), cy=round(p[1], 2), a1=round(p[2], 3), a3=round(p[3], 3),
         rot=round(p[4] % 360.0, 3), flip=flip, tilt_east=round(p[5], 3),
         tilt_north=round(p[6], 3), stars=n, rms_px=round(rms_px, 2), rms_deg=round(rms_deg, 3),
         width=w, height=h,
-    )  # fmt: skip
+    ), verdict  # fmt: skip
 
 
 def sky_band(

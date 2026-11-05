@@ -10,10 +10,10 @@ import numpy.typing as npt
 import pytest
 from pydantic import ValidationError
 
-from allskyhub_agent.calib.solve import Solution, alt_az, sidereal_deg
 from allskyhub_agent.detect import cloudmap
 from allskyhub_agent.detect.cloudmap import CELLS, cell_centre, cell_of
 from allskyhub_protocol import SkyMetrics
+from allskyhub_solve.solve import Solution, alt_az, sidereal_deg
 
 W = H = 2000
 SOL = Solution(cx=1000.0, cy=1000.0, a1=900.0, a3=0.0, rot=20.0, flip=-1.0, tilt_east=0.0,

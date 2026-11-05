@@ -16,7 +16,6 @@ import cv2
 import numpy as np
 import pytest
 
-from allskyhub_agent.calib.solve import Solution
 from allskyhub_agent.detect import tuning
 from allskyhub_agent.detect.events import DetectionWorker
 from allskyhub_agent.detect.meteor import MeteorConfig
@@ -28,6 +27,7 @@ from allskyhub_agent.settings_schema import build_schema, check, values
 from allskyhub_agent.store.images import ImageStore
 from allskyhub_agent.web.calibration import LocalCalibration
 from allskyhub_agent.web.server import WebServer
+from allskyhub_solve.solve import Solution
 
 W, H = 640, 360
 SQUARE = [[0.0, 0.0], [0.25, 0.0], [0.25, 0.25], [0.0, 0.25]]

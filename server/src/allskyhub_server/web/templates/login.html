@@ -1,20 +1,21 @@
 {% extends "base.html" %}
-{% block title %}Anmelden · allskyhub{% endblock %}
+{% block lang %}{{ 'en' if en else 'de' }}{% endblock %}
+{% block title %}{{ t('Anmelden', 'Sign in') }} · allskyhub{% endblock %}
 {% block content %}
 <div class="auth">
-  <h1>Anmelden</h1>
+  <h1>{{ t('Anmelden', 'Sign in') }}</h1>
   <form method="post" action="/login" class="card stack">
     <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
     <input type="hidden" name="next" value="{{ next or '/' }}">
-    <label>E-Mail-Adresse
+    <label>{{ t('E-Mail-Adresse', 'Email address') }}
       <input type="email" name="email" value="{{ email or '' }}" autocomplete="username" required>
     </label>
-    <label>Passwort
+    <label>{{ t('Passwort', 'Password') }}
       <input type="password" name="password" autocomplete="current-password" required>
     </label>
-    <button type="submit">Anmelden</button>
+    <button type="submit">{{ t('Anmelden', 'Sign in') }}</button>
   </form>
-  {% if mail_enabled %}<p><a href="/password/forgot">Passwort vergessen?</a></p>{% endif %}
-  <p class="muted">Noch kein Konto? {% if open_signup %}<a href="/konto/anlegen">Kostenlos anlegen</a>{% else %}<a href="/zugang">Zugang beantragen</a>{% endif %}</p>
+  {% if mail_enabled %}<p><a href="/password/forgot">{{ t('Passwort vergessen?', 'Forgot your password?') }}</a></p>{% endif %}
+  <p class="muted">{{ t('Noch kein Konto?', 'No account yet?') }} {% if open_signup %}<a href="/konto/anlegen">{{ t('Kostenlos anlegen', 'Create one for free') }}</a>{% else %}<a href="/zugang">{{ t('Zugang beantragen', 'Ask for access') }}</a>{% endif %}</p>
 </div>
 {% endblock %}

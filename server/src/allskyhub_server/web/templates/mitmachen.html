@@ -1,15 +1,30 @@
 {% extends "base.html" %}
-{% block title %}SharedSky · Gemeinsam den Himmel vermessen · allskyhub{% endblock %}
+{% block lang %}{{ 'en' if en else 'de' }}{% endblock %}
+{% block title %}{{ t('SharedSky · Gemeinsam den Himmel vermessen', 'SharedSky · Measuring the sky together') }} · allskyhub{% endblock %}
 {% block content %}
-<div class="page-head"><h1>SharedSky</h1><p class="muted">Gemeinsam den Himmel vermessen. Ein offenes Netz von allskyhub.</p></div>
+<div class="page-head"><h1>SharedSky</h1><p class="muted">{{ t('Gemeinsam den Himmel vermessen. Ein offenes Netz von allskyhub.', 'Measuring the sky together. An open network by allskyhub.') }}</p></div>
 
 <section class="card stack">
+  {% if en %}
+  <h2>Your all-sky camera sees more when it isn't alone</h2>
+  <p>One camera on its own sees a streak in the sky. Two or more cameras that see the same fireball give its path: how high it was, where it flew and where meteorites might have landed. SharedSky connects all kinds of all-sky cameras for this – allskyhub, Allsky, indi-allsky or your own software. Free, no strings attached, and your camera stays as it is.</p>
+  {% else %}
   <h2>Deine Allsky-Kamera sieht mehr, wenn sie nicht allein ist</h2>
   <p>Eine Kamera allein sieht einen Strich am Himmel. Zwei oder mehr Kameras, die dieselbe Feuerkugel sehen, ergeben ihre Bahn: wie hoch sie war, wohin sie flog und wo Meteorite gelandet sein könnten. SharedSky verbindet dafür Allsky-Kameras aller Art, egal ob allskyhub, Allsky, indi-allsky oder eigene Software. Kostenlos, ohne Bindung, und deine Kamera bleibt, wie sie ist.</p>
-  <p class="actions">{% if user %}<a class="button" href="/stationen/neu">Kamera verbinden</a>{% elif open_signup %}<a class="button" href="/konto/anlegen?weiter=sharedsky">Kostenloses Konto anlegen</a> <a class="button secondary" href="/login?next=/stationen/neu">Anmelden</a>{% else %}<a class="button" href="/zugang">Zugang beantragen</a> <a class="button secondary" href="/login?next=/stationen/neu">Anmelden</a>{% endif %}</p>
+  {% endif %}
+  <p class="actions">{% if user %}<a class="button" href="/start?kamera=ja">{{ t('Kamera verbinden', 'Connect a camera') }}</a>{% elif open_signup %}<a class="button" href="/konto/anlegen?weiter=sharedsky">{{ t('Kostenloses Konto anlegen', 'Create a free account') }}</a> <a class="button secondary" href="/login?next=/start%3Fkamera%3Dja">{{ t('Anmelden', 'Sign in') }}</a>{% else %}<a class="button" href="/zugang">{{ t('Zugang beantragen', 'Ask for access') }}</a> <a class="button secondary" href="/login?next=/start%3Fkamera%3Dja">{{ t('Anmelden', 'Sign in') }}</a>{% endif %}</p>
 </section>
 
 <section class="card stack">
+  {% if en %}
+  <h2>What you get</h2>
+  <ul>
+    <li><strong>Results one camera alone never gives:</strong> a fireball's height and path, its possible fall area with the winds aloft, speed and origin from a match with the Global Meteor Network. <a href="/feuerkugeln">See the fireballs</a></li>
+    <li><strong>Meteor showers live:</strong> hourly rates from every clear camera. <a href="/meteorstroeme">Meteor showers</a></li>
+    <li><strong>Your sky compared:</strong> sky brightness night by night and its trend over the years, next to the stations around you.</li>
+    <li><strong>Credit:</strong> your station is named on every result it helped with.</li>
+  </ul>
+  {% else %}
   <h2>Was du bekommst</h2>
   <ul>
     <li><strong>Ergebnisse, die eine Kamera allein nie liefert:</strong> Höhe und Bahn einer Feuerkugel, ihr mögliches Fallgebiet mit dem Wind in der Höhe, Geschwindigkeit und Herkunft aus dem Abgleich mit dem Global Meteor Network. <a href="/feuerkugeln">Feuerkugeln ansehen</a></li>
@@ -17,32 +32,51 @@
     <li><strong>Dein Himmel im Vergleich:</strong> Himmelshelligkeit pro Nacht und ihr Trend über die Jahre, neben den Stationen der Umgebung.</li>
     <li><strong>Nennung:</strong> Deine Station steht mit ihrem Namen auf jeder Ergebnisseite, an der sie beteiligt war.</li>
   </ul>
+  {% endif %}
 </section>
 
 <section class="card stack">
-  <h2>Die Messprogramme</h2>
+  <h2>{{ t('Die Messprogramme', 'What the network measures') }}</h2>
   <div class="table-scroll"><table class="stats users-list">
-    <tr><th>Programm</th><th>Was gemessen wird</th></tr>
-    <tr><td>Feuerkugeln</td><td>Bahn, Höhe, Genauigkeit, Fallgebiet mit Höhenwind</td></tr>
-    <tr><td>Meteorströme</td><td>Raten pro Stunde, Radiant</td></tr>
-    <tr><td>Himmelshelligkeit</td><td>mag/″² pro Nacht, Trend über die Jahre</td></tr>
-    <tr><td>Polarlicht</td><td>Episoden und Richtung, Warnung an Kameras weiter südlich</td></tr>
-    <tr><td>Leuchtende Nachtwolken</td><td>Sichtungen in Sommernächten</td></tr>
-    <tr><td>Wolken</td><td>Bedeckung jetzt und in Kürze</td></tr>
+    <tr><th>{{ t('Programm', 'Programme') }}</th><th>{{ t('Was gemessen wird', 'What is measured') }}</th></tr>
+    <tr><td>{{ t('Feuerkugeln', 'Fireballs') }}</td><td>{{ t('Bahn, Höhe, Genauigkeit, Fallgebiet mit Höhenwind', 'Path, height, accuracy, fall area with the winds aloft') }}</td></tr>
+    <tr><td>{{ t('Meteorströme', 'Meteor showers') }}</td><td>{{ t('Raten pro Stunde, Radiant', 'Hourly rates, radiant') }}</td></tr>
+    <tr><td>{{ t('Himmelshelligkeit', 'Sky brightness') }}</td><td>{{ t('mag/″² pro Nacht, Trend über die Jahre', 'mag/″² per night, trend over the years') }}</td></tr>
+    <tr><td>{{ t('Polarlicht', 'Aurora') }}</td><td>{{ t('Episoden und Richtung, Warnung an Kameras weiter südlich', 'Episodes and direction, alerts to cameras further south') }}</td></tr>
+    <tr><td>{{ t('Leuchtende Nachtwolken', 'Noctilucent clouds') }}</td><td>{{ t('Sichtungen in Sommernächten', 'Sightings on summer nights') }}</td></tr>
+    <tr><td>{{ t('Wolken', 'Clouds') }}</td><td>{{ t('Bedeckung jetzt und in Kürze', 'Cover now and shortly') }}</td></tr>
   </table></div>
 </section>
 
 <section class="stack">
-  <h2>So verbindest du deine Kamera</h2>
+  <h2>{{ t('So verbindest du deine Kamera', 'How to connect your camera') }}</h2>
   <div class="join-ways">
+    {% if en %}
+    <div class="card stack"><h3>indi-allsky</h3><p class="muted">Nothing to install: turn on SyncAPI in your configuration and enter three values from allskyhub. Every image brings its location, exposure and detected meteors.</p></div>
+    <div class="card stack"><h3>Allsky and others with an image online</h3><p class="muted">You give the address of your latest image, your location and a short proof. An admin checks the station by hand; then the hub fetches the image. Nothing changes on your camera.</p></div>
+    <div class="card stack"><h3>Your own or commercial software</h3><p class="muted">An open, simple interface over HTTPS, with examples and a test mode. <a href="/entwickler/connect">For developers</a></p></div>
+    <div class="card stack"><h3>allskyhub camera</h3><p class="muted">The ready-made image for the Raspberry Pi: pair it with the app, everything else runs by itself. <a href="/hardware">Hardware</a></p></div>
+    {% else %}
     <div class="card stack"><h3>indi-allsky</h3><p class="muted">Ohne Installation: In der Konfiguration die SyncAPI einschalten und drei Werte von allskyhub eintragen. Mit jedem Bild kommen Standort, Belichtung und erkannte Meteore.</p></div>
     <div class="card stack"><h3>Allsky und andere mit Bild im Netz</h3><p class="muted">Du gibst die Adresse deines neuesten Bilds an, den Ort und einen kurzen Nachweis. Ein Admin prüft die Station von Hand; danach holt der Hub das Bild ab. An deiner Kamera änderst du nichts.</p></div>
     <div class="card stack"><h3>Eigene oder gekaufte Software</h3><p class="muted">Eine offene, einfache Schnittstelle über HTTPS, mit Beispielen und Testmodus. <a href="/entwickler/connect">Für Entwickler</a></p></div>
     <div class="card stack"><h3>allskyhub-Kamera</h3><p class="muted">Das fertige Image für den Raspberry Pi: koppeln per App, alles andere läuft von selbst. <a href="/hardware">Hardware</a></p></div>
+    {% endif %}
   </div>
 </section>
 
 <section class="card stack" id="bedingungen">
+  {% if en %}
+  <h2>Terms in short</h2>
+  <ul>
+    <li><strong>Your images stay yours.</strong> The hub shows them only where you allow it, and always with your station's name.</li>
+    <li><strong>Measurements under CC BY 4.0:</strong> your station's times, tracks, paths, rates and sky brightness are shared with its name. Only that lets them go on to scientific partners.</li>
+    <li><strong>Location:</strong> the exact place is used only for the calculations. Publicly it is always rounded.</li>
+    <li><strong>Clock:</strong> joint paths need a synchronised clock (NTP). The hub checks it on every image.</li>
+    <li><strong>Leave any time:</strong> when you remove your station, its images, its exact place and its secret are deleted at once. Measurements already part of joint results stay there, without your name if you ask.</li>
+  </ul>
+  <p class="muted small">Our <a href="/agb">terms</a> and <a href="/datenschutz">privacy policy</a> (both in German) also apply.</p>
+  {% else %}
   <h2>Teilnahmebedingungen in Kürze</h2>
   <ul>
     <li><strong>Deine Bilder bleiben deine.</strong> Der Hub zeigt sie nur dort, wo du es erlaubst, und immer mit dem Namen deiner Station.</li>
@@ -52,10 +86,16 @@
     <li><strong>Austritt jederzeit:</strong> Entfernst du deine Station, sind ihre Bilder, ihr genauer Ort und ihr Geheimnis sofort gelöscht. Messwerte, die schon in gemeinsame Ergebnisse eingeflossen sind, bleiben dort, auf Wunsch ohne Namen.</li>
   </ul>
   <p class="muted small">Es gelten außerdem die <a href="/agb">AGB</a> und die <a href="/datenschutz">Datenschutzerklärung</a>.</p>
+  {% endif %}
 </section>
 
 <section class="card stack">
+  {% if en %}
+  <h2>Your camera is here and you didn't add it?</h2>
+  <p>An admin checks every station that joins by its image address by hand. If your camera is here anyway without your consent, write to us via the <a href="/impressum">imprint</a>. We pause the station at once and sort it out with whoever added it.</p>
+  {% else %}
   <h2>Deine Kamera ist hier, ohne dass du sie eingetragen hast?</h2>
   <p>Jede Station über eine Bild-Adresse prüft ein Admin von Hand. Ist trotzdem deine Kamera dabei, ohne dass du zugestimmt hast, schreib uns über das <a href="/impressum">Impressum</a>. Wir pausieren die Station sofort und klären es mit dem, der sie eingetragen hat.</p>
+  {% endif %}
 </section>
 {% endblock %}

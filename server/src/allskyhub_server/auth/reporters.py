@@ -22,6 +22,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from allskyhub_server.admin.stores import Vault
 from allskyhub_server.auth.accounts import MIN_PASSWORD_LENGTH, AccountError, normalize_email
 from allskyhub_server.auth.passwords import hash_secret_async
+from allskyhub_server.i18n import tr
 from allskyhub_server.models import EmailConfirmation, User
 from allskyhub_server.settings import Settings
 
@@ -47,9 +48,16 @@ async def sign_up(
     invalid address or password. The caller commits."""
     email = normalize_email(email)
     if "@" not in email or len(email) > 254 or email.startswith("@"):
-        raise AccountError("Bitte eine gültige E-Mail-Adresse angeben.")
+        raise AccountError(
+            tr("Bitte eine gültige E-Mail-Adresse angeben.", "Please enter a valid email address.")
+        )
     if len(password) < MIN_PASSWORD_LENGTH:
-        raise AccountError(f"Das Passwort braucht mindestens {MIN_PASSWORD_LENGTH} Zeichen.")
+        raise AccountError(
+            tr(
+                f"Das Passwort braucht mindestens {MIN_PASSWORD_LENGTH} Zeichen.",
+                f"The password needs at least {MIN_PASSWORD_LENGTH} characters.",
+            )
+        )
     password_hash = await hash_secret_async(password)  # also when it is not used: timing
     existing = await db.scalar(select(User).where(User.email == email))
     if existing is not None:

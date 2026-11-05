@@ -1,0 +1,7 @@
+[Unit]
+Description=allskyhub: grow the images' file system to its disk (admin page)
+
+[Service]
+Type=oneshot
+ExecStart=/opt/allskyhub-server/deploy/storage/allskyhub-storage.sh
+TimeoutStartSec=30min

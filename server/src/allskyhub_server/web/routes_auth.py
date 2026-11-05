@@ -11,6 +11,7 @@ from fastapi.responses import RedirectResponse, Response
 
 from allskyhub_server.auth import accounts, invitations, lockout, password_reset, ratelimit
 from allskyhub_server.auth.sessions import ABSOLUTE_LIFETIME, create_session, delete_session
+from allskyhub_server.i18n import english, tr
 from allskyhub_server.mail.send import Mail, Mailer
 from allskyhub_server.settings import Settings
 from allskyhub_server.web.deps import (
@@ -88,7 +89,13 @@ async def login(
         resp = render(
             request,
             "login.html",
-            {"error": "Zu viele Anmeldeversuche. Bitte später erneut versuchen.", "email": email},
+            {
+                "error": tr(
+                    "Zu viele Anmeldeversuche. Bitte später erneut versuchen.",
+                    "Too many sign-in attempts. Please try again later.",
+                ),
+                "email": email,
+            },
             status_code=429,
         )
         resp.headers["Retry-After"] = str(exc.retry_after)
@@ -98,7 +105,13 @@ async def login(
         return render(
             request,
             "login.html",
-            {"error": "E-Mail-Adresse oder Passwort ist falsch.", "email": email, "next": next},
+            {
+                "error": tr(
+                    "E-Mail-Adresse oder Passwort ist falsch.", "Wrong email address or password."
+                ),
+                "email": email,
+                "next": next,
+            },
             status_code=400,
         )
     return await start_session(request, db, settings, user.id, next)
@@ -206,16 +219,20 @@ async def forgot(
     await db.commit()
     if created is not None:
         user, token = created
-        link = f"{settings.base_url.rstrip('/')}/password/reset?{urlencode({'token': token})}"
+        query = {"token": token} | ({"lang": "en"} if english() else {})
+        link = f"{settings.base_url.rstrip('/')}/password/reset?{urlencode(query)}"
         await mailer.send(
             Mail(
                 to=user.email,
-                subject="allskyhub: neues Passwort",
-                body=(
+                subject=tr("allskyhub: neues Passwort", "allskyhub: new password"),
+                body=tr(
                     "Hallo,\n\nfür dein allskyhub-Konto wurde ein neues Passwort angefordert. "
                     f"Mit diesem Link legst du es fest (eine Stunde gültig, nur einmal):\n\n{link}"
                     "\n\nWarst du das nicht, ignoriere diese Nachricht; dein Passwort bleibt "
-                    "dann, wie es ist.\n\nallskyhub\n"
+                    "dann, wie es ist.\n\nallskyhub\n",
+                    "Hello,\n\na new password was asked for your allskyhub account. This link "
+                    f"sets it (it works for one hour, once):\n\n{link}\n\nIf this wasn't you, "
+                    "just ignore this message; your password stays as it is.\n\nallskyhub\n",
                 ),
             )
         )
@@ -244,7 +261,9 @@ async def reset(
 ) -> Response:
     try:
         if password != password2:
-            raise accounts.AccountError("Die Passwörter stimmen nicht überein.")
+            raise accounts.AccountError(
+                tr("Die Passwörter stimmen nicht überein.", "The passwords don't match.")
+            )
         user = await password_reset.use(db, token, password)
     except accounts.AccountError as exc:
         return render(

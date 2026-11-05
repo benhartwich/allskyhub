@@ -67,7 +67,7 @@ def place(lat: str, lon: str, elevation: str) -> Place:
         raise StationInputError(
             tr(
                 "Bitte den Ort auf der Karte setzen oder die Koordinaten eingeben.",
-                "Please set the place on the map or enter its coordinates.",
+                "Please set the location on the map or enter the coordinates.",
             )
         ) from None
     if not (-90 <= la <= 90 and -180 <= lo <= 180) or (el is not None and not -500 <= el <= 9000):
@@ -126,13 +126,13 @@ async def create(
     where = place(ask.latitude, ask.longitude, ask.elevation_m)
     if len(ask.proof) > image_url.PROOF_MAX_UPLOAD:
         raise StationInputError(
-            tr("Das Nachweis-Bild ist zu groß.", "The proof picture is too large.")
+            tr("Das Nachweis-Bild ist zu groß.", "The proof image is too large.")
         )
     if not ask.proof_text.strip() and not ask.proof:
         raise StationInputError(
             tr(
                 "Bitte einen Nachweis angeben: einen Satz, einen Link oder ein Bild.",
-                "Please give a proof: a sentence, a link or a picture.",
+                "Please give a proof: a sentence, a link or an image.",
             )
         )
     device, _ = await stations.create(db, user, ask.name, ask.software, key)
@@ -142,7 +142,7 @@ async def create(
         except image_url.FetchError as exc:
             await db.rollback()
             raise StationInputError(
-                tr(f"Das Nachweis-Bild: {exc.text}", f"The proof picture: {exc.text}")
+                tr("Das Nachweis-Bild: ", "The proof image: ") + exc.text
             ) from None
     focal = ask.focal_mm.replace(",", ".")
     lens = {"focal_mm": float(focal)} if number(ask.focal_mm) else None

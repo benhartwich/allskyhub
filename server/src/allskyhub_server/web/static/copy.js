@@ -8,7 +8,7 @@
     try {
       await navigator.clipboard.writeText(text);
       const before = button.textContent;
-      button.textContent = "kopiert";
+      button.textContent = document.documentElement.lang === "en" ? "copied" : "kopiert";
       setTimeout(() => {
         button.textContent = before;
       }, 1500);

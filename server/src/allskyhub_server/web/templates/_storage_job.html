@@ -1,0 +1,24 @@
+{# The images' disk and the root helper's progress in growing it (admin/storage.py). #}
+{% set d = images_disk %}
+<dl class="facts">
+  {% if d %}
+  <dt>Belegt</dt><dd class="{{ 'warn' if d.used_pct >= 70 }}">{{ '%.0f' | format(d.used_bytes / 1e9) }} GB von {{ '%.0f' | format(d.fs_bytes / 1e9) }} GB ({{ d.used_pct | round | int }} %)</dd>
+  <dt>Platte</dt><dd><code>/dev/{{ d.device }}</code>{% if d.disk_bytes %}, {{ '%.0f' | format(d.disk_bytes / 1e9) }} GB{% endif %}{% if d.growable %} <span class="warn">größer als das Dateisystem</span>{% endif %}</dd>
+  {% else %}
+  <dt>Platte</dt><dd class="warn">Die Bilder liegen auf keiner eigenen Platte (nicht eingehängt?).</dd>
+  {% endif %}
+</dl>
+{% set j = storage_job %}
+{% if j.state != 'idle' %}
+<div class="deploy-job"{% if j.busy %} hx-get="/admin/storage/job" hx-trigger="every 3s" hx-target="#storage-job" hx-swap="innerHTML"{% endif %}>
+  <p class="deploy-state {{ j.state }}">
+    {% if j.state == 'requested' %}Vergrößern angefordert, wartet auf den Server …
+    {% elif j.state == 'running' %}Das Dateisystem wird vergrößert …
+    {% elif j.state == 'ok' %}Zuletzt erfolgreich vergrößert.
+    {% elif j.state == 'failed' %}Das letzte Vergrößern ist fehlgeschlagen; das Dateisystem ist unverändert.
+    {% endif %}
+    {% if j.changed_at %}<span class="muted small">· {{ j.changed_at | localtime }}</span>{% endif %}
+  </p>
+  {% if j.log %}<details{% if j.state == 'failed' %} open{% endif %}><summary>Protokoll</summary><pre class="deploy-log">{{ j.log }}</pre></details>{% endif %}
+</div>
+{% endif %}

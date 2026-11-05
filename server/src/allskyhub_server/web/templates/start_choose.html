@@ -1,59 +1,61 @@
 {% extends "base.html" %}
 {# The way in after signing up (routes_access.first_steps): three short questions. #}
-{% block title %}Erste Schritte · allskyhub{% endblock %}
+{% block lang %}{{ 'en' if en else 'de' }}{% endblock %}
+{% block title %}{{ t('Erste Schritte', 'Getting started') }} · allskyhub{% endblock %}
 {% block content %}
 <div class="wizard">
   {% if stage == 'camera' %}
-  <div class="page-head"><h1>Hast du schon eine Allsky-Kamera?</h1></div>
+  <div class="page-head"><h1>{{ t('Hast du schon eine Allsky-Kamera?', 'Do you already have an all-sky camera?') }}</h1></div>
   <div class="choice-grid">
     <a class="choice-card" href="/start?kamera=ja">
-      <strong>Ja, ich habe eine Kamera</strong>
-      <span class="muted">Mit allskyhub, Allsky, indi-allsky oder eigener Software.</span>
+      <strong>{{ t('Ja, ich habe eine Kamera', 'Yes, I have a camera') }}</strong>
+      <span class="muted">{{ t('Mit allskyhub, Allsky, indi-allsky oder eigener Software.', 'Running allskyhub, Allsky, indi-allsky or your own software.') }}</span>
     </a>
     <a class="choice-card" href="/start?kamera=nein">
-      <strong>Nein, noch nicht</strong>
-      <span class="muted">Was du kaufen musst, der Zusammenbau und die Speicherkarte, Schritt für Schritt.</span>
+      <strong>{{ t('Nein, noch nicht', 'No, not yet') }}</strong>
+      <span class="muted">{{ t('Was du kaufen musst, der Zusammenbau und die Speicherkarte, Schritt für Schritt.', 'What to buy, putting it together and the memory card, step by step.') }}</span>
     </a>
   </div>
-  <p class="muted small">Erst mal umschauen: <a href="/feuerkugeln">Feuerkugeln</a> · <a href="/karte">Kamerakarte</a> · <a href="/meteorstroeme">Meteorströme</a></p>
+  <p class="muted small">{{ t('Erst mal umschauen:', 'Just look around first:') }} <a href="/feuerkugeln">{{ t('Feuerkugeln', 'Fireballs') }}</a> · <a href="/karte">{{ t('Kamerakarte', 'Camera map') }}</a> · <a href="/meteorstroeme">{{ t('Meteorströme', 'Meteor showers') }}</a></p>
 
   {% elif stage == 'software' %}
-  <p class="muted small"><a class="back" href="/start">Zurück</a></p>
-  <div class="page-head"><h1>Welche Software läuft darauf?</h1></div>
+  <p class="muted small"><a class="back" href="/start">{{ t('Zurück', 'Back') }}</a></p>
+  <div class="page-head"><h1>{{ t('Welche Software läuft darauf?', 'Which software does it run?') }}</h1></div>
   <div class="choice-grid">
     <a class="choice-card" href="/start?kamera=ja&amp;software=allskyhub">
       <strong>allskyhub</strong>
-      <span class="muted">Das fertige Image für den Raspberry Pi. Weiter zum Koppeln.</span>
+      <span class="muted">{{ t('Das fertige Image für den Raspberry Pi. Weiter zum Koppeln.', 'The ready-made image for the Raspberry Pi. On to pairing.') }}</span>
     </a>
     <a class="choice-card" href="/start?kamera=ja&amp;software=allsky">
       <strong>Allsky</strong>
-      <span class="muted">Die Software des AllskyTeams (Thomas Jacquin).</span>
+      <span class="muted">{{ t('Die Software des AllskyTeams (Thomas Jacquin).', "The AllskyTeam's software (Thomas Jacquin).") }}</span>
     </a>
     <a class="choice-card" href="/start?kamera=ja&amp;software=indi-allsky">
       <strong>indi-allsky</strong>
-      <span class="muted">Mit INDI, von Aaron Morris.</span>
+      <span class="muted">{{ t('Mit INDI, von Aaron Morris.', 'Built on INDI, by Aaron Morris.') }}</span>
     </a>
     <a class="choice-card" href="/start?kamera=ja&amp;software=andere">
-      <strong>Andere oder eigene</strong>
-      <span class="muted">Gekaufte Kamera mit eigener Software oder selbst geschrieben.</span>
+      <strong>{{ t('Andere oder eigene', 'Other or your own') }}</strong>
+      <span class="muted">{{ t('Gekaufte Kamera mit eigener Software oder selbst geschrieben.', 'A bought camera with its own software, or something you wrote.') }}</span>
     </a>
   </div>
 
   {% else %}
-  <p class="muted small"><a class="back" href="/start?kamera=ja">Zurück</a></p>
-  <div class="page-head"><h1>Was möchtest du?</h1></div>
+  {% set name = {'allsky': 'Allsky', 'indi-allsky': 'indi-allsky'}.get(software) %}
+  <p class="muted small"><a class="back" href="/start?kamera=ja">{{ t('Zurück', 'Back') }}</a></p>
+  <div class="page-head"><h1>{{ t('Was möchtest du?', 'What would you like to do?') }}</h1></div>
   <div class="choice-grid two">
     <a class="choice-card" href="/start?kamera=ja&amp;software={{ software }}&amp;wahl=mitmachen">
-      <strong>Mitmachen (SharedSky)</strong>
-      <span>Deine Kamera bleibt, wie sie ist. Sie misst im Netz mit: Feuerkugeln, Meteore, Himmelshelligkeit.</span>
-      <span class="muted small">Dauert etwa 5 Minuten.</span>
+      <strong>{{ t('Mitmachen (SharedSky)', 'Join SharedSky') }}</strong>
+      <span>{{ t('Deine Kamera bleibt, wie sie ist. Sie misst im Netz mit: Feuerkugeln, Meteore, Himmelshelligkeit.', 'Your camera stays as it is and measures along with the network: fireballs, meteors, sky brightness.') }}</span>
+      <span class="muted small">{{ t('Dauert etwa 5 Minuten.', 'Takes about 5 minutes.') }}</span>
     </a>
     <a class="choice-card" href="/start?kamera=ja&amp;software={{ software }}&amp;wahl=umsteigen">
-      <strong>Auf allskyhub umsteigen</strong>
-      <span>allskyhub läuft auf deinem Pi neben {{ {'allsky': 'Allsky', 'indi-allsky': 'indi-allsky'}.get(software, 'deiner Software') }} und kann deine bisherigen Bilder übernehmen. Mit Livebild in der App, Alarmen und allem anderen.</span>
+      <strong>{{ t('Auf allskyhub umsteigen', 'Switch to allskyhub') }}</strong>
+      <span>{% if en %}allskyhub runs on your Pi next to {{ name or 'your software' }} and can take over your earlier images. With the live image in the app, alerts and everything else.{% else %}allskyhub läuft auf deinem Pi neben {{ name or 'deiner Software' }} und kann deine bisherigen Bilder übernehmen. Mit Livebild in der App, Alarmen und allem anderen.{% endif %}</span>
     </a>
   </div>
-  <p class="muted small"><a href="/mitmachen">Was ist SharedSky?</a></p>
+  <p class="muted small"><a href="/mitmachen">{{ t('Was ist SharedSky?', 'What is SharedSky?') }}</a></p>
   {% endif %}
 </div>
 {% endblock %}

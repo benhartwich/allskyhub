@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import datetime as dt
+from typing import Any
 
 import httpx
 import pytest
@@ -178,3 +179,35 @@ async def test_events_per_night_are_capped(
         await send(ws, second)
         with pytest.raises(TimeoutError):  # dropped: no picture asked for
             await asyncio.wait_for(ws.recv(), 0.3)
+
+
+async def test_a_meteor_with_its_track(
+    app: FastAPI, client: httpx.AsyncClient, live_app: str
+) -> None:
+    """SPEC §6.4 fireball package B: `track` is the one list in data; the hub keeps it,
+    lists it and shows the event page as before (the trial: nothing uses it yet)."""
+    dev = FakeDevice()
+    token = await paired_token(client, dev)
+    r = await client.post(
+        "/api/v1/auth/login",
+        json={"email": await owner_email(app, dev.device_id), "password": PASSWORD},
+    )
+    auth = {"Authorization": f"Bearer {r.json()['access_token']}"}
+    track = [[120.5, 40.25], [125.0, 35.5], [130.75, 30.0]]
+    event = meteor(has_image=False)
+    event = event.model_copy(update={"data": {**event.data, "track": track,
+                                              "track_rms_deg": 0.18}})  # fmt: skip
+    async with device_ws(live_app, token) as ws:
+        await send(ws, event)
+        listed: list[dict[str, Any]] = []
+        api = f"/api/v1/cameras/{dev.device_id}/events"
+        for _ in range(50):
+            listed = (await client.get(api, headers=auth)).json()
+            if listed:
+                break
+            await asyncio.sleep(0.05)
+    data: dict[str, Any] = listed[0]["data"]
+    assert data["track"] == track
+    assert data["track_rms_deg"] == 0.18
+    page = await client.get(f"/cameras/{dev.device_id}/events/{NIGHT}/{METEOR}")
+    assert page.status_code == 200

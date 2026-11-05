@@ -91,6 +91,7 @@ ERRORS = {
     "too_large": "Das Bild ist zu groß (höchstens 8 MB, 50 MP bei JPEG, 16 MP bei PNG).",
     "bad_image": "Das Bild lässt sich nicht lesen.",
     "too_many_redirects": "Zu viele Weiterleitungen.",
+    "insecure_redirect": "Die Adresse leitet von https auf unverschlüsseltes http um.",
     "busy": "Der Server bittet, später wiederzukommen.",
     "http": "Der Server antwortet mit einem Fehler.",
 }

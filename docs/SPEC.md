@@ -1539,10 +1539,11 @@ wrong frames in a row make the clock untrusted until 10 judged frames in a row a
 right. Only meteors of a station with a trusted clock (both its word and the hub's
 check) are paired.
 
-**Limits and keeping.** As for cameras: at most 3000 events a night, at most one frame a
-minute kept. Thumbnails are kept like a camera's (§4.5, the owner's plan), full frames
-of events like event images, and at most 2 GB per station; above that the oldest full
-frames go first. When the owner removes a station, its images, its exact place and its
+**Limits and keeping.** At most 3000 events a night, as for cameras. Of a station's
+frames the hub keeps a thumbnail every 5 minutes (and the latest), for as long as a
+camera's (§4.5, the owner's plan), full frames of events like event images, and at most
+500 MB per station; above that the oldest full frames go first (Benjamin, 2026-11-05: the
+server's disk is shared). When the owner removes a station, its images, its exact place and its
 secret are deleted at once; what stays is §10.6.
 
 The hub works out the station's orientation itself (§4.8, the same acceptance) from clear
@@ -1567,8 +1568,8 @@ missing optional ones are null.
 - `POST /frames` — multipart: `metadata` (JSON `{time, exposure_s, gain, night,
   clock_synced, stars | null, sky_brightness | null}`, `time` = mid-exposure) and `image`
   (JPEG). By default a thumbnail (longest side ≤ 640 px); the full frame when the last
-  answer had `want_full_frame`. At most one a minute is kept; answers
-  `{want_full_frame}`.
+  answer had `want_full_frame`. Every frame is looked at, a thumbnail every 5 minutes is
+  kept (§10.1); answers `{want_full_frame}`.
 - `POST /events` — multipart: `metadata` (JSON `{kind: "meteor", start, end, peak 0..1 |
   null, track: [[x, y], …] (pixels of the full frame, 2–32 points along the streak),
   clock_synced}`) and `image` (the full frame the meteor is on). The hub turns the track

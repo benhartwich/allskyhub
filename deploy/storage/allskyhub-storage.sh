@@ -23,13 +23,14 @@ exec 9>"$LOCK"
 flock -n 9 || exit 0
 as_hub() { runuser -u "$HUB_USER" -- "$@"; }
 
-rm -f -- "$SPOOL/request"
+# Removed as the hub, like everything in its folder: never by root through a link.
+as_hub rm -f -- "$SPOOL/request" || exit 0
 answer() {  # answer <file> <text>
-    rm -f -- "$SPOOL/$1"
+    as_hub rm -f -- "$SPOOL/$1"
     # shellcheck disable=SC2016  # $1 is the inner shell's
     printf '%s\n' "$2" | as_hub sh -c 'umask 027; cat > "$1"' _ "$SPOOL/$1"
 }
-rm -f -- "$SPOOL/log"
+as_hub rm -f -- "$SPOOL/log"
 # shellcheck disable=SC2016  # $1 is the inner shell's
 as_hub sh -c 'umask 027; : > "$1"' _ "$SPOOL/log"
 say() { printf '%s %s\n' "$(date '+%H:%M:%S')" "$*" | as_hub tee -a -- "$SPOOL/log" >/dev/null; }

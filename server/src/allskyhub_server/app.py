@@ -29,6 +29,7 @@ from allskyhub_server.api import (
     app_reports,
     app_sightings,
     app_sky,
+    app_stations,
     sky_view,
 )
 from allskyhub_server.api import connect as connect_api
@@ -414,6 +415,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(app_sky.router)
     app.include_router(app_reports.router)
     app.include_router(app_sightings.router)
+    app.include_router(app_stations.router)
     app.include_router(sky_view.router)
     app.include_router(routes_admin.reload_router)  # last: it catches GET /admin/*
 

@@ -11,23 +11,21 @@ from __future__ import annotations
 import base64
 import datetime as dt
 import logging
-from dataclasses import dataclass
 from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile
 from fastapi.responses import FileResponse, RedirectResponse, Response
-from sqlalchemy import func, select
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from allskyhub_protocol import FrameVariant
 from allskyhub_server.auth.sessions import SessionInfo
-from allskyhub_server.devices import image_url, map_tiles, pairing, stations
+from allskyhub_server.devices import image_url, map_tiles, station_flow, stations
 from allskyhub_server.devices.images import ImageStore
 from allskyhub_server.devices.stations import SecretKey
 from allskyhub_server.i18n import pick, tr
 from allskyhub_server.mail.send import Mail, Mailer
-from allskyhub_server.models import Device, EventRecord, Frame, StationSource, User
-from allskyhub_server.settings import Settings
+from allskyhub_server.models import Device, StationSource, User
 from allskyhub_server.web import flash
 from allskyhub_server.web.deps import (
     CurrentSession,
@@ -63,14 +61,6 @@ def _wrong_password() -> str:
 
 def _secret_key(request: Request) -> SecretKey:
     return SecretKey(request.app.state.stores.vault)
-
-
-def _proofs(settings: Settings) -> Any:
-    return settings.data_dir / "station-proofs"
-
-
-def _masks(settings: Settings) -> Any:
-    return settings.data_dir / "station-masks"
 
 
 async def _own_station(db: AsyncSession, session: SessionInfo, device_id: str) -> Device:
@@ -109,29 +99,6 @@ async def new_form(request: Request, session: CurrentSession, software: str = ""
     )
 
 
-@dataclass(frozen=True)
-class _Place:
-    lat: float
-    lon: float
-    elevation_m: float | None
-
-
-def _place(lat: str, lon: str, elevation: str) -> _Place:
-    try:
-        la, lo = float(lat.replace(",", ".")), float(lon.replace(",", "."))
-        el = float(elevation.replace(",", ".")) if elevation.strip() else None
-    except ValueError:
-        raise ValueError(
-            tr("Bitte den Ort auf der Karte setzen oder die Koordinaten eingeben.",
-               "Please set the location on the map or enter the coordinates.")
-        ) from None  # fmt: skip
-    if not (-90 <= la <= 90 and -180 <= lo <= 180) or (el is not None and not -500 <= el <= 9000):
-        raise ValueError(
-            tr("Die Koordinaten liegen außerhalb der Erde.", "The coordinates are off the Earth.")
-        )
-    return _Place(la, lo, el)
-
-
 @router.post("/stationen/neu")
 async def create(
     request: Request,
@@ -150,118 +117,43 @@ async def create(
     proof_text: Annotated[str, Form(max_length=2000)] = "",
     proof: Annotated[UploadFile | None, File()] = None,
 ) -> Response:
-    """SPEC §10.1 creating a station; §10.7 asking with an image address."""
+    """SPEC §10.1 creating a station; §10.7 asking with an image address
+    (devices/station_flow.py, the same for the app)."""
     form = {
         "name": name, "url": url, "latitude": latitude, "longitude": longitude,
         "elevation_m": elevation_m, "timezone": timezone, "focal_mm": focal_mm,
         "proof_text": proof_text,
     }  # fmt: skip
-
-    def again(error: str) -> Response:
+    proof_bytes = b""
+    if software == "image-url" and proof is not None and proof.filename:
+        proof_bytes = await proof.read(image_url.PROOF_MAX_UPLOAD + 1)
+    user = await db.get(User, session.user.id)
+    if user is None:
+        raise HTTPException(404)
+    ask = station_flow.Ask(
+        software=software, name=name, terms=terms, url=url, latitude=latitude,
+        longitude=longitude, elevation_m=elevation_m, timezone=timezone, focal_mm=focal_mm,
+        proof_text=proof_text, proof=proof_bytes,
+    )  # fmt: skip
+    try:
+        device, secret = await station_flow.create(
+            db, user, ask, _secret_key(request), settings, request.app.state.mailer
+        )
+    except station_flow.StationInputError as exc:
         return render(
             request,
             "station_new.html",
-            {"software": software, "choices": SOFTWARE, "form": form, "error": error,
+            {"software": software, "choices": SOFTWARE, "form": form, "error": exc.message,
              "map_config": _map_config(None, None, editable=True)},
             session=session,
             status_code=400,
         )  # fmt: skip
-
-    if software not in SOFTWARE:
-        return again(tr("Bitte die Software deiner Kamera wählen.",
-                        "Please choose your camera's software."))  # fmt: skip
-    if not name.strip():
-        return again(tr("Bitte einen Namen für die Station angeben.",
-                        "Please give the station a name."))  # fmt: skip
-    if not terms:
-        return again(tr("Bitte den Teilnahmebedingungen zustimmen.",
-                        "Please agree to the terms."))  # fmt: skip
-    place: _Place | None = None
-    proof_bytes = b""
-    if software == "image-url":
-        try:
-            image_url.check_url(url)
-        except image_url.FetchError as exc:
-            return again(exc.text)
-        try:
-            place = _place(latitude, longitude, elevation_m)
-        except ValueError as exc:
-            return again(str(exc))
-        if proof is not None and proof.filename:
-            proof_bytes = await proof.read(image_url.PROOF_MAX_UPLOAD + 1)
-        if not proof_text.strip() and not proof_bytes:
-            return again(tr("Bitte einen Nachweis angeben: einen Satz, einen Link oder ein Bild.",
-                            "Please give a proof: a sentence, a link or an image."))  # fmt: skip
-    user = await db.get(User, session.user.id)
-    if user is None:
-        raise HTTPException(404)
-    device, secret = await stations.create(db, user, name, software, _secret_key(request))
-    if software == "image-url" and place is not None:
-        if proof_bytes:
-            try:
-                image_url.store_proof(_proofs(settings), device.id, proof_bytes)
-            except image_url.FetchError as exc:
-                await db.rollback()
-                return again(tr("Das Nachweis-Bild: ", "The proof image: ") + exc.text)
-        lens = {"focal_mm": float(focal_mm.replace(",", "."))} if _number(focal_mm) else None
-        device.last_status = {
-            "settings": {"latitude": place.lat, "longitude": place.lon,
-                         "elevation_m": place.elevation_m, "timezone": timezone.strip() or None},
-            "station": {"software": "image-url", "lens": lens},
-        }  # fmt: skip
-        db.add(StationSource(
-            device_id=device.id, url=url.strip(), proof_text=proof_text.strip(),
-            proof_image=bool(proof_bytes),
-        ))  # fmt: skip
-        await db.commit()
-        log.info("station asked by image address", extra={"device_id": device.id})
-        await _tell_admins(request, settings, device, user)
+    if secret is None:
         return RedirectResponse(f"/stationen/{device.id}", status_code=303)
-    await db.commit()
-    log.info("station created", extra={"device_id": device.id, "software": software})
     return flash.redirect(request, session, f"/stationen/{device.id}", 200, {"secret": secret})
 
 
-def _number(text: str) -> bool:
-    try:
-        return float(text.replace(",", ".")) > 0
-    except ValueError:
-        return False
-
-
-async def _tell_admins(request: Request, settings: Settings, device: Device, user: User) -> None:
-    mailer: Mailer = request.app.state.mailer
-    if not mailer.enabled:
-        return
-    link = f"{settings.base_url.rstrip('/')}/admin/stationen/{device.id}"
-    for admin in settings.admins:
-        await mailer.send(Mail(
-            to=admin, subject=f"SharedSky: {device.name} wartet auf Prüfung",
-            body=f"Hallo,\n\n{user.email} möchte eine Kamera über ihre Bild-Adresse "
-                 f"verbinden:\n\n{link}\n\nallskyhub\n",
-        ))  # fmt: skip
-
-
 # A station's page
-
-
-async def _today(db: AsyncSession, device: Device) -> tuple[int, int]:
-    night = stations.night_id(dt.datetime.now(dt.UTC), stations.longitude(device))
-    frames = await db.scalar(
-        select(func.count())
-        .select_from(Frame)
-        .where(Frame.device_id == device.id, Frame.night_id == night)
-    )
-    meteors = await db.scalar(
-        select(func.count())
-        .select_from(EventRecord)
-        .where(
-            EventRecord.device_id == device.id,
-            EventRecord.night_id == night,
-            EventRecord.kind == "meteor",
-        )
-    )
-    return int(frames or 0), int(meteors or 0)
 
 
 @router.get("/stationen/{device_id}")
@@ -271,7 +163,7 @@ async def station_page(
     device = await _own_station(db, session, device_id)
     status, kept = flash.take(request, session)
     source = await db.get(StationSource, device.id)
-    frames, meteors = await _today(db, device)
+    frames, meteors = await station_flow.today(db, device)
     orientation: dict[str, Any] | None = (device.last_status or {}).get("orientation")
     settings_: dict[str, Any] = (device.last_status or {}).get("settings") or {}
     return render(
@@ -369,17 +261,7 @@ async def remove(
             403,
             {"error": _wrong_password()},
         )
-    source = await db.get(StationSource, device.id)
-    if source is not None:
-        await db.delete(source)
-    await pairing.unpair(db, device)
-    await db.commit()
-    store: ImageStore = request.app.state.images
-    store.delete_device(device.id)
-    image_url.proof_path(_proofs(settings), device.id).unlink(missing_ok=True)
-    image_url.OverlayMask(_masks(settings)).forget(device.id)
-    request.app.state.station_detector.buffer.drop(device.id)
-    log.info("station removed", extra={"device_id": device.id})
+    await station_flow.remove(db, device, request.app.state, settings)
     return RedirectResponse("/", status_code=303)
 
 
@@ -462,7 +344,7 @@ async def admin_proof(
 ) -> Response:
     admin_only(session, settings)
     source, _, _ = await _admin_station(db, device_id)
-    path = image_url.proof_path(_proofs(settings), device_id)
+    path = image_url.proof_path(station_flow.proofs_dir(settings), device_id)
     if not source.proof_image or not path.is_file():
         raise HTTPException(404)
     return FileResponse(path, media_type="image/jpeg", headers={"Cache-Control": "no-store"})

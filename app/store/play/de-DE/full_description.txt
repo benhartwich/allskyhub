@@ -20,6 +20,11 @@ EINFACH EINGERICHTET
 • Einstellungen der Kamera direkt in der App
 • Teilen, öffentliche Seite und Kameranetz, wenn du magst
 
-Du brauchst eine allskyhub-Kamera und ein Konto auf allskyhub.org. Den Zugang beantragst du auf allskyhub.org/zugang, die Teileliste und die Anleitung stehen auf allskyhub.org/hardware und allskyhub.org/allsky.
+SHAREDSKY: SCHON EINE ALLSKY-KAMERA?
+• Verbinde deine Allsky-, indi-allsky- oder selbst gebaute Kamera mit SharedSky, dem gemeinsamen Netz für Feuerkugeln, Meteore und Himmelshelligkeit
+• Deine Kamera bleibt, wie sie ist: indi-allsky braucht drei Werte, Allsky nur die Adresse seines Bilds
+• Mehrere Kameras vermessen eine Feuerkugel gemeinsam: Bahn, Höhe und mögliches Fallgebiet
+
+Für eine eigene Kamera brauchst du ein kostenloses Konto auf allskyhub.org. Die Teileliste und die Anleitung stehen auf allskyhub.org/hardware, SharedSky erklärt allskyhub.org/mitmachen.
 
 allskyhub ist Open Source: github.com/benhartwich/allskyhub

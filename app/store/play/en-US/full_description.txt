@@ -20,6 +20,11 @@ EASY TO SET UP
 • Change the camera's settings right in the app
 • Sharing, a public page and the camera network, if you like
 
-You need an allskyhub camera and an account on allskyhub.org. Request access at allskyhub.org/zugang; the parts list and the guide are at allskyhub.org/hardware and allskyhub.org/allsky.
+SHAREDSKY: ALREADY HAVE AN ALL-SKY CAMERA?
+• Connect your Allsky, indi-allsky or self-built camera to SharedSky, the shared network for fireballs, meteors and sky brightness
+• Your camera stays as it is: indi-allsky needs three values, Allsky just the address of its picture
+• Several cameras measure a fireball together: its path, height and where meteorites may have fallen
+
+For your own camera you need a free account on allskyhub.org. The parts list and the guide are at allskyhub.org/hardware; allskyhub.org/mitmachen explains SharedSky.
 
 allskyhub is open source: github.com/benhartwich/allskyhub

@@ -151,7 +151,12 @@ void main() {
     );
     await tester.tap(find.byKey(const Key('join-own-camera')));
     await tester.pumpAndSettle();
+    expect(find.text('Hast du schon eine Allsky-Kamera?'), findsOneWidget);
+    await tester.tap(find.byKey(const Key('wizard-camera-no')));
+    await tester.pumpAndSettle();
     expect(find.text('Anleitung und Hardware ansehen'), findsOneWidget);
+    // An older hub (no /public/hub): ask for access as before.
+    expect(find.text('Zugang anfragen'), findsOneWidget);
     await tester.scrollUntilVisible(find.byKey(const Key('own-sign-in')), 100);
     await tester.tap(find.byKey(const Key('own-sign-in')));
     expect(asked, isTrue);

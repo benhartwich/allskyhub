@@ -7,6 +7,7 @@ No account is needed for the main features. After launch:
 2. Sky: tonight's clear hours from the cloud forecast, aurora chance, a sky calendar, and the sky view (point the phone at the sky to find planets and stars).
 3. Take part: report the sky brightness, a fireball or an aurora sighting. Reporting needs a free reporter account (email only, sign-up protected by Cloudflare Turnstile); the reporter's name is never shown.
 Signing in (Take part → "I have an account · Sign in") with the demo account in the Sign-In Information adds the tab "Mine" with the account's cameras and the account page. A new camera is paired with the code it shows; this needs the camera hardware, so the demo account already has a camera.
+4. SharedSky (connect a camera that runs other software): Mine → "Add camera" → "Connect another camera (SharedSky)" → "Other or your own" → "Join (SharedSky)". Enter a name, accept the terms and tap "Create station": the app shows a station ID and a secret for the open interface. This works without any hardware. The station can be removed again on its page (needs the demo account's password).
 
 ACCOUNTS AND USER CONTENT
 Account deletion: Mine → Account → Delete account, confirmed once, deletes the account on the server, unpairs its cameras and deletes their pictures and pages.

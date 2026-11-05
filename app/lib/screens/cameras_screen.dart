@@ -15,6 +15,7 @@ import 'gallery_screens.dart';
 import 'onboarding_screen.dart';
 import 'pair_screen.dart';
 import 'setup_mode_screen.dart';
+import 'station_screens.dart';
 
 class CamerasScreen extends StatefulWidget {
   const CamerasScreen({
@@ -32,6 +33,9 @@ class CamerasScreen extends StatefulWidget {
 
 class _CamerasScreenState extends State<CamerasScreen> {
   late Future<List<Camera>> _cameras = widget.client.cameras();
+
+  /// SharedSky stations (SPEC §10), listed under the cameras; none when the hub has none.
+  late Future<List<Station>> _stations = _loadStations();
   TestBuild? _update;
 
   /// A reporter account (sky-brightness reports only) cannot pair cameras.
@@ -58,70 +62,28 @@ class _CamerasScreenState extends State<CamerasScreen> {
     }
   }
 
-  Future<void> _reload() async {
-    final next = widget.client.cameras();
-    setState(() => _cameras = next);
-    await next;
+  Future<List<Station>> _loadStations() async {
+    try {
+      return await widget.client.stations();
+    } on Object {
+      return []; // the cameras still show
+    }
   }
 
-  Future<void> _pair() async {
-    final choice = await showModalBottomSheet<_PairWay>(
-      context: context,
-      builder: (context) => SafeArea(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            ListTile(
-              leading: const Icon(Icons.add_circle_outline),
-              title: Text(tr('Neue Kamera einrichten', 'Set up a new camera')),
-              subtitle: Text(
-                tr(
-                  'Über das WLAN „allskyhub-…“ der Kamera',
-                  "Through the camera's Wi-Fi “allskyhub-…”",
-                ),
-              ),
-              onTap: () => Navigator.pop(context, _PairWay.setupMode),
-            ),
-            ListTile(
-              leading: const Icon(Icons.wifi),
-              title: Text(
-                tr('Kamera ist schon im WLAN', 'Camera is already on Wi-Fi'),
-              ),
-              subtitle: Text(
-                tr(
-                  'Die App holt sich den Code von der Kamera',
-                  'The app gets the code from the camera',
-                ),
-              ),
-              onTap: () => Navigator.pop(context, _PairWay.lan),
-            ),
-            ListTile(
-              leading: const Icon(Icons.pin),
-              title: Text(tr('Code eingeben', 'Enter code')),
-              onTap: () => Navigator.pop(context, _PairWay.code),
-            ),
-          ],
-        ),
-      ),
-    );
-    if (choice == null || !mounted) return;
-    final paired = await Navigator.of(context).push<Camera>(
-      MaterialPageRoute(
-        builder: (_) => switch (choice) {
-          _PairWay.setupMode => SetupModeScreen(
-            controller: SetupModeController(
-              hub: widget.client,
-              binding: PlatformWifiBinding(),
-              discovery: NsdCameraDiscovery(),
-              locationSource: PlatformLocationSource(),
-            ),
-          ),
-          _PairWay.lan => OnboardingScreen(client: widget.client),
-          _PairWay.code => PairScreen(client: widget.client),
-        },
-      ),
-    );
-    if (paired != null) await _reload();
+  Future<void> _reload() async {
+    final next = widget.client.cameras();
+    final stations = _loadStations();
+    setState(() {
+      _cameras = next;
+      _stations = stations;
+    });
+    await next;
+    await stations;
+  }
+
+  Future<void> _add() async {
+    final changed = await addCamera(context, widget.client);
+    if (changed && mounted) await _reload();
   }
 
   @override
@@ -152,9 +114,10 @@ class _CamerasScreenState extends State<CamerasScreen> {
       floatingActionButton: _reporter
           ? null
           : FloatingActionButton.extended(
-              onPressed: _pair,
+              key: const Key('add-camera'),
+              onPressed: _add,
               icon: const Icon(Icons.add),
-              label: Text(tr('Kamera koppeln', 'Pair camera')),
+              label: Text(tr('Kamera hinzufügen', 'Add camera')),
             ),
       body: Column(
         children: [
@@ -190,34 +153,62 @@ class _CamerasScreenState extends State<CamerasScreen> {
           if (cameras == null) {
             return const Center(child: CircularProgressIndicator());
           }
-          if (cameras.isEmpty && _reporter) {
-            return _Message(
-              tr(
-                'Mit deinem Melder-Konto meldest du die Himmelshelligkeit (Mitmachen). Für eine eigene Kamera frag auf allskyhub.org Zugang an.',
-                'With your reporter account you report the sky brightness (Take part). For your own camera, request access on allskyhub.org.',
-              ),
-            );
-          }
-          if (cameras.isEmpty) {
-            return _Message(
-              tr(
-                'Noch keine Kamera gekoppelt. Schalte deine Kamera ein und tippe auf „Kamera koppeln“.',
-                'No camera paired yet. Switch your camera on and tap “Pair camera”.',
-              ),
-            );
-          }
-          return ListView.separated(
-            padding: const EdgeInsets.fromLTRB(16, 16, 16, 96),
-            itemCount: cameras.length,
-            separatorBuilder: (_, _) => const SizedBox(height: 12),
-            itemBuilder: (context, i) => _CameraCard(
-              client: widget.client,
-              camera: cameras[i],
-              onChanged: _reload,
-            ),
+          return FutureBuilder<List<Station>>(
+            future: _stations,
+            builder: (context, stationSnapshot) =>
+                _items(cameras, stationSnapshot.data ?? const []),
           );
         },
       ),
+    );
+  }
+
+  Widget _items(List<Camera> cameras, List<Station> stations) {
+    if (cameras.isEmpty && stations.isEmpty && _reporter) {
+      return _Message(
+        tr(
+          'Mit deinem Melder-Konto meldest du die Himmelshelligkeit (Mitmachen). Für eine eigene Kamera frag auf allskyhub.org Zugang an.',
+          'With your reporter account you report the sky brightness (Take part). For your own camera, request access on allskyhub.org.',
+        ),
+      );
+    }
+    if (cameras.isEmpty && stations.isEmpty) {
+      return _Message(
+        tr(
+          'Noch keine Kamera. Tippe auf „Kamera hinzufügen“: eine allskyhub-Kamera koppeln oder deine Allsky- oder indi-allsky-Kamera mit SharedSky verbinden.',
+          'No camera yet. Tap “Add camera”: pair an allskyhub camera or connect your Allsky or indi-allsky camera to SharedSky.',
+        ),
+      );
+    }
+    return ListView(
+      padding: const EdgeInsets.fromLTRB(16, 16, 16, 96),
+      children: [
+        for (final camera in cameras) ...[
+          _CameraCard(
+            client: widget.client,
+            camera: camera,
+            onChanged: _reload,
+          ),
+          const SizedBox(height: 12),
+        ],
+        if (stations.isNotEmpty) ...[
+          Padding(
+            padding: const EdgeInsets.fromLTRB(4, 8, 4, 8),
+            child: Text(
+              tr('SharedSky-Stationen', 'SharedSky stations'),
+              style: Theme.of(context).textTheme.titleMedium,
+            ),
+          ),
+          for (final station in stations) ...[
+            StationCard(
+              client: widget.client,
+              station: station,
+              onChanged: _reload,
+            ),
+            const SizedBox(height: 12),
+          ],
+        ],
+      ],
     );
   }
 }
@@ -336,7 +327,117 @@ class _Message extends StatelessWidget {
   }
 }
 
-enum _PairWay { setupMode, lan, code }
+enum _PairWay { setupMode, lan, code, station }
+
+/// "+" on "Meine Kameras": pair an allskyhub camera, or connect one with other software
+/// to SharedSky. True when something was added.
+Future<bool> addCamera(BuildContext context, HubClient client) async {
+  final choice = await showModalBottomSheet<_PairWay>(
+    context: context,
+    builder: (context) => SafeArea(
+      child: SingleChildScrollView(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ..._pairTiles(context),
+            const Divider(),
+            ListTile(
+              key: const Key('add-station'),
+              leading: const Icon(Icons.hub_outlined),
+              title: Text(
+                tr(
+                  'Andere Kamera verbinden (SharedSky)',
+                  'Connect another camera (SharedSky)',
+                ),
+              ),
+              subtitle: Text(
+                tr(
+                  'Allsky, indi-allsky oder eigene Software',
+                  'Allsky, indi-allsky or your own software',
+                ),
+              ),
+              onTap: () => Navigator.pop(context, _PairWay.station),
+            ),
+          ],
+        ),
+      ),
+    ),
+  );
+  if (choice == null || !context.mounted) return false;
+  if (choice == _PairWay.station) {
+    final added = await Navigator.of(context).push<bool>(
+      MaterialPageRoute(builder: (_) => SoftwareStepScreen(client: client)),
+    );
+    return added ?? false;
+  }
+  return await _pairWay(context, client, choice) != null;
+}
+
+/// The three ways to pair an allskyhub camera (SPEC §6.2); the camera when paired.
+Future<Camera?> pairCamera(BuildContext context, HubClient client) async {
+  final choice = await showModalBottomSheet<_PairWay>(
+    context: context,
+    builder: (context) => SafeArea(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: _pairTiles(context),
+      ),
+    ),
+  );
+  if (choice == null || !context.mounted) return null;
+  return _pairWay(context, client, choice);
+}
+
+List<Widget> _pairTiles(BuildContext context) => [
+  ListTile(
+    leading: const Icon(Icons.add_circle_outline),
+    title: Text(tr('Neue Kamera einrichten', 'Set up a new camera')),
+    subtitle: Text(
+      tr(
+        'Über das WLAN „allskyhub-…“ der Kamera',
+        "Through the camera's Wi-Fi “allskyhub-…”",
+      ),
+    ),
+    onTap: () => Navigator.pop(context, _PairWay.setupMode),
+  ),
+  ListTile(
+    leading: const Icon(Icons.wifi),
+    title: Text(tr('Kamera ist schon im WLAN', 'Camera is already on Wi-Fi')),
+    subtitle: Text(
+      tr(
+        'Die App holt sich den Code von der Kamera',
+        'The app gets the code from the camera',
+      ),
+    ),
+    onTap: () => Navigator.pop(context, _PairWay.lan),
+  ),
+  ListTile(
+    leading: const Icon(Icons.pin),
+    title: Text(tr('Code eingeben', 'Enter code')),
+    onTap: () => Navigator.pop(context, _PairWay.code),
+  ),
+];
+
+Future<Camera?> _pairWay(
+  BuildContext context,
+  HubClient client,
+  _PairWay way,
+) => Navigator.of(context).push<Camera>(
+  MaterialPageRoute(
+    builder: (_) => switch (way) {
+      _PairWay.setupMode => SetupModeScreen(
+        controller: SetupModeController(
+          hub: client,
+          binding: PlatformWifiBinding(),
+          discovery: NsdCameraDiscovery(),
+          locationSource: PlatformLocationSource(),
+        ),
+      ),
+      _PairWay.lan => OnboardingScreen(client: client),
+      _PairWay.code || _PairWay.station => PairScreen(client: client),
+    },
+  ),
+);
 
 class _UpdateBanner extends StatelessWidget {
   const _UpdateBanner({required this.update});

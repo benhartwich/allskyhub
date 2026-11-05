@@ -109,6 +109,9 @@ TITLES = {
     "bortle_android_upload": "bortle: Android-Upload-Schlüssel",
     "vinventory_android_upload": "Vinventory: Android-Upload-Schlüssel",
     "currywursttest_android_upload": "Currywurst Test: Android-Upload-Schlüssel",
+    # The demo account a further app's store-screenshots run signs in with (OtherApp.review).
+    "bortle_review": "bortle: Demo-Konto für Screenshots",
+    "vinventory_review": "Vinventory: Demo-Konto für Screenshots",
 }
 # Apple capabilities the hub switches on for a bundle id, with their report titles.
 CAPABILITIES = {
@@ -184,6 +187,10 @@ class OtherApp:
     entitlements: str = "ios/Runner/Runner.entitlements"
     # Its codemagic.yaml has the store-screenshots workflow (SCREENSHOT_WORKFLOW).
     screenshots: bool = False
+    # The names of the login and password its screenshot run reads, when it signs in: the
+    # admin enters the demo account on the apps page once, "Einrichten" puts it into the
+    # Codemagic group <key>_screenshots (secure, nothing else in it).
+    review_vars: tuple[str, str] | tuple[()] = ()
 
     @property
     def version_name(self) -> str:
@@ -200,6 +207,15 @@ class OtherApp:
         """The vault kind of its own Play upload key (built on the hub's server like
         allskyhub's, deploy/android: the request's first line is ``app=<key>``)."""
         return f"{self.key}_android_upload"
+
+    @property
+    def review(self) -> str:
+        """The vault kind of its demo account for screenshots (``review_vars``)."""
+        return f"{self.key}_review"
+
+    @property
+    def screenshot_group(self) -> str:
+        return f"{self.key}_screenshots"
 
 
 OTHER_APPS = {
@@ -223,6 +239,7 @@ OTHER_APPS = {
             "Feedback is welcome through TestFlight.",
         },
         screenshots=True,  # bortle-app#4
+        review_vars=("SHOT_LOGIN", "SHOT_PASSWORD"),
     ),
     # Benjamin, 2026-10-29: Vinventory, an Expo app (React Native) in a private repository;
     # Android built on the hub's server like the others (deploy/android, app=vinventory).
@@ -252,6 +269,7 @@ OTHER_APPS = {
         # A wine cellar: alcohol throughout (its store/README.md: 17+ at Apple).
         age_rating={"alcoholTobaccoOrDrugUseOrReferences": "FREQUENT_OR_INTENSE"},
         screenshots=True,  # vinventory#8
+        review_vars=("VINVENTORY_REVIEW_EMAIL", "VINVENTORY_REVIEW_PASSWORD"),
     ),
     # Benjamin, 2026-10-30: the Currywurst Test app (Flutter, private repository) on the
     # same accounts and keys; Android built on the hub's server (app=currywursttest).
@@ -571,6 +589,16 @@ def github_token(vault: Vault) -> str | None:
     if not vault.has("github"):
         return None
     return vault.secret("github", "GitHub-API").decode()
+
+
+def parse_review(login: str, password: str) -> tuple[bytes, dict[str, Any]]:
+    """A demo account for the screenshot runs: login and password, as entered."""
+    login = login.strip()
+    if not 3 <= len(login) <= 254 or any(c in login for c in "\r\n\t "):
+        raise StoreError("Bitte die Anmeldung des Demo-Kontos (E-Mail oder Name).")
+    if not 1 <= len(password) <= 256 or any(c in password for c in "\r\n"):
+        raise StoreError("Bitte das Passwort des Demo-Kontos.")
+    return json.dumps({"login": login, "password": password}).encode(), {"login": login}
 
 
 def parse_codemagic(token: str) -> tuple[bytes, dict[str, Any]]:
@@ -1081,9 +1109,10 @@ class Stores:
         report: Report,
         name: str = GROUP,
         public: dict[str, str] | None = None,
+        secure: dict[str, str] | None = None,
     ) -> None:
-        """The group's secure variables, plus ``public`` ones in plain sight (a further
-        app's Firebase identifiers for its --dart-define)."""
+        """The group's secure variables (the store keys, or ``secure``), plus ``public``
+        ones in plain sight (a further app's Firebase identifiers for its --dart-define)."""
         auth = self._cm_auth("Codemagic-Gruppe")
         title = f"Codemagic-Gruppe {name}"
         r = await client.get(
@@ -1112,7 +1141,7 @@ class Stores:
             report.add(title, "fail", _message(r))
             return
         there = {str(v["name"]): str(v["id"]) for v in _list(_dict(r.json()).get("data"))}
-        variables = self._variables()
+        variables = self._variables() if secure is None else secure
         for name in sorted(OBSOLETE & there.keys()):  # Android keys stay on the hub now
             r = await client.delete(
                 f"{CODEMAGIC}/variable-groups/{group}/variables/{there.pop(name)}", headers=auth
@@ -1240,11 +1269,32 @@ class Stores:
                     self.vault.update_meta("codemagic", **{f"{app.key}_app_id": app_id})
                     public = fcm_defines(app, self.vault.read_json(app.fcm_file))
                     await self._cm_group(client, app_id, report, app.group, public)
+                    await self._screenshot_group(client, app_id, report, app)
             except httpx.HTTPError as exc:
                 report.add("Codemagic", "fail", f"{type(exc).__name__}")
         finally:
             await self._close(client)
         return report
+
+    async def _screenshot_group(
+        self, client: httpx.AsyncClient, app_id: str, report: Report, app: OtherApp
+    ) -> None:
+        """The demo account for the screenshot runs, in a group of its own: the store
+        keys stay out of the run that signs in with it."""
+        if not app.review_vars:
+            return
+        if not self.vault.has(app.review):
+            report.add(
+                TITLES[app.review],
+                "warn",
+                "Noch nicht eingetragen (Karte → Mehr → Demo-Konto für Screenshots); ohne "
+                "es bricht „Screenshots erzeugen“ ab.",
+            )
+            return
+        account = _dict(json.loads(self.vault.secret(app.review, "Codemagic-Gruppe")))
+        login_var, password_var = app.review_vars
+        secure = {login_var: str(account["login"]), password_var: str(account["password"])}
+        await self._cm_group(client, app_id, report, app.screenshot_group, secure=secure)
 
     async def _repo_checks(
         self, client: httpx.AsyncClient, report: Report, app: OtherApp

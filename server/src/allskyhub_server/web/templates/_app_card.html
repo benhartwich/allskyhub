@@ -56,6 +56,20 @@
       {% endif %}
       {% endfor %}
     </div>
+    {% if card.review_login is not none %}
+    <details data-fold="apps-{{ card.key }}-review">
+      <summary>Demo-Konto für Screenshots{% if card.review_login %} · {{ card.review_login }}{% else %} · fehlt{% endif %}</summary>
+      <form method="post" action="/admin/apps/review-account" class="stack">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+        <input type="hidden" name="app" value="{{ card.key }}">
+        <label>Anmeldung (E-Mail oder Name)<input name="login" required maxlength="254" autocomplete="off" value="{{ card.review_login or '' }}"></label>
+        <label>Passwort des Demo-Kontos<input type="password" name="secret" required maxlength="256" autocomplete="new-password"></label>
+        <label>Dein Passwort<input type="password" name="password" required autocomplete="current-password"></label>
+        <p class="muted small">Damit meldet sich „Screenshots erzeugen“ in der App an. „Einrichten“ legt es als geheime Variablen in die eigene Codemagic-Gruppe {{ card.key }}_screenshots, getrennt von den Store-Schlüsseln. Das Passwort wird nie wieder angezeigt.</p>
+        <button type="submit" class="secondary">Speichern</button>
+      </form>
+    </details>
+    {% endif %}
     <p class="muted small">Gebaut wird immer <code>main</code>: Android auf diesem Server (danach im internen Test bei Google Play), iOS bei Codemagic (danach in TestFlight). Die Store-Texte kommen aus dem Repository, die Screenshots auch, außer „Screenshots erzeugen“ (die echte App bei Codemagic im Simulator und Emulator) und danach „Screenshots übernehmen“ hat neuere geholt. „Einrichten“ prüft die Zugänge und legt fehlende Schlüssel an. „APK zum Herunterladen holen“ lädt Googles installierbare APK des letzten App Bundles und stellt sie öffentlich zum Download.</p>
     {% if card.android and card.android.latest %}
     <p class="small">Letztes App Bundle: <a href="/admin/stores-android/{{ card.android.latest.file }}">{{ card.android.latest.file }}</a> <span class="muted">· Version {{ card.android.latest.version }} ({{ card.android.latest.build }})</span></p>

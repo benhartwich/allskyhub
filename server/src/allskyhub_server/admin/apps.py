@@ -93,6 +93,9 @@ class Card:
     apk: dict[str, Any] | None = None  # the APK for /download/<key>.apk (Stores.apk)
     test: AndroidJob | None = None  # the server's test APK (OtherApp.test_apk)
     screenshots: bool = False  # its codemagic.yaml can make store screenshots
+    # The demo account for the screenshot run: None when the app needs none, "" when it
+    # is not entered yet, else its login (OtherApp.review_vars).
+    review_login: str | None = None
 
     @property
     def waiting(self) -> bool:
@@ -428,6 +431,8 @@ async def cards(stores: Stores, only: str | None = None) -> list[Card]:
         # allskyhub's own come from sample data (app/test/store): the owner's screens
         # need an account a simulator run would not have.
         card.screenshots = bool(app and app.screenshots)
+        if app and app.review_vars:
+            card.review_login = str((stores.vault.meta(app.review) or {}).get("login", ""))
         latest_file = str((job.latest or {}).get("file", ""))
         live = live_of(stores, key)
         card.live_at = str(live.get("at", ""))

@@ -910,6 +910,7 @@ async def test_a_further_app_shares_the_keys(tmp_path: Path) -> None:
         "App-Store-Connect-API-Schlüssel": "warn",
         "Codemagic-API-Token": "ok",
         "Codemagic-Gruppe bortle_store": "ok",
+        "bortle: Demo-Konto für Screenshots": "warn",  # not entered yet
     }, report.steps
     assert ("POST", "/v1/bundleIds", {"data": {"type": "bundleIds", "attributes": {
         "identifier": "eu.bortle.app", "name": "bortle", "platform": "IOS"}}}) in seen  # fmt: skip
@@ -2082,3 +2083,56 @@ async def test_screenshots_only_where_the_workflow_is() -> None:
     app = replace(stores.OTHER_APPS["vinventory"], screenshots=False)
     with pytest.raises(stores.StoreError, match="noch keine Screenshots"):
         await hub.build("screenshots", "a", app=app)
+
+
+async def test_the_demo_account_goes_to_its_own_codemagic_group(tmp_path: Path) -> None:
+    """Benjamin, 2026-11-04: "bitte du anlegen via einrichten" – the screenshot run's demo
+    account, entered once on the apps page, in a group without the store keys."""
+    posted: list[tuple[str, Any]] = []
+
+    def answer(request: httpx.Request) -> httpx.Response:
+        body = json.loads(request.content) if request.content else None
+        path = request.url.path
+        if request.method == "GET" and path.endswith("/variable-groups"):
+            return httpx.Response(200, json={"data": [{"id": "G1", "name": "bortle_store"}]})
+        if request.method == "POST" and path.endswith("/variable-groups"):
+            posted.append((path, body))
+            return httpx.Response(201, json={"data": {"id": "G2"}})
+        if request.method == "GET" and path.endswith("/variables"):
+            return httpx.Response(200, json={"data": []})
+        if request.method == "POST" and path.endswith("/variables"):
+            posted.append((path, body))
+            return httpx.Response(201, json={"data": {}})
+        return httpx.Response(404)
+
+    hub = stores.Stores(
+        tmp_path / "store",
+        "benhartwich/allskyhub",
+        httpx.AsyncClient(transport=httpx.MockTransport(answer)),
+    )
+    hub.vault.put("codemagic", *stores.parse_codemagic("c" * 40), by="a")
+    bortle = stores.OTHER_APPS["bortle"]
+    report = stores.Report()
+    client = hub._http()  # pyright: ignore[reportPrivateUsage]
+    await hub._screenshot_group(client, "APP2", report, bortle)  # pyright: ignore[reportPrivateUsage]
+    assert [(s.title, s.state) for s in report.steps] == [(stores.TITLES[bortle.review], "warn")]
+
+    with pytest.raises(stores.StoreError):
+        stores.parse_review("store review", "x")
+    hub.vault.put(bortle.review, *stores.parse_review("store-review", "Pw 7731"), by="a")
+    assert (hub.vault.meta(bortle.review) or {})["login"] == "store-review"
+    report = stores.Report()
+    await hub._screenshot_group(client, "APP2", report, bortle)  # pyright: ignore[reportPrivateUsage]
+    assert report.steps[0].state == "ok", report.steps
+    assert "7731" not in report.steps[0].text
+    assert posted[0] == ("/api/v3/apps/APP2/variable-groups", {"name": "bortle_screenshots"})
+    assert posted[1][1] == {"secure": True, "variables": [
+        {"name": "SHOT_LOGIN", "value": "store-review"},
+        {"name": "SHOT_PASSWORD", "value": "Pw 7731"},
+    ]}  # fmt: skip
+    # Currywurst Test shows only public data: no account, no group.
+    report = stores.Report()
+    await hub._screenshot_group(  # pyright: ignore[reportPrivateUsage]
+        client, "APP3", report, stores.OTHER_APPS["currywursttest"]
+    )
+    assert report.steps == []

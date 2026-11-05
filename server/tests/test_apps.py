@@ -15,7 +15,7 @@ from allskyhub_server.admin import apps, appstore, stores
 from allskyhub_server.admin.stores import AndroidJob
 from allskyhub_server.auth import ratelimit
 from allskyhub_server.settings import Settings
-from tests.helpers import csrf_from, make_account
+from tests.helpers import PASSWORD, csrf_from, make_account
 from tests.test_stores import ISSUER, _p8, _play_json  # pyright: ignore[reportPrivateUsage]
 
 
@@ -499,3 +499,35 @@ async def test_the_last_ios_build_from_codemagic(tmp_path: Path) -> None:
     )
     card = (await apps.cards(hub, only="bortle"))[0]
     assert card.pending["ios"] == 1
+
+
+async def test_demo_account_for_screenshots(
+    app: FastAPI,
+    client: httpx.AsyncClient,
+    settings: Settings,
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    email = await make_account(client)
+    hub = stores.Stores(tmp_path / "store", "benhartwich/allskyhub")
+    monkeypatch.setattr(app.state, "stores", hub)
+    monkeypatch.setattr(settings, "admin_emails", email)
+    page = await client.get("/admin/apps")
+    assert "Demo-Konto für Screenshots · fehlt" in page.text
+    token = csrf_from(page.text)
+    data = {"csrf_token": token, "app": "bortle", "login": "store-review",
+            "secret": "geheim-123", "password": "wrong"}  # fmt: skip
+    r = await client.post("/admin/apps/review-account", data=data, follow_redirects=True)
+    assert "Dein Passwort stimmt nicht" in r.text
+    assert not hub.vault.has("bortle_review")
+    data["password"] = PASSWORD
+    r = await client.post("/admin/apps/review-account", data=data, follow_redirects=True)
+    assert "Demo-Konto gespeichert" in r.text
+    assert "Demo-Konto für Screenshots · store-review" in r.text
+    assert "geheim-123" not in r.text
+    assert hub.vault.has("bortle_review")
+    r = await client.post(
+        "/admin/apps/review-account", data={**data, "app": "currywursttest"},
+        follow_redirects=True,
+    )  # fmt: skip
+    assert "braucht kein Demo-Konto" in r.text

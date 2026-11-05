@@ -9,7 +9,7 @@ from urllib.parse import urlencode, urlsplit
 from fastapi import APIRouter, Depends, Form, HTTPException, Request
 from fastapi.responses import RedirectResponse, Response
 
-from allskyhub_server.auth import accounts, invitations, password_reset, ratelimit
+from allskyhub_server.auth import accounts, invitations, lockout, password_reset, ratelimit
 from allskyhub_server.auth.sessions import ABSOLUTE_LIFETIME, create_session, delete_session
 from allskyhub_server.mail.send import Mail, Mailer
 from allskyhub_server.settings import Settings
@@ -49,7 +49,7 @@ def _set_session_cookie(response: Response, settings: Settings, token: str) -> N
     )
 
 
-async def _start_session(
+async def start_session(
     request: Request, db: DbSession, settings: Settings, user_id: uuid.UUID, target: str
 ) -> Response:
     old = request.cookies.get(settings.session_cookie_name)
@@ -79,9 +79,12 @@ async def login(
     next: Annotated[str, Form()] = "/",
 ) -> Response:
     engine = request.app.state.engine
+    ip = client_ip(request, settings)
     try:
-        await ratelimit.login(engine, accounts.normalize_email(email), client_ip(request, settings))
+        await ratelimit.login(engine, accounts.normalize_email(email), ip)
     except ratelimit.RateLimitedError as exc:
+        if isinstance(exc, ratelimit.AccountLockedError):
+            lockout.warn_later(request.app, accounts.normalize_email(email), ip, settings.base_url)
         resp = render(
             request,
             "login.html",
@@ -98,7 +101,7 @@ async def login(
             {"error": "E-Mail-Adresse oder Passwort ist falsch.", "email": email, "next": next},
             status_code=400,
         )
-    return await _start_session(request, db, settings, user.id, next)
+    return await start_session(request, db, settings, user.id, next)
 
 
 # The invitation token travels in the query string: never logged (app and nginx log paths only).
@@ -148,7 +151,7 @@ async def accept_invitation(
             {"invitation": invitation, "token": token, "error": exc.message},
             status_code=400,
         )
-    return await _start_session(request, db, settings, user.id, "/")
+    return await start_session(request, db, settings, user.id, "/")
 
 
 @router.post("/logout")
@@ -251,4 +254,4 @@ async def reset(
             status_code=400,
         )
     await db.commit()
-    return await _start_session(request, db, settings, user.id, "/")
+    return await start_session(request, db, settings, user.id, "/")

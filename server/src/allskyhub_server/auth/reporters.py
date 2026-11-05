@@ -38,10 +38,13 @@ def _now() -> dt.datetime:
     return dt.datetime.now(dt.UTC)
 
 
-async def sign_up(db: AsyncSession, email: str, password: str) -> tuple[User, str | None]:
-    """A new inactive reporter with a confirmation token, a new token for an unconfirmed
-    reporter, or the existing account and None. Raises AccountError for an invalid address
-    or password. The caller commits."""
+async def sign_up(
+    db: AsyncSession, email: str, password: str, kind: str = KIND
+) -> tuple[User, str | None]:
+    """A new inactive account of ``kind`` (reporter, or owner on /konto/anlegen) with a
+    confirmation token, a new token for one still unconfirmed, or the existing account and
+    None (also one an admin locked: it has no open link). Raises AccountError for an
+    invalid address or password. The caller commits."""
     email = normalize_email(email)
     if "@" not in email or len(email) > 254 or email.startswith("@"):
         raise AccountError("Bitte eine gültige E-Mail-Adresse angeben.")
@@ -49,13 +52,16 @@ async def sign_up(db: AsyncSession, email: str, password: str) -> tuple[User, st
         raise AccountError(f"Das Passwort braucht mindestens {MIN_PASSWORD_LENGTH} Zeichen.")
     password_hash = await hash_secret_async(password)  # also when it is not used: timing
     existing = await db.scalar(select(User).where(User.email == email))
-    if existing is not None and (existing.is_active or existing.kind != KIND):
-        return existing, None
     if existing is not None:
+        open_link = await db.scalar(
+            select(EmailConfirmation.user_id).where(EmailConfirmation.user_id == existing.id)
+        )
+        if existing.is_active or existing.kind != kind or open_link is None:
+            return existing, None
         user = existing
         await db.execute(delete(EmailConfirmation).where(EmailConfirmation.user_id == user.id))
     else:
-        user = User(email=email, password_hash=password_hash, kind=KIND, is_active=False)
+        user = User(email=email, password_hash=password_hash, kind=kind, is_active=False)
         db.add(user)
         await db.flush()
     token = secrets.token_urlsafe(32)
@@ -86,7 +92,8 @@ async def confirm(db: AsyncSession, token: str) -> User | None:
 
 
 async def purge(db: AsyncSession, now: dt.datetime) -> None:
-    """Expired links go, and reporter accounts never confirmed with them."""
+    """Expired links go, and the accounts never confirmed with them (reporters, and owners
+    who signed up on /konto/anlegen; a locked account has no link, so it stays)."""
     expired = list(
         await db.scalars(
             select(EmailConfirmation.user_id).where(EmailConfirmation.expires_at < now)
@@ -95,7 +102,9 @@ async def purge(db: AsyncSession, now: dt.datetime) -> None:
     await db.execute(delete(EmailConfirmation).where(EmailConfirmation.expires_at < now))
     if expired:
         await db.execute(
-            delete(User).where(User.id.in_(expired), User.kind == KIND, User.is_active.is_(False))
+            delete(User).where(
+                User.id.in_(expired), User.kind.in_((KIND, "owner")), User.is_active.is_(False)
+            )
         )
 
 

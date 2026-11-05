@@ -15,6 +15,6 @@
     <button type="submit">Anmelden</button>
   </form>
   {% if mail_enabled %}<p><a href="/password/forgot">Passwort vergessen?</a></p>{% endif %}
-  <p class="muted">Noch kein Konto? <a href="/zugang">Zugang beantragen</a></p>
+  <p class="muted">Noch kein Konto? {% if open_signup %}<a href="/konto/anlegen">Kostenlos anlegen</a>{% else %}<a href="/zugang">Zugang beantragen</a>{% endif %}</p>
 </div>
 {% endblock %}

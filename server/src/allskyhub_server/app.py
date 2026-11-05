@@ -78,6 +78,7 @@ from allskyhub_server.web import (
     routes_public,
     routes_report,
     routes_showers,
+    routes_signup,
     routes_stores,
     routes_users,
 )
@@ -362,6 +363,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.mount("/static", CachedStaticFiles(directory=STATIC_DIR), name="static")
     app.include_router(routes_auth.router)
     app.include_router(routes_report.router)
+    app.include_router(routes_signup.router)
     app.include_router(routes_access.router)
     app.include_router(lang.router)
     app.include_router(routes_account.router)

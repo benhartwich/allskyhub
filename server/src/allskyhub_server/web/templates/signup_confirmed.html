@@ -1,0 +1,20 @@
+{% extends "base.html" %}
+{% block title %}Konto bestätigen · allskyhub{% endblock %}
+{% block content %}
+<div class="auth">
+  {% if ask %}
+  <h1>Konto bestätigen</h1>
+  <form method="post" action="/konto/bestaetigen" class="card stack">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <input type="hidden" name="token" value="{{ token }}">
+    <p>Ein Klick noch, dann bist du angemeldet.</p>
+    <button type="submit">Konto bestätigen</button>
+  </form>
+  {% else %}
+  <h1>Link ungültig</h1>
+  <div class="card stack">
+    <p>Der Link ist abgelaufen oder wurde schon benutzt. <a href="/konto/anlegen">Neu anlegen</a> oder <a href="/login">anmelden</a>.</p>
+  </div>
+  {% endif %}
+</div>
+{% endblock %}

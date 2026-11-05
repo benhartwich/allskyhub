@@ -193,3 +193,34 @@ async def test_camera_page_shows_setup_card(
     page = (await client.get(f"/cameras/{dev.device_id}")).text
     assert "<h2>Einrichtung</h2>" in page
     assert "<strong>Himmelsmaske gelernt</strong>: Abwarten" in page
+
+
+async def test_all_well_only_says_connected_while_it_is(
+    app: FastAPI, client: httpx.AsyncClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Benjamin, 2026-11-05: "verbunden" next to OFFLINE contradicted itself."""
+    dev = FakeDevice()
+    await paired_token(client, dev)
+    maker: async_sessionmaker[AsyncSession] = app.state.sessionmaker
+    async with maker() as db:
+        await db.execute(
+            update(Device)
+            .where(Device.id == dev.device_id)
+            .values(last_seen_at=dt.datetime.now(dt.UTC))
+        )
+        await db.commit()
+
+    async def well(*_args: object) -> list[health.Problem]:
+        return []
+
+    monkeypatch.setattr(health, "full_check", well)
+    page = (await client.get(f"/cameras/{dev.device_id}")).text
+    assert "Gerade nicht verbunden (zuletzt" in page
+    assert "Alles in Ordnung: verbunden" not in page
+
+    def online(_device_id: str) -> bool:
+        return True
+
+    monkeypatch.setattr(app.state.connections, "is_online", online)
+    page = (await client.get(f"/cameras/{dev.device_id}")).text
+    assert "Alles in Ordnung: verbunden" in page

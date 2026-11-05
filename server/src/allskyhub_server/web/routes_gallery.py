@@ -389,17 +389,29 @@ async def event_page(
 ) -> Response:
     device = await _own(db, session, device_id)
     event = await _event(db, device, night_id, event_id)
-    seen_too: list[dict[str, object]] = []
+    seen_too: list[dict[str, Any]] = []
     for pair, other in await meteor_pairs.for_event(db, device.id, event.event_id):
         own = other.owner_id == device.owner_id
         other_event = pair.event_b if pair.device_a == device.id else pair.event_a
+        camera = {
+            "name": other.name if own else public.title(other),
+            "link": (f"/cameras/{other.id}/events/{other_event[7:15]}/{other_event}" if own
+                     else f"/sky/{other.public_slug}" if other.public_slug else None),
+        }  # fmt: skip
+        # The pairs of one meteor solved together (devices/meteor_pairs.py) share one
+        # solution: one card naming all the other cameras (Benjamin, 2026-11-05).
+        joint = next(
+            (s for s in seen_too if len(pair.cameras) > 2 and s["pair"].cameras == pair.cameras),
+            None,
+        )
+        if joint is not None:
+            joint["cameras"].append(camera)
+            continue
         seen_too.append({
             "pair": pair,
             "fireball": fireball.is_fireball(pair),
             "meteorite": pair.low_km <= fireball.METEORITE_END_KM,
-            "name": other.name if own else public.title(other),
-            "link": (f"/cameras/{other.id}/events/{other_event[7:15]}/{other_event}" if own
-                     else f"/sky/{other.public_slug}" if other.public_slug else None),
+            "cameras": [camera],
         })  # fmt: skip
     return render(
         request,

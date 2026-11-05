@@ -101,3 +101,15 @@ def test_write_only_settings() -> None:
     assert new == {"example_token": "s3cret"}
     cleared, _ = settings_form.changes(schema, current, {"example_token__clear": "1"})
     assert cleared == {"example_token": None}
+
+
+def test_an_unset_time_zone_says_which_one_is_assumed() -> None:
+    fields = [f for g in settings_form.groups(settings_form.FALLBACK, {}) for f in g.fields]
+    zone = next(f for f in fields if f.spec.key == "timezone")
+    assert zone.help == "Nicht gesetzt: Der Hub nimmt Europe/Berlin an."
+    fields = [
+        f
+        for g in settings_form.groups(settings_form.FALLBACK, {"timezone": "Europe/Vienna"})
+        for f in g.fields
+    ]
+    assert next(f for f in fields if f.spec.key == "timezone").help is None

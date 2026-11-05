@@ -20,7 +20,7 @@
   <div class="card"><small>Nächte mit Daten</small><strong>{{ t.nights }}</strong></div>
   <div class="card"><small>Klare Nächte</small><strong>{{ t.clear_nights }}</strong><span class="muted">mind. 2 h klar</span></div>
   <div class="card"><small>Klare Stunden</small><strong>{{ '%.0f' | format(t.clear_hours) }}</strong></div>
-  <div class="card"><small>Dunkelster Himmel</small><strong>{{ '%.2f' | format(t.best_sqm) | replace('.', ',') if t.best_sqm is not none else '–' }}</strong><span class="muted">mag/″²</span></div>
+  <div class="card"><small>Dunkelster Himmel</small><strong>{{ '%.2f' | format(t.best_sqm) | replace('.', ',') if t.best_sqm is not none else '–' }}</strong><span class="muted">mag/⁠″²</span></div>
   <div class="card"><small>Meteore</small><strong>{{ t.meteors }}</strong></div>
   <div class="card"><small>Polarlicht · Gewitter</small><strong>{{ t.aurora }} · {{ t.storms }}</strong></div>
 </div>
@@ -67,7 +67,7 @@
   <ol class="month-bars sqm-bars" aria-label="Himmelshelligkeit pro Monat">
     {% for m in trend.months[-36:] %}
     {% set level = (((m.sqm - lo) / (hi - lo)) * 9 + 1) | round | int if hi > lo else 5 %}
-    <li class="h{{ level }}" title="{{ m.label }}: {{ '%.2f' | format(m.sqm) | replace('.', ',') }} mag/″² ({{ m.nights }} Nächte)"><span class="bar"></span><small>{{ m.label[:2] }}</small></li>
+    <li class="h{{ level }}" title="{{ m.label }}: {{ '%.2f' | format(m.sqm) | replace('.', ',') }} mag/⁠″² ({{ m.nights }} Nächte)"><span class="bar"></span><small>{{ m.label[:2] }}</small></li>
     {% endfor %}
   </ol>
   <p class="muted small">Median der dunkelsten Messung klarer Nächte ohne viel Mond, je Monat; höher ist dunkler. Die Jahreszeiten (Milchstraße im Zenit, Schnee) verschieben einzelne Monate. Die Kamera ist nicht gegen ein SQM-Messgerät geeicht: Der Trend sagt mehr als der absolute Wert.</p>

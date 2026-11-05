@@ -113,6 +113,8 @@ async def test_owner_sees_sky_and_camera_state(
     data = r.json()
     assert data["hours"] == 24
     assert data["tz"] == "Europe/Vienna"
+    assert data["tz_assumed"] is False  # the camera named it
+    assert "locale_guard.js" in page.text  # before uPlot: odd browser languages break it
     assert len(data["sky"]["t"]) == 30
     assert data["status"]["exposure"][0] == 20.0
     assert "ephemeris" in data

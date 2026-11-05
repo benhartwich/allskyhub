@@ -42,8 +42,34 @@ def test_event_rows_in_german() -> None:
         "Bilder": "3",
         "Richtung": "135° (diagonal, oben links – unten rechts)",
         "Meteorstrom": "Orioniden",
-        "extra": "7",
-    }
+    }  # an unknown key ("extra") stays off the page
+
+
+def test_event_rows_say_the_track_in_words() -> None:
+    """Benjamin, 2026-11-05: no raw keys such as `track_ordered` or `end_azimuth_deg`."""
+    event = record("x")
+    event.data = {**event.data, "start_azimuth_deg": 223.3, "start_altitude_deg": 59.4,
+                  "end_azimuth_deg": 206.8, "end_altitude_deg": 23.6, "track_ordered": True,
+                  "track": [[223.3, 59.4], [206.8, 23.6]], "track_rms_deg": 0.2,
+                  "source": "image_url", "shower": "Taurids", "shower_match": "date"}  # fmt: skip
+    rows = dict(event_rows(event))
+    assert rows["Spur am Himmel"] == "von 223° SW, 59° hoch nach 207° SW, 24° hoch"
+    assert rows["Quelle"] == "Bild-Adresse (SharedSky)"
+    assert rows["Meteorstrom"] == "vielleicht Tauriden (nur nach Datum)"
+    assert not [k for k in rows if "_" in k or k.startswith("track")]
+    event.data = {**event.data, "track_ordered": False}
+    assert dict(event_rows(event))["Spur am Himmel"].startswith("zwischen 223°")
+
+
+def test_transient_rows() -> None:
+    event = record("x")
+    event.kind = "transient"
+    event.data = {"ra_deg": 83.82, "dec_deg": -5.39, "mag": 4.25, "frames": 6, "ongoing": True}
+    rows = dict(event_rows(event))
+    assert rows["Position (J2000)"] == "RA 83,82°, Dec -5,39°"
+    assert rows["Helligkeit (mag)"] == "+4,2"
+    assert rows["Bilder"] == "6"
+    assert rows["Status"] == "läuft noch"
 
 
 @pytest.mark.parametrize(

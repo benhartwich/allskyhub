@@ -96,3 +96,20 @@ async def test_empty_statistics(client: httpx.AsyncClient) -> None:
     await paired_token(client, dev)
     page = (await client.get(f"/cameras/{dev.device_id}/stats?year=1800")).text
     assert "Noch keine Nächte" in page
+
+
+async def test_shower_names_in_german_whatever_was_stored(
+    app: FastAPI, client: httpx.AsyncClient
+) -> None:
+    """Nights stored with the camera's (IMO) names count with the German ones."""
+    dev = FakeDevice()
+    await paired_token(client, dev)
+    maker: async_sessionmaker[AsyncSession] = app.state.sessionmaker
+    async with maker() as db:
+        db.add(NightStat(device_id=dev.device_id, night_id="20260811", meteors=3,
+                         showers={"Perseids": 2, "sporadisch": 1}))  # fmt: skip
+        db.add(NightStat(device_id=dev.device_id, night_id="20260812", meteors=4,
+                         showers={"Perseiden": 4}))  # fmt: skip
+        await db.commit()
+        year = await stats.year(db, dev.device_id, 2026)
+    assert year.showers == {"Perseiden": 6, "sporadisch": 1}

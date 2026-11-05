@@ -14,7 +14,7 @@
 <p class="lead">Allsky-Kameras mit öffentlicher Seite, deren Betreiber den Ort zeigen (auf etwa 10 km gerundet). Tippe auf eine Kamera für ihr aktuelles Bild.</p>
 {% if layer %}
 <div class="card stack sqm-info">
-  <p class="muted small">Im Hintergrund die Lichter der Nacht aus dem All (NASA Black Marble): je heller, desto mehr Lichtverschmutzung. Die Punkte sind die Messungen der Kameras selbst: der Median der dunkelsten Messung klarer Nächte der letzten 60 Tage, in mag/″² (höher = dunkler). Ungefähr, solange die Kameras nicht kalibriert sind. Grau: noch zu wenige klare Nächte gemessen oder Himmelsqualität nicht öffentlich. Die kleinen Punkte sind Meldungen von Menschen mit bloßem Auge aus der allskyhub-App (Median je 10-km-Feld, letztes Jahr), noch ungenauer als die Kameras.</p>
+  <p class="muted small">Im Hintergrund die Lichter der Nacht aus dem All (NASA Black Marble): je heller, desto mehr Lichtverschmutzung. Die Punkte sind die Messungen der Kameras selbst: der Median der dunkelsten Messung klarer Nächte der letzten 60 Tage, in mag/⁠″² (höher = dunkler). Ungefähr, solange die Kameras nicht kalibriert sind. Grau: noch zu wenige klare Nächte gemessen oder Himmelsqualität nicht öffentlich. Die kleinen Punkte sind Meldungen von Menschen mit bloßem Auge aus der allskyhub-App (Median je 10-km-Feld, letztes Jahr), noch ungenauer als die Kameras.</p>
   <ul class="sqm-legend">{% for _, cls, label in sqm_classes %}<li><span class="swatch {{ cls }}"></span>{{ label }}</li>{% endfor %}<li><span class="swatch sqm-none"></span>noch kein Wert</li></ul>
 </div>
 {% endif %}
@@ -41,7 +41,7 @@
   <li><a class="card cam" href="/sky/{{ c.slug }}">
     {% if c.has_image %}<img src="/sky/{{ c.slug }}/latest.jpg" alt="Himmel über {{ c.title }}" loading="lazy">{% else %}<div class="sky-ph" aria-hidden="true"></div>{% endif %}
     <div class="cam-meta"><strong>{{ c.title }}</strong></div>
-    <span class="muted">{{ c.place or ('%.1f°, %.1f°' | format(c.lat, c.lon)) }}{% if layer %} · {{ c.sqm_text }}{% elif c.sqm %} · {{ '%.2f' | format(c.sqm) | replace('.', ',') }} mag/″²{% endif %}</span>
+    <span class="muted">{{ c.place or ('%.1f°, %.1f°' | format(c.lat, c.lon)) }}{% if layer %} · {{ c.sqm_text }}{% elif c.sqm %} · {{ '%.2f' | format(c.sqm) | replace('.', ',') }} mag/⁠″²{% endif %}</span>
   </a></li>
   {% endfor %}
 </ul>

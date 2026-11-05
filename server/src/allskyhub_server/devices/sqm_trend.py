@@ -22,6 +22,10 @@ from allskyhub_server.i18n import english, tr
 from allskyhub_server.models import Device, NightStat
 from allskyhub_sky import astro
 
+# The unit of sky brightness, never broken across lines (a no-break space before it,
+# a word joiner after the slash; Benjamin, 2026-11-05).
+SQM_UNIT = "\u00a0mag/\u2060″²"
+
 MIN_CLEAR_HOURS = 1.0
 # Moon lit more than this at the night's midnight brightens the sky.
 MAX_MOON = 0.35
@@ -65,17 +69,17 @@ class Trend:
             value = value.replace(".", ",")
         if abs(self.per_year) < STEADY:
             return tr(
-                f"Der Himmel ist gleich dunkel geblieben ({value} mag/″² pro Jahr).",
-                f"The sky has stayed equally dark ({value} mag/″² per year).",
+                f"Der Himmel ist gleich dunkel geblieben ({value}{SQM_UNIT} pro Jahr).",
+                f"The sky has stayed equally dark ({value}{SQM_UNIT} per year).",
             )
         if self.per_year < 0:
             return tr(
-                f"Der Himmel wird heller: {value} mag/″² pro Jahr mehr Lichtverschmutzung.",
-                f"The sky is getting brighter: {value} mag/″² more light pollution per year.",
+                f"Der Himmel wird heller: {value}{SQM_UNIT} pro Jahr mehr Lichtverschmutzung.",
+                f"The sky is getting brighter: {value}{SQM_UNIT} more light pollution per year.",
             )
         return tr(
-            f"Der Himmel wird dunkler: {value} mag/″² pro Jahr.",
-            f"The sky is getting darker: {value} mag/″² per year.",
+            f"Der Himmel wird dunkler: {value}{SQM_UNIT} pro Jahr.",
+            f"The sky is getting darker: {value}{SQM_UNIT} per year.",
         )
 
     @property

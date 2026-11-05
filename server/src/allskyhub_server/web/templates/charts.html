@@ -2,6 +2,7 @@
 {% block title %}Messdaten · {{ back_title }}{% endblock %}
 {% block head %}
   <link rel="stylesheet" href="{{ asset('uplot.min.css') }}">
+  <script src="{{ asset('locale_guard.js') }}" defer></script>
   <script src="{{ asset('uplot.min.js') }}" defer></script>
   <script src="{{ asset('charts.js') }}" defer></script>
 {% endblock %}
@@ -22,7 +23,7 @@
 <section class="card chart-notes">
   <h2>Zu den Werten</h2>
   <dl class="facts">
-    <dt>Himmelshelligkeit</dt><dd>in mag/″², größere Werte = dunkler. Aus dem Himmelshintergrund des Kamerabilds, normiert auf Belichtung und Gain, nur bei astronomischer Nacht (Sonne unter −18°). Ein Näherungswert, solange die Kamera nicht gegen ein SQM-Messgerät kalibriert ist.</dd>
+    <dt>Himmelshelligkeit</dt><dd>in mag/⁠″², größere Werte = dunkler. Aus dem Himmelshintergrund des Kamerabilds, normiert auf Belichtung und Gain, nur bei astronomischer Nacht (Sonne unter −18°). Ein Näherungswert, solange die Kamera nicht gegen ein SQM-Messgerät kalibriert ist.</dd>
     <dt>Bewölkung</dt><dd>aus den Sternen im oberen Himmel, nur bei Nacht (Sonne unter −12°).</dd>
     <dt>Sterne</dt><dd>Zahl der im Bild erkannten Sterne.</dd>
     <dt>Dämmerung</dt><dd>Hintergrund von hell nach dunkel: Tag, bürgerliche (bis −6°), nautische (bis −12°) und astronomische Dämmerung (bis −18°), Nacht.</dd>

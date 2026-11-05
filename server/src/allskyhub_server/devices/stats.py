@@ -13,6 +13,7 @@ from sqlalchemy import select, union
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from allskyhub_server.devices.event_text import shower_name
 from allskyhub_server.devices.night_summary import summarize
 from allskyhub_server.i18n import english
 from allskyhub_server.models import Device, EventRecord, NightStat, SkySample
@@ -120,7 +121,8 @@ async def year(db: AsyncSession, device_id: str, year: int) -> Year:
     for n in rows:
         months[int(n.night_id[4:6]) - 1].add(n)
         total.add(n)
-        for name, count in (n.showers or {}).items():
+        for key, count in (n.showers or {}).items():
+            name = shower_name(key)  # stored as the camera names it (SPEC §6.4)
             showers[name] = showers.get(name, 0) + int(count)
     years = sorted(
         {

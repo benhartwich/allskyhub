@@ -56,10 +56,13 @@ STATUS_FIELDS = (
 )
 
 
+def _settings(device: Device) -> dict[str, Any]:
+    return (device.last_status or {}).get("settings") or {}
+
+
 def zone(device: Device) -> ZoneInfo:
     """The camera's own time zone (status settings), else the hub's."""
-    settings: dict[str, Any] = (device.last_status or {}).get("settings") or {}
-    return tonight.zone_for(settings.get("timezone"))
+    return tonight.zone_for(_settings(device).get("timezone"))
 
 
 def night_range(night_id: str, tz: ZoneInfo) -> tuple[dt.datetime, dt.datetime]:
@@ -208,6 +211,8 @@ async def load(
         "from": _ts(start),
         "to": _ts(end),
         "tz": zone(device).key,
+        # The camera named none: the hub's zone is a guess, and the page says so.
+        "tz_assumed": not _settings(device).get("timezone"),
         "night": rng.night_id,
         "hours": rng.hours,
         "bucket_s": bucket_s,

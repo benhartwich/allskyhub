@@ -21,6 +21,7 @@ from PIL import Image as PILImage
 from pydantic import ValidationError
 
 from allskyhub_agent.adapters.camera import Image
+from allskyhub_agent.calib import localfit
 from allskyhub_agent.calib.orientation import Orienter
 from allskyhub_agent.calib.solve import Solution
 from allskyhub_agent.core.metering import Mask
@@ -34,6 +35,8 @@ from allskyhub_agent.detect.meteor import (
     Streak,
     active_shower,
     angle_between,
+    axis_samples,
+    centre_line,
     match_shower,
     progressing,
     similar,
@@ -44,7 +47,17 @@ from allskyhub_agent.detect.nlc import NlcDetector, NlcUpdate
 from allskyhub_agent.detect.sky import SkyMeter
 from allskyhub_agent.process.skymask import SkyMask
 from allskyhub_agent.store.images import THUMB_WIDTH, ImageStore
-from allskyhub_protocol import Event, EventKind, FrameInfo, Mode, SkyMetrics, event_id
+from allskyhub_protocol import (
+    TRACK_POINTS,
+    TRACK_RMS_MAX,
+    Event,
+    EventKind,
+    EventValue,
+    FrameInfo,
+    Mode,
+    SkyMetrics,
+    event_id,
+)
 
 log = logging.getLogger(__name__)
 
@@ -52,6 +65,9 @@ INDEX = "events.jsonl"
 MAX_REJECTS = 300  # SPEC §6.4 Trail verdicts: streaks a night that are not meteors
 CROP_MIN_PX = 480  # the picture shows the meteor with some sky around it
 FULL_MAX_PX = 1920  # a lightning picture is the whole frame, at most this wide
+# SPEC §4.8 Local fit for bright meteors: which meteors get one.
+LOCAL_FIT_PEAK = 0.9
+LOCAL_FIT_LENGTH_DEG = 15.0
 Window = tuple[int, int, int, int]  # left, top, width, height in the frame's pixels
 
 
@@ -129,6 +145,76 @@ class EventStore:
             "track_ordered": False,
         }
 
+    def _meteor_track(self, frame: FrameInfo, s: Streak, image: Path) -> dict[str, EventValue]:
+        """The ends, `track` and `track_rms_deg` of a meteor (SPEC §6.4): from the local fit
+        around the track for a bright or long one (SPEC §4.8), else from the orientation.
+        Runs in the detection thread, before the store's lock is taken."""
+        out: dict[str, EventValue] = {**self._track_ends(frame, s), "track": None,
+                                      "track_rms_deg": None}  # fmt: skip
+        sol = self._orientation() if self._orientation is not None else None
+        size = self._frame_size(frame) if sol is not None and self._time_trusted() else None
+        if sol is None or size is None or (sol.width and size != (sol.width, sol.height)):
+            return out
+        a1, z1 = sol.unproject(np.array([s.p1[0]]), np.array([s.p1[1]]))
+        a2, z2 = sol.unproject(np.array([s.p2[0]]), np.array([s.p2[1]]))
+        length_deg = angle_between(sky_unit(float(z1[0]), float(a1[0])),
+                                   sky_unit(float(z2[0]), float(a2[0])))  # fmt: skip
+        points = centre_line(s, min(TRACK_POINTS[1], max(TRACK_POINTS[0],
+                                                         math.ceil(length_deg) + 1)))  # fmt: skip
+
+        def plain(x: float, y: float) -> tuple[float, float]:
+            alt, az = sol.unproject(np.array([x]), np.array([y]))
+            return float(az[0]) % 360.0, float(alt[0])
+
+        where = plain
+        rms = sol.rms_deg
+        loc = self._location() if self._location is not None else None
+        if loc is not None and (s.peak >= LOCAL_FIT_PEAK or length_deg >= LOCAL_FIT_LENGTH_DEG):
+            fitted = self._local_fit(frame, s, image, sol, loc)
+            if fitted is not None:
+                where, rms = fitted.position, fitted.rms_deg
+        track: list[list[float]] = []
+        for x, y in points:
+            az, alt = where(x, y)
+            track.append([round(az % 360.0, 2) % 360.0, round(max(-90.0, min(90.0, alt)), 2)])
+        # The ends are the track's: on the streak's centre line, which bends near the edge
+        # of a fisheye, not on the straight axis through it.
+        for key, (az, alt) in (("start", track[0]), ("end", track[-1])):
+            out[f"{key}_azimuth_deg"] = round(az, 1) % 360.0
+            out[f"{key}_altitude_deg"] = round(alt, 1)
+        out["track"] = track
+        out["track_rms_deg"] = round(max(0.0, min(TRACK_RMS_MAX, rms)), 3)
+        return out
+
+    def _local_fit(
+        self,
+        frame: FrameInfo,
+        s: Streak,
+        image: Path,
+        sol: Solution,
+        loc: tuple[float, float],
+    ) -> localfit.LocalFit | None:
+        """SPEC §4.8 Local fit for bright meteors, on the event's own frame."""
+        try:
+            with PILImage.open(image) as im:
+                gray = np.asarray(im.convert("L"), dtype=np.uint8)
+        except OSError:
+            return None
+        mid = frame.captured_at + timedelta(microseconds=frame.exposure_us // 2)
+        dense = centre_line(s, 64)  # the track for the 15° around it
+        try:
+            fitted = localfit.fit(gray, sol, dense, mid, *loc,
+                                  streak_px=axis_samples(s, gray.shape))  # fmt: skip
+        except Exception:  # the fit is a refinement: never lose the meteor over it
+            log.exception("local fit failed for %s", frame.name)
+            return None
+        if fitted is None:
+            log.info("%s: no local fit, the orientation stands", frame.name)
+        else:
+            log.info("%s: local fit with %d stars, %.2f° RMS, corrections %s°", frame.name,
+                     fitted.stars, fitted.rms_deg, fitted.angles_deg)  # fmt: skip
+        return fitted
+
     def _frame_size(self, frame: FrameInfo) -> tuple[int, int] | None:
         try:
             with PILImage.open(self._store.night_dir(frame.night_id) / frame.name) as im:
@@ -202,7 +288,7 @@ class EventStore:
         with path.open("a", encoding="utf-8") as fh:
             fh.write(event.model_dump_json() + "\n")
 
-    def amend(self, event: Event, data: dict[str, float | int | str | bool | None]) -> Event:
+    def amend(self, event: Event, data: Mapping[str, EventValue]) -> Event:
         """The event again with more `data` (the newer line counts, like an episode's)."""
         with self._lock:
             out = event.model_copy(update={"data": {**event.data, **data}})
@@ -212,6 +298,7 @@ class EventStore:
     def save_meteor(self, hit: MeteorHit) -> Event:
         """Crop the frame around the streak, store picture, thumbnail and index line."""
         f, s = hit.frame, hit.streak
+        track = self._meteor_track(f, s, hit.image_path)  # outside the lock: it may fit stars
         with self._lock:
             eid = self._new_id(EventKind.METEOR, f)
             window = self._save_crop(hit, f.night_id, eid)
@@ -232,7 +319,7 @@ class EventStore:
                     "trail": hit.trail,  # SPEC §6.4 Trail verdicts
                     **self._shower(f, s),
                     **self._position(f, s.cx, s.cy),
-                    **self._track_ends(f, s),
+                    **track,
                     **(original(f.name, window) if window is not None else {}),
                 },
             )
@@ -259,6 +346,8 @@ class EventStore:
                         best, far = d, (float(alt), float(az))
             if far is not None:
                 data["end_altitude_deg"], data["end_azimuth_deg"] = far
+                # The points ran to the first piece's end (SPEC §6.4): no longer the track.
+                data["track"], data["track_rms_deg"] = None, None
         end = f.captured_at + timedelta(microseconds=f.exposure_us)
         with self._lock:
             out = event.model_copy(update={"end": max(event.end, end), "data": data})
@@ -360,7 +449,7 @@ class EventStore:
         start: datetime,
         end: datetime,
         confidence: float,
-        data: dict[str, float | int | str | bool | None],
+        data: Mapping[str, EventValue],
         picture: Path | None,
     ) -> Event | None:
         """An event from another program's records (roadmap L18); None if an event of this
@@ -386,7 +475,7 @@ class EventStore:
                 confidence=confidence,
                 has_image=has_image,
                 imported=True,
-                data=data,
+                data=dict(data),
             )
             self._append(event)
         return event

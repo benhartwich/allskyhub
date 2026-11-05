@@ -24,11 +24,13 @@ from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse
 from python_multipart.exceptions import MultipartParseError
 from python_multipart.multipart import MultipartParser, parse_options_header
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
+from allskyhub_protocol import EventVariant
 from allskyhub_server.api import connect
 from allskyhub_server.auth import ratelimit
-from allskyhub_server.devices import stations
+from allskyhub_server.devices import station_detect, stations
 from allskyhub_server.devices.images import ImageStore
 from allskyhub_server.devices.stations import SecretKey, StationError
 from allskyhub_server.models import Device, EventRecord
@@ -196,9 +198,12 @@ async def _image(
     device: Device,
     meta: dict[str, Any],
     data: bytes,
+    detector: station_detect.Detector | None = None,
 ) -> None:
     """A frame (SPEC §10.3): the thumbnail as for ``POST /frames``; with ``detections`` the
-    full frame is kept as a meteor candidate for the hub's own detection."""
+    full frame is kept as a meteor candidate. Every frame also goes to the hub's own
+    detection (devices/station_detect.py): when it finds meteors in the frame before, one
+    indi-allsky saw streaks on, they replace that frame's candidate, with their tracks."""
     start_s, exposure = _num(meta, "createDate"), _num(meta, "exposure") or 0.0
     if start_s is None:
         raise StationError(400, "bad_request", "createDate")
@@ -220,7 +225,15 @@ async def _image(
         sky_brightness=None,  # indi-allsky's sqm is its own scale, not mag/arcsec²
     )
     await connect.store_frame(db, store, maker, device, frame, data, full_always=True)
-    if (_num(meta, "detections") or 0) <= 0:
+    detections = int(_num(meta, "detections") or 0)
+    if detector is not None:
+        found = await detector.feed(
+            device.id, data, frame.time, exposure, "indi-allsky", detections=detections,
+            orientation=(device.last_status or {}).get("orientation"),
+        )  # fmt: skip
+        if found is not None and found.held.detections > 0:
+            await _with_tracks(db, store, device, found)
+    if detections <= 0:
         return
     night = stations.night_id(start, stations.longitude(device))
     if await stations.night_full(db, device, night):
@@ -243,6 +256,30 @@ async def _image(
     await asyncio.to_thread(stations.cap_storage, store.root, device.id)
 
 
+async def _with_tracks(
+    db: AsyncSession, store: ImageStore, device: Device, found: station_detect.Found
+) -> None:
+    """The hub found meteors on a frame indi-allsky had a candidate for: they take its
+    place (SPEC §10.3), with tracks, as trial events (devices/station_detect.py)."""
+    held = found.held
+    start = dt.datetime.fromtimestamp(held.taken - held.exposure_s / 2, dt.UTC)
+    old = await db.scalar(
+        select(EventRecord).where(
+            EventRecord.device_id == device.id,
+            EventRecord.kind == "meteor",
+            EventRecord.start == start,
+        )
+    )
+    if old is not None and (old.data or {}).get("candidate"):
+        for variant in EventVariant:
+            await asyncio.to_thread(
+                store.delete_event, device.id, old.night_id, old.event_id, variant
+            )
+        await db.delete(old)
+        await db.flush()
+    await station_detect.store_found(db, store, device, found, "indi-allsky")
+
+
 def _error(exc: StationError) -> JSONResponse:
     return connect.error(exc)
 
@@ -263,7 +300,10 @@ async def sync(request: Request, db: DbSession, asset: str) -> JSONResponse:
         elif asset == "image" and request.method in ("POST", "PUT"):
             facts: dict[str, Any] = meta  # pyright: ignore[reportUnknownVariableType]
             maker = request.app.state.sessionmaker
-            await _image(db, request.app.state.images, maker, device, facts, data)
+            await _image(
+                db, request.app.state.images, maker, device, facts, data,
+                request.app.state.station_detector,
+            )  # fmt: skip
         elif asset == "image" and request.method == "GET":
             return JSONResponse({"error": "file_missing"}, status_code=400)
     except StationError as exc:

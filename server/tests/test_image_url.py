@@ -17,13 +17,14 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from allskyhub_protocol import FrameVariant
-from allskyhub_server.devices import image_url, stations
+from allskyhub_server.devices import image_url, station_detect, stations
 from allskyhub_server.devices.image_url import Fetcher, FetchError
 from allskyhub_server.devices.images import ImageStore
 from allskyhub_server.devices.stations import SecretKey
 from allskyhub_server.mail.send import MemoryMailer
-from allskyhub_server.models import Device, Frame, StationSource, User
+from allskyhub_server.models import Device, EventRecord, Frame, StationSource, User
 from tests.helpers import make_account
+from tests.test_station_detect import frame as _frame_with
 
 PUBLIC = "93.184.216.34"
 NAMES = {"cam.example.org": [PUBLIC], "intern.example.org": ["10.0.0.5"]}
@@ -190,21 +191,12 @@ def test_images_and_their_time(monkeypatch: pytest.MonkeyPatch) -> None:
         image_url.prepare(out.getvalue(), "image/jpeg")  # says JPEG, is PNG
 
 
-def test_interval_backoff_and_runs() -> None:
+def test_interval_and_backoff() -> None:
     assert image_url.next_interval([]) == 30
     assert image_url.next_interval([0, 60, 120, 180]) == 30
     assert image_url.next_interval([0, 300, 600, 900]) == 150
     assert image_url.next_interval([0, 1200, 2400, 3600]) == 300
     assert [image_url.backoff(n) for n in (1, 2, 3, 8)] == [60, 120, 240, 3600]
-    recent = image_url.Recent()
-    for t in (0, 60, 120):
-        recent.frames.append((t, 1920, 1080, b""))
-    assert image_url.run_ready(recent, 60)
-    assert not image_url.run_ready(recent, 20)  # too far apart
-    small = image_url.Recent()
-    for t in (0, 60, 120):
-        small.frames.append((t, 1024, 768, b""))
-    assert not image_url.run_ready(small, 60)  # too small for meteors
 
 
 def test_overlay_mask(tmp_path: Path) -> None:
@@ -260,7 +252,8 @@ async def test_the_loop_fetches_approved_stations(
                                                               "etag": '"v1"'})  # fmt: skip
 
     ctx = image_url.Context(maker, store, mailer, "https://allskyhub.org", _fetcher(handler),
-                            image_url.OverlayMask(tmp_path / "masks"))  # fmt: skip
+                            image_url.OverlayMask(tmp_path / "masks"),
+                            station_detect.Detector(tmp_path / "detect"))  # fmt: skip
     now = dt.datetime(2026, 11, 5, 20, 41, tzinfo=dt.UTC)
     assert await image_url.round_once(ctx, now) == 1
     async with maker() as db:
@@ -319,10 +312,56 @@ async def test_failed_orientation_sends_it_back(
 
     mailer: MemoryMailer = app.state.mailer
     ctx = image_url.Context(maker, app.state.images, mailer, "https://allskyhub.org",
-                            _fetcher(handler), image_url.OverlayMask(tmp_path))  # fmt: skip
+                            _fetcher(handler), image_url.OverlayMask(tmp_path),
+                            station_detect.Detector(tmp_path / "detect"))  # fmt: skip
     await image_url.round_once(ctx, dt.datetime(2026, 11, 5, 21, tzinfo=dt.UTC))
     async with maker() as db:
         source = await db.get(StationSource, device_id)
         assert source is not None
         assert source.state == "pending"
     assert any("neu geprüft" in m.subject for m in mailer.sent)
+
+
+async def test_a_meteor_from_fetched_frames(
+    app: FastAPI, client: httpx.AsyncClient, tmp_path: Path
+) -> None:
+    """Three frames in a row, a streak only in the middle one: a trial event of the middle
+    frame, with its track in full pixels, never paired."""
+    device_id = await _approved_station(app, client)
+    frames = [
+        _frame_with(1600, 1200, seed=1),
+        _frame_with(1600, 1200, (300, 300, 1100, 700), seed=2),
+        _frame_with(1600, 1200, seed=3),
+    ]
+    served = {"n": 0}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        n = served["n"]
+        served["n"] += 1
+        headers = {"content-type": "image/jpeg", "etag": f'"{n}"',
+                   "last-modified": f"Thu, 05 Nov 2026 20:4{n}:00 GMT"}  # fmt: skip
+        return httpx.Response(200, content=frames[n], headers=headers)
+
+    maker: async_sessionmaker[AsyncSession] = app.state.sessionmaker
+    ctx = image_url.Context(maker, app.state.images, app.state.mailer, "https://allskyhub.org",
+                            _fetcher(handler), image_url.OverlayMask(tmp_path / "masks"),
+                            station_detect.Detector(tmp_path / "detect"))  # fmt: skip
+    now = dt.datetime(2026, 11, 5, 20, 40, 5, tzinfo=dt.UTC)
+    for i in range(3):
+        async with maker() as db:
+            source = await db.get(StationSource, device_id)
+            assert source is not None
+            source.next_fetch_at = None
+            source.interval_s = 60  # as if it had learnt the camera's minute
+            await db.commit()
+        await image_url.round_once(ctx, now + dt.timedelta(minutes=i))
+    async with maker() as db:
+        events = (
+            await db.scalars(select(EventRecord).where(EventRecord.device_id == device_id))
+        ).all()
+    assert len(events) == 1
+    data = events[0].data or {}
+    assert (data["source"], data["trial"], data["time_trusted"]) == ("image_url", True, False)
+    assert events[0].start == dt.datetime(2026, 11, 5, 20, 41, tzinfo=dt.UTC)  # the middle one
+    assert data["track_px"][0] == pytest.approx([300, 300], abs=25)
+    assert events[0].has_original

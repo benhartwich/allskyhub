@@ -406,6 +406,38 @@ async def test_indi_allsky(
     assert r.status_code == 200  # dropped
 
 
+async def test_indi_allsky_candidate_gets_its_track(
+    app: FastAPI, client: httpx.AsyncClient, new_client: httpx.AsyncClient
+) -> None:
+    """indi-allsky saw a streak on the middle of three frames: the hub's own detection
+    replaces its candidate with a trial meteor that has its track (SPEC §10.3)."""
+    from tests.test_station_detect import frame
+
+    maker: async_sessionmaker[AsyncSession] = app.state.sessionmaker
+    station_id, secret = await _station(app, client, "indi-allsky")
+    start = int(time.time()) - 200
+    pictures = [frame(1600, 1200, seed=1), frame(1600, 1200, (300, 300, 1100, 700), seed=2),
+                frame(1600, 1200, seed=3)]  # fmt: skip
+    for i, picture in enumerate(pictures):
+        image = json.dumps({"type": 2, "createDate": start + 60 * i, "exposure": 30.0,
+                            "night": True, "detections": 1 if i == 1 else 0,
+                            "camera_uuid": "abc", "utc_offset": 0}).encode()  # fmt: skip
+        r = await new_client.post("/indi-allsky/sync/v1/image",
+                                  files=_indi_files(image, picture),
+                                  headers=_indi_headers(station_id, secret, image))  # fmt: skip
+        assert r.status_code == 200
+    async with maker() as db:
+        found = (
+            await db.scalars(select(EventRecord).where(EventRecord.device_id == station_id))
+        ).all()
+    assert len(found) == 1
+    data = found[0].data or {}
+    assert (data["source"], data["trial"]) == ("indi-allsky", True)
+    assert "candidate" not in data
+    assert len(data["track_px"]) >= 2
+    assert found[0].start == dt.datetime.fromtimestamp(start + 60, dt.UTC)
+
+
 async def test_remove_station(app: FastAPI, client: httpx.AsyncClient) -> None:
     """SPEC §10.1: removing a station deletes its place and secret at once; its meteors stay
     for joint results (§10.6)."""

@@ -1,5 +1,5 @@
 version = 1
-revision = 5
+revision = 3
 requires-python = ">=3.11"
 resolution-markers = [
     "python_full_version >= '3.14'",
@@ -123,6 +123,7 @@ source = { editable = "server" }
 dependencies = [
     { name = "alembic" },
     { name = "allskyhub-design" },
+    { name = "allskyhub-detect" },
     { name = "allskyhub-protocol" },
     { name = "allskyhub-sky" },
     { name = "allskyhub-solve" },
@@ -150,6 +151,7 @@ dependencies = [
 requires-dist = [
     { name = "alembic", specifier = ">=1.16" },
     { name = "allskyhub-design", editable = "packages/design" },
+    { name = "allskyhub-detect", editable = "packages/detect" },
     { name = "allskyhub-protocol", editable = "packages/protocol" },
     { name = "allskyhub-sky", editable = "packages/sky" },
     { name = "allskyhub-solve", editable = "packages/solve" },

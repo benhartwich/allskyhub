@@ -366,6 +366,7 @@ async def remove(
     store.delete_device(device.id)
     image_url.proof_path(_proofs(settings), device.id).unlink(missing_ok=True)
     image_url.OverlayMask(_masks(settings)).forget(device.id)
+    request.app.state.station_detector.buffer.drop(device.id)
     log.info("station removed", extra={"device_id": device.id})
     return RedirectResponse("/", status_code=303)
 

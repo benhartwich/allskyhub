@@ -31,9 +31,9 @@ import itertools
 import logging
 import socket
 import statistics
-from collections import deque
+import time
 from collections.abc import Awaitable, Callable
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 from urllib.parse import SplitResult, urljoin, urlsplit, urlunsplit
@@ -45,6 +45,7 @@ from PIL import Image, ImageOps, UnidentifiedImageError
 from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
+from allskyhub_server.devices import station_detect
 from allskyhub_server.devices.images import ImageStore
 from allskyhub_server.mail.send import Mail, Mailer
 from allskyhub_server.models import Device, StationSource, User
@@ -71,9 +72,6 @@ FAILED_NIGHTS = 3
 # Proof pictures on the request (re-encoded, no metadata): at most this big.
 PROOF_MAX_UPLOAD = 5 * 1024 * 1024
 PROOF_EDGE = 1600
-# Meteors only in images at least this wide, in runs of this many (SPEC §10.7).
-METEOR_MIN_WIDTH = 1280
-RUN = 3
 # The overlay mask (§10.7): a pixel that changed in this part of the frames is overlay.
 MASK_SIDE = 320
 MASK_CHANGE = 20
@@ -435,36 +433,6 @@ class OverlayMask:
         self._path(device_id).unlink(missing_ok=True)
 
 
-@dataclass
-class Recent:
-    """The last frames of a station, for meteors in runs (SPEC §10.7)."""
-
-    frames: deque[tuple[float, int, int, bytes]] = field(default_factory=lambda: deque(maxlen=RUN))
-
-
-def meteor_candidates(
-    before: bytes, frame: bytes, after: bytes, mask: np.ndarray[Any, np.dtype[np.bool_]] | None
-) -> list[dict[str, Any]]:
-    """The hook for allsky's coming ``packages/detect``
-    (``candidates(before, frame, after, mask, cfg)``, the camera's detection without its
-    several-frame logic). Until it exists the hub finds no meteors in fetched images; the
-    runs it would look at are formed already (``run_ready``)."""
-    return []
-
-
-def run_ready(recent: Recent, usual_s: float) -> bool:
-    """At least ``RUN`` frames of one size, at least ``METEOR_MIN_WIDTH`` wide, each at
-    most twice the usual interval after the one before."""
-    frames = list(recent.frames)
-    if len(frames) < RUN:
-        return False
-    sizes = {(w, h) for _, w, h, _ in frames}
-    if len(sizes) != 1 or next(iter(sizes))[0] < METEOR_MIN_WIDTH:
-        return False
-    times = [t for t, *_ in frames]
-    return all(0 < b - a <= 2 * usual_s for a, b in itertools.pairwise(times))
-
-
 def store_proof(root: Path, device_id: str, data: bytes) -> None:
     """A proof picture, re-encoded as JPEG without metadata (like the aurora photos)."""
     if len(data) > PROOF_MAX_UPLOAD:
@@ -532,7 +500,7 @@ class Context:
     base_url: str
     fetcher: Fetcher
     masks: OverlayMask
-    recent: dict[str, Recent] = field(default_factory=dict[str, Recent])
+    detector: station_detect.Detector
 
 
 async def _mail_owner(
@@ -631,14 +599,15 @@ async def _process(
         clock["trusted"] = False  # SPEC §10.7: never trusted for pairing
         device.clock = clock
     await asyncio.to_thread(ctx.masks.update, device.id, prepared.jpeg)
-    recent = ctx.recent.setdefault(device.id, Recent())
-    recent.frames.append((taken.timestamp(), prepared.width, prepared.height, prepared.jpeg))
-    usual = source.interval_s * 2.0
-    if run_ready(recent, usual):
-        before, frame, after = (f[3] for f in recent.frames)
-        mask = await asyncio.to_thread(ctx.masks.mask, device.id)
-        for found_meteor in meteor_candidates(before, frame, after, mask):
-            log.info("station meteor candidate", extra={"device_id": device.id, **found_meteor})
+    # Meteors (SPEC §10.7): the camera's detection on runs of frames; found ones are in the
+    # frame before this one and wait for a trial before they are paired.
+    overlay = await asyncio.to_thread(ctx.masks.mask, device.id)
+    meteors = await ctx.detector.feed(
+        device.id, prepared.jpeg, taken, 0.0, origin, usual_s=source.interval_s * 2.0,
+        overlay=overlay, orientation=(device.last_status or {}).get("orientation"),
+    )  # fmt: skip
+    if meteors is not None:
+        await station_detect.store_found(db, ctx.store, device, meteors, "image_url")
 
 
 def _apply_size(device: Device, width: int, height: int) -> None:
@@ -706,10 +675,17 @@ async def round_once(ctx: Context, now: dt.datetime) -> int:
     return len(due)
 
 
+CLEAN_EVERY_S = 600.0
+
+
 async def run_forever(ctx: Context) -> None:
+    cleaned = 0.0
     while True:
         try:
             await round_once(ctx, dt.datetime.now(dt.UTC))
+            if time.monotonic() - cleaned > CLEAN_EVERY_S:  # detection buffers of silent stations
+                cleaned = time.monotonic()
+                await asyncio.to_thread(ctx.detector.buffer.clean)
         except Exception:
             log.exception("image address round failed")
         await asyncio.sleep(TICK_S)

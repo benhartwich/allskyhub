@@ -40,7 +40,15 @@ from allskyhub_server.auth.reporters import turnstile_from
 from allskyhub_server.billing import task as billing_task
 from allskyhub_server.billing.paddle import Paddle
 from allskyhub_server.db import create_engine, create_sessionmaker
-from allskyhub_server.devices import aircraft, domains, gmn, image_url, lightning_li, winds
+from allskyhub_server.devices import (
+    aircraft,
+    domains,
+    gmn,
+    image_url,
+    lightning_li,
+    station_detect,
+    winds,
+)
 from allskyhub_server.devices.connections import ConnectionRegistry
 from allskyhub_server.devices.discord import Discord, Poster
 from allskyhub_server.devices.domains import HostMap
@@ -298,6 +306,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             fetching = image_url.Context(
                 app.state.sessionmaker, app.state.images, app.state.mailer, settings.base_url,
                 app.state.image_fetcher, image_url.OverlayMask(settings.data_dir / "station-masks"),
+                app.state.station_detector,
             )  # fmt: skip
             tasks.append(asyncio.create_task(image_url.run_forever(fetching)))
         if settings.billing:
@@ -362,6 +371,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     SecretKey(app.state.stores.vault).ensure()
     # SPEC §10.7: one safe fetcher for the stations and the admin's look at their images.
     app.state.image_fetcher = image_url.Fetcher(own=image_url.own_addresses(settings.base_url))
+    # Stations' meteors (SPEC §10.3, §10.7): the last two frames each on disk, anew at start.
+    app.state.station_detector = station_detect.Detector(settings.data_dir / "tmp" / "detect")
+    app.state.station_detector.buffer.clean(everything=True)
     app.state.github.token = app.state.latest_image.token = github_token(app.state.stores.vault)
     app.add_middleware(CustomDomainMiddleware, hosts=app.state.hosts)
     app.add_middleware(LanguageMiddleware)

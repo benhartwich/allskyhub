@@ -6,7 +6,7 @@ So läuft der Hub auf allskyhub.org; für einen eigenen Hub die Domain ersetzen.
 |---|---|
 | Code | `/opt/allskyhub-server` (Git-Checkout, gehört root) |
 | Python-Umgebung | `/opt/allskyhub-server/.venv` (`uv sync --frozen --no-dev --package allskyhub-server`) |
-| Daten (Bilder) | `/var/lib/allskyhub-server/images/<kamera>/<nacht>/{full,thumb}/` (Benutzer `allskyhub-server`); Vollbilder 7 Tage, Vorschaubilder 30 Tage (`ALLSKYHUB_SERVER_KEEP_FULL_DAYS`, `_KEEP_THUMB_DAYS`; bei Änderung die Datenschutzerklärung anpassen) |
+| Daten (Bilder) | `/var/lib/allskyhub-server/images/<kamera>/<nacht>/{full,thumb}/` (Benutzer `allskyhub-server`), seit 2026-11-05 auf eigenem netcup Local Block Storage (`/dev/vdb`, ext4 `allskyhub-img` unter `/srv/allskyhub-img`, per Bind-Mount an diese Stelle; Abschnitt „Bildspeicher“); Vollbilder 7 Tage, Vorschaubilder 30 Tage (`ALLSKYHUB_SERVER_KEEP_FULL_DAYS`, `_KEEP_THUMB_DAYS`; bei Änderung die Datenschutzerklärung anpassen) |
 | Konfiguration | `/etc/allskyhub-server/allskyhub-server.env` (root:allskyhub-server, 0640), Vorlage `deploy/allskyhub-server.env.example` |
 | Datenbank | PostgreSQL 17 aus Debian, Rolle `allskyhub_server`, Datenbank `allskyhub` |
 | Dienst | `allskyhub-server.socket` + `.service` (`deploy/systemd/`), uvicorn auf `/run/allskyhub-server/api.sock` |
@@ -282,3 +282,13 @@ chown root:allskyhub-server /etc/allskyhub-server/monitor.env && chmod 0640 /etc
 ```
 
 Ein Ausfall des ganzen Servers fällt so nicht auf; dafür braucht es eine Prüfung von außen.
+
+## Bildspeicher
+
+Die Bilder des Hubs liegen seit 2026-11-05 auf einem eigenen netcup Local Block Storage (anfangs 200 GB), nicht auf der Systemplatte, die sich der Hub mit anderen Diensten teilt.
+
+- `/etc/fstab`: `UUID=… /srv/allskyhub-img ext4 defaults,noatime,nofail` und `/srv/allskyhub-img/images /var/lib/allskyhub-server/images none bind,nofail,…`. Der Pfad, die Rechte und das Backup (`/root/rsync.sh`, `rsync -aH` ohne `-x`) bleiben gleich.
+- `/etc/systemd/system/allskyhub-server.service.d/images-mount.conf`: `RequiresMountsFor=/var/lib/allskyhub-server/images`. Fehlt die Platte, startet der Hub nicht, statt still auf die Systemplatte zu schreiben.
+- Die Überwachung warnt ab 70 % belegt (`ALLSKYHUB_MONITOR_IMAGES_MAX_PCT`) und wenn der Speicher nicht eingehängt ist.
+- **Vergrößern:** im netcup-Kundenbereich den Local Block Storage erweitern, dann ohne Neustart `resize2fs /dev/vdb` (ext4 wächst im laufenden Betrieb). Prüfen mit `df -h /var/lib/allskyhub-server/images`.
+- Die Kopie vom Umzug liegt in `/var/lib/allskyhub-server/images.old-root` und kann nach einigen Tagen gelöscht werden.

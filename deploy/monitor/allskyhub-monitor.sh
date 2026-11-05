@@ -10,6 +10,7 @@
 #   ALLSKYHUB_MONITOR_NTFY_TOKEN=tk_...          (if the topic needs one)
 #   ALLSKYHUB_MONITOR_MIN_FREE_PCT=15            (warn above 85 % used)
 #   ALLSKYHUB_MONITOR_MAX_RX_GB_DAY=100          (incoming traffic of the server per UTC day)
+#   ALLSKYHUB_MONITOR_IMAGES_MAX_PCT=70          (the images' own disk, warn early to grow it)
 set -uo pipefail
 
 SITE="${ALLSKYHUB_MONITOR_URL:-https://allskyhub.org}"
@@ -17,6 +18,7 @@ DATA_DIR="${ALLSKYHUB_SERVER_DATA_DIR:-/var/lib/allskyhub-server}"
 STATE_DIR="${ALLSKYHUB_MONITOR_STATE_DIR:-$DATA_DIR/monitor}"
 MIN_FREE_PCT="${ALLSKYHUB_MONITOR_MIN_FREE_PCT:-15}"
 MAX_RX_GB="${ALLSKYHUB_MONITOR_MAX_RX_GB_DAY:-100}"
+IMAGES_MAX_PCT="${ALLSKYHUB_MONITOR_IMAGES_MAX_PCT:-70}"
 CERT_DAYS="${ALLSKYHUB_MONITOR_CERT_DAYS:-14}"
 DUMP_MAX_H="${ALLSKYHUB_MONITOR_DUMP_MAX_HOURS:-26}"
 
@@ -99,5 +101,24 @@ if [ -n "$iface" ] && [ -r "/sys/class/net/$iface/statistics/rx_bytes" ]; then
     report traffic ok "Eingehender Traffic heute wieder unter $MAX_RX_GB GB ($gb GB)."
   else
     report traffic fail "Heute schon $gb GB eingehender Traffic am Server ($iface), mehr als $MAX_RX_GB GB. Stationen (SharedSky) prüfen."
+  fi
+fi
+
+# 6. The images on their own disk (netcup local block storage, since 2026-11-05: fstab binds
+# /srv/allskyhub-img/images there). It must be mounted (else the hub does not start, by
+# RequiresMountsFor) and warns early, from 70 % used, so there is time to grow it.
+images="$DATA_DIR/images"
+if grep -qs "[[:space:]]${images}[[:space:]]" /etc/fstab; then
+  if ! mountpoint -q "$images"; then
+    report images fail "Der Bildspeicher ist nicht eingehängt ($images): Block Storage bei netcup und /etc/fstab prüfen, dann mount -a."
+  else
+    read -r used size <<< "$(df -B1 --output=used,size "$images" | tail -1)"
+    pct=$(( used * 100 / size ))
+    left=$(( (size - used) / 1000000000 ))
+    if [ "$pct" -lt "$IMAGES_MAX_PCT" ]; then
+      report images ok "Bildspeicher wieder bei ${pct} % (${left} GB frei)."
+    else
+      report images fail "Bildspeicher zu ${pct} % voll, noch ${left} GB frei. Local Block Storage bei netcup vergrößern, danach: resize2fs $(findmnt -no SOURCE "$images" | sed 's/\[.*//')"
+    fi
   fi
 fi

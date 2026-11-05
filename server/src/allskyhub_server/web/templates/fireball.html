@@ -22,6 +22,7 @@
     <dt>Schnittwinkel</dt><dd>{{ pair.convergence_deg | round | int }}° {% if pair.convergence_deg < 20 %}<span class="warn">(flach, ungenauer)</span>{% endif %}</dd>
   </dl>
 </div>
+{% if gmn %}{% from "_gmn.html" import gmn_card with context %}{{ gmn_card(gmn) }}{% endif %}
 {% if area %}
 <div class="card stack">
   <h2>Mögliches Fallgebiet</h2>

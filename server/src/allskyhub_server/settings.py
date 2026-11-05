@@ -82,6 +82,8 @@ class Settings(BaseSettings):
     adsb: bool = True
     # Roadmap H6 (SPEC §7.9): CelesTrak's orbital elements, to name satellites among meteors.
     satellites: bool = True
+    # Fireball package D: GMN's trajectory summaries (CC BY 4.0), matched with our meteors.
+    gmn: bool = True
     # Roadmap H8 (SPEC §7.10): flashes from Meteosat's Lightning Imager, from the EUMETSAT
     # Data Store (a free account; key and secret of its API). Off while either is empty.
     eumetsat_key: str = ""

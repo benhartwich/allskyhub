@@ -61,12 +61,13 @@
     </div>
     {% if card.review_login is not none %}
     <details data-fold="apps-{{ card.key }}-review">
-      <summary>Demo-Konto für Screenshots{% if card.review_login %} · {{ card.review_login }}{% else %} · fehlt{% endif %}</summary>
+      <summary>Demo-Konto für Screenshots{% if card.review_login %} · {{ card.review_login }} · Passwort gespeichert ✓{% else %} · fehlt{% endif %}</summary>
+      {% if card.review_login %}<p class="small tone-done">✓ Anmeldung und Passwort sind gespeichert{% if card.review_at %} ({{ card.review_at[:16] | replace('T', ' ') }} UTC){% endif %}. Zum Ändern beides neu eingeben.</p>{% endif %}
       <form method="post" action="/admin/apps/review-account" class="stack">
         <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
         <input type="hidden" name="app" value="{{ card.key }}">
         <label>Anmeldung (E-Mail oder Name)<input name="login" required maxlength="254" autocomplete="off" value="{{ card.review_login or '' }}"></label>
-        <label>Passwort des Demo-Kontos<input type="password" name="secret" required maxlength="256" autocomplete="new-password"></label>
+        <label>Passwort des Demo-Kontos<input type="password" name="secret" required maxlength="256" autocomplete="new-password"{% if card.review_login %} placeholder="gespeichert, nicht angezeigt"{% endif %}></label>
         <label>Dein Passwort<input type="password" name="password" required autocomplete="current-password"></label>
         <p class="muted small">Damit meldet sich „Screenshots erzeugen“ in der App an. „Einrichten“ legt es als geheime Variablen in die eigene Codemagic-Gruppe {{ card.key }}_screenshots, getrennt von den Store-Schlüsseln. Das Passwort wird nie wieder angezeigt.</p>
         <button type="submit" class="secondary">Speichern</button>

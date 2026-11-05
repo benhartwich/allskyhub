@@ -348,7 +348,9 @@ async def test_vinventory_test_apk(
     with pytest.raises(stores.StoreError):
         hub.request_android(email, vinventory)
     # The other cards say why their build buttons are missing.
-    assert "der Server baut Vinventory: Test-APK" in (await client.get("/admin/apps")).text
+    page = (await client.get("/admin/apps")).text
+    assert "der Server baut Vinventory: Test-APK" in page
+    assert "apps_poll" in page  # the cards wait while someone types
 
     # The root helper built it.
     (tmp_path / "android-release" / "request").unlink()
@@ -527,7 +529,9 @@ async def test_demo_account_for_screenshots(
     data["password"] = PASSWORD
     r = await client.post("/admin/apps/review-account", data=data, follow_redirects=True)
     assert "Demo-Konto gespeichert" in r.text
-    assert "Demo-Konto für Screenshots · store-review" in r.text
+    assert "Demo-Konto für Screenshots · store-review · Passwort gespeichert ✓" in r.text
+    assert "Anmeldung und Passwort sind gespeichert (20" in r.text
+    assert 'placeholder="gespeichert, nicht angezeigt"' in r.text
     assert "geheim-123" not in r.text
     assert hub.vault.has("bortle_review")
     r = await client.post(
@@ -535,3 +539,23 @@ async def test_demo_account_for_screenshots(
         follow_redirects=True,
     )  # fmt: skip
     assert "braucht kein Demo-Konto" in r.text
+
+
+def test_a_build_on_mains_state_says_what_comes_next() -> None:
+    """Benjamin, 2026-11-05: "aktuell" alone was confusing; it says whether to submit."""
+    from allskyhub_server.web.templating import templates
+
+    macro = templates.env.get_template("_pending.html").module.pending  # pyright: ignore[reportAttributeAccessIssue, reportUnknownMemberType, reportUnknownVariableType]
+    card = apps.Card("bortle", "bortle", "org.bortle", "1.0.0")
+    card.pending = {"android": 0, "ios": 0}
+    card.rows = [
+        apps.Row("Android", "todo", "im internen Test", "review-play", "Zur Prüfung einreichen"),
+        apps.Row("iOS", "done", "in Prüfung"),
+    ]
+    text = str(macro(card))  # pyright: ignore[reportUnknownArgumentType]
+    assert "Android ✓ aktuell, bereit zum Einreichen" in text
+    assert "iOS ✓ aktuell, eingereicht" in text
+    card.pending = {"android": 2, "ios": None}
+    text = str(macro(card))  # pyright: ignore[reportUnknownArgumentType]
+    assert "Android → 2 neue Commits" in text
+    assert "bereit" not in text

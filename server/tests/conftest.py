@@ -59,6 +59,7 @@ def settings(tmp_path_factory: pytest.TempPathFactory) -> Settings:
         log_format="console",
         adsb=False,
         satellites=False,
+        gmn=False,
     )
 
 

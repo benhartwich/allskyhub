@@ -16,8 +16,8 @@ from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from allskyhub_server.auth.sessions import SessionInfo
-from allskyhub_server.devices import fireball, map_tiles, public, queries, science
-from allskyhub_server.models import Device, MeteorPair
+from allskyhub_server.devices import fireball, gmn, map_tiles, public, queries, science
+from allskyhub_server.models import Device, GmnMeteor, MeteorPair
 from allskyhub_server.web.deps import DbSession, OptionalSession
 from allskyhub_server.web.render import render
 
@@ -50,6 +50,15 @@ def _camera(device: Device, session: SessionInfo | None) -> dict[str, Any]:
     if device.public_slug:
         return {"name": public.title(device), "link": f"/sky/{device.public_slug}"}
     return {"name": "eine Kamera im Kameranetz", "link": None}
+
+
+async def _gmn(db: AsyncSession, pair: MeteorPair) -> GmnMeteor | None:
+    """GMN's measurement of this meteor, from either camera's event (devices/gmn.py)."""
+    for device_id, event_id in ((pair.device_a, pair.event_a), (pair.device_b, pair.event_b)):
+        found = await gmn.for_events(db, device_id, [event_id])
+        if found:
+            return found[0]
+    return None
 
 
 def _item(pair: MeteorPair) -> dict[str, Any]:
@@ -129,6 +138,9 @@ async def fireball_page(
             "map_config": _map_config(pair, item["area"]),
             "end_km": fireball.METEORITE_END_KM,
             "fireball_form": science.FIREBALL_FORM,
+            "gmn": await _gmn(db, pair),
+            "gmn_source": gmn.SOURCE,
+            "gmn_shower": gmn.shower_name,
         },
         session=session,
     )

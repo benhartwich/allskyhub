@@ -11,6 +11,7 @@ import '../l10n.dart';
 import '../platform/location.dart';
 import 'report_screen.dart';
 import 'sightings_screen.dart';
+import 'station_screens.dart';
 
 /// Lets screens deep in a guest's navigation open the sign-in (null when signed in).
 class SignInScope extends InheritedWidget {
@@ -81,7 +82,8 @@ class JoinScreen extends StatelessWidget {
               key: const Key('join-own-camera'),
               onTap: () => Navigator.of(context).push(
                 MaterialPageRoute<void>(
-                  builder: (_) => OwnCameraScreen(client: client),
+                  builder: (_) =>
+                      CameraWizardScreen(client: client, location: location),
                 ),
               ),
               child: Container(
@@ -108,8 +110,8 @@ class JoinScreen extends StatelessWidget {
                     const SizedBox(height: 4),
                     Text(
                       tr(
-                        'Jede Nacht den ganzen Himmel aufnehmen: Meteore, Polarlicht, Wolken und wie dunkel es bei dir ist.',
-                        'Record the whole sky every night: meteors, aurora, clouds and how dark it is where you live.',
+                        'Jede Nacht den ganzen Himmel aufnehmen: Meteore, Polarlicht, Wolken und wie dunkel es bei dir ist. Schon eine Allsky-Kamera? Verbinde sie mit SharedSky.',
+                        'Record the whole sky every night: meteors, aurora, clouds and how dark it is where you live. Already have an all-sky camera? Connect it to SharedSky.',
                       ),
                     ),
                     const SizedBox(height: 8),
@@ -198,11 +200,22 @@ class JoinScreen extends StatelessWidget {
   }
 }
 
-/// How to get an own camera: hardware, image, pairing with this app.
-class OwnCameraScreen extends StatelessWidget {
+/// How to get an own camera: hardware, image, pairing with this app (the way in's
+/// "Nein, noch nicht", station_screens.dart).
+class OwnCameraScreen extends StatefulWidget {
   const OwnCameraScreen({super.key, required this.client});
 
   final HubClient client;
+
+  @override
+  State<OwnCameraScreen> createState() => _OwnCameraScreenState();
+}
+
+class _OwnCameraScreenState extends State<OwnCameraScreen> {
+  /// Whether anyone may create an account (older hubs: no, ask for access).
+  late final Future<HubInfo?> _info = widget.client.hubInfo();
+
+  HubClient get client => widget.client;
 
   @override
   Widget build(BuildContext context) {
@@ -265,19 +278,10 @@ class OwnCameraScreen extends StatelessWidget {
               'Enter the Wi-Fi, set the place, done. No port forwarding.',
             ),
           ),
-          TextButton(
-            onPressed: () => open('/allsky'),
-            child: Text(
-              tr(
-                'Du hast schon eine Allsky-Kamera? So steigst du um ›',
-                'Already have an all-sky camera? How to switch ›',
-              ),
-            ),
-          ),
           const SizedBox(height: 12),
           FilledButton(
             key: const Key('own-guide'),
-            onPressed: () => open('/start'),
+            onPressed: () => open('/start?kamera=nein'),
             child: Text(
               tr(
                 'Anleitung und Hardware ansehen',
@@ -287,9 +291,26 @@ class OwnCameraScreen extends StatelessWidget {
           ),
           if (signIn != null) ...[
             const SizedBox(height: 10),
-            OutlinedButton(
-              onPressed: () => open('/zugang'),
-              child: Text(tr('Zugang anfragen', 'Request access')),
+            FutureBuilder<HubInfo?>(
+              future: _info,
+              builder: (context, snapshot) {
+                final info = snapshot.data;
+                return OutlinedButton(
+                  key: const Key('own-signup'),
+                  onPressed: () => launchUrl(
+                    info?.signupUrl ?? client.site('/zugang'),
+                    mode: LaunchMode.inAppBrowserView,
+                  ),
+                  child: Text(
+                    info?.openSignup ?? false
+                        ? tr(
+                            'Kostenloses Konto anlegen',
+                            'Create a free account',
+                          )
+                        : tr('Zugang anfragen', 'Request access'),
+                  ),
+                );
+              },
             ),
             TextButton(
               key: const Key('own-sign-in'),

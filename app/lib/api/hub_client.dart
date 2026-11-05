@@ -336,6 +336,27 @@ class HubClient {
     return jsonDecode(utf8.decode(response.bodyBytes));
   }
 
+  /// A form with files (a photo); errors as in [_sendUri].
+  Future<dynamic> _sendMultipart(http.MultipartRequest request) async {
+    request.headers
+      ..addAll(authHeaders)
+      ..['Accept'] = 'application/json'
+      ..['Accept-Language'] = appLocale.languageCode;
+    final response = await http.Response.fromStream(await _http.send(request));
+    if (response.statusCode >= 400) {
+      var message = response.reasonPhrase ?? 'error';
+      try {
+        message = (jsonDecode(response.body) as Map<String, dynamic>)['detail']
+            .toString();
+      } on FormatException {
+        // keep the reason phrase
+      }
+      throw HubException(response.statusCode, message);
+    }
+    if (response.body.isEmpty) return null;
+    return jsonDecode(utf8.decode(response.bodyBytes));
+  }
+
   /// Signs in and keeps the token on this client; returns it for storage.
   Future<String> login(
     String email,
@@ -1687,8 +1708,6 @@ extension Sightings on HubClient {
     String author = '',
   }) async {
     final request = http.MultipartRequest('POST', _uri('/sightings/aurora'))
-      ..headers.addAll(authHeaders)
-      ..headers['Accept-Language'] = appLocale.languageCode
       ..fields.addAll({
         'lat': lat.toStringAsFixed(1),
         'lon': lon.toStringAsFixed(1),
@@ -1702,19 +1721,8 @@ extension Sightings on HubClient {
         http.MultipartFile.fromBytes('photo', photo, filename: photoName),
       );
     }
-    final response = await http.Response.fromStream(await _http.send(request));
-    if (response.statusCode >= 400) {
-      var message = response.reasonPhrase ?? 'error';
-      try {
-        message = (jsonDecode(response.body) as Map<String, dynamic>)['detail']
-            .toString();
-      } on FormatException {
-        // keep the reason phrase
-      }
-      throw HubException(response.statusCode, message);
-    }
     return AuroraSighting.fromJson(
-      jsonDecode(utf8.decode(response.bodyBytes)) as Map<String, dynamic>,
+      await _sendMultipart(request) as Map<String, dynamic>,
     );
   }
 
@@ -1786,4 +1794,182 @@ extension Push on HubClient {
     '/push/tokens/delete',
     body: {'token': token, 'platform': platform},
   );
+}
+
+/// A SharedSky station (SPEC §10): a camera with other software in the network.
+class Station {
+  Station({
+    required this.id,
+    required this.name,
+    required this.software,
+    required this.state,
+    this.reason,
+    this.url,
+    this.lastSeenAt,
+    this.hasImage = false,
+    this.oriented = false,
+    this.clockTrusted = false,
+    this.framesToday = 0,
+    this.meteorsToday = 0,
+  });
+
+  factory Station.fromJson(Map<String, dynamic> json) => Station(
+    id: json['id'] as String,
+    name: json['name'] as String,
+    software: json['software'] as String,
+    state: json['state'] as String,
+    reason: json['reason'] as String?,
+    url: json['url'] as String?,
+    lastSeenAt: json['last_seen_at'] == null
+        ? null
+        : DateTime.parse(json['last_seen_at'] as String),
+    hasImage: json['has_image'] as bool? ?? false,
+    oriented: json['oriented'] as bool? ?? false,
+    clockTrusted: json['clock_trusted'] as bool? ?? false,
+    framesToday: json['frames_today'] as int? ?? 0,
+    meteorsToday: json['meteors_today'] as int? ?? 0,
+  );
+
+  final String id;
+  final String name;
+
+  /// `indi-allsky`, `image-url` (Allsky and others by their image address) or `other`.
+  final String software;
+
+  /// connected, waiting (nothing received yet), pending, declined or paused.
+  final String state;
+  final String? reason;
+  final String? url;
+  final DateTime? lastSeenAt;
+  final bool hasImage;
+  final bool oriented;
+  final bool clockTrusted;
+  final int framesToday;
+  final int meteorsToday;
+}
+
+/// The answer to "Kamera verbinden": the secret only this once.
+class StationCreated {
+  StationCreated({
+    required this.station,
+    required this.docsUrl,
+    this.secret,
+    this.baseUrl,
+  });
+
+  factory StationCreated.fromJson(Map<String, dynamic> json) => StationCreated(
+    station: Station.fromJson(json['station'] as Map<String, dynamic>),
+    secret: json['secret'] as String?,
+    baseUrl: json['base_url'] as String?,
+    docsUrl: json['docs_url'] as String,
+  );
+
+  final Station station;
+  final String? secret;
+
+  /// indi-allsky's "Base URL" (SyncAPI).
+  final String? baseUrl;
+  final String docsUrl;
+}
+
+/// What the app needs to know before sign-in (`/public/hub`).
+class HubInfo {
+  HubInfo({required this.openSignup, required this.signupUrl});
+
+  factory HubInfo.fromJson(Map<String, dynamic> json) => HubInfo(
+    openSignup: json['open_signup'] as bool? ?? false,
+    signupUrl: Uri.parse(json['signup_url'] as String),
+  );
+
+  /// Anyone may create an account on the web (behind Turnstile).
+  final bool openSignup;
+
+  /// The sign-up, or asking for access while it is closed.
+  final Uri signupUrl;
+}
+
+extension Stations on HubClient {
+  /// The account's stations; none from a hub without SharedSky (404).
+  Future<List<Station>> stations() async {
+    try {
+      return [
+        for (final s in await _send('GET', '/stations') as List<dynamic>)
+          Station.fromJson(s as Map<String, dynamic>),
+      ];
+    } on HubException catch (e) {
+      if (e.statusCode == 404) return [];
+      rethrow;
+    }
+  }
+
+  Future<Station> station(String id) async => Station.fromJson(
+    await _send('GET', '/stations/$id') as Map<String, dynamic>,
+  );
+
+  /// SPEC §10.1 and §10.7, like "Kamera verbinden" on the web; a [HubException] with the
+  /// hub's sentence when something is missing.
+  Future<StationCreated> createStation({
+    required String software,
+    required String name,
+    required bool terms,
+    String url = '',
+    double? latitude,
+    double? longitude,
+    double? elevationM,
+    String timezone = '',
+    String focalMm = '',
+    String proofText = '',
+    Uint8List? proof,
+    String proofName = 'proof.jpg',
+  }) async {
+    final request = http.MultipartRequest('POST', _uri('/stations'))
+      ..fields.addAll({
+        'software': software,
+        'name': name,
+        'terms': '$terms',
+        if (software == 'image-url') ...{
+          'url': url,
+          'latitude': latitude?.toString() ?? '',
+          'longitude': longitude?.toString() ?? '',
+          'elevation_m': elevationM?.toStringAsFixed(0) ?? '',
+          'timezone': timezone,
+          'focal_mm': focalMm,
+          'proof_text': proofText,
+        },
+      });
+    if (proof != null && software == 'image-url') {
+      request.files.add(
+        http.MultipartFile.fromBytes('proof', proof, filename: proofName),
+      );
+    }
+    return StationCreated.fromJson(
+      await _sendMultipart(request) as Map<String, dynamic>,
+    );
+  }
+
+  Future<String> renewStationSecret(String id, String password) async {
+    final json = await _send(
+      'POST',
+      '/stations/$id/secret',
+      body: {'password': password},
+    );
+    return (json as Map<String, dynamic>)['secret'] as String;
+  }
+
+  Future<void> deleteStation(String id, String password) =>
+      _send('POST', '/stations/$id/delete', body: {'password': password});
+
+  Uri stationImageUrl(String id, {int? bust}) =>
+      _uri('/stations/$id/image.jpg', {if (bust != null) 't': '$bust'});
+
+  /// Null from an older hub (404) or offline: the app then asks for access as before.
+  Future<HubInfo?> hubInfo() async {
+    try {
+      return HubInfo.fromJson(
+        await _send('GET', '/public/hub') as Map<String, dynamic>,
+      );
+    } on Object {
+      return null;
+    }
+  }
 }

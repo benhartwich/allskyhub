@@ -26,6 +26,7 @@ import 'package:allskyhub_app/screens/event_screens.dart';
 import 'package:allskyhub_app/screens/gallery_screens.dart';
 import 'package:allskyhub_app/screens/measurements_screen.dart';
 import 'package:allskyhub_app/screens/sky_view_screen.dart';
+import 'package:allskyhub_app/screens/station_screens.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -598,6 +599,14 @@ void main() {
         cameraId: camera.id,
         night: '20261014',
       ),
+    );
+  });
+
+  testWidgets('07 sharedsky', skip: !_run, (tester) async {
+    await _shot(
+      tester,
+      '07-sharedsky',
+      GoalStepScreen(client: _hub(), software: 'allsky'),
     );
   });
 }

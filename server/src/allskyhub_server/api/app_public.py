@@ -23,6 +23,7 @@ from allskyhub_server.devices.event_text import EVENT_TITLES
 from allskyhub_server.i18n import tr
 from allskyhub_server.models import Device, EventRecord
 from allskyhub_server.web.deps import DbSession
+from allskyhub_server.web.render import open_signup
 
 router = APIRouter(prefix="/api/v1/public")
 
@@ -178,6 +179,25 @@ async def _public_devices(db: DbSession) -> list[Device]:
         select(Device).where(Device.public_slug.is_not(None), Device.owner_id.is_not(None))
     )
     return [d for d in rows if _listed(d)]
+
+
+class HubInfo(BaseModel):
+    """What the app needs to know about the hub before anyone signs in."""
+
+    open_signup: bool  # self sign-up on /konto/anlegen (web/routes_signup.py)
+    signup_url: str  # where the app opens it, landing at SharedSky's questions after
+
+
+@router.get("/hub")
+async def hub_info(request: Request) -> HubInfo:
+    """Benjamin, 2026-11-05: the app shows "Kostenloses Konto anlegen" instead of "Zugang
+    anfragen" once anyone may sign up."""
+    base = request.app.state.settings.base_url.rstrip("/")
+    is_open = open_signup(request)
+    return HubInfo(
+        open_signup=is_open,
+        signup_url=f"{base}/konto/anlegen?weiter=sharedsky" if is_open else f"{base}/zugang",
+    )
 
 
 @router.get("/cameras")

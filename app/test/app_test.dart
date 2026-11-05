@@ -75,7 +75,7 @@ void main() {
     await tester.tap(find.widgetWithText(FilledButton, 'Anmelden'));
     await tester.pumpAndSettle();
     expect(find.text('Meine Kameras'), findsOneWidget);
-    expect(find.textContaining('Noch keine Kamera gekoppelt'), findsOneWidget);
+    expect(find.textContaining('Noch keine Kamera.'), findsOneWidget);
     expect(store.session?.token, 'tok');
     expect(store.session?.hubUrl, defaultHubUrl);
   });
@@ -104,7 +104,7 @@ void main() {
     await tester.tap(find.widgetWithText(FilledButton, 'Sign in'));
     await tester.pumpAndSettle();
     expect(find.text('My cameras'), findsOneWidget);
-    expect(find.textContaining('No camera paired yet'), findsOneWidget);
+    expect(find.textContaining('No camera yet.'), findsOneWidget);
     expect(languages, {'en'});
   });
 

@@ -449,7 +449,8 @@ async def test_android_release_through_the_spool(
     old = {"id": "CM1", "app_id": "A1", "platform": "android", "at": "2026-10-16T03:33:00+00:00"}
     hub.vault.add_build({**old, "by": email})
     page = await client.get("/admin/apps")
-    assert "Build 412 ist Version 1.0.0, nicht 1.1.0." in page.text  # the app is 1.1.0 now
+    # The build is 1.0.0, the app (app/pubspec.yaml) newer.
+    assert f"Build 412 ist Version 1.0.0, nicht {appstore.VERSION}." in page.text
     assert "Google kennt die App noch nicht." in page.text
     assert 'href="/admin/stores-android/allskyhub-412.aab"' in page.text
     r = await client.get("/admin/stores-android/allskyhub-412.aab")
@@ -1773,7 +1774,7 @@ def test_currywursttest_on_the_same_accounts(tmp_path: Path) -> None:
 
 
 def test_app_store_version_follows_pubspec(tmp_path: Path) -> None:
-    assert appstore.VERSION == "1.1.0"  # the update after 1.0.0
+    assert appstore.app_version() == appstore.VERSION  # app/pubspec.yaml, now 1.2.0
     pubspec = tmp_path / "pubspec.yaml"
     pubspec.write_text("name: app\nversion: 2.3.4+17\n")
     assert appstore.app_version(pubspec) == "2.3.4"

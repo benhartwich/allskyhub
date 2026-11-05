@@ -197,7 +197,7 @@ async def test_apps_page_and_actions(
     assert page.status_code == 200
     assert 'id="app-allskyhub"' in page.text
     assert 'id="app-bortle"' in page.text
-    assert "Version 1.1.0" in page.text
+    assert f"Version {appstore.VERSION}" in page.text  # app/pubspec.yaml
     assert "hx-trigger" not in page.text  # nothing on its way: no card polls
     token = csrf_from(page.text)
 
@@ -245,11 +245,11 @@ async def test_apps_page_and_actions(
     out.mkdir()
     (out / "state").write_text("ok\n")
     (out / "allskyhub-323.aab").write_bytes(b"x")
-    latest = {"build": 323, "version": "1.1.0", "built_at": "2026-10-28T14:13:47Z",
+    latest = {"build": 323, "version": appstore.VERSION, "built_at": "2026-10-28T14:13:47Z",
               "size": 1, "file": "allskyhub-323.aab"}  # fmt: skip
     (out / "latest.json").write_text(json.dumps(latest))
     page = await client.get("/admin/apps")
-    assert "Build 323 (Version 1.1.0) ist im internen Test." in page.text
+    assert f"Build 323 (Version {appstore.VERSION}) ist im internen Test." in page.text
     r = await client.post(
         follow_redirects=True, url="/admin/apps", data=act("allskyhub", "review-play")
     )

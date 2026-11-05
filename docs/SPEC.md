@@ -1647,11 +1647,15 @@ fits its place and orientation (§4.8 fails 3 nights in a row on clear frames) g
 to `pending`. Anyone may ask an admin to remove a station that shows their camera
 (contact on /mitmachen); the admin pauses it at once and asks its owner.
 
-**Fetching.** Every 30 s, with `If-None-Match`/`If-Modified-Since`, as
-`User-Agent: SharedSky (+https://allskyhub.org/mitmachen)`. Only addresses that resolve
-to public addresses (never loopback, private, link-local or the hub's own), checked
-again at each fetch and after each of at most 3 redirects; only `image/jpeg` or
-`image/png`, at most 8 MB and 50 MP, 15 s timeout. An unchanged image (same ETag, date
+**Fetching.** With `If-None-Match`/`If-Modified-Since`, as
+`User-Agent: SharedSky (+https://allskyhub.org/mitmachen)`, every 30 s at first; then the
+hub follows how often the image actually changes (half its usual change interval, at
+least 30 s, at most 5 min). Only ports 80 and 443. The name is resolved at each fetch,
+only public addresses count (never loopback, private, link-local, multicast or the
+hub's own), and the hub connects to exactly the address it checked (pinned; TLS name
+and `Host` stay the name), so a second lookup cannot lead elsewhere; each of at most 3
+redirects is checked and pinned the same way. Only `image/jpeg` (at most 8 MB, 50 MP) or
+`image/png` (at most 8 MB, 16 MP), 15 s timeout. An unchanged image (same ETag, date
 or bytes) is not processed again. Errors back off (1 min doubling to 1 h); after 24 h of
 errors the station pauses and its owner gets a mail. A 429 or 503 is honoured with its
 `Retry-After`.
@@ -1663,7 +1667,19 @@ else the moment of the fetch; the source is kept with the frame. The clock check
 the fetch is never trusted for pairing (its meteors still count for showers and the
 night).
 
-**Processing.** Each new image is a frame of §10.2: a thumbnail is kept by §10.1, the
-hub solves the orientation from it (§10.1) and runs its meteor detection on it (the
-camera's, §5.3); a meteor keeps the full frame and becomes an event like `POST /events`
-sends. Sky brightness, clouds and aurora come from the same frames as for cameras.
+**Processing.** Each new image is a frame of §10.2: a thumbnail is kept by §10.1 and the
+hub solves the orientation from it (§10.1). Sky brightness, clouds and aurora come from
+the same frames as for cameras. Meteors need more, as the camera's detection compares a
+frame with the one before and after:
+
+- Published images carry overlays (time, exposure, temperature) that change in every
+  frame and are often scaled down. The hub builds a mask per station from the pixels
+  that change in nearly every frame, adds the horizon from the orientation, and keeps it
+  current.
+- It looks for meteors only in runs of at least 3 frames of the same size that came at
+  most twice the usual interval apart, and only in frames at least 1280 px wide;
+  smaller images serve brightness, clouds and aurora only.
+- It uses the camera's detection without its several-frame logic and aircraft check,
+  so such a meteor carries `source: "image_url"` in its data, and until a trial has
+  shown its quality (as in N1c) it counts for showers and the night but is not paired.
+  A meteor keeps its full frame and is an event like one from `POST /events`.

@@ -86,6 +86,8 @@ class Settings(BaseSettings):
     gmn: bool = True
     # Fireball package C: NOAA GFS winds aloft (public domain) for the dark flight.
     winds: bool = True
+    # SharedSky (SPEC §10.7): fetch the images of approved stations by their image address.
+    image_url_stations: bool = True
     # Roadmap H8 (SPEC §7.10): flashes from Meteosat's Lightning Imager, from the EUMETSAT
     # Data Store (a free account; key and secret of its API). Off while either is empty.
     eumetsat_key: str = ""

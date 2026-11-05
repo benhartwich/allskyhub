@@ -503,3 +503,10 @@ table.stats.ovf-list th, table.stats.ovf-list td { text-align: left; }
 .search-row label.narrow { flex: 0 1 180px; }
 table.stats.users-list th, table.stats.users-list td { text-align: left; }
 h1.break { overflow-wrap: anywhere; }
+/* SharedSky (web/routes_stations.py) */
+.choice-row { display: flex; flex-wrap: wrap; gap: 8px; }
+.msg.warn { background: rgba(242, 192, 107, .12); color: var(--warn); border-color: rgba(242, 192, 107, .35); }
+.station-latest, .station-preview { width: 100%; max-width: 640px; border-radius: 12px; background: #05070f; }
+.map.map-small { height: min(50vh, 380px); min-height: 260px; }
+.copy-value { overflow-wrap: anywhere; }
+.join-ways { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px; }

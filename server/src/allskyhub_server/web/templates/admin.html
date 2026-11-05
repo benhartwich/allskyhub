@@ -51,6 +51,7 @@
   <h2>Server</h2>
   <dl class="facts">
     <dt>Konten</dt><dd><a href="/admin/users">{{ users }} verwalten</a></dd>
+    <dt>SharedSky</dt><dd><a href="/admin/stationen">Stationen prüfen</a></dd>
     <dt>Gekoppelte Kameras</dt><dd>{{ cameras }}</dd>
     <dt>Speicher frei</dt><dd class="{{ 'warn' if disk_free_pct < 15 }}">{{ '%.1f' | format(disk_free_gb) | replace('.', ',') }} GB ({{ disk_free_pct | round | int }} %)</dd>
     <dt>E-Mail</dt><dd>{{ 'eingerichtet' if mail_enabled else 'aus' }}</dd>

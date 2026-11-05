@@ -1,0 +1,71 @@
+{% extends "base.html" %}
+{% block title %}{{ device.name }} · Station · allskyhub{% endblock %}
+{% block content %}
+<div class="page-head"><h1>{{ device.name }}</h1><p class="muted"><a href="/">Meine Kameras</a> › SharedSky-Station · {{ software }}</p></div>
+{% if notice %}<p class="msg ok" role="status">{{ notice }}</p>{% endif %}
+{% if error %}<p class="msg error" role="alert">{{ error }}</p>{% endif %}
+
+{% if secret %}
+<section class="card stack">
+  <h2>{% if device.software == 'indi-allsky' %}In indi-allsky eintragen{% else %}Zugangsdaten{% endif %}</h2>
+  {% if device.software == 'indi-allsky' %}
+  <p class="muted small">In indi-allsky unter Konfiguration → SyncAPI: einschalten, Bilder auf „jedes Bild“ stellen und diese drei Werte eintragen.</p>
+  <dl class="facts">
+    <dt>Base URL</dt><dd><code class="copy-value">{{ base }}/indi-allsky</code> <button type="button" class="secondary small" data-copy="{{ base }}/indi-allsky">kopieren</button></dd>
+    <dt>Username</dt><dd><code class="copy-value">{{ device.id }}</code> <button type="button" class="secondary small" data-copy="{{ device.id }}">kopieren</button></dd>
+    <dt>API Key</dt><dd><code class="copy-value">{{ secret }}</code> <button type="button" class="secondary small" data-copy="{{ secret }}">kopieren</button></dd>
+  </dl>
+  {% else %}
+  <dl class="facts">
+    <dt>Station-ID</dt><dd><code class="copy-value">{{ device.id }}</code> <button type="button" class="secondary small" data-copy="{{ device.id }}">kopieren</button></dd>
+    <dt>Geheimnis</dt><dd><code class="copy-value">{{ secret }}</code> <button type="button" class="secondary small" data-copy="{{ secret }}">kopieren</button></dd>
+  </dl>
+  <p class="muted small">Jede Anfrage trägt <code>Authorization: Bearer {{ device.id }}:&lt;Geheimnis&gt;</code>. Alles Weitere steht in der <a href="{{ docs }}">Entwickler-Doku</a>, mit einem Testmodus, der nichts speichert.</p>
+  {% endif %}
+  <p class="msg warn">Das Geheimnis wird nur jetzt angezeigt. Notier es dir; sonst kannst du unten ein neues erzeugen.</p>
+</section>
+{% endif %}
+
+{% if source %}
+<section class="card stack">
+  <h2>Prüfung</h2>
+  <p><span class="badge {{ 'ok' if source.state == 'approved' else 'warn' }}">{{ states.get(source.state, source.state) }}</span>{% if source.reason %} {{ source.reason }}{% endif %}</p>
+  {% if source.state == 'pending' %}<p class="muted">Ein Admin sieht sich deine Station an und meldet sich per E-Mail. Bis dahin holt der Hub nichts von <code>{{ source.url }}</code> ab.</p>{% endif %}
+  {% if source.state == 'approved' %}<p class="muted small">Adresse <code>{{ source.url }}</code>, abgefragt alle {{ source.interval_s }} s{% if source.last_error %}; zuletzt: {{ source.last_error }}{% endif %}.</p>{% endif %}
+  {% if source.state == 'paused' and source.reviewed_by != 'pause' %}
+  <form method="post" action="/stationen/{{ device.id }}/fortsetzen"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><button type="submit">Wieder abrufen</button></form>
+  {% endif %}
+</section>
+{% endif %}
+
+<section class="card stack">
+  <h2>Stand</h2>
+  {% if device.latest_thumb_at %}<img class="station-latest" src="/stationen/{{ device.id }}/bild.jpg?t={{ device.latest_thumb_at.timestamp() | int }}" alt="Letztes Bild von {{ device.name }}">{% endif %}
+  <dl class="facts">
+    <dt>Verbindung</dt><dd>{% if device.last_seen_at %}<span class="badge ok">verbunden</span> letztes Bild {{ device.last_seen_at | age }}{% else %}<span class="badge">noch nichts empfangen</span>{% endif %}</dd>
+    <dt>Ausrichtung</dt><dd>{% if orientation %}<span class="badge ok">an den Sternen ausgerichtet</span> {{ orientation.stars }} Sterne, ± {{ '%.2f' | format(orientation.rms_deg) | replace('.', ',') }}°{% else %}<span class="badge warn">wartet auf eine klare Nacht</span>{% endif %}</dd>
+    <dt>Uhr</dt><dd>{% if clock_trusted %}<span class="badge ok">gestellt</span>{% elif time_source == 'fetch' %}<span class="badge warn">Bilder ohne eigene Zeit</span> Meteore zählen für Ströme und Nacht, nicht für gemeinsame Bahnen.{% else %}<span class="badge warn">wird noch geprüft</span>{% endif %}</dd>
+    <dt>Heute Nacht</dt><dd>{{ frames }} Bilder, {{ meteors }} Meteore</dd>
+    {% if place.get('latitude') is not none and place.get('longitude') is not none %}<dt>Ort</dt><dd>{{ '%.3f' | format(place.latitude) | replace('.', ',') }}° N, {{ '%.3f' | format(place.longitude) | replace('.', ',') }}° O <span class="muted small">(öffentlich nur gerundet)</span></dd>{% endif %}
+  </dl>
+</section>
+
+<section class="card stack">
+  <h2>Verwalten</h2>
+  {% if device.software != 'image-url' %}
+  <form method="post" action="/stationen/{{ device.id }}/geheimnis" class="search-row">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <label>Dein Passwort<input type="password" name="password" required autocomplete="current-password"></label>
+    <button type="submit" class="secondary">Neues Geheimnis</button>
+  </form>
+  <p class="muted small">Das alte hört sofort auf zu gelten; danach das neue in deiner Software eintragen.</p>
+  {% endif %}
+  <form method="post" action="/stationen/{{ device.id }}/entfernen" class="search-row">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <label>Dein Passwort<input type="password" name="password" required autocomplete="current-password"></label>
+    <button type="submit" class="danger">Station entfernen</button>
+  </form>
+  <p class="muted small">Bilder, genauer Ort und Geheimnis werden sofort gelöscht. Messwerte, die schon in gemeinsame Ergebnisse eingeflossen sind, bleiben dort (Teilnahmebedingungen).</p>
+</section>
+<script src="{{ asset('copy.js') }}" defer></script>
+{% endblock %}

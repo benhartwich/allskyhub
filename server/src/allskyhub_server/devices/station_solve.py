@@ -80,7 +80,7 @@ def count_try(device: Device, now: dt.datetime) -> None:
     state = _solve_state(device)
     tries = int(state.get("tries", 0)) if state.get("night") == night else 0
     status = dict(device.last_status or {})
-    status["solve"] = {"night": night, "tries": tries + 1}
+    status["solve"] = state | {"night": night, "tries": tries + 1}
     device.last_status = status
 
 
@@ -205,6 +205,8 @@ async def solve(
             return False
     if sol is None or not verdict.ok:
         log.info("station not solved", extra={"device_id": device_id, "reason": verdict.reason})
+        if verdict.reason in FAILED_ON_CLEAR:
+            await _failed_night(maker, device_id, taken)
         return False
     async with maker() as db:
         device = await db.get(Device, device_id)
@@ -215,10 +217,36 @@ async def solve(
             return False  # the station changed its frame size meanwhile
         status = dict(device.last_status or {})
         status["orientation"] = to_orientation(sol, dt.datetime.now(dt.UTC))
+        status["solve"] = {**dict(status.get("solve") or {}), "fails": []}
         device.last_status = status
         await db.commit()
     await apply(maker, device_id, dt.datetime.now(dt.UTC))
     return True
+
+
+# Verdicts of a frame with enough stars that still did not fit: on a clear night the image
+# does not match the place (SPEC §10.7); "few stars" is a cloudy frame and says nothing.
+FAILED_ON_CLEAR = ("no match", "large error", "close rival")
+
+
+async def _failed_night(
+    maker: async_sessionmaker[AsyncSession], device_id: str, taken: dt.datetime
+) -> None:
+    """Note the night the orientation failed on a clear frame (image_url.py reads it)."""
+    async with maker() as db:
+        device = await db.get(Device, device_id)
+        place = _place(device) if device else None
+        if device is None:
+            return
+        night = stations.night_id(taken, place[1] if place else None)
+        status = dict(device.last_status or {})
+        state = dict(status.get("solve") or {})
+        before: list[Any] = state.get("fails") or []
+        fails = [str(n) for n in before if n != night][-5:]
+        state["fails"] = [*fails, night]
+        status["solve"] = state
+        device.last_status = status
+        await db.commit()
 
 
 def start(

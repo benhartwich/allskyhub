@@ -710,6 +710,38 @@ class GmnMeteor(Base):
     created_at: Mapped[dt.datetime] = mapped_column(_tz(), server_default=func.now())
 
 
+class StationSource(Base):
+    """A station that joins by its image address (SPEC §10.7): the address, the proof the
+    admin checks it by, the review, and how the hub fetches it (devices/image_url.py)."""
+
+    __tablename__ = "station_source"
+
+    device_id: Mapped[str] = mapped_column(
+        ForeignKey("device.id", ondelete="CASCADE"), primary_key=True
+    )
+    url: Mapped[str] = mapped_column(String(2048))
+    # pending (waits for an admin), approved (fetched), declined, paused (errors, removal ask)
+    state: Mapped[str] = mapped_column(
+        String(16), default="pending", server_default="pending", index=True
+    )
+    proof_text: Mapped[str] = mapped_column(String(2000), default="", server_default="")
+    proof_image: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
+    requested_at: Mapped[dt.datetime] = mapped_column(_tz(), server_default=func.now())
+    reviewed_at: Mapped[dt.datetime | None] = mapped_column(_tz())
+    reviewed_by: Mapped[str | None] = mapped_column(String(254))
+    reason: Mapped[str] = mapped_column(String(500), default="", server_default="")
+    etag: Mapped[str | None] = mapped_column(String(256))
+    last_modified: Mapped[str | None] = mapped_column(String(64))
+    content_hash: Mapped[bytes | None] = mapped_column(LargeBinary(32))
+    next_fetch_at: Mapped[dt.datetime | None] = mapped_column(_tz())
+    interval_s: Mapped[int] = mapped_column(Integer, default=30, server_default="30")
+    # The last moments the image changed (epoch seconds), for the interval (SPEC §10.7).
+    changes: Mapped[list[float]] = mapped_column(JSONB, default=list, server_default="[]")
+    errors: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+    errors_since: Mapped[dt.datetime | None] = mapped_column(_tz())
+    last_error: Mapped[str] = mapped_column(String(200), default="", server_default="")
+
+
 class StatusSample(Base):
     """The camera's state every few minutes (SPEC §6.3 status), for the charts of exposure,
     gain, temperatures and disk. Kept like thumbnails; removed with the pairing."""

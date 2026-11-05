@@ -40,7 +40,7 @@ from allskyhub_server.auth.reporters import turnstile_from
 from allskyhub_server.billing import task as billing_task
 from allskyhub_server.billing.paddle import Paddle
 from allskyhub_server.db import create_engine, create_sessionmaker
-from allskyhub_server.devices import aircraft, domains, gmn, lightning_li, winds
+from allskyhub_server.devices import aircraft, domains, gmn, image_url, lightning_li, winds
 from allskyhub_server.devices.connections import ConnectionRegistry
 from allskyhub_server.devices.discord import Discord, Poster
 from allskyhub_server.devices.domains import HostMap
@@ -79,6 +79,7 @@ from allskyhub_server.web import (
     routes_report,
     routes_showers,
     routes_signup,
+    routes_stations,
     routes_stores,
     routes_users,
 )
@@ -293,6 +294,12 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             tasks.append(
                 asyncio.create_task(winds.run_forever(app.state.sessionmaker, adsb_client))
             )
+        if settings.image_url_stations:
+            fetching = image_url.Context(
+                app.state.sessionmaker, app.state.images, app.state.mailer, settings.base_url,
+                app.state.image_fetcher, image_url.OverlayMask(settings.data_dir / "station-masks"),
+            )  # fmt: skip
+            tasks.append(asyncio.create_task(image_url.run_forever(fetching)))
         if settings.billing:
             tasks.append(
                 asyncio.create_task(
@@ -353,6 +360,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.state.turnstile = turnstile_from(settings, app.state.stores.vault)
     # SPEC §10.1: the key for indi-allsky stations' secrets exists before any station.
     SecretKey(app.state.stores.vault).ensure()
+    # SPEC §10.7: one safe fetcher for the stations and the admin's look at their images.
+    app.state.image_fetcher = image_url.Fetcher(own=image_url.own_addresses(settings.base_url))
     app.state.github.token = app.state.latest_image.token = github_token(app.state.stores.vault)
     app.add_middleware(CustomDomainMiddleware, hosts=app.state.hosts)
     app.add_middleware(LanguageMiddleware)
@@ -368,6 +377,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(lang.router)
     app.include_router(routes_account.router)
     app.include_router(routes_cameras.router)
+    app.include_router(routes_stations.router)  # SPEC §10
     app.include_router(routes_gallery.router)
     app.include_router(routes_legal.router)
     app.include_router(routes_public.router)

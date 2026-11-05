@@ -1,5 +1,5 @@
 version = 1
-revision = 3
+revision = 5
 requires-python = ">=3.11"
 resolution-markers = [
     "python_full_version >= '3.14'",
@@ -14,6 +14,7 @@ members = [
     "allskyhub-protocol",
     "allskyhub-server",
     "allskyhub-sky",
+    "allskyhub-solve",
 ]
 
 [manifest.dependency-groups]
@@ -48,6 +49,7 @@ dependencies = [
     { name = "allskyhub-design" },
     { name = "allskyhub-protocol" },
     { name = "allskyhub-sky" },
+    { name = "allskyhub-solve" },
     { name = "cryptography" },
     { name = "gpiod" },
     { name = "httpx" },
@@ -66,6 +68,7 @@ requires-dist = [
     { name = "allskyhub-design", editable = "packages/design" },
     { name = "allskyhub-protocol", editable = "packages/protocol" },
     { name = "allskyhub-sky", editable = "packages/sky" },
+    { name = "allskyhub-solve", editable = "packages/solve" },
     { name = "cryptography", specifier = ">=46" },
     { name = "gpiod", specifier = ">=2.2" },
     { name = "httpx", specifier = ">=0.27" },
@@ -158,6 +161,22 @@ dependencies = [
 
 [package.metadata]
 requires-dist = [{ name = "allskyhub-protocol", editable = "packages/protocol" }]
+
+[[package]]
+name = "allskyhub-solve"
+version = "0.1.0"
+source = { editable = "packages/solve" }
+dependencies = [
+    { name = "numpy", version = "2.4.6", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.12'" },
+    { name = "numpy", version = "2.5.3", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.12'" },
+    { name = "opencv-python-headless" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "numpy", specifier = ">=1.24" },
+    { name = "opencv-python-headless", specifier = ">=4.8" },
+]
 
 [[package]]
 name = "annotated-doc"

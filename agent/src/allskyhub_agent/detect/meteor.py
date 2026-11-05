@@ -25,10 +25,10 @@ import cv2
 import numpy as np
 import numpy.typing as npt
 
-from allskyhub_agent.calib.solve import Solution, alt_az, sidereal_deg
 from allskyhub_agent.core.metering import circle_mask
 from allskyhub_agent.detect import trail
 from allskyhub_protocol import FrameInfo, Mode
+from allskyhub_solve.solve import Solution, alt_az, sidereal_deg
 
 Gray = npt.NDArray[np.uint8]
 Mask = npt.NDArray[np.bool_]
@@ -243,6 +243,10 @@ def find_streaks(diff: Gray, cfg: MeteorConfig) -> list[Streak]:
             continue
         cx, cy = float(mean[0, 0]), float(mean[0, 1])
         dx, dy = float(evec[0][0]), float(evec[0][1])
+        if dy < 0 or (dy == 0 and dx < 0):
+            # The axis as `angle_deg` gives it (0..180), so the bend below has the same
+            # sides wherever it is read back (axis_samples, dash_runs).
+            dx, dy = -dx, -dy
         # The thresholds use 4 sigma (as the module was tuned); length and ends are the real
         # extent along the axis.
         u = (xs - cx) * dx + (ys - cy) * dy
@@ -323,7 +327,26 @@ def dash_runs(gray: Gray, s: Streak) -> int:
     return _count_runs(on, min_gap=4, min_run=3)
 
 
-def _axis_samples(
+def centre_line(s: Streak, n: int) -> list[tuple[float, float]]:
+    """`n` evenly spaced pixels on the streak's centre line (following its bend), from
+    `p1` to `p2` (SPEC §6.4 `track`)."""
+    ex, ey = s.p2[0] - s.p1[0], s.p2[1] - s.p1[1]
+    length = math.hypot(ex, ey)
+    if length < 1e-9 or n < 2:
+        return [s.p1, s.p2][: max(n, 0)]
+    dx, dy = ex / length, ey / length  # the axis the bend was fitted along (p1 -> p2)
+    u0 = (s.p1[0] - s.cx) * dx + (s.p1[1] - s.cy) * dy
+    u1 = (s.p2[0] - s.cx) * dx + (s.p2[1] - s.cy) * dy
+    c2, c1, c0 = s.bend
+    out: list[tuple[float, float]] = []
+    for i in range(n):
+        u = u0 + (u1 - u0) * i / (n - 1)
+        v = c2 * u * u + c1 * u + c0
+        out.append((s.cx + dx * u - dy * v, s.cy + dy * u + dx * v))
+    return out
+
+
+def axis_samples(
     s: Streak, shape: tuple[int, ...]
 ) -> tuple[npt.NDArray[np.int64], npt.NDArray[np.int64]]:
     """Pixel positions along the streak (following its bend), 3 px wide."""
@@ -345,7 +368,7 @@ def _axis_samples(
 
 def new_light_fraction(s: Streak, before: Gray, frame: Gray, after: Gray, threshold: int) -> float:
     """Share of the trail that is brighter in `frame` than in both neighbours."""
-    xs, ys = _axis_samples(s, frame.shape)
+    xs, ys = axis_samples(s, frame.shape)
     if xs.size == 0:
         return 0.0
     here = frame[ys, xs].astype(np.int32)

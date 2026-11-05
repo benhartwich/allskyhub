@@ -441,6 +441,10 @@ class EventKind(StrEnum):
 EVENT_ID_PATTERN = r"^[a-z]+-\d{8}T\d{6}Z(-\d+)?$"
 
 
+# A value of an event's `data` (SPEC §6.4).
+EventValue = float | int | str | bool | None | list[list[float]]
+
+
 class Event(_Body):
     """A detection (SPEC §6.4)."""
 
@@ -455,9 +459,8 @@ class Event(_Body):
     has_image: bool = False
     # SPEC §6.4: taken over from another program's records (roadmap L18), never a push.
     imported: bool = False
-    data: dict[str, float | int | str | bool | None] = Field(
-        default_factory=dict[str, float | int | str | bool | None]
-    )
+    # JSON scalars; the one list is a meteor's `track` (SPEC §6.4, fireball package B).
+    data: dict[str, EventValue] = Field(default_factory=dict[str, EventValue])
 
     @model_validator(mode="after")
     def _end_after_start(self) -> Event:
@@ -465,7 +468,34 @@ class Event(_Body):
             raise ValueError("end is before start")
         if not self.id.startswith(self.kind.value.replace("_", "") + "-"):
             raise ValueError("id must start with the kind")
+        for key, value in self.data.items():
+            if isinstance(value, list) and key != "track":
+                raise ValueError(f"data.{key}: only `track` may be a list")
+        _check_track(self.data.get("track"), self.data.get("track_rms_deg"))
         return self
+
+
+TRACK_POINTS = (2, 32)  # SPEC §6.4 `track`: points along a meteor's streak
+TRACK_RMS_MAX = 5.0
+
+
+def _check_track(track: object, rms: object) -> None:
+    """SPEC §6.4: `track` 2-32 [azimuth, altitude] points, `track_rms_deg` 0-5 degrees."""
+    if track is not None:
+        points = cast("list[list[float]]", track)
+        if not TRACK_POINTS[0] <= len(points) <= TRACK_POINTS[1]:
+            raise ValueError("data.track: 2 to 32 points")
+        for point in points:
+            if len(point) != 2 or not all(math.isfinite(v) for v in point):
+                raise ValueError("data.track: points are [azimuth_deg, altitude_deg]")
+            if not (0.0 <= point[0] <= 360.0 and -90.0 <= point[1] <= 90.0):
+                raise ValueError("data.track: azimuth 0-360, altitude -90-90")
+    if rms is None:
+        return
+    if not isinstance(rms, int | float) or isinstance(rms, bool):
+        raise ValueError("data.track_rms_deg: 0 to 5")
+    if not (math.isfinite(rms) and 0.0 <= rms <= TRACK_RMS_MAX):
+        raise ValueError("data.track_rms_deg: 0 to 5")
 
 
 def event_id(kind: EventKind, start: datetime, seq: int = 1) -> str:

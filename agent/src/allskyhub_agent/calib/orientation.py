@@ -19,8 +19,8 @@ from pathlib import Path
 import cv2
 import numpy as np
 
-from allskyhub_agent.calib.solve import Solution, solve
 from allskyhub_protocol import FrameInfo, Lens, Orientation, SkyMetrics
+from allskyhub_solve.solve import Solution, solve
 
 log = logging.getLogger(__name__)
 

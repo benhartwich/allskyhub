@@ -9,7 +9,6 @@ import numpy as np
 import numpy.typing as npt
 import pytest
 
-from allskyhub_agent.calib.solve import Solution
 from allskyhub_agent.core.metering import circle_mask
 from allskyhub_agent.detect.daycloud import (
     DayCloud,
@@ -20,6 +19,7 @@ from allskyhub_agent.detect.daycloud import (
 )
 from allskyhub_agent.detect.sky import Mask, Rgb, SkyMeter
 from allskyhub_protocol import FrameInfo, Mode
+from allskyhub_solve.solve import Solution
 
 H, W = 720, 1280
 SOL = Solution(cx=640.0, cy=360.0, a1=330.0, a3=0.0, rot=20.0, flip=-1.0, tilt_east=0.0,

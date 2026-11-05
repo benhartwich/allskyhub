@@ -13,18 +13,17 @@ import json
 import math
 from datetime import datetime, timedelta
 from functools import cache
-from pathlib import Path
 
 import numpy as np
 import numpy.typing as npt
 
-from allskyhub_agent.calib.solve import Solution, alt_az, sidereal_deg
 from allskyhub_sky.astro import moon_illumination, moon_radec
+from allskyhub_solve.solve import STARS_MAG4, Solution, alt_az, sidereal_deg
 
 F = npt.NDArray[np.float64]
 Mask = npt.NDArray[np.bool_]
 
-STARS = Path(__file__).parent.parent / "calib" / "stars_mag4.json"
+STARS = STARS_MAG4
 SECTORS = 8
 BANDS = (15.0, 40.0, 65.0, 90.0)
 CELLS = SECTORS * (len(BANDS) - 1)

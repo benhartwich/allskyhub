@@ -5,13 +5,13 @@ from __future__ import annotations
 import math
 from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
+from typing import cast
 from zoneinfo import ZoneInfo
 
 import cv2
 import numpy as np
 import pytest
 
-from allskyhub_agent.calib.solve import Solution, alt_az, sidereal_deg
 from allskyhub_agent.detect import trail
 from allskyhub_agent.detect.events import DetectionWorker, EventStore, OpenPass, onward
 from allskyhub_agent.detect.meteor import (
@@ -26,7 +26,8 @@ from allskyhub_agent.detect.meteor import (
     radiant_distance,
 )
 from allskyhub_agent.store.images import ImageStore
-from allskyhub_protocol import Event, EventKind, FrameInfo, Mode
+from allskyhub_protocol import Event, EventKind, EventValue, FrameInfo, Mode
+from allskyhub_solve.solve import Solution, alt_az, sidereal_deg
 
 H, W = 360, 640
 T0 = datetime(2026, 10, 8, 21, 0, tzinfo=UTC)
@@ -196,10 +197,12 @@ def test_event_store_and_worker(tmp_path: Path) -> None:
     assert set(ev.data) == {"length_px", "peak", "frames", "direction_deg", "shower",
                             "shower_match", "azimuth_deg", "altitude_deg",
                             "start_azimuth_deg", "start_altitude_deg", "end_azimuth_deg",
-                            "end_altitude_deg", "track_ordered", "trail", "frame", "crop_x",
-                            "crop_y", "crop_w", "crop_h"}  # fmt: skip
+                            "end_altitude_deg", "track_ordered", "track", "track_rms_deg",
+                            "trail", "frame", "crop_x", "crop_y", "crop_w",
+                            "crop_h"}  # fmt: skip
     assert ev.data["trail"] == "meteor"
     assert ev.data["start_azimuth_deg"] is None
+    assert ev.data["track"] is None  # no orientation yet (SPEC §6.4)
     assert ev.data["track_ordered"] is False
     assert ev.data["azimuth_deg"] is None  # no orientation yet
     assert ev.data["shower"] == "Orionids"  # 8 October
@@ -220,7 +223,7 @@ def test_event_store_and_worker(tmp_path: Path) -> None:
 
     with PILImage.open(full) as pic:
         assert (ev.data["crop_w"], ev.data["crop_h"]) == pic.size
-    x, y = int(ev.data["crop_x"] or 0), int(ev.data["crop_y"] or 0)
+    x, y = int(cast(int, ev.data["crop_x"] or 0)), int(cast(int, ev.data["crop_y"] or 0))
     assert 0 <= x <= 300 <= x + pic.size[0]
     assert 0 <= y <= 150 <= y + pic.size[1]
     assert events.original_path(ev.night_id, ev.id) == store.night_dir(ev.night_id) / frame_name
@@ -459,7 +462,7 @@ def test_automatic_labels() -> None:
     t = datetime(2026, 10, 8, 21, 0, tzinfo=UTC)
 
     def ev(verdict: str | None) -> Event:
-        data: dict[str, float | int | str | bool | None] = {}
+        data: dict[str, EventValue] = {}
         if verdict is not None:
             data["trail"] = verdict
         return Event(id="meteor-20261008T210000Z", night_id="20261008", kind=EventKind.METEOR,

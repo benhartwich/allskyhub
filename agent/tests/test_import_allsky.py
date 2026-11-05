@@ -219,7 +219,7 @@ def test_lightning_and_episodes(tmp_path: Path) -> None:
     got = sorted(events.night_events("20261011"), key=lambda e: (e.kind.value, e.start))
     bolts = [e for e in got if e.kind is EventKind.LIGHTNING]
     assert [e.data["storm_flashes"] for e in bolts] == [1, 2]
-    assert {e.data["storm"] for e in bolts} == {"storm-20261011T203000Z"}
+    assert {str(e.data["storm"]) for e in bolts} == {"storm-20261011T203000Z"}
     assert bolts[1].data["area_frac"] == 0.2  # 2880 of 160 x 90 pixels
     assert bolts[0].imported
     assert bolts[0].has_image

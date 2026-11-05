@@ -1539,10 +1539,11 @@ wrong frames in a row make the clock untrusted until 10 judged frames in a row a
 right. Only meteors of a station with a trusted clock (both its word and the hub's
 check) are paired.
 
-**Limits and keeping.** As for cameras: at most 3000 events a night, at most one frame a
-minute kept. Thumbnails are kept like a camera's (§4.5, the owner's plan), full frames
-of events like event images, and at most 2 GB per station; above that the oldest full
-frames go first. When the owner removes a station, its images, its exact place and its
+**Limits and keeping.** At most 3000 events a night, as for cameras. Of a station's
+frames the hub keeps a thumbnail every 5 minutes (and the latest), for as long as a
+camera's (§4.5, the owner's plan), full frames of events like event images, and at most
+500 MB per station; above that the oldest full frames go first (Benjamin, 2026-11-05: the
+server's disk is shared). When the owner removes a station, its images, its exact place and its
 secret are deleted at once; what stays is §10.6.
 
 The hub works out the station's orientation itself (§4.8, the same acceptance) from clear
@@ -1567,8 +1568,8 @@ missing optional ones are null.
 - `POST /frames` — multipart: `metadata` (JSON `{time, exposure_s, gain, night,
   clock_synced, stars | null, sky_brightness | null}`, `time` = mid-exposure) and `image`
   (JPEG). By default a thumbnail (longest side ≤ 640 px); the full frame when the last
-  answer had `want_full_frame`. At most one a minute is kept; answers
-  `{want_full_frame}`.
+  answer had `want_full_frame`. Every frame is looked at, a thumbnail every 5 minutes is
+  kept (§10.1); answers `{want_full_frame}`.
 - `POST /events` — multipart: `metadata` (JSON `{kind: "meteor", start, end, peak 0..1 |
   null, track: [[x, y], …] (pixels of the full frame, 2–32 points along the streak),
   clock_synced}`) and `image` (the full frame the meteor is on). The hub turns the track
@@ -1622,3 +1623,63 @@ sky brightness) are shared under CC BY 4.0 with the station's name as credit, wh
 what lets the hub pass them to partners. Every result page names the stations behind it.
 The owner can leave at any time; their measurements already in joint results stay, under
 their name or, if they ask, as "eine Station im Netz".
+
+### 10.7 Stations by their image address
+
+Benjamin, 2026-11-05: most cameras publish their latest image at a fixed address (an
+Allsky or indi-allsky website, AllSkyKamera, own builds); such a camera joins without
+changing anything on it. Nothing is shown in its image for this: an admin checks every
+such station by hand before the hub fetches anything.
+
+**Asking.** The owner creates a station with the software "Bild-Adresse" and gives the
+image's address (`https://` or `http://`, no credentials in it), the camera's place (map
+pin or latitude, longitude, elevation), optionally the lens, and how the admin can tell
+the camera is theirs: a screenshot of the camera's own settings page that shows the
+address, a photo of the camera at that place, a link to their own website with the
+image, or a sentence. They consent to the terms (§10.6) and to the hub fetching that
+address (its traffic is theirs, §10.7 Fetching). The station waits as `pending`.
+
+**Checking.** The admin page lists pending stations with the owner's address and proof
+and, fetched once when the admin opens it, the image at the address beside a map of the
+given place. The admin approves or declines with a short reason; the owner gets a mail
+either way. Until approved the hub fetches nothing else. A station whose image no longer
+fits its place and orientation (§4.8 fails 3 nights in a row on clear frames) goes back
+to `pending`. Anyone may ask an admin to remove a station that shows their camera
+(contact on /mitmachen); the admin pauses it at once and asks its owner.
+
+**Fetching.** With `If-None-Match`/`If-Modified-Since`, as
+`User-Agent: SharedSky (+https://allskyhub.org/mitmachen)`, every 30 s at first; then the
+hub follows how often the image actually changes (half its usual change interval, at
+least 30 s, at most 5 min). Only ports 80 and 443. The name is resolved at each fetch,
+only public addresses count (never loopback, private, link-local, multicast or the
+hub's own), and the hub connects to exactly the address it checked (pinned; TLS name
+and `Host` stay the name), so a second lookup cannot lead elsewhere; each of at most 3
+redirects is checked and pinned the same way. Only `image/jpeg` (at most 8 MB, 50 MP) or
+`image/png` (at most 8 MB, 16 MP), 15 s timeout. An unchanged image (same ETag, date
+or bytes) is not processed again. Errors back off (1 min doubling to 1 h); after 24 h of
+errors the station pauses and its owner gets a mail. A 429 or 503 is honoured with its
+`Retry-After`.
+
+**Time.** From the image's EXIF `DateTimeOriginal` with `OffsetTimeOriginal` when it has
+one, else from the camera's time zone at its place, else the response's `Last-Modified`,
+else the moment of the fetch; the source is kept with the frame. The clock check of
+§10.1 judges these times like a station's own; a station whose times come only from
+the fetch is never trusted for pairing (its meteors still count for showers and the
+night).
+
+**Processing.** Each new image is a frame of §10.2: a thumbnail is kept by §10.1 and the
+hub solves the orientation from it (§10.1). Sky brightness, clouds and aurora come from
+the same frames as for cameras. Meteors need more, as the camera's detection compares a
+frame with the one before and after:
+
+- Published images carry overlays (time, exposure, temperature) that change in every
+  frame and are often scaled down. The hub builds a mask per station from the pixels
+  that change in nearly every frame, adds the horizon from the orientation, and keeps it
+  current.
+- It looks for meteors only in runs of at least 3 frames of the same size that came at
+  most twice the usual interval apart, and only in frames at least 1280 px wide;
+  smaller images serve brightness, clouds and aurora only.
+- It uses the camera's detection without its several-frame logic and aircraft check,
+  so such a meteor carries `source: "image_url"` in its data, and until a trial has
+  shown its quality (as in N1c) it counts for showers and the night but is not paired.
+  A meteor keeps its full frame and is an event like one from `POST /events`.

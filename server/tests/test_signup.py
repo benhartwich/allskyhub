@@ -103,35 +103,77 @@ async def test_sign_up_confirm_and_sign_in(
 
 async def test_many_wrong_passwords_warn_the_owner(
     app: FastAPI, client: httpx.AsyncClient, new_client: httpx.AsyncClient,
-    open_signup: MemoryMailer,
+    open_signup: MemoryMailer, settings: Settings, monkeypatch: pytest.MonkeyPatch,
 ) -> None:  # fmt: skip
+    monkeypatch.setattr(settings, "trust_proxy_headers", True)
     await _sign_up(client, "ziel@example.org")
     await _confirm(client, open_signup)
     sent = len(open_signup.sent)
-    codes: list[int] = []
-    for _ in range(12):
+
+    async def attempt(ip: str, email: str = "ziel@example.org") -> int:
         r = await new_client.post(
-            "/api/v1/auth/login", json={"email": "ziel@example.org", "password": "falsch-falsch"}
-        )
-        codes.append(r.status_code)
-    assert codes[:10] == [401] * 10
-    assert codes[10:] == [429, 429]
+            "/api/v1/auth/login", json={"email": email, "password": "falsch-falsch"},
+            headers={"X-Real-IP": ip},
+        )  # fmt: skip
+        return r.status_code
+
+    # Typos from one place: blocked there for a while, but no alarm.
+    codes = [await attempt("198.51.100.7") for _ in range(11)]
+    assert codes == [401] * 10 + [429]
+    await asyncio.sleep(0.1)
+    assert len(open_signup.sent) == sent
+    # Guessing from many places: the account's own limit trips and its owner hears of it.
+    last = 0
+    for i in range(10):
+        for _ in range(10):
+            last = await attempt(f"203.0.113.{i}")
+    assert last == 429
     for _ in range(50):
         if len(open_signup.sent) > sent:
             break
         await asyncio.sleep(0.02)
+    for i in range(5):
+        await attempt(f"192.0.2.{i}")
+    await asyncio.sleep(0.1)
     warned = [m for m in open_signup.sent[sent:] if "viele falsche Anmeldungen" in m.subject]
     assert len(warned) == 1  # once, not for every blocked try
     assert warned[0].to == "ziel@example.org"
     assert "/password/forgot" in warned[0].body
     # An address without an account: the same 429, and no mail.
     sent = len(open_signup.sent)
-    last = 0
-    for _ in range(11):
-        r = await new_client.post(
-            "/api/v1/auth/login", json={"email": "niemand@example.org", "password": "x" * 10}
-        )
-        last = r.status_code
-    assert last == 429
+    for i in range(10):
+        for _ in range(10):
+            last = await attempt(f"203.0.113.{100 + i}", "niemand@example.org")
+    assert await attempt("192.0.2.200", "niemand@example.org") == 429
     await asyncio.sleep(0.1)
     assert len(open_signup.sent) == sent
+
+
+async def test_forms_need_their_csrf_token(
+    client: httpx.AsyncClient, open_signup: MemoryMailer
+) -> None:
+    """Else a page could confirm an attacker's account in someone's browser and sign them
+    in to it (allsky's review)."""
+    data = {"email": "a@example.org", "password": PASSWORD, "terms": "true",
+            "cf-turnstile-response": "ok"}  # fmt: skip
+    assert (await client.post("/konto/anlegen", data=data)).status_code == 403
+    r = await client.post("/konto/bestaetigen", data={"token": "x" * 40})
+    assert r.status_code == 403
+    assert not open_signup.sent
+
+
+async def test_one_address_gets_few_mails(
+    client: httpx.AsyncClient, open_signup: MemoryMailer, settings: Settings,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:  # fmt: skip
+    monkeypatch.setattr(settings, "trust_proxy_headers", True)
+    for i in range(5):
+        page = await client.get("/konto/anlegen")
+        r = await client.post(
+            "/konto/anlegen",
+            data={"csrf_token": csrf_from(page.text), "email": "opfer@example.org",
+                  "password": PASSWORD, "terms": "true", "cf-turnstile-response": "ok"},
+            headers={"X-Real-IP": f"203.0.113.{i}"},
+        )  # fmt: skip
+        assert "E-Mail mit einem Link ist unterwegs" in r.text  # the page always says so
+    assert len([m for m in open_signup.sent if m.to == "opfer@example.org"]) == 3

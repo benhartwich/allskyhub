@@ -12,17 +12,19 @@ from __future__ import annotations
 from typing import Annotated
 from urllib.parse import urlencode
 
-from fastapi import APIRouter, Form, HTTPException, Request
+from fastapi import APIRouter, Depends, Form, HTTPException, Request
 from fastapi.responses import Response
 
 from allskyhub_server.auth import accounts, ratelimit, reporters
 from allskyhub_server.mail.send import Mail, Mailer
-from allskyhub_server.web.deps import DbSession, SettingsDep, client_ip
+from allskyhub_server.web.deps import DbSession, SettingsDep, client_ip, csrf_protect
 from allskyhub_server.web.render import render
 from allskyhub_server.web.routes_auth import start_session
 from allskyhub_server.web.routes_report import SIGNUP_CSP
 
-router = APIRouter()
+# CSRF on every form, also the confirmation: else a page could confirm the attacker's own
+# account in someone's browser and sign them in there (allsky's review of #392).
+router = APIRouter(dependencies=[Depends(csrf_protect)])
 
 KIND = "owner"
 
@@ -80,6 +82,12 @@ async def signup(
     except accounts.AccountError as exc:
         return _page(request, 400, email=email, error=exc.message)
     await db.commit()
+    try:  # never a flood of mails to one address, from however many places
+        await ratelimit.hit(
+            request.app.state.engine, f"signup-mail:{user.email}", ratelimit.SIGNUP_MAIL_PER_EMAIL
+        )
+    except ratelimit.RateLimitedError:
+        return _page(request, sent=True)
     base = settings.base_url.rstrip("/")
     if token is not None:
         link = f"{base}/konto/bestaetigen?{urlencode({'token': token})}"

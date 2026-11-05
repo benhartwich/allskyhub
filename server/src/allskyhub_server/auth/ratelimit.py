@@ -64,6 +64,7 @@ INVITE_PER_IP = (Limit(20, 3600),)
 LOCKOUT_MAIL = (Limit(1, 6 * 3600),)
 # Owner sign-up on /konto/anlegen (open_signup), like the reporters' one.
 OWNER_SIGNUP_PER_IP = (Limit(5, 3600), Limit(20, 86400))
+SIGNUP_MAIL_PER_EMAIL = (Limit(3, 86400),)
 RESET_PER_EMAIL = (Limit(3, 3600),)
 RESET_PER_IP = (Limit(10, 3600),)
 # Access requests on /zugang: per IP, and a cap across all, so a bot cannot flood the admins.
@@ -89,15 +90,16 @@ APK_ALL = (Limit(500, 86400),)
 
 
 class AccountLockedError(RateLimitedError):
-    """Too many attempts at one account (not just from one address): someone may be trying
-    passwords, so its owner hears of it (auth/lockout.py)."""
+    """Too many attempts at one account from many places together: someone may be trying
+    passwords, so its owner hears of it (auth/lockout.py). Typos from one place only hit
+    the per-place limit and stay quiet (allsky's review of #392)."""
 
 
 async def login(engine: AsyncEngine, email: str, ip: str) -> None:
     """Count one login attempt (web and app) for ``email`` (normalised) from ``ip``."""
     await hit(engine, f"login:ip:{ip}", LOGIN_PER_IP)
+    await hit(engine, f"login:acct:{email}|{ip}", LOGIN_PER_ACCOUNT)
     try:
-        await hit(engine, f"login:acct:{email}|{ip}", LOGIN_PER_ACCOUNT)
         await hit(engine, f"login:acct:{email}", LOGIN_PER_ACCOUNT_ALL)
     except RateLimitedError as exc:
         raise AccountLockedError(exc.retry_after) from None

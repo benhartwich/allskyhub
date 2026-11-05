@@ -240,6 +240,11 @@ async def claim(db: AsyncSession, user_id: uuid.UUID, code: str, name: str) -> D
 
 async def unpair(db: AsyncSession, device: Device) -> None:
     """The owner removes the device (SPEC §6.2 step 4). The caller commits."""
+    if device.kind == "station":  # SPEC §10.1: its measurements stay (§10.6)
+        from allskyhub_server.devices import stations
+
+        await stations.remove(db, device)
+        return
     device.owner_id = None
     device.paired_at = None
     device.auth_generation += 1

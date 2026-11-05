@@ -10,12 +10,15 @@ import os
 import sys
 from collections.abc import Awaitable, Callable
 from pathlib import Path
-from typing import TypeVar
+from typing import TYPE_CHECKING, TypeVar
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from allskyhub_server.logconfig import configure_logging
 from allskyhub_server.settings import Settings, get_settings
+
+if TYPE_CHECKING:
+    from allskyhub_server.devices.stations import SecretKey
 
 T = TypeVar("T")
 
@@ -209,6 +212,56 @@ def _cmd_users(args: argparse.Namespace) -> int:
     return _run_db(work)
 
 
+def _secret_key(settings: Settings) -> SecretKey:
+    from allskyhub_server.admin.stores import Stores
+    from allskyhub_server.devices.stations import SecretKey
+
+    return SecretKey(Stores(settings.data_dir / "store", settings.deploy_repo).vault)
+
+
+def _cmd_station_create(args: argparse.Namespace) -> int:
+    """SPEC §10.1: a connected camera for an account, until the page "Kamera verbinden"
+    exists. Prints its id and secret once."""
+    from sqlalchemy import select
+
+    from allskyhub_server.auth.accounts import normalize_email
+    from allskyhub_server.devices import stations
+    from allskyhub_server.models import User
+
+    async def work(db: AsyncSession, settings: Settings) -> int:
+        user = await db.scalar(select(User).where(User.email == normalize_email(args.email)))
+        if user is None:
+            print("Kein Konto mit dieser Adresse.", file=sys.stderr)
+            return 1
+        key = _secret_key(settings)
+        device, secret = await stations.create(db, user, args.name, args.software, key)
+        await db.commit()
+        print(f"Station {device.name} für {user.email} angelegt ({args.software}).")
+        print(f"Station-ID: {device.id}")
+        print(f"Geheimnis (wird nicht wieder angezeigt): {secret}")
+        return 0
+
+    return _run_db(work)
+
+
+def _cmd_station_secret(args: argparse.Namespace) -> int:
+    """A new secret for a station; the old one stops working."""
+    from allskyhub_server.devices import stations
+    from allskyhub_server.models import Device
+
+    async def work(db: AsyncSession, settings: Settings) -> int:
+        device = await db.get(Device, args.station)
+        if device is None or device.kind != "station" or device.owner_id is None:
+            print("Keine Station mit dieser ID.", file=sys.stderr)
+            return 1
+        secret = stations.rotate_secret(device, _secret_key(settings))
+        await db.commit()
+        print(f"Neues Geheimnis für {device.name} (wird nicht wieder angezeigt): {secret}")
+        return 0
+
+    return _run_db(work)
+
+
 def _cmd_set_password(args: argparse.Namespace) -> int:
     """Password reset by the operator; signs the account out everywhere."""
     from sqlalchemy import delete, select
@@ -299,6 +352,16 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("email")
     p.add_argument("--password-stdin", action="store_true", help="read the password from stdin")
     p.set_defaults(func=_cmd_set_password)
+
+    p = sub.add_parser("station-create", help="connect a camera with other software (SPEC §10)")
+    p.add_argument("email")
+    p.add_argument("name")
+    p.add_argument("--software", choices=("indi-allsky", "allsky", "other"), default="other")
+    p.set_defaults(func=_cmd_station_create)
+
+    p = sub.add_parser("station-secret", help="a new secret for a station (the old one ends)")
+    p.add_argument("station")
+    p.set_defaults(func=_cmd_station_secret)
 
     p = sub.add_parser("delete-user", help="delete an account and unpair its cameras")
     p.add_argument("email")

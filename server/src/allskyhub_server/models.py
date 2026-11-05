@@ -256,6 +256,17 @@ class Device(Base):
     # are triangulated with the exact places (devices/meteor_pairs.py), which tells the other
     # owner a lot about where this camera stands. The owner's choice, kept on the hub only.
     network: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
+    # SPEC §10: a connected camera ("station", devices/stations.py) or one of ours; its
+    # software, the SHA-256 of its secret and, for indi-allsky only, the secret encrypted
+    # with the vault's key (§10.3 signs with it); when the owner agreed to the terms; and
+    # the hub's check of its clock (§10.1: trusted, wrong and right frames in a row, the
+    # last frames' taken and arrival times).
+    kind: Mapped[str] = mapped_column(String(16), default="camera", server_default="camera")
+    software: Mapped[str | None] = mapped_column(String(16))
+    station_secret_hash: Mapped[bytes | None] = mapped_column(LargeBinary(32))
+    station_secret_enc: Mapped[bytes | None] = mapped_column(LargeBinary)
+    terms_accepted_at: Mapped[dt.datetime | None] = mapped_column(_tz())
+    clock: Mapped[dict[str, Any] | None] = mapped_column(JSONB)
     # Roadmap N7, "Plus": the longer archive (maintenance.py) until ``plus_until``; a gift
     # (``plus_gift``, set by an admin) never ends. Paid and trial periods come from Paddle.
     plus_until: Mapped[dt.datetime | None] = mapped_column(_tz())

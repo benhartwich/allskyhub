@@ -23,7 +23,10 @@ _RANK: dict[str, int] = {"viewer": 1, "admin": 2, "owner": 3}
 async def owned(db: AsyncSession, user_id: uuid.UUID) -> Sequence[Device]:
     return (
         await db.scalars(
-            select(Device).where(Device.owner_id == user_id).order_by(Device.paired_at)
+            # Stations (SPEC §10) have no camera pages (settings, live view, commands).
+            select(Device)
+            .where(Device.owner_id == user_id, Device.kind == "camera")
+            .order_by(Device.paired_at)
         )
     ).all()
 

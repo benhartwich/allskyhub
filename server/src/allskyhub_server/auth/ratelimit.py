@@ -53,6 +53,30 @@ async def hit(engine: AsyncEngine, key: str, limits: Sequence[Limit]) -> None:
         raise RateLimitedError(max(retry_after, 1))
 
 
+_PEEK = text(
+    """
+    SELECT count, extract(epoch FROM (window_start + make_interval(secs => :win) - now()))
+    FROM rate_limit
+    WHERE key = :key
+      AND window_start = to_timestamp(floor(extract(epoch FROM now()) / :win) * :win)
+    """
+)
+
+
+async def blocked(engine: AsyncEngine, key: str, limits: Sequence[Limit]) -> int:
+    """Seconds until ``key`` may try again (0: now), without counting an attempt; for
+    checks before the expensive part of a request (SPEC §10.2)."""
+    retry_after = 0
+    async with engine.connect() as conn:
+        for limit in limits:
+            row = (
+                await conn.execute(_PEEK, {"key": f"{key}|{limit.window_s}", "win": limit.window_s})
+            ).one_or_none()
+            if row is not None and int(row[0]) >= limit.count:
+                retry_after = max(retry_after, max(math.ceil(float(row[1])), 1))
+    return retry_after
+
+
 LOGIN_PER_ACCOUNT = (Limit(10, 900),)
 # Audit L5: password guesses for one address count per address and IP, so whoever knows an
 # address cannot lock its owner out from one place; this cap holds across all places.
@@ -83,6 +107,8 @@ DOMAIN_PER_USER = (Limit(3, 3600), Limit(10, 86400))
 # Roadmap H5: test posts to a Discord webhook.
 DISCORD_TEST = (Limit(5, 600),)
 MAP_SEARCH_PER_IP = (Limit(20, 60), Limit(200, 3600))
+# SPEC §10.2: wrong station logins per IP, like password guesses (LOGIN_PER_IP).
+STATION_AUTH_PER_IP = (Limit(30, 900),)
 # Public APKs (/download/<app>.apk, /app/android/…) are some 100 MB each: a script must not
 # burn the server's bandwidth (review of #354). The cap across all is ~50 GB a day.
 APK_PER_IP = (Limit(10, 3600),)

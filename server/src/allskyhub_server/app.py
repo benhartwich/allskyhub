@@ -31,7 +31,9 @@ from allskyhub_server.api import (
     app_sky,
     sky_view,
 )
+from allskyhub_server.api import connect as connect_api
 from allskyhub_server.api import device as device_api
+from allskyhub_server.api import indi_allsky as indi_allsky_api
 from allskyhub_server.api import widget as app_widget
 from allskyhub_server.auth.hub_keys import HubKeys
 from allskyhub_server.auth.reporters import turnstile_from
@@ -49,6 +51,7 @@ from allskyhub_server.devices.satellite_match import SatelliteCatalogue
 from allskyhub_server.devices.satellites import TleCache
 from allskyhub_server.devices.sky_photos import SkyPhotos
 from allskyhub_server.devices.space_weather import KpCache, OvationCache
+from allskyhub_server.devices.stations import SecretKey
 from allskyhub_server.devices.tonight import ForecastCache
 from allskyhub_server.devices.youtube import YouTube
 from allskyhub_server.i18n import LanguageMiddleware
@@ -348,6 +351,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         release_out=settings.android_dir / "release",
     )
     app.state.turnstile = turnstile_from(settings, app.state.stores.vault)
+    # SPEC §10.1: the key for indi-allsky stations' secrets exists before any station.
+    SecretKey(app.state.stores.vault).ensure()
     app.state.github.token = app.state.latest_image.token = github_token(app.state.stores.vault)
     app.add_middleware(CustomDomainMiddleware, hosts=app.state.hosts)
     app.add_middleware(LanguageMiddleware)
@@ -377,6 +382,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(routes_plus.router)
     app.include_router(routes_plus.webhook_router)
     app.include_router(device_api.router)
+    app.include_router(connect_api.router)  # SPEC §10.2
+    app.include_router(indi_allsky_api.router)  # SPEC §10.3
     app.include_router(app_api.router)
     app.include_router(app_overview.router)
     app.include_router(app_manage.router)

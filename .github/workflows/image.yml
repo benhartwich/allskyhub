@@ -16,6 +16,7 @@ on:
       - "packages/design/**"
       - "packages/sky/**"
       - "packages/solve/**"
+      - "packages/detect/**"
       - "uv.lock"
       - ".github/workflows/image.yml"
       - "tools/e2e/**"

@@ -6,6 +6,7 @@ license = "GPL-3.0-or-later"
 requires-python = ">=3.11"
 dependencies = [
   "allskyhub-design",
+  "allskyhub-detect",
   "allskyhub-protocol",
   "allskyhub-sky",
   "allskyhub-solve",
@@ -26,6 +27,7 @@ allskyhub-agent = "allskyhub_agent.cli:main"
 
 [tool.uv.sources]
 allskyhub-design = { workspace = true }
+allskyhub-detect = { workspace = true }
 allskyhub-protocol = { workspace = true }
 allskyhub-sky = { workspace = true }
 allskyhub-solve = { workspace = true }

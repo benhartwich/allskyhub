@@ -88,6 +88,28 @@ def when(value: dt.datetime) -> str:
     return value.astimezone(UI_ZONE).strftime("%d.%m.%Y, %H:%M")
 
 
+def stamp(value: str | dt.datetime | None) -> str:
+    """ "heute 14:02", "gestern 22:10" or "05.11. 14:02" in the hub's time zone; an ISO
+    text too (the apps page keeps its times as text)."""
+    if not value:
+        return ""
+    if isinstance(value, str):
+        try:
+            value = dt.datetime.fromisoformat(value)
+        except ValueError:
+            return ""
+    if value.tzinfo is None:
+        value = value.replace(tzinfo=dt.UTC)
+    local = value.astimezone(UI_ZONE)
+    today = dt.datetime.now(UI_ZONE).date()
+    day = local.date()
+    if day == today:
+        return f"heute {local:%H:%M}"
+    if day == today - dt.timedelta(days=1):
+        return f"gestern {local:%H:%M}"
+    return f"{local:%d.%m.} {local:%H:%M}"
+
+
 def mmss(seconds: float | None) -> str:
     if seconds is None:
         return "–"
@@ -155,6 +177,7 @@ _filters["age"] = age
 _filters["night_title"] = night_title
 _filters["clock"] = clock
 _filters["when"] = when
+_filters["stamp"] = stamp
 _filters["compass"] = compass
 _filters["mmss"] = mmss
 _filters["filesize"] = filesize

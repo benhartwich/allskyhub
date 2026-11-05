@@ -4,20 +4,30 @@
   <p class="muted small">{% if card.live_at %}Stand bei Apple und Google: {{ card.live_at[:16] | replace('T', ' ') }} UTC (alle zehn Minuten neu){% else %}Apple und Google werden gerade gefragt; Seite gleich neu laden.{% endif %}</p>
   {% from "_pending.html" import pending %}
   <p class="small">Seit dem letzten Build: {{ pending(card) }}</p>
-  <div class="store-rows">
-    {% for row in card.rows %}
-    <div class="store-row">
-      <strong>{{ row.store }}</strong>
-      <span class="tone-{{ row.tone }}">{{ {'done': '✓', 'todo': '→', 'wait': '⏳', 'fail': '✕'}[row.tone] }} {{ row.status }}{% if row.link %} <a href="{{ row.link }}">{{ row.link_label }}</a>{% endif %}</span>
-      {% if row.action and not (row.action == 'build-android' and android_busy) %}
-      <form method="post" action="/admin/apps" class="inline">
-        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-        <input type="hidden" name="app" value="{{ card.key }}">
-        <input type="hidden" name="action" value="{{ row.action }}">
-        <button type="submit">{{ row.label }}</button>
-      </form>
-      {% else %}<span></span>{% endif %}
-    </div>
+  {# Each platform's way as steps (admin/apps.py Steps): ✓ done, ● the next thing to do
+     with its one button, ⏳ busy, ✕ failed, ○ later. #}
+  <div class="platforms">
+    {% for way in card.steps %}
+    <section class="platform" aria-label="{{ way.store }}">
+      <h3>{{ way.store }} <span class="muted small">· Version {{ way.version }}</span></h3>
+      <ol class="steps">
+        {% for st in way.steps %}
+        <li class="step step-{{ st.state }}"{% if st.state in ('current', 'wait', 'fail') %} aria-current="step"{% endif %}>
+          <span class="step-icon" aria-hidden="true">{{ {'done': '✓', 'current': '●', 'wait': '⏳', 'store': '⏳', 'fail': '✕', 'todo': '○'}[st.state] }}</span>
+          <span class="step-name">{{ st.name }}</span>
+          <span class="step-text">{{ st.text }}{% if st.at %} <span class="muted">· {{ st.at | stamp }}</span>{% endif %}{% if st.link %} · <a href="{{ st.link }}"{% if st.link.startswith('http') %} rel="noopener" target="_blank"{% endif %}>{{ st.link_label }}</a>{% endif %}</span>
+          {% if st.action and not (st.action == 'build-android' and android_busy) %}
+          <form method="post" action="/admin/apps" class="inline step-action">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+            <input type="hidden" name="app" value="{{ card.key }}">
+            <input type="hidden" name="action" value="{{ st.action }}">
+            <button type="submit"{% if st.state != 'fail' %} class="small"{% endif %}>{{ st.label }}</button>
+          </form>
+          {% endif %}
+        </li>
+        {% endfor %}
+      </ol>
+    </section>
     {% endfor %}
   </div>
   {% if android_busy and not (card.android and card.android.busy) %}

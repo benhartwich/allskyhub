@@ -38,6 +38,8 @@ _ENDS = ("start_azimuth_deg", "start_altitude_deg", "end_azimuth_deg", "end_alti
 
 def sighting(device: Device, event: EventRecord) -> triangulation.Sighting | None:
     data: dict[str, Any] = event.data or {}
+    if data.get("trial"):  # a station's meteor found by the hub, before its trial (§10.7)
+        return None
     values = [data.get(k) for k in _ENDS]
     if not all(isinstance(v, int | float) and math.isfinite(v) for v in values):
         return None

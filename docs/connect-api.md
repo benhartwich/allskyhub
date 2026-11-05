@@ -2,7 +2,7 @@
 
 Mit dieser Schnittstelle kann jede Allsky-Kamera bei SharedSky mitmessen, egal mit welcher Software sie läuft: gekaufte Programme, eigene Skripte oder Bastelprojekte. Die Kamera schickt über HTTPS an den Hub. MQTT, FTP und Portfreigaben braucht es nicht. Den Vertrag dazu beschreibt `docs/SPEC.md` §10. Diese Seite ist die Kurzfassung für Entwicklerinnen und Entwickler.
 
-Für **indi-allsky** reicht die Konfiguration, siehe ganz unten. Für **Allsky** kommt ein eigenes Modul.
+Für **indi-allsky** reicht die Konfiguration, siehe ganz unten. **Allsky** und alle Kameras, die ihr neuestes Bild unter einer festen Adresse zeigen, verbinden sich ohne eigenen Code über diese Adresse („Allsky / Bild-Adresse“ bei „Kamera verbinden“, SPEC §10.7); ein Admin prüft sie von Hand.
 
 ## Anmelden
 
@@ -85,7 +85,7 @@ Unter `/api/connect/v1/test/station`, `/test/frames` und `/test/events` prüft d
 
 ## Grenzen und Fehler
 
-- **Grenzen:** 120 Anfragen pro Minute und Station. Gespeichert wird höchstens ein Bild pro Minute. Pro Nacht nimmt der Hub höchstens 3000 Meteore an, pro Station höchstens 2 GB. Darüber fallen die ältesten vollen Bilder zuerst weg.
+- **Grenzen:** 120 Anfragen pro Minute und Station. Der Hub sieht sich jedes Bild an und behält alle 5 Minuten ein Vorschaubild. Pro Nacht nimmt er höchstens 3000 Meteore an, pro Station höchstens 500 MB. Darüber fallen die ältesten vollen Bilder zuerst weg.
 - **Fehler** kommen als `{"error": "<code>"}`:
 
 | Status | `error` | Bedeutung |

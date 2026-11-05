@@ -1,0 +1,45 @@
+{% extends "base.html" %}
+{% block title %}{{ device.name }} · Station prüfen · allskyhub{% endblock %}
+{% block head %}<link rel="stylesheet" href="{{ asset('leaflet/leaflet.css') }}">
+<script src="{{ asset('leaflet/leaflet.js') }}" defer></script>
+<script src="{{ asset('station_map.js') }}" defer></script>{% endblock %}
+{% block content %}
+<div class="page-head"><h1>{{ device.name }}</h1><p class="muted"><a href="/admin">Admin</a> › <a href="/admin/stationen">Stationen</a> › {{ states.get(source.state, source.state) }}</p></div>
+{% if notice %}<p class="msg ok" role="status">{{ notice }}</p>{% endif %}
+{% if error %}<p class="msg error" role="alert">{{ error }}</p>{% endif %}
+
+<section class="card stack">
+  <h2>Antrag</h2>
+  <dl class="facts">
+    <dt>Besitzer</dt><dd>{% if owner %}<a href="/admin/users/{{ owner.id }}">{{ owner.email }}</a>{% else %}–{% endif %}</dd>
+    <dt>Adresse</dt><dd><code class="copy-value">{{ source.url }}</code></dd>
+    <dt>Angefragt</dt><dd>{{ source.requested_at | localtime }}</dd>
+    <dt>Stand</dt><dd><span class="badge {{ 'ok' if source.state == 'approved' else 'warn' }}">{{ states.get(source.state, source.state) }}</span>{% if source.reason %} {{ source.reason }}{% endif %}</dd>
+    {% if source.last_error %}<dt>Letzter Fehler</dt><dd>{{ source.last_error }}</dd>{% endif %}
+    <dt>Nachweis</dt><dd>{% if source.proof_text %}{{ source.proof_text }}{% else %}<span class="muted">kein Text</span>{% endif %}</dd>
+  </dl>
+  {% if source.proof_image %}<a href="/admin/stationen/{{ device.id }}/nachweis.jpg"><img class="station-preview" src="/admin/stationen/{{ device.id }}/nachweis.jpg" alt="Nachweis-Bild"></a>{% endif %}
+</section>
+
+<section class="card stack">
+  <h2>Das Bild an der Adresse, jetzt geholt</h2>
+  {% if preview %}<img class="station-preview" src="data:image/jpeg;base64,{{ preview }}" alt="Bild an der Adresse">{% else %}<p class="msg error">{{ problem }}</p>{% endif %}
+  <h2>Angegebener Ort</h2>
+  <div id="map" class="map map-small" role="region" aria-label="Karte mit dem angegebenen Ort"></div>
+  <script type="application/json" id="map-config">{{ map_config | tojson }}</script>
+  <p class="muted small">{% if place.get('latitude') is not none %}{{ place.latitude }}, {{ place.longitude }}{% if place.get('elevation_m') is not none %}, {{ place.elevation_m }} m{% endif %}{% endif %}{% if place.get('timezone') %} · {{ place.timezone }}{% endif %}. Passen Landschaft, Horizont und Himmel zum Ort? Passt der Nachweis zur Adresse?</p>
+</section>
+
+<section class="card stack">
+  <h2>Entscheiden</h2>
+  {% for decision, label, cls in [('freigeben', 'Freigeben', ''), ('ablehnen', 'Ablehnen', 'danger'), ('pausieren', 'Pausieren (Entfernungswunsch)', 'secondary')] %}
+  <form method="post" action="/admin/stationen/{{ device.id }}/{{ decision }}" class="search-row">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <label>Grund{% if decision != 'ablehnen' %} (optional){% endif %}<input name="reason" maxlength="500"></label>
+    <label class="narrow">Dein Passwort<input type="password" name="password" required autocomplete="current-password"></label>
+    <button type="submit" class="{{ cls }}">{{ label }}</button>
+  </form>
+  {% endfor %}
+  <p class="muted small">Der Besitzer bekommt in jedem Fall eine E-Mail, mit dem Grund, falls angegeben.</p>
+</section>
+{% endblock %}

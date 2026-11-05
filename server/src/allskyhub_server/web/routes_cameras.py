@@ -62,7 +62,8 @@ async def _visible(
 ) -> tuple[Device, Role]:
     """Roadmap C10: shared cameras; 404 below ``need``."""
     found = await queries.visible_one(db, session.user.id, device_id, need)
-    if found is None:
+    # A station (SPEC §10) has its own pages (web/routes_stations.py), no camera ones.
+    if found is None or found[0].kind == "station":
         raise HTTPException(404)
     return found
 
@@ -70,7 +71,7 @@ async def _visible(
 async def _own_device(db: DbSession, session: SessionInfo, device_id: str) -> Device:
     """404 for unknown devices and devices of other accounts alike."""
     device = await queries.owned_one(db, session.user.id, device_id)
-    if device is None:
+    if device is None or device.kind == "station":
         raise HTTPException(404)
     return device
 
@@ -87,7 +88,16 @@ async def home(request: Request, db: DbSession, session: OptionalSession) -> Res
         (d, registry.is_online(d.id), health.check(d, registry.is_online(d.id), now), role)
         for d, role in await queries.visible(db, session.user.id)
     ]
-    return render(request, "home.html", {"cameras": cameras}, session=session)
+    own_stations = (
+        await db.scalars(
+            select(Device)
+            .where(Device.owner_id == session.user.id, Device.kind == "station")
+            .order_by(Device.paired_at)
+        )
+    ).all()
+    return render(
+        request, "home.html", {"cameras": cameras, "stations": own_stations}, session=session
+    )
 
 
 @router.get("/cameras/pair")
@@ -133,6 +143,9 @@ async def pair(
 async def camera(
     request: Request, db: DbSession, session: CurrentSession, device_id: str
 ) -> Response:
+    station = await queries.owned_one(db, session.user.id, device_id)
+    if station is not None and station.kind == "station":
+        return RedirectResponse(f"/stationen/{station.id}", status_code=303)
     device, role = await _visible(db, session, device_id)
     context = await _camera_context(request, db, device, role=role)
     return render(request, "camera.html", context, session=session)

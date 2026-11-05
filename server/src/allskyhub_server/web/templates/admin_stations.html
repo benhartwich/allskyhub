@@ -1,0 +1,24 @@
+{% extends "base.html" %}
+{% block title %}Stationen prüfen · Admin · allskyhub{% endblock %}
+{% block content %}
+<div class="page-head"><h1>Stationen prüfen</h1><p class="muted"><a href="/admin">Admin</a> › Stationen</p></div>
+{% if notice %}<p class="msg ok" role="status">{{ notice }}</p>{% endif %}
+{% if error %}<p class="msg error" role="alert">{{ error }}</p>{% endif %}
+<section class="card stack">
+  <p class="muted small">SharedSky-Stationen über ihre Bild-Adresse (SPEC §10.7). Jede prüft ein Admin von Hand, bevor der Hub ihr Bild abholt.</p>
+  <div class="table-scroll"><table class="stats users-list">
+    <tr><th>Station</th><th>Besitzer</th><th>Adresse</th><th>Angefragt</th><th>Stand</th></tr>
+    {% for source, device, owner in rows %}
+    <tr>
+      <td><a href="/admin/stationen/{{ device.id }}">{{ device.name }}</a></td>
+      <td>{{ owner.email if owner else '–' }}</td>
+      <td class="small"><code class="copy-value">{{ source.url }}</code></td>
+      <td>{{ source.requested_at | localtime }}</td>
+      <td><span class="badge {{ 'ok' if source.state == 'approved' else 'warn' }}">{{ states.get(source.state, source.state) }}</span></td>
+    </tr>
+    {% else %}
+    <tr><td colspan="5" class="muted">Noch keine Station über eine Bild-Adresse.</td></tr>
+    {% endfor %}
+  </table></div>
+</section>
+{% endblock %}

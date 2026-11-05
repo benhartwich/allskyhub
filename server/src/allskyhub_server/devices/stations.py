@@ -43,7 +43,8 @@ from allskyhub_server.models import (
 
 log = logging.getLogger(__name__)
 
-SOFTWARE = ("indi-allsky", "allsky", "other")
+# "image-url": by its image address, checked by hand, fetched by the hub (SPEC §10.7).
+SOFTWARE = ("indi-allsky", "allsky", "other", "image-url")
 KEY_KIND = "station_key"  # in the vault (admin/stores.py), made at the hub's start
 # SPEC §10.1 Clock.
 CLOCK_EARLY_S = 120.0  # plus the exposure: a frame this much older than its arrival
@@ -52,8 +53,10 @@ CLOCK_BAD_IN_A_ROW = 3
 CLOCK_GOOD_IN_A_ROW = 10
 # SPEC §10.1 Limits and keeping.
 EVENTS_PER_NIGHT = 3000
-FRAME_EVERY = dt.timedelta(minutes=1)
-MAX_BYTES = 2 * 1024**3
+# Every frame is looked at; a thumbnail is kept every 5 minutes, and at most 500 MB per
+# station (Benjamin, 2026-11-05: the server's disk is shared).
+FRAME_EVERY = dt.timedelta(minutes=5)
+MAX_BYTES = 500 * 1024**2
 THUMB_SIDE = 640
 # A frame larger than this is refused before it is decoded (a JPEG's size is in its header).
 MAX_PIXELS = 50_000_000
@@ -131,7 +134,8 @@ async def create(
         # SPEC §10.1: a new station's clock is trusted once enough frames showed it.
         clock={"trusted": False, "bad": 0, "good": 0, "recent": []},
     )
-    secret = _new_secret(device, key)
+    # A station by its image address sends nothing itself: it has no secret (§10.7).
+    secret = "" if software == "image-url" else _new_secret(device, key)
     db.add(device)
     await db.flush()
     return device, secret
@@ -139,6 +143,8 @@ async def create(
 
 def rotate_secret(device: Device, key: SecretKey) -> str:
     """A new secret; the old one stops working at once."""
+    if device.software == "image-url":
+        raise ValueError("a station by its image address has no secret")
     return _new_secret(device, key)
 
 

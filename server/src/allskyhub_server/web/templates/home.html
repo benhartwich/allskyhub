@@ -3,7 +3,7 @@
 {% block content %}
 <div class="page-head">
   <h1>Meine Kameras</h1>
-  <a class="button small" href="/cameras/pair">Kamera koppeln</a>
+  <span class="actions"><a class="button small" href="/cameras/pair">Kamera koppeln</a> <a class="button small secondary" href="/stationen/neu">Kamera verbinden</a></span>
 </div>
 {% if cameras %}
 <ul class="cams">
@@ -32,5 +32,27 @@
   <p class="actions"><a class="button" href="/start">Erste Schritte</a> <a class="button secondary" href="/cameras/pair">Kamera koppeln</a></p>
 </div>
 {% endif %}
+<section class="stack">
+  <h2>SharedSky-Stationen</h2>
+  {% if stations %}
+  <ul class="cams">
+    {% for s in stations %}
+    <li>
+      <a class="card cam" href="/stationen/{{ s.id }}">
+        {% if s.latest_thumb_at %}
+        <img src="/stationen/{{ s.id }}/bild.jpg?t={{ s.latest_thumb_at.timestamp() | int }}" alt="Letztes Bild von {{ s.name }}" loading="lazy">
+        {% else %}
+        <div class="sky-ph" aria-hidden="true"></div>
+        {% endif %}
+        <div class="cam-meta"><strong>{{ s.name }}</strong><span class="badge">Station</span></div>
+        <span class="muted">{% if s.last_seen_at %}Zuletzt gesehen {{ s.last_seen_at | age }}{% else %}Noch nichts empfangen{% endif %}</span>
+      </a>
+    </li>
+    {% endfor %}
+  </ul>
+  {% else %}
+  <p class="muted">Deine Kamera läuft mit indi-allsky, Allsky oder eigener Software? <a href="/stationen/neu">Verbinde sie mit SharedSky</a> und miss gemeinsam mit den anderen Kameras Feuerkugeln, Meteorströme und die Himmelshelligkeit. <a href="/mitmachen">Mehr erfahren</a></p>
+  {% endif %}
+</section>
 <p class="muted small">Unterwegs: <a href="{{ play_store_url }}" rel="noopener">allskyhub-App bei Google Play ↗</a> · iOS folgt in Kürze.</p>
 {% endblock %}

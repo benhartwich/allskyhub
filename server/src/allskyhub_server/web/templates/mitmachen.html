@@ -1,0 +1,61 @@
+{% extends "base.html" %}
+{% block title %}SharedSky · Gemeinsam den Himmel vermessen · allskyhub{% endblock %}
+{% block content %}
+<div class="page-head"><h1>SharedSky</h1><p class="muted">Gemeinsam den Himmel vermessen. Ein offenes Netz von allskyhub.</p></div>
+
+<section class="card stack">
+  <h2>Deine Allsky-Kamera sieht mehr, wenn sie nicht allein ist</h2>
+  <p>Eine Kamera allein sieht einen Strich am Himmel. Zwei oder mehr Kameras, die dieselbe Feuerkugel sehen, ergeben ihre Bahn: wie hoch sie war, wohin sie flog und wo Meteorite gelandet sein könnten. SharedSky verbindet dafür Allsky-Kameras aller Art, egal ob allskyhub, Allsky, indi-allsky oder eigene Software. Kostenlos, ohne Bindung, und deine Kamera bleibt, wie sie ist.</p>
+  <p class="actions">{% if user %}<a class="button" href="/stationen/neu">Kamera verbinden</a>{% elif open_signup %}<a class="button" href="/konto/anlegen">Kostenloses Konto anlegen</a> <a class="button secondary" href="/login?next=/stationen/neu">Anmelden</a>{% else %}<a class="button" href="/zugang">Zugang beantragen</a> <a class="button secondary" href="/login?next=/stationen/neu">Anmelden</a>{% endif %}</p>
+</section>
+
+<section class="card stack">
+  <h2>Was du bekommst</h2>
+  <ul>
+    <li><strong>Ergebnisse, die eine Kamera allein nie liefert:</strong> Höhe und Bahn einer Feuerkugel, ihr mögliches Fallgebiet mit dem Wind in der Höhe, Geschwindigkeit und Herkunft aus dem Abgleich mit dem Global Meteor Network. <a href="/feuerkugeln">Feuerkugeln ansehen</a></li>
+    <li><strong>Meteorströme live:</strong> Raten pro Stunde aus allen klaren Kameras. <a href="/meteorstroeme">Meteorströme</a></li>
+    <li><strong>Dein Himmel im Vergleich:</strong> Himmelshelligkeit pro Nacht und ihr Trend über die Jahre, neben den Stationen der Umgebung.</li>
+    <li><strong>Nennung:</strong> Deine Station steht mit ihrem Namen auf jeder Ergebnisseite, an der sie beteiligt war.</li>
+  </ul>
+</section>
+
+<section class="card stack">
+  <h2>Die Messprogramme</h2>
+  <div class="table-scroll"><table class="stats users-list">
+    <tr><th>Programm</th><th>Was gemessen wird</th></tr>
+    <tr><td>Feuerkugeln</td><td>Bahn, Höhe, Genauigkeit, Fallgebiet mit Höhenwind</td></tr>
+    <tr><td>Meteorströme</td><td>Raten pro Stunde, Radiant</td></tr>
+    <tr><td>Himmelshelligkeit</td><td>mag/″² pro Nacht, Trend über die Jahre</td></tr>
+    <tr><td>Polarlicht</td><td>Episoden und Richtung, Warnung an Kameras weiter südlich</td></tr>
+    <tr><td>Leuchtende Nachtwolken</td><td>Sichtungen in Sommernächten</td></tr>
+    <tr><td>Wolken</td><td>Bedeckung jetzt und in Kürze</td></tr>
+  </table></div>
+</section>
+
+<section class="stack">
+  <h2>So verbindest du deine Kamera</h2>
+  <div class="join-ways">
+    <div class="card stack"><h3>indi-allsky</h3><p class="muted">Ohne Installation: In der Konfiguration die SyncAPI einschalten und drei Werte von allskyhub eintragen. Mit jedem Bild kommen Standort, Belichtung und erkannte Meteore.</p></div>
+    <div class="card stack"><h3>Allsky und andere mit Bild im Netz</h3><p class="muted">Du gibst die Adresse deines neuesten Bilds an, den Ort und einen kurzen Nachweis. Ein Admin prüft die Station von Hand; danach holt der Hub das Bild ab. An deiner Kamera änderst du nichts.</p></div>
+    <div class="card stack"><h3>Eigene oder gekaufte Software</h3><p class="muted">Eine offene, einfache Schnittstelle über HTTPS, mit Beispielen und Testmodus. <a href="/entwickler/connect">Für Entwickler</a></p></div>
+    <div class="card stack"><h3>allskyhub-Kamera</h3><p class="muted">Das fertige Image für den Raspberry Pi: koppeln per App, alles andere läuft von selbst. <a href="/hardware">Hardware</a></p></div>
+  </div>
+</section>
+
+<section class="card stack" id="bedingungen">
+  <h2>Teilnahmebedingungen in Kürze</h2>
+  <ul>
+    <li><strong>Deine Bilder bleiben deine.</strong> Der Hub zeigt sie nur dort, wo du es erlaubst, und immer mit dem Namen deiner Station.</li>
+    <li><strong>Messwerte unter CC BY 4.0:</strong> Zeiten, Spuren, Bahnen, Raten und Himmelshelligkeit deiner Station werden mit ihrem Namen geteilt. Erst das erlaubt es, sie an wissenschaftliche Partner weiterzugeben.</li>
+    <li><strong>Standort:</strong> Der genaue Ort dient nur der Rechnung. Öffentlich steht er immer gerundet.</li>
+    <li><strong>Uhr:</strong> Gemeinsame Bahnen brauchen eine gestellte Uhr (NTP). Der Hub prüft das an jedem Bild.</li>
+    <li><strong>Austritt jederzeit:</strong> Entfernst du deine Station, sind ihre Bilder, ihr genauer Ort und ihr Geheimnis sofort gelöscht. Messwerte, die schon in gemeinsame Ergebnisse eingeflossen sind, bleiben dort, auf Wunsch ohne Namen.</li>
+  </ul>
+  <p class="muted small">Es gelten außerdem die <a href="/agb">AGB</a> und die <a href="/datenschutz">Datenschutzerklärung</a>.</p>
+</section>
+
+<section class="card stack">
+  <h2>Deine Kamera ist hier, ohne dass du sie eingetragen hast?</h2>
+  <p>Jede Station über eine Bild-Adresse prüft ein Admin von Hand. Ist trotzdem deine Kamera dabei, ohne dass du zugestimmt hast, schreib uns über das <a href="/impressum">Impressum</a>. Wir pausieren die Station sofort und klären es mit dem, der sie eingetragen hat.</p>
+</section>
+{% endblock %}

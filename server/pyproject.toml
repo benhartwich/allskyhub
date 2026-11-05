@@ -11,6 +11,9 @@ dependencies = [
   # Connected cameras (SPEC §10.1): the hub solves their orientation itself with the
   # camera's own plate solver (§4.8), shared in the workspace (GPL-3, fits the AGPL hub).
   "allskyhub-solve",
+  # Their meteors (SPEC §10.3, §10.7): the camera's detection of one frame and its
+  # neighbours, shared in the workspace (GPL-3, like the solver).
+  "allskyhub-detect",
   "fastapi>=0.118",
   "uvicorn[standard]>=0.37",
   "sqlalchemy[asyncio]>=2.0.43",
@@ -48,6 +51,7 @@ allskyhub-protocol = { workspace = true }
 allskyhub-design = { workspace = true }
 allskyhub-sky = { workspace = true }
 allskyhub-solve = { workspace = true }
+allskyhub-detect = { workspace = true }
 
 [project.scripts]
 allskyhub-server = "allskyhub_server.cli:main"

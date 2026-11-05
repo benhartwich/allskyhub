@@ -1,0 +1,102 @@
+{% extends "base.html" %}
+{% block title %}Kamera verbinden: connect/v1 · allskyhub{% endblock %}
+{% block content %}
+<div class="page-head"><h1>Kamera verbinden: <code>connect/v1</code></h1><p class="muted"><a href="/mitmachen">SharedSky</a> › Für Entwickler</p></div>
+<div class="prose stack">
+<p>Mit dieser Schnittstelle kann jede Allsky-Kamera bei SharedSky mitmessen, egal mit welcher Software sie läuft: gekaufte Programme, eigene Skripte oder Bastelprojekte. Die Kamera schickt über HTTPS an den Hub. MQTT, FTP und Portfreigaben braucht es nicht. Den Vertrag dazu beschreibt <a href="https://github.com/benhartwich/allskyhub/blob/main/docs/SPEC.md">SPEC §10</a>.</p>
+<p>Für <strong>indi-allsky</strong> reicht die Konfiguration, siehe unten. <strong>Allsky</strong> und alle Kameras, die ihr neuestes Bild unter einer festen Adresse zeigen, verbinden sich ohne eigenen Code über diese Adresse („Allsky / Bild-Adresse“ bei <a href="/stationen/neu">Kamera verbinden</a>).</p>
+
+<h2>Anmelden</h2>
+<p>Lege ein kostenloses Konto an und wähle <a href="/stationen/neu?software=other">Kamera verbinden</a>. Danach zeigt dir der Hub einmal die <strong>Station-ID</strong> (26 Zeichen) und das <strong>Geheimnis</strong> (64 Hex-Zeichen). Ein neues Geheimnis kannst du jederzeit erzeugen, das alte gilt dann sofort nicht mehr. Jede Anfrage trägt den Header</p>
+<pre><code>Authorization: Bearer &lt;Station-ID&gt;:&lt;Geheimnis&gt;</code></pre>
+<p>Die Adresse ist <code>{{ base }}/api/connect/v1</code>. Alle Zeiten sind ISO 8601 in UTC, zum Beispiel <code>2026-11-05T21:40:12Z</code>.</p>
+
+<h2>1. Station melden: <code>PUT /station</code></h2>
+<p>Beim Start und wenn sich etwas ändert:</p>
+<pre><code>{
+  "name": "Sternwarte Musterberg",
+  "latitude": 48.3, "longitude": 14.29, "elevation_m": 300,
+  "software": "MySky", "software_version": "1.2",
+  "lens": {"focal_mm": 1.55, "f_ratio": 2.0, "projection": "equidistant"},
+  "width": 3096, "height": 2080,
+  "clock_synced": true
+}</code></pre>
+<ul>
+  <li><code>width</code> × <code>height</code> ist die Größe des vollen Bildes, so wie die Kamera es speichert, nach einem eventuellen Zuschnitt. Alle Pixelangaben beziehen sich auf dieses Bild; ändert sich die Größe, richtet der Hub die Kamera neu an den Sternen aus.</li>
+  <li><code>clock_synced</code>: Die Uhr läuft per NTP oder GPS. Der Hub prüft das zusätzlich an jedem Bild.</li>
+</ul>
+<p>Antwort: <code>{"orientation": null, "want_full_frame": false}</code></p>
+
+<h2>2. Bild schicken: <code>POST /frames</code></h2>
+<p>Etwa einmal pro Minute, Multipart mit zwei Teilen:</p>
+<ul>
+  <li><code>metadata</code>: JSON <code>{"time", "exposure_s", "gain", "night", "clock_synced", "stars", "sky_brightness"}</code>; <code>time</code> ist die Mitte der Belichtung.</li>
+  <li><code>image</code>: JPEG, normalerweise ein Vorschaubild (höchstens 640 px an der langen Seite, 300 kB). Nur wenn die letzte Antwort <code>"want_full_frame": true</code> enthielt, das volle Bild (höchstens 8 MB).</li>
+</ul>
+<p>Antwort: <code>{"want_full_frame": false}</code></p>
+
+<h2>3. Meteor melden: <code>POST /events</code></h2>
+<p>Multipart: <code>metadata</code> als JSON und <code>image</code>, das volle Bild mit dem Meteor, genau <code>width</code> × <code>height</code>.</p>
+<pre><code>{
+  "kind": "meteor",
+  "start": "2026-11-05T21:40:00Z", "end": "2026-11-05T21:40:30Z",
+  "peak": 0.8,
+  "track": [[812, 431], [990, 502], [1140, 566]],
+  "clock_synced": true
+}</code></pre>
+<p><code>track</code> sind 2 bis 32 Punkte entlang der Spur, in Pixeln des vollen Bildes. <code>peak</code> (0 bis 1) ist optional; ohne ihn misst der Hub die Helligkeit selbst. Antwort: <code>{"id": "meteor-20261105T214000Z"}</code></p>
+
+<h2>Testmodus</h2>
+<p class="msg ok">Unter <code>/api/connect/v1/test/station</code>, <code>/test/frames</code> und <code>/test/events</code> prüft der Hub jede Anfrage genauso, speichert aber nichts, und antwortet, was er verstanden hat: <code>{"ok": true, "understood": {…}}</code>. Damit lässt sich eine Anbindung gefahrlos ausprobieren.</p>
+
+<h2>Grenzen und Fehler</h2>
+<p>120 Anfragen pro Minute und Station. Der Hub sieht sich jedes Bild an und behält alle 5 Minuten ein Vorschaubild; pro Nacht höchstens 3000 Meteore, pro Station höchstens 500 MB (darüber fallen die ältesten vollen Bilder zuerst weg). Fehler kommen als <code>{"error": "&lt;code&gt;"}</code>:</p>
+<div class="table-scroll"><table class="stats users-list">
+  <tr><th>Status</th><th><code>error</code></th><th>Bedeutung</th></tr>
+  <tr><td>400</td><td><code>bad_request</code></td><td>ein Feld fehlt oder liegt außerhalb des Bereichs, dazu <code>field</code></td></tr>
+  <tr><td>400</td><td><code>bad_image</code></td><td>kein lesbares JPEG</td></tr>
+  <tr><td>400</td><td><code>wrong_size</code></td><td>das volle Bild hat nicht <code>width</code> × <code>height</code></td></tr>
+  <tr><td>401</td><td><code>unauthorized</code></td><td>unbekannte Station oder falsches Geheimnis</td></tr>
+  <tr><td>413</td><td><code>too_large</code></td><td>Bild zu groß</td></tr>
+  <tr><td>429</td><td><code>too_often</code> / <code>night_full</code></td><td>zu viele Anfragen oder Meteore in dieser Nacht, mit <code>Retry-After</code></td></tr>
+</table></div>
+
+<h2>Beispiel mit curl</h2>
+<pre><code>AUTH="Authorization: Bearer $STATION_ID:$SECRET"
+curl -X PUT {{ base }}/api/connect/v1/station -H "$AUTH" \
+     -H 'Content-Type: application/json' -d @station.json
+curl {{ base }}/api/connect/v1/frames -H "$AUTH" \
+     -F 'metadata={"time":"2026-11-05T21:40:15Z","exposure_s":30,"night":true,"clock_synced":true};type=application/json' \
+     -F image=@thumb.jpg</code></pre>
+
+<h2>Beispiel in Python</h2>
+<pre><code>import json
+
+import requests
+
+BASE = "{{ base }}/api/connect/v1"
+AUTH = {"Authorization": f"Bearer {STATION_ID}:{SECRET}"}
+
+requests.put(f"{BASE}/station", json=station, headers=AUTH, timeout=30).raise_for_status()
+
+meta = {"time": "2026-11-05T21:40:15Z", "exposure_s": 30, "night": True, "clock_synced": True}
+with open("thumb.jpg", "rb") as image:
+    r = requests.post(
+        f"{BASE}/frames",
+        headers=AUTH,
+        files={"metadata": (None, json.dumps(meta), "application/json"), "image": image},
+        timeout=30,
+    )
+print(r.json())  # {"want_full_frame": false}</code></pre>
+
+<h2>indi-allsky</h2>
+<p>indi-allsky braucht keine Installation. In der Konfiguration unter <strong>SyncAPI</strong>: einschalten, <strong>Base URL</strong> <code>{{ base }}/indi-allsky</code>, <strong>Username</strong> die Station-ID, <strong>API Key</strong> das Geheimnis, Bilder synchronisieren: jedes Bild. indi-allsky schickt dann mit jedem Bild Standort, Objektiv, Belichtung, Sternzahl und die Zahl erkannter Meteorspuren.</p>
+
+<h2>Was mit den Daten passiert</h2>
+<ul>
+  <li><strong>Bilder</strong> bleiben deine. Der Hub zeigt sie nur dort, wo du es erlaubst, und immer mit dem Namen der Station.</li>
+  <li><strong>Messwerte</strong> (Zeiten, Spuren, Bahnen, Raten, Himmelshelligkeit) teilt der Hub unter CC BY 4.0 mit dem Namen der Station; nur so kann er sie an wissenschaftliche Partner weitergeben.</li>
+  <li><strong>Standort:</strong> Der genaue Ort dient nur der Rechnung, öffentlich steht er immer gerundet.</li>
+</ul>
+</div>
+{% endblock %}

@@ -661,6 +661,40 @@ class MeteorPair(Base):
     created_at: Mapped[dt.datetime] = mapped_column(_tz(), server_default=func.now())
 
 
+class GmnMeteor(Base):
+    """A meteor of ours the Global Meteor Network measured too (devices/gmn.py; CC BY 4.0):
+    its time, path, speed and orbit. Kept after the event expires, like a pair."""
+
+    __tablename__ = "gmn_meteor"
+    __table_args__ = (UniqueConstraint("device_id", "event_id"),)
+
+    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid7)
+    device_id: Mapped[str] = mapped_column(ForeignKey("device.id", ondelete="CASCADE"), index=True)
+    event_id: Mapped[str] = mapped_column(String(64))
+    gmn_id: Mapped[str] = mapped_column(String(40))
+    at: Mapped[dt.datetime] = mapped_column(_tz())
+    shower: Mapped[str | None] = mapped_column(String(8))
+    v_init_kms: Mapped[float] = mapped_column(Float)
+    v_avg_kms: Mapped[float | None] = mapped_column(Float)
+    beg_lat: Mapped[float] = mapped_column(Float)
+    beg_lon: Mapped[float] = mapped_column(Float)
+    beg_km: Mapped[float] = mapped_column(Float)
+    end_lat: Mapped[float] = mapped_column(Float)
+    end_lon: Mapped[float] = mapped_column(Float)
+    end_km: Mapped[float] = mapped_column(Float)
+    duration_s: Mapped[float | None] = mapped_column(Float)
+    peak_mag: Mapped[float | None] = mapped_column(Float)
+    mass_kg: Mapped[float | None] = mapped_column(Float)
+    stations: Mapped[int] = mapped_column(Integer)
+    a_au: Mapped[float | None] = mapped_column(Float)
+    e: Mapped[float | None] = mapped_column(Float)
+    i_deg: Mapped[float | None] = mapped_column(Float)
+    q_au: Mapped[float | None] = mapped_column(Float)
+    # How far the camera's track lay off GMN's path (degrees), the match's quality.
+    offset_deg: Mapped[float] = mapped_column(Float)
+    created_at: Mapped[dt.datetime] = mapped_column(_tz(), server_default=func.now())
+
+
 class StatusSample(Base):
     """The camera's state every few minutes (SPEC §6.3 status), for the charts of exposure,
     gain, temperatures and disk. Kept like thumbnails; removed with the pairing."""

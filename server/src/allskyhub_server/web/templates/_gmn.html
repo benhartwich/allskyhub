@@ -1,0 +1,15 @@
+{# A meteor the Global Meteor Network measured too (devices/gmn.py); GMN data are CC BY 4.0. #}
+{% macro gmn_card(g) -%}
+<div class="card trajectory">
+  <h2>Vom Global Meteor Network vermessen</h2>
+  <p>Auch {{ g.stations }} Videokameras des <a href="{{ gmn_source }}" rel="noopener" target="_blank">Global Meteor Network</a> haben ihn gesehen, um {{ g.at | when }} Uhr. Daraus ergeben sich Geschwindigkeit und Herkunft, die eine lange Belichtung nicht zeigt:</p>
+  <dl class="facts">
+    <dt>Höhe</dt><dd>{{ '%.0f' | format(g.beg_km) }} km → {{ '%.0f' | format(g.end_km) }} km</dd>
+    <dt>Geschwindigkeit</dt><dd>{{ '%.1f' | format(g.v_init_kms) | replace('.', ',') }} km/s beim Eintritt{% if g.duration_s %}, {{ '%.1f' | format(g.duration_s) | replace('.', ',') }} s sichtbar{% endif %}</dd>
+    <dt>Strom</dt><dd>{{ gmn_shower(g.shower) }}</dd>
+    {% if g.peak_mag is not none %}<dt>Hellste Stelle</dt><dd>{{ '%+.1f' | format(g.peak_mag) | replace('.', ',') }} mag (absolut)</dd>{% endif %}
+    {% if g.a_au is not none and g.e is not none and g.i_deg is not none %}<dt>Umlaufbahn</dt><dd>{% if g.e < 1 %}große Halbachse {{ '%.2f' | format(g.a_au) | replace('.', ',') }} AE, Exzentrizität {{ '%.2f' | format(g.e) | replace('.', ',') }}, Neigung {{ '%.1f' | format(g.i_deg) | replace('.', ',') }}°{% else %}nicht an die Sonne gebunden (meist ein Messfehler){% endif %}</dd>{% endif %}
+  </dl>
+  <p class="muted small">Daten: Global Meteor Network, <a href="https://creativecommons.org/licenses/by/4.0/deed.de" rel="noopener" target="_blank">CC BY 4.0</a>, Bahn {{ g.gmn_id }}.</p>
+</div>
+{%- endmacro %}

@@ -24,7 +24,7 @@ from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse
 from python_multipart.exceptions import MultipartParseError
 from python_multipart.multipart import MultipartParser, parse_options_header
-from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from allskyhub_server.api import connect
 from allskyhub_server.auth import ratelimit
@@ -190,7 +190,12 @@ def _camera(device: Device, meta: dict[str, Any]) -> None:
 
 
 async def _image(
-    db: AsyncSession, store: ImageStore, device: Device, meta: dict[str, Any], data: bytes
+    db: AsyncSession,
+    store: ImageStore,
+    maker: async_sessionmaker[AsyncSession],
+    device: Device,
+    meta: dict[str, Any],
+    data: bytes,
 ) -> None:
     """A frame (SPEC §10.3): the thumbnail as for ``POST /frames``; with ``detections`` the
     full frame is kept as a meteor candidate for the hub's own detection."""
@@ -214,7 +219,7 @@ async def _image(
         stars=int(_num(meta, "stars") or 0),
         sky_brightness=None,  # indi-allsky's sqm is its own scale, not mag/arcsec²
     )
-    await connect.store_frame(db, store, device, frame, pic.thumb)
+    await connect.store_frame(db, store, maker, device, frame, data, full_always=True)
     if (_num(meta, "detections") or 0) <= 0:
         return
     night = stations.night_id(start, stations.longitude(device))
@@ -256,7 +261,9 @@ async def sync(request: Request, db: DbSession, asset: str) -> JSONResponse:
             if request.method in ("POST", "PUT"):
                 _camera(device, meta)  # pyright: ignore[reportUnknownArgumentType]
         elif asset == "image" and request.method in ("POST", "PUT"):
-            await _image(db, request.app.state.images, device, meta, data)  # pyright: ignore[reportUnknownArgumentType]
+            facts: dict[str, Any] = meta  # pyright: ignore[reportUnknownVariableType]
+            maker = request.app.state.sessionmaker
+            await _image(db, request.app.state.images, maker, device, facts, data)
         elif asset == "image" and request.method == "GET":
             return JSONResponse({"error": "file_missing"}, status_code=400)
     except StationError as exc:

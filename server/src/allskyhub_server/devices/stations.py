@@ -253,7 +253,7 @@ class Picture:
     mean: float  # 0..255
 
 
-def _open(data: bytes) -> Image.Image:
+def open_jpeg(data: bytes) -> Image.Image:
     """A JPEG, its size checked from the header before anything is decoded."""
     try:
         im = Image.open(io.BytesIO(data))
@@ -271,7 +271,7 @@ def _open(data: bytes) -> Image.Image:
 def picture(data: bytes) -> Picture:
     """Size, a thumbnail and the mean of a JPEG; ``bad_image`` when it is none. Only a
     reduced draft is decoded (JPEG's DCT scaling); the full frame stays as sent."""
-    with _open(data) as im:
+    with open_jpeg(data) as im:
         width, height = im.size
         try:
             im.draft("RGB", (THUMB_SIDE, THUMB_SIDE))
@@ -302,7 +302,7 @@ PEAK_SIDE = 2048
 def track_peak(data: bytes, track: list[tuple[float, float]]) -> float:
     """The track's brightness on the 0..1 scale of SPEC §6.4 when the station sends none
     (§10.2): the brightest pixel along it above the sky's median, in a draft of the frame."""
-    with _open(data) as im:
+    with open_jpeg(data) as im:
         full_w, _ = im.size
         im.draft("L", (PEAK_SIDE, PEAK_SIDE))
         gray = im.convert("L")

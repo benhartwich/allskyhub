@@ -1,5 +1,5 @@
 version = 1
-revision = 5
+revision = 3
 requires-python = ">=3.11"
 resolution-markers = [
     "python_full_version >= '3.14'",
@@ -106,6 +106,7 @@ dependencies = [
     { name = "allskyhub-design" },
     { name = "allskyhub-protocol" },
     { name = "allskyhub-sky" },
+    { name = "allskyhub-solve" },
     { name = "argon2-cffi" },
     { name = "asyncpg" },
     { name = "cryptography" },
@@ -132,6 +133,7 @@ requires-dist = [
     { name = "allskyhub-design", editable = "packages/design" },
     { name = "allskyhub-protocol", editable = "packages/protocol" },
     { name = "allskyhub-sky", editable = "packages/sky" },
+    { name = "allskyhub-solve", editable = "packages/solve" },
     { name = "argon2-cffi", specifier = ">=25.1" },
     { name = "asyncpg", specifier = ">=0.30" },
     { name = "cryptography", specifier = ">=44" },

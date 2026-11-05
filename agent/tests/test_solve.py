@@ -14,7 +14,7 @@ import pytest
 from allskyhub_agent.calib import orientation as orientation_mod
 from allskyhub_agent.calib.orientation import OrientationConfig, Orienter
 from allskyhub_agent.calib.solve import Solution, catalogue, project, solve, unproject
-from allskyhub_protocol import FrameInfo, Mode, SkyMetrics
+from allskyhub_protocol import EventValue, FrameInfo, Mode, SkyMetrics
 
 H, W = 1080, 1920
 AT = datetime(2026, 10, 7, 21, 1, tzinfo=UTC)
@@ -185,9 +185,12 @@ def test_meteor_event_gets_its_sky_position(tmp_path: Path) -> None:
     assert ev.data["azimuth_deg"] == pytest.approx(90, abs=2)
     assert ev.data["altitude_deg"] == pytest.approx(45, abs=2)
     # SPEC §6.4 (C4): the ends lie on either side of the midpoint, one higher, one lower.
-    alts = sorted(
-        [float(ev.data["start_altitude_deg"] or 0), float(ev.data["end_altitude_deg"] or 0)]
-    )
-    mid = float(ev.data["altitude_deg"] or 0)
+    alts = sorted([_num(ev.data["start_altitude_deg"]), _num(ev.data["end_altitude_deg"])])
+    mid = _num(ev.data["altitude_deg"])
     assert alts[0] < mid < alts[1]
     assert ev.data["start_azimuth_deg"] is not None
+
+
+def _num(value: EventValue) -> float:
+    assert isinstance(value, int | float)
+    return float(value)

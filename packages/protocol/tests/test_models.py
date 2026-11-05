@@ -1,6 +1,7 @@
 """Protocol model tests (SPEC §6)."""
 
 from datetime import UTC, datetime, timedelta
+from typing import Any
 
 import pytest
 from pydantic import ValidationError
@@ -187,6 +188,34 @@ def test_event_ids_and_upload_event_args() -> None:
     assert a.variant.value == "full"
     with pytest.raises(ValidationError):
         UploadEventArgs.model_validate({"night_id": "20261006", "event_id": "../../etc"})
+
+
+def test_meteor_track_points() -> None:
+    """SPEC §6.4 `track`: 2-32 [azimuth, altitude] points, `track_rms_deg` 0-5."""
+
+    def meteor(data: dict[str, Any]) -> Event:
+        return Event(id="meteor-20261006T213000Z", night_id="20261006", kind=EventKind.METEOR,
+                     start=TS, end=TS, confidence=0.8, data=data)  # fmt: skip
+
+    track = [[164.9, 38.02], [185.3, 45.1], [205.11, 52.0]]
+    ev = meteor({"track": track, "track_rms_deg": 0.12, "peak": 0.95})
+    assert parse_envelope(Envelope.wrap(ev, ts=TS).model_dump_json()).body == ev
+    assert ev.data["track"] == track
+    assert meteor({"track": None, "track_rms_deg": None}).data["track"] is None
+    for bad in (
+        {"track": [[10.0, 20.0]]},  # one point
+        {"track": [[10.0, 20.0]] * 33},
+        {"track": [[10.0, 20.0, 1.0], [11.0, 21.0]]},
+        {"track": [[361.0, 20.0], [11.0, 21.0]]},
+        {"track": [[10.0, 91.0], [11.0, 21.0]]},
+        {"track": [[float("nan"), 20.0], [11.0, 21.0]]},
+        {"track_rms_deg": 5.5},
+        {"track_rms_deg": -0.1},
+        {"track_rms_deg": "0.2"},
+        {"frames": [[1.0, 2.0], [3.0, 4.0]]},  # only `track` is a list
+    ):
+        with pytest.raises(ValidationError):
+            meteor(bad)
 
 
 def test_set_settings_args() -> None:

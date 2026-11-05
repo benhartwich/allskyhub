@@ -11,6 +11,7 @@ import asyncio
 import datetime as dt
 import os
 import socket
+import uuid
 from collections.abc import AsyncIterator, Iterator
 from pathlib import Path
 
@@ -46,12 +47,39 @@ def pytest_collection_modifyitems(config: pytest.Config, items: list[pytest.Item
             item.add_marker(skip)
 
 
+async def _database(url: str, sql: str) -> bool:
+    """Run CREATE or DROP DATABASE through the given database (outside a transaction)."""
+    engine = create_async_engine(url, isolation_level="AUTOCOMMIT")
+    try:
+        async with engine.connect() as conn:
+            await conn.execute(text(sql))
+        return True
+    except Exception:  # no right to create databases: share the configured one
+        return False
+    finally:
+        await engine.dispose()
+
+
 @pytest.fixture(scope="session")
-def settings(tmp_path_factory: pytest.TempPathFactory) -> Settings:
+def test_database_url() -> Iterator[str]:
+    """A database of its own for this run, next to the configured one, so that runs at the
+    same time (two sessions, CI) never truncate each other's tables (2026-11-05)."""
     assert TEST_DB_URL
+    base, _, name = TEST_DB_URL.rpartition("/")
+    own = f"{name}_{os.getpid()}_{uuid.uuid4().hex[:6]}"
+    async_base = Settings(database_url=TEST_DB_URL).async_database_url
+    if not asyncio.run(_database(async_base, f'CREATE DATABASE "{own}"')):
+        yield TEST_DB_URL
+        return
+    yield f"{base}/{own}"
+    asyncio.run(_database(async_base, f'DROP DATABASE IF EXISTS "{own}" WITH (FORCE)'))
+
+
+@pytest.fixture(scope="session")
+def settings(tmp_path_factory: pytest.TempPathFactory, test_database_url: str) -> Settings:
     return Settings(
         env="dev",
-        database_url=TEST_DB_URL,
+        database_url=test_database_url,
         base_url="http://testserver",
         data_dir=tmp_path_factory.mktemp("data"),
         android_dir=tmp_path_factory.mktemp("android"),

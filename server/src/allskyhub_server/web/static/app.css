@@ -510,3 +510,27 @@ h1.break { overflow-wrap: anywhere; }
 .map.map-small { height: min(50vh, 380px); min-height: 260px; }
 .copy-value { overflow-wrap: anywhere; }
 .join-ways { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px; }
+
+/* Each platform's way on the apps page (_app_card.html): side by side on a desktop,
+   one under the other on a phone. */
+.platforms { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 16px; }
+.platform { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+.platform h3 { margin: 0; }
+.steps { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+.step { display: grid; grid-template-columns: 1.4rem 6.5rem 1fr; gap: 4px 8px; align-items: baseline; padding: 6px 8px; border-radius: 10px; }
+.step-icon { text-align: center; }
+.step-name { font-weight: 600; }
+.step-text { min-width: 0; overflow-wrap: anywhere; }
+.step-action { grid-column: 3; justify-self: start; }
+.step-todo { color: var(--text-2); }
+.step-todo .step-name { font-weight: 500; }
+.step-done .step-icon { color: var(--ok); }
+.step-current { background: var(--surface-2); outline: 1px solid var(--accent); }
+.step-current .step-icon { color: var(--accent); }
+.step-wait .step-icon, .step-store .step-icon { color: var(--warn); }
+.step-fail { background: var(--surface-2); outline: 1px solid var(--danger); }
+.step-fail .step-icon, .step-fail .step-name { color: var(--danger); }
+@media (max-width: 480px) {
+  .step { grid-template-columns: 1.4rem 1fr; }
+  .step-text, .step-action { grid-column: 2; }
+}

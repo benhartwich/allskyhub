@@ -6,7 +6,13 @@ It reads what the hub keeps (the Android job, Codemagic's build states, the last
 push and review submission) and what the stores say now (live-<app>.json, refreshed in
 the background at most every ten minutes): a release submitted by hand in the Play
 Console or App Store Connect counts too (Benjamin, 2026-10-29: rows said "failed" for
-apps that were in review). The rows are pure; the routes act.
+apps that were in review). The steps are pure; the routes act.
+
+Each platform shows its whole way as steps (Benjamin, 2026-11-05: "die anzeige ist so
+schlecht und verwirrend"): iOS built → sent to App Store Connect → processed by Apple →
+submitted → Apple's verdict; Android built → internal test → submitted → Google. One
+step is the current one and carries the one button; a store's verdict on an older build
+or version is only a note and never hides where the new build stands.
 """
 
 from __future__ import annotations
@@ -14,6 +20,7 @@ from __future__ import annotations
 import asyncio
 import datetime as dt
 import logging
+import re
 from dataclasses import dataclass, field
 from typing import Any, cast
 
@@ -65,6 +72,41 @@ COMMITS_DEFAULT_DAYS = 30  # how far back when no build is known
 
 
 @dataclass(frozen=True)
+class Step:
+    """One stage of a platform's way: done, current (the next thing to do), wait (the hub
+    or Codemagic is busy), store (Apple or Google have it), fail, or todo (later)."""
+
+    name: str
+    state: str
+    text: str = ""
+    at: str = ""  # ISO time, shown in the hub's zone
+    link: str | None = None
+    link_label: str = ""
+    action: str | None = None  # one of ACTIONS
+    label: str = ""
+
+
+@dataclass(frozen=True)
+class Steps:
+    store: str  # "Android" or "iOS"
+    version: str
+    steps: tuple[Step, ...]
+
+    @property
+    def row(self) -> Row:
+        """The one line for the overview and the commits line (_pending.html): the
+        current step, else the last one reached."""
+        tones = {"current": "todo", "wait": "wait", "fail": "fail"}
+        now = next((s for s in self.steps if s.state in tones), None)
+        if now is not None:
+            return Row(self.store, tones[now.state], now.text, now.action, now.label,
+                       now.link, now.link_label)  # fmt: skip
+        reached = [s for s in self.steps if s.state in ("done", "store")]
+        last = reached[-1] if reached else self.steps[0]
+        return Row(self.store, "done", last.text, None, "", last.link, last.link_label)
+
+
+@dataclass(frozen=True)
 class Row:
     store: str  # "Android" or "iOS"
     tone: str  # done, todo, wait, fail
@@ -82,6 +124,7 @@ class Card:
     package: str
     version: str
     rows: list[Row] = field(default_factory=lambda: list[Row]())
+    steps: list[Steps] = field(default_factory=lambda: list[Steps]())
     android: AndroidJob | None = None
     results: list[tuple[str, dict[str, Any]]] = field(
         default_factory=lambda: list[tuple[str, dict[str, Any]]]()
@@ -312,6 +355,94 @@ def _production(play: dict[str, Any] | None, code: str) -> dict[str, Any] | None
     return next((r for r in releases if code in (r.get("codes") or [])), None)
 
 
+def _steps(store: str, version: str, names: tuple[str, ...], *done: Step) -> Steps:
+    """The steps given, then the rest of ``names`` still to come."""
+    rest = tuple(Step(n, "todo") for n in names[len(done) :])
+    return Steps(store, version, (*done, *rest))
+
+
+ANDROID = ("Gebaut", "Interner Test", "Eingereicht", "Google")
+
+
+def android_steps(
+    version: str,
+    has_key: bool,
+    job: AndroidJob,
+    review: dict[str, Any] | None,
+    aab: str,
+    play: dict[str, Any] | None = None,
+) -> Steps:
+    latest = job.latest or {}
+
+    def way(*done: Step) -> Steps:
+        return _steps("Android", version, ANDROID, *done)
+
+    if not has_key:
+        return way(Step("Gebaut", "current", "Noch nicht eingerichtet.", action="setup",
+                        label="Einrichten"))  # fmt: skip
+    if job.busy:
+        return way(Step("Gebaut", "wait", "Der Server baut gerade das App Bundle …"))
+    number, built = latest.get("build"), str(latest.get("version", ""))
+    at = str(latest.get("built_at", ""))
+    made = Step("Gebaut", "done", f"Build {number} (Version {built})", at, aab or None,
+                "App Bundle ↓")  # fmt: skip
+    release = _production(play, str(number)) if latest and built == version else None
+    if release is not None:  # also when submitted by hand in the Play Console
+        status = release.get("status")
+        earlier = (made, Step("Interner Test", "done"), Step("Eingereicht", "done"))
+        if status == "draft":
+            draft = (f"Build {number} ({built}) liegt als Entwurf in der Produktion: in der "
+                     "Play Console einführen.")  # fmt: skip
+            return way(*earlier, Step("Google", "current", draft))
+        if status == "halted":
+            return way(*earlier, Step("Google", "fail", f"Build {number} ({built}): die "
+                       "Einführung ist angehalten (Play Console)."))  # fmt: skip
+        return way(*earlier, Step("Google", "store", f"Build {number} ({built}) ist in der "
+                   "Produktion: bei Google in Prüfung oder schon live."))  # fmt: skip
+    if job.state == "failed":
+        return way(Step("Gebaut", "fail", "Der letzte Build ist fehlgeschlagen (Protokoll "
+                        "unten).", action="build-android", label="Neu bauen"))  # fmt: skip
+    if not latest:
+        return way(Step("Gebaut", "current", "Noch kein Build.", action="build-android",
+                        label="Release bauen"))  # fmt: skip
+    if built != version:
+        other = f"Build {number} ist Version {built}, nicht {version}."
+        return way(Step("Gebaut", "current", other, at, action="build-android",
+                        label="Release bauen"))  # fmt: skip
+    if job.state == "built":
+        return way(made, Step("Interner Test", "current", f"Build {number} ist gebaut. "
+                   "Google kennt die App noch nicht: dieses erste App Bundle einmal von Hand "
+                   "in der Play Console hochladen.", link=aab, link_label="App Bundle "
+                   "herunterladen"))  # fmt: skip
+    tested = Step("Interner Test", "done", "Google Play: interner Test")
+    google = Step("Google", "todo", _older_release(play, str(number)))
+    if review and str(review.get("at", "")) > at:
+        steps: list[dict[str, Any]] = review.get("steps") or []
+        state, sent_at = _state(steps), str(review.get("at", ""))
+        if state == "fail":
+            return way(made, tested, Step("Eingereicht", "fail", f"Einreichen ging nicht: "
+                       f"{_text(steps)}", sent_at, action="review-play",
+                       label="Erneut einreichen"), google)  # fmt: skip
+        if state == "warn":  # a draft to roll out in the Play Console, or an account missing
+            return way(made, tested, Step("Eingereicht", "current", _text(steps), sent_at,
+                       action="review-play", label="Erneut einreichen"), google)  # fmt: skip
+        return way(made, tested, Step("Eingereicht", "done", _text(steps), sent_at), google)
+    return way(made, tested, Step("Eingereicht", "current", f"Build {number} (Version "
+               f"{built}) ist im internen Test.", action="review-play",
+               label="Zur Prüfung einreichen"), google)  # fmt: skip
+
+
+def _older_release(play: dict[str, Any] | None, code: str) -> str:
+    """A note on what Google has in production now, when it is another build."""
+    releases: list[dict[str, Any]] = (play or {}).get("production") or []
+    other = next((r for r in releases if code not in (r.get("codes") or [])), None)
+    if other is None:
+        return ""
+    found: list[Any] = other.get("codes") or []
+    codes = ", ".join(str(c) for c in found)
+    return f"zuletzt: Build {codes} in der Produktion ({other.get('status', '')})"
+
+
 def android_row(
     version: str,
     has_key: bool,
@@ -320,47 +451,123 @@ def android_row(
     aab: str,
     play: dict[str, Any] | None = None,
 ) -> Row:
-    latest = job.latest or {}
-    if not has_key:
-        return Row("Android", "todo", "Noch nicht eingerichtet.", "setup", "Einrichten")
-    if job.busy:
-        return Row("Android", "wait", "Der Server baut gerade das App Bundle …")
-    number, built = latest.get("build"), str(latest.get("version", ""))
-    release = _production(play, str(number)) if latest and built == version else None
-    if release is not None:  # also when submitted by hand in the Play Console
-        status = release.get("status")
-        if status == "draft":
-            return Row("Android", "todo", f"Build {number} ({built}) liegt als Entwurf in der "
-                       "Produktion: in der Play Console einführen.")  # fmt: skip
-        if status == "halted":
-            return Row("Android", "fail", f"Build {number} ({built}): die Einführung ist "
-                       "angehalten (Play Console).")  # fmt: skip
-        return Row("Android", "done", f"Build {number} ({built}) ist in der Produktion: bei "
-                   "Google in Prüfung oder schon live.")  # fmt: skip
-    if job.state == "failed":
-        return Row("Android", "fail", "Der letzte Build ist fehlgeschlagen (Protokoll unten).",
-                   "build-android", "Neu bauen")  # fmt: skip
-    if not latest:
-        return Row("Android", "todo", "Noch kein Build.", "build-android", "Release bauen")
-    if built != version:
-        return Row("Android", "todo", f"Build {number} ist Version {built}, nicht {version}.",
-                   "build-android", "Release bauen")  # fmt: skip
-    if job.state == "built":
-        return Row("Android", "todo",
-                   f"Build {number} ist gebaut. Google kennt die App noch nicht: dieses erste "
-                   "App Bundle einmal von Hand in der Play Console hochladen.",
-                   link=aab, link_label="App Bundle herunterladen")  # fmt: skip
-    if review and str(review.get("at", "")) > str(latest.get("built_at", "")):
-        steps: list[dict[str, Any]] = review.get("steps") or []
-        state = _state(steps)
-        if state == "fail":
-            return Row("Android", "fail", f"Einreichen ging nicht: {_text(steps)}",
-                       "review-play", "Erneut einreichen")  # fmt: skip
-        if state == "warn":  # a draft to roll out in the Play Console, or an account missing
-            return Row("Android", "todo", _text(steps), "review-play", "Erneut einreichen")
-        return Row("Android", "done", _text(steps))
-    return Row("Android", "todo", f"Build {number} (Version {built}) ist im internen Test.",
-               "review-play", "Zur Prüfung einreichen")  # fmt: skip
+    return android_steps(version, has_key, job, review, aab, play).row
+
+
+IOS = ("Gebaut", "Übertragen", "Bei Apple", "Eingereicht", "Apple")
+APPLE_SHORT = {"REJECTED": "abgelehnt", "METADATA_REJECTED": "abgelehnt (Texte)",
+               "INVALID_BINARY": "ungültiger Build", "DEVELOPER_REJECTED": "zurückgezogen",
+               "READY_FOR_SALE": "im App Store", "READY_FOR_DISTRIBUTION": "im App Store",
+               "PREPARE_FOR_SUBMISSION": "in Vorbereitung"}  # fmt: skip
+
+
+def _apple_note(apple: list[dict[str, str]] | None, version: str) -> str:
+    """What Apple last said about another version (a note, never the current step)."""
+    other = next((v for v in apple or [] if v.get("version") != version), None)
+    if other is None:
+        return ""
+    state = other.get("state", "")
+    return f"zuletzt: {other.get('version', '')} {APPLE_SHORT.get(state, state.lower())}"
+
+
+def ios_steps(
+    codemagic: bool,
+    build: dict[str, Any] | None,
+    pushed: dict[str, Any] | None,
+    review: dict[str, Any] | None,
+    apple: list[dict[str, str]] | None = None,
+    version: str = "",
+) -> Steps:
+    def way(*done: Step) -> Steps:
+        return _steps("iOS", version, IOS, *done)
+
+    if not codemagic:
+        return way(Step("Gebaut", "current", "Noch nicht eingerichtet.", action="setup",
+                        label="Einrichten"))  # fmt: skip
+    # Where Apple has the current version (also when submitted in App Store Connect).
+    there = next((v for v in apple or [] if v.get("version") == version), None)
+    state = (there or {}).get("state", "")
+    note = _apple_note(apple, version)
+    link = build_url(build) if build else None
+    status = str((build or {}).get("status") or "")
+    built_at = str((build or {}).get("at", ""))
+    steps: list[dict[str, Any]] = (pushed or {}).get("steps") or []
+    pushed_at = str((pushed or {}).get("at", ""))
+    chosen = next((s for s in steps if s.get("title") == "Build"), None)
+    fresh = bool(pushed) and pushed_at >= built_at and chosen is not None  # this build pushed
+    number = _build_number(str((chosen or {}).get("text", ""))) if fresh else ""
+    made = Step("Gebaut", "done", f"Build {number}" if number else "bei Codemagic", built_at,
+                link, "Codemagic ↗")  # fmt: skip
+    if state in APPLE_REVIEW:
+        apple_state = "done" if state in ("READY_FOR_SALE", "READY_FOR_DISTRIBUTION") else "store"
+        return Steps("iOS", version, (
+            made if build else Step("Gebaut", "done"), Step("Übertragen", "done"),
+            Step("Bei Apple", "done"), Step("Eingereicht", "done"),
+            Step("Apple", apple_state, f"Version {version} {APPLE_REVIEW[state]}."),
+        ))  # fmt: skip
+    rsteps: list[dict[str, Any]] = (review or {}).get("steps") or []
+    sent_at = str((review or {}).get("at", ""))
+    rejected = state in APPLE_REJECTED
+    if build is None:
+        if rejected:  # rejected, and no build started here: build anew
+            return way(Step("Gebaut", "current", f"Apple hat Version {version} abgelehnt; "
+                            "für einen neuen Versuch neu bauen.", action="build-ios",
+                            label="Release bauen"))  # fmt: skip
+        return way(Step("Gebaut", "current", "Noch kein Build.", action="build-ios",
+                        label="Release bauen"))  # fmt: skip
+    if status in CM_FAILED:
+        failed = f"Der letzte Build bei Codemagic: {status}."
+        return way(Step("Gebaut", "fail", failed, built_at, link, "Bei Codemagic ansehen",
+                        "build-ios", "Neu bauen"))  # fmt: skip
+    if status not in CM_DONE:
+        return way(Step("Gebaut", "wait", f"Codemagic baut ({status or 'gestartet'}) …",
+                        built_at, link, "Bei Codemagic ansehen"))  # fmt: skip
+    verdict = Step("Apple", "todo", f"zuletzt: {version} abgelehnt" if rejected else note)
+    if pushed and pushed.get("running"):
+        return way(made, Step("Übertragen", "wait", "Die Übertragung zum App Store läuft …"),
+                   Step("Bei Apple", "todo"), Step("Eingereicht", "todo"), verdict)  # fmt: skip
+    if not fresh:
+        return way(made, Step("Übertragen", "current", "Der Build ist fertig. Jetzt Texte, "
+                   "Screenshots und Build zum App Store übertragen.", action="appstore",
+                   label="App Store übertragen"), Step("Bei Apple", "todo"),
+                   Step("Eingereicht", "todo"), verdict)  # fmt: skip
+    sent = Step("Übertragen", "done", "Texte, Screenshots und Build", pushed_at)
+    if (chosen or {}).get("state") != "ok":
+        return way(made, sent, Step("Bei Apple", "current", "Apple verarbeitet den Build noch "
+                   "(dauert meist 10–30 Minuten); danach noch einmal übertragen.",
+                   action="appstore", label="App Store übertragen"),
+                   Step("Eingereicht", "todo"), verdict)  # fmt: skip
+    ready = Step("Bei Apple", "done", f"{(chosen or {}).get('text', '')} In TestFlight.".strip())
+    if review and sent_at > pushed_at:  # submitted after this push
+        if any(s.get("title") in appstore.TO_PUSH for s in rsteps):  # the new build next
+            return way(made, Step("Übertragen", "current", _text(rsteps), sent_at,
+                       action="appstore", label="App Store übertragen"),
+                       Step("Bei Apple", "todo"), Step("Eingereicht", "todo"), verdict)  # fmt: skip
+        if _state(rsteps) == "fail":
+            return way(made, sent, ready, Step("Eingereicht", "fail", f"Einreichen ging nicht: "
+                       f"{_text(rsteps)}", sent_at, action="review-appstore",
+                       label="Erneut einreichen"), verdict)  # fmt: skip
+        if _state(rsteps) == "warn":
+            return way(made, sent, ready, Step("Eingereicht", "current", _text(rsteps), sent_at,
+                       action="review-appstore", label="Erneut einreichen"), verdict)  # fmt: skip
+        if rejected:  # what was submitted here came back
+            return way(made, sent, ready, Step("Eingereicht", "done", _text(rsteps), sent_at),
+                       Step("Apple", "fail", f"Apple hat Version {version} abgelehnt; die "
+                            "Begründung steht in App Store Connect (App-Prüfung).",
+                            action="review-appstore", label="Erneut einreichen"))  # fmt: skip
+        return way(made, sent, ready, Step("Eingereicht", "done", _text(rsteps), sent_at),
+                   Step("Apple", "todo", note))  # fmt: skip
+    # This build went to Apple after the last submission: a rejection is only a note now.
+    return way(made, sent, ready, Step("Eingereicht", "current", "Bereit für die Prüfung.",
+               action="review-appstore",
+               label="Erneut einreichen" if rejected else "Zur Prüfung einreichen"),
+               verdict)  # fmt: skip
+
+
+def _build_number(text: str) -> str:
+    """ "Build 57 gewählt." → "57"."""
+    found = re.search(r"Build (\S+?)[ .]", text)
+    return found[1] if found else ""
 
 
 def ios_row(
@@ -371,50 +578,7 @@ def ios_row(
     apple: list[dict[str, str]] | None = None,
     version: str = "",
 ) -> Row:
-    if not codemagic:
-        return Row("iOS", "todo", "Noch nicht eingerichtet.", "setup", "Einrichten")
-    # Where Apple has the current version (also when submitted in App Store Connect).
-    there = next((v for v in apple or [] if v.get("version") == version), None)
-    state = (there or {}).get("state", "")
-    if state in APPLE_REVIEW:
-        return Row("iOS", "done", f"Version {version} {APPLE_REVIEW[state]}.")
-    if state in APPLE_REJECTED:
-        return Row("iOS", "fail", f"Apple hat Version {version} abgelehnt; die Begründung "
-                   "steht in App Store Connect (App-Prüfung).", "review-appstore",
-                   "Erneut einreichen")  # fmt: skip
-    if build is None:
-        return Row("iOS", "todo", "Noch kein Build.", "build-ios", "Release bauen")
-    link, status = build_url(build), str(build.get("status") or "")
-    if status in CM_FAILED:
-        return Row("iOS", "fail", f"Der letzte Build bei Codemagic: {status}.", "build-ios",
-                   "Neu bauen", link, "Bei Codemagic ansehen")  # fmt: skip
-    if status not in CM_DONE:
-        return Row("iOS", "wait", f"Codemagic baut ({status or 'gestartet'}) …",
-                   link=link, link_label="Bei Codemagic ansehen")  # fmt: skip
-    built_at = str(build.get("at", ""))
-    if pushed and pushed.get("running"):
-        return Row("iOS", "wait", "Die Übertragung zum App Store läuft …")
-    steps: list[dict[str, Any]] = (pushed or {}).get("steps") or []
-    chosen = next((s for s in steps if s.get("title") == "Build"), None)
-    if not pushed or str(pushed.get("at", "")) < built_at or chosen is None:
-        return Row("iOS", "todo", "Der Build ist fertig. Jetzt Texte, Screenshots und Build "
-                   "zum App Store übertragen.", "appstore", "App Store übertragen")  # fmt: skip
-    if chosen.get("state") != "ok":
-        return Row("iOS", "todo", "Apple verarbeitet den Build noch (dauert meist 10–30 "
-                   "Minuten); danach noch einmal übertragen.", "appstore",
-                   "App Store übertragen")  # fmt: skip
-    if review and str(review.get("at", "")) > str(pushed.get("at", "")):
-        rsteps: list[dict[str, Any]] = review.get("steps") or []
-        if any(s.get("title") in appstore.TO_PUSH for s in rsteps):  # the new build next
-            return Row("iOS", "todo", _text(rsteps), "appstore", "App Store übertragen")
-        if _state(rsteps) == "fail":
-            return Row("iOS", "fail", f"Einreichen ging nicht: {_text(rsteps)}",
-                       "review-appstore", "Erneut einreichen")  # fmt: skip
-        if _state(rsteps) == "warn":
-            return Row("iOS", "todo", _text(rsteps), "review-appstore", "Erneut einreichen")
-        return Row("iOS", "done", _text(rsteps))
-    return Row("iOS", "todo", f"{chosen.get('text', '')} Bereit für die Prüfung.",
-               "review-appstore", "Zur Prüfung einreichen")  # fmt: skip
+    return ios_steps(codemagic, build, pushed, review, apple, version).row
 
 
 async def cards(stores: Stores, only: str | None = None) -> list[Card]:
@@ -445,13 +609,13 @@ async def cards(stores: Stores, only: str | None = None) -> list[Card]:
                                str((job.latest or {}).get("built_at", ""))),
             "ios": pending(commits, "", _ios_at(stores, key, live)),
         }  # fmt: skip
-        card.rows.append(
-            android_row(
+        card.steps.append(
+            android_steps(
                 version,
                 stores.vault.has(app.android_upload if app else "android_upload"),
                 job,
                 stores.vault.read_json(review_file(key, "play")),
-                f"/admin/stores-android/{latest_file}",
+                f"/admin/stores-android/{latest_file}" if latest_file else "",
                 live.get("play"),
             )
         )
@@ -466,8 +630,8 @@ async def cards(stores: Stores, only: str | None = None) -> list[Card]:
             None,
         )  # fmt: skip
         pushed = appstore.state(stores, app)
-        card.rows.append(
-            ios_row(
+        card.steps.append(
+            ios_steps(
                 bool(codemagic),
                 ios_build,
                 pushed,
@@ -476,6 +640,7 @@ async def cards(stores: Stores, only: str | None = None) -> list[Card]:
                 version,
             )
         )
+        card.rows = [s.row for s in card.steps]
         listing = stores.listing_state(app)
         found = stores.apk(key)
         card.apk = found[1] if found else None

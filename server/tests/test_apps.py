@@ -84,8 +84,9 @@ def test_rows_follow_what_the_stores_say() -> None:
     live = [{"version": "1.1.0", "state": "READY_FOR_SALE"}]
     assert apps.ios_row(True, None, None, None, live, "1.1.0").status.endswith("im App Store.")
     rejected = [{"version": "1.1.0", "state": "REJECTED"}]
+    # A finished build not yet sent to Apple comes first; the rejection is a note.
     row = apps.ios_row(True, build, None, None, rejected, "1.1.0")
-    assert (row.tone, row.action) == ("fail", "review-appstore")
+    assert (row.tone, row.action) == ("todo", "appstore")
     # Another version waiting does not count for this one.
     assert apps.ios_row(True, None, None, None, waiting, "1.2.0").action == "build-ios"
 
@@ -163,10 +164,15 @@ def test_ios_steps() -> None:
     pushed = {"at": "2026-10-28T15:00:00+00:00", "steps": [
         {"title": "Build", "state": "ok", "text": "Build 57 gewählt."}]}  # fmt: skip
     row = apps.ios_row(True, done, pushed, None)
-    assert (row.action, row.status) == (
+    assert (row.action, row.label, row.status) == (
         "review-appstore",
-        "Build 57 gewählt. Bereit für die Prüfung.",
+        "Zur Prüfung einreichen",
+        "Bereit für die Prüfung.",
     )
+    way = apps.ios_steps(True, done, pushed, None)
+    assert [s.state for s in way.steps] == ["done", "done", "done", "current", "todo"]
+    assert way.steps[0].text == "Build 57"
+    assert way.steps[2].text.startswith("Build 57 gewählt.")
     text = "Version 1.1.0 mit Build 57 ist zur Prüfung eingereicht."
     sent = {
         "at": "2026-10-28T15:10:00+00:00",
@@ -559,3 +565,105 @@ def test_a_build_on_mains_state_says_what_comes_next() -> None:
     text = str(macro(card))  # pyright: ignore[reportUnknownArgumentType]
     assert "Android → 2 neue Commits" in text
     assert "bereit" not in text
+
+
+def _names(way: apps.Steps) -> list[tuple[str, str]]:
+    return [(s.name, s.state) for s in way.steps]
+
+
+def test_ios_steps_after_a_rejection() -> None:
+    """Benjamin, 2026-11-05: Apple's rejection of what was submitted before must not hide
+    where the new build stands (Vinventory 0.1.0 rejected, 1.0.0 built)."""
+    build: dict[str, Any] = {"id": "CM", "app_id": "A", "status": "finished",
+                             "at": "2026-11-05T13:00:00+00:00"}  # fmt: skip
+    before = [{"version": "0.1.0", "state": "REJECTED"}]
+    way = apps.ios_steps(True, build, None, None, before, "1.0.0")
+    assert _names(way) == [
+        ("Gebaut", "done"),
+        ("Übertragen", "current"),
+        ("Bei Apple", "todo"),
+        ("Eingereicht", "todo"),
+        ("Apple", "todo"),
+    ]
+    assert way.steps[-1].text == "zuletzt: 0.1.0 abgelehnt"
+    assert way.steps[1].action == "appstore"
+
+    # The hub renamed the rejected version to 1.0.0 and put the new build on it.
+    renamed = [{"version": "1.0.0", "state": "REJECTED"}]
+    sent = {"title": "Prüfung", "state": "ok", "text": "Eingereicht."}
+    submitted = {"at": "2026-11-04T10:00:00+00:00", "steps": [sent]}
+    chosen = {"title": "Build", "state": "ok", "text": "Build 14 gewählt."}
+    pushed = {"at": "2026-11-05T14:00:00+00:00", "steps": [chosen]}
+    way = apps.ios_steps(True, build, pushed, submitted, renamed, "1.0.0")
+    assert way.row.action == "review-appstore"
+    assert way.row.tone == "todo"  # not "fail": the rejection was of the old build
+    current = way.steps[3]
+    assert (current.name, current.state, current.label) == (
+        "Eingereicht", "current", "Erneut einreichen")  # fmt: skip
+    assert way.steps[-1].text == "zuletzt: 1.0.0 abgelehnt"
+    assert way.steps[0].text == "Build 14"
+
+    # Submitted after that push and rejected again: then it is Apple's verdict on it.
+    again = {**submitted, "at": "2026-11-05T15:00:00+00:00"}
+    way = apps.ios_steps(True, build, pushed, again, renamed, "1.0.0")
+    assert way.steps[-1].state == "fail"
+    assert way.row.action == "review-appstore"
+    assert way.row.tone == "fail"
+
+
+def test_ios_steps_at_apple_and_on_the_way() -> None:
+    build: dict[str, Any] = {"id": "CM", "app_id": "A", "status": "building",
+                             "at": "2026-11-05T13:00:00+00:00"}  # fmt: skip
+    way = apps.ios_steps(True, build, None, None, None, "1.0.0")
+    assert _names(way)[0] == ("Gebaut", "wait")
+    assert way.steps[0].link == "https://codemagic.io/app/A/build/CM"
+    review = [{"version": "1.0.0", "state": "IN_REVIEW"}]
+    way = apps.ios_steps(True, {**build, "status": "finished"}, None, None, review, "1.0.0")
+    assert [s.state for s in way.steps] == ["done", "done", "done", "done", "store"]
+    assert way.row.tone == "done"
+    assert way.row.status == "Version 1.0.0 wird von Apple geprüft."
+
+
+def test_android_steps_as_a_way() -> None:
+    way = apps.android_steps("1.1.0", True, _job(), None, "/admin/stores-android/a.aab")
+    assert _names(way) == [("Gebaut", "done"), ("Interner Test", "done"),
+                           ("Eingereicht", "current"), ("Google", "todo")]  # fmt: skip
+    assert way.steps[0].text == "Build 323 (Version 1.1.0)"
+    assert way.steps[0].at == "2026-10-28T14:13:47Z"
+    assert way.steps[0].link == "/admin/stores-android/a.aab"
+    # Google has an older build in production: a note on the last step.
+    older = {"production": [{"status": "completed", "codes": ["322"]}]}
+    way = apps.android_steps("1.1.0", True, _job(), None, "", older)
+    assert way.steps[-1].text == "zuletzt: Build 322 in der Produktion (completed)"
+    assert way.steps[2].state == "current"
+    live = {"production": [{"status": "completed", "codes": ["323"]}]}
+    way = apps.android_steps("1.1.0", True, _job(), None, "", live)
+    assert way.steps[-1].state == "store"
+    failed = apps.android_steps("1.1.0", True, _job("failed"), None, "")
+    assert (failed.steps[0].state, failed.steps[0].label) == ("fail", "Neu bauen")
+
+
+def test_the_card_shows_the_ways(tmp_path: Path) -> None:
+    """The steps as the page renders them (_app_card.html), with the one button."""
+    from allskyhub_server.web.templating import templates
+
+    card = apps.Card("vinventory", "Vinventory", "eu.vinventory.app", "1.0.0")
+    build: dict[str, Any] = {"id": "CM", "app_id": "A", "status": "finished",
+                             "at": "2026-11-05T13:00:00+00:00"}  # fmt: skip
+    card.steps = [
+        apps.android_steps("1.0.0", True, _job(version="1.0.0"), None, "/a.aab"),
+        apps.ios_steps(True, build, None, None, [{"version": "0.1.0", "state": "REJECTED"}],
+                       "1.0.0"),
+    ]  # fmt: skip
+    card.rows = [w.row for w in card.steps]
+    html = templates.env.get_template("_app_card.html").render(
+        card=card,
+        titles={},
+        android_busy="",
+        csrf_token="t",  # noqa: S106
+    )
+    assert html.count('aria-current="step"') == 2  # one current step per platform
+    assert "zuletzt: 0.1.0 abgelehnt" in html
+    assert 'value="appstore"' in html
+    assert 'value="review-play"' in html
+    assert "Codemagic ↗" in html

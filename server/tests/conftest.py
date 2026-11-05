@@ -22,6 +22,7 @@ from alembic import command
 from alembic.config import Config
 from fastapi import FastAPI
 from sqlalchemy import text
+from sqlalchemy.engine import make_url
 from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
 
 from allskyhub_server.app import create_app
@@ -61,25 +62,25 @@ async def _database(url: str, sql: str) -> bool:
 
 
 @pytest.fixture(scope="session")
-def test_database_url() -> Iterator[str]:
+def database_url() -> Iterator[str]:
     """A database of its own for this run, next to the configured one, so that runs at the
     same time (two sessions, CI) never truncate each other's tables (2026-11-05)."""
     assert TEST_DB_URL
-    base, _, name = TEST_DB_URL.rpartition("/")
-    own = f"{name}_{os.getpid()}_{uuid.uuid4().hex[:6]}"
+    url = make_url(TEST_DB_URL)  # keeps a query such as ?sslmode=… intact
+    own = f"{url.database}_{os.getpid()}_{uuid.uuid4().hex[:6]}"
     async_base = Settings(database_url=TEST_DB_URL).async_database_url
     if not asyncio.run(_database(async_base, f'CREATE DATABASE "{own}"')):
         yield TEST_DB_URL
         return
-    yield f"{base}/{own}"
+    yield url.set(database=own).render_as_string(hide_password=False)
     asyncio.run(_database(async_base, f'DROP DATABASE IF EXISTS "{own}" WITH (FORCE)'))
 
 
 @pytest.fixture(scope="session")
-def settings(tmp_path_factory: pytest.TempPathFactory, test_database_url: str) -> Settings:
+def settings(tmp_path_factory: pytest.TempPathFactory, database_url: str) -> Settings:
     return Settings(
         env="dev",
-        database_url=test_database_url,
+        database_url=database_url,
         base_url="http://testserver",
         data_dir=tmp_path_factory.mktemp("data"),
         android_dir=tmp_path_factory.mktemp("android"),

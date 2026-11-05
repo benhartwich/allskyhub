@@ -555,8 +555,9 @@ A `meteor` may also carry `track` (optional): its streak as 2–32 points
 end in `start_*` to the end in `end_*`, and `track_rms_deg` (optional, 0–5): how far these
 directions may be off, from the local fit of §4.8 when it succeeded, otherwise the
 orientation's `rms_deg`. Like the ends, `track` is null while the clock is not trusted.
-With it the hub fits the meteor's plane through all points instead of both ends and
-weights the camera by `track_rms_deg`; cameras without it pair as before.
+After a trial in which the hub only collects them (roadmap N1c), the hub fits the meteor's
+plane through all points instead of both ends and weights the camera by `track_rms_deg`;
+cameras without it pair as before.
 
 A meteor's `shower` depends on `shower_match`:
 

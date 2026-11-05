@@ -1,16 +1,26 @@
-"""Where a meteor flew, from two cameras (roadmap C4, SPEC §6.4 track ends).
+"""Where a meteor flew, from two cameras or more (roadmap C4, SPEC §6.4 track ends).
 
 Each camera sees the track as two directions (azimuth, altitude of both ends); together with
 the camera's position they span a plane. Two cameras' planes meet in the meteor's line of
 flight; the ends each camera saw are the points on that line closest to its end rays.
 Heights are above the WGS84 ellipsoid. Without the direction of flight (``track_ordered``
 false) the result has no "begin" and "end", just two ends, the higher listed first.
+
+``solve`` takes every camera that saw the meteor at once: the line closest to all planes
+(least squares, a plane weighted by the track's length on the sky over the camera's error),
+and each end as the weighted mean of where the cameras' end rays meet it. That assumes all
+of them saw the whole glow, as one long exposure does; a track cut by a horizon pulls its
+end a little. How far to trust it comes from solving again with the directions shaken by
+each camera's plate-solve error (Monte Carlo; Benjamin, 2026-11-05).
 """
 
 from __future__ import annotations
 
 import math
+import random
 from dataclasses import dataclass
+
+import numpy as np
 
 A = 6378.137  # WGS84, km
 F = 1 / 298.257223563
@@ -21,6 +31,12 @@ MIN_CONVERGENCE_DEG = 10.0
 MIN_HEIGHT_KM, MAX_HEIGHT_KM = 15.0, 180.0
 # Part of the shorter of the two seen stretches that both cameras must have in common.
 MIN_OVERLAP = 0.3
+# The error of a camera's directions (one sigma, degrees) when it reports none, about a plate
+# solve's usual RMS (SPEC §4.8 accepts up to 0.6°); never less than a pixel or so.
+DEFAULT_SIGMA_DEG = 0.3
+MIN_SIGMA_DEG, MAX_SIGMA_DEG = 0.1, 5.0
+# Solutions with shaken directions; fewer than half of them valid: no error to give.
+RUNS = 200
 
 Vec = tuple[float, float, float]
 
@@ -100,6 +116,7 @@ class Sighting:
     height_km: float
     end1: tuple[float, float]  # azimuth, altitude
     end2: tuple[float, float]
+    sigma_deg: float = DEFAULT_SIGMA_DEG
 
 
 @dataclass(frozen=True)
@@ -163,6 +180,130 @@ def triangulate(s1: Sighting, s2: Sighting) -> Trajectory | None:
     pts = sorted((Point(lat, lon, h) for lat, lon, h in points), key=lambda p: -p.height_km)
     return Trajectory(
         (pts[0], pts[1]), length_km=_norm(_sub(ends[0], ends[1])), convergence_deg=angle
+    )
+
+
+@dataclass(frozen=True)
+class Solution:
+    """All cameras' trajectory and how far its ends may be off (one sigma, km)."""
+
+    trajectory: Trajectory
+    cameras: int
+    high_err_km: float | None
+    low_err_km: float | None
+
+
+def _fit(
+    origins: list[Vec], rays: list[tuple[Vec, Vec]], sigmas: list[float]
+) -> tuple[Vec, Vec] | None:
+    """The line closest to all cameras' planes and its two ends, ECEF."""
+    normals: list[Vec] = []
+    weights: list[float] = []
+    for (d1, d2), sigma in zip(rays, sigmas, strict=True):
+        n = _cross(d1, d2)
+        if _norm(n) < 1e-9:
+            return None
+        # |d1 x d2| is the sine of the track's length: a short track tilts its plane easily.
+        weights.append((_norm(n) / sigma) ** 2)
+        normals.append(_unit(n))
+    nm = np.array(normals, dtype=np.float64)
+    w = np.array(weights, dtype=np.float64)
+    m = (nm * w[:, None]).T @ nm
+    _, vectors = np.linalg.eigh(m)
+    line_d: Vec = (float(vectors[0, 0]), float(vectors[1, 0]), float(vectors[2, 0]))
+    # The point on the line nearest the cameras' centre fixes it along its direction.
+    centre: Vec = (0.0, 0.0, 0.0)
+    for o in origins:
+        centre = _add(centre, o)
+    centre = _mul(centre, 1 / len(origins))
+    rows = np.array(
+        [_mul(n, math.sqrt(wi)) for n, wi in zip(normals, weights, strict=True)] + [line_d],
+        dtype=np.float64,
+    )
+    rhs = np.array(
+        [math.sqrt(wi) * _dot(n, o) for n, o, wi in zip(normals, origins, weights, strict=True)]
+        + [_dot(line_d, centre)],
+        dtype=np.float64,
+    )
+    found = np.linalg.lstsq(rows, rhs, rcond=None)[0]
+    line_p: Vec = (float(found[0]), float(found[1]), float(found[2]))
+    # Each camera's ends along the line, the lower one first; a ray that meets the line at
+    # a flat angle, or a camera with a rough solve, places its end loosely.
+    ends: list[tuple[float, float]] = [(0.0, 0.0), (0.0, 0.0)]
+    for o, pair, sigma in zip(origins, rays, sigmas, strict=True):
+        placed = sorted(
+            (_dot(_sub(_closest_on_line(line_p, line_d, o, d), line_p), line_d),
+             (1 - _dot(d, line_d) ** 2) / sigma**2)
+            for d in pair
+        )  # fmt: skip
+        for i, (t, w_end) in enumerate(placed):
+            ends[i] = (ends[i][0] + t * w_end, ends[i][1] + w_end)
+    if ends[0][1] <= 0 or ends[1][1] <= 0:
+        return None
+    t_lo, t_hi = ends[0][0] / ends[0][1], ends[1][0] / ends[1][1]
+    return _add(line_p, _mul(line_d, t_lo)), _add(line_p, _mul(line_d, t_hi))
+
+
+def _rays(s: Sighting, rng: random.Random | None = None) -> tuple[Vec, Vec]:
+    out: list[Vec] = []
+    for az, alt in (s.end1, s.end2):
+        if rng is not None:
+            sigma = min(max(s.sigma_deg, MIN_SIGMA_DEG), MAX_SIGMA_DEG)
+            az += rng.gauss(0, sigma) / max(math.cos(math.radians(alt)), 0.05)
+            alt += rng.gauss(0, sigma)
+        out.append(direction(s.lat, s.lon, az, alt))
+    return out[0], out[1]
+
+
+def _ends(ends: tuple[Vec, Vec]) -> tuple[Point, Point] | None:
+    """Higher end first; None off meteor heights."""
+    points = [Point(*geodetic(p)) for p in ends]
+    if not all(MIN_HEIGHT_KM <= p.height_km <= MAX_HEIGHT_KM for p in points):
+        return None
+    high, low = sorted(points, key=lambda p: -p.height_km)
+    return high, low
+
+
+def solve(sightings: list[Sighting], seed: str = "") -> Solution | None:
+    """One trajectory from all cameras (they passed ``triangulate`` in pairs); ``seed``
+    makes the shaken solutions repeatable."""
+    if len(sightings) < 2:
+        return None
+    origins = [ecef(s.lat, s.lon, s.height_km) for s in sightings]
+    sigmas = [min(max(s.sigma_deg, MIN_SIGMA_DEG), MAX_SIGMA_DEG) for s in sightings]
+    rays = [_rays(s) for s in sightings]
+    fitted = _fit(origins, rays, sigmas)
+    ends = _ends(fitted) if fitted is not None else None
+    if fitted is None or ends is None:
+        return None
+    normals = [_unit(_cross(*r)) for r in rays]
+    convergence = max(
+        math.degrees(math.acos(min(1.0, abs(_dot(a, b)))))
+        for i, a in enumerate(normals)
+        for b in normals[i + 1 :]
+    )
+    high, low = ends
+    nominal = (ecef(high.lat, high.lon, high.height_km), ecef(low.lat, low.lon, low.height_km))
+    rng = random.Random(seed)
+    spread: list[tuple[float, float]] = []
+    for _ in range(RUNS):
+        shaken = _fit(origins, [_rays(s, rng) for s in sightings], sigmas)
+        got = _ends(shaken) if shaken is not None else None
+        if got is None:
+            continue
+        a, b = (ecef(p.lat, p.lon, p.height_km) for p in got)
+        spread.append((_norm(_sub(a, nominal[0])), _norm(_sub(b, nominal[1]))))
+    errors: tuple[float | None, float | None] = (None, None)
+    if len(spread) >= RUNS // 2:
+        errors = (
+            math.sqrt(sum(h * h for h, _ in spread) / len(spread)),
+            math.sqrt(sum(lo * lo for _, lo in spread) / len(spread)),
+        )
+    return Solution(
+        Trajectory((high, low), length_km=_norm(_sub(*fitted)), convergence_deg=convergence),
+        cameras=len(sightings),
+        high_err_km=errors[0],
+        low_err_km=errors[1],
     )
 
 

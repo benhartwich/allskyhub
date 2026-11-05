@@ -113,12 +113,19 @@ async def fireball_page(
     if pair is None or cameras is None:
         raise HTTPException(404)
     item = _item(pair)
+    # The further cameras of a meteor solved together (devices/meteor_pairs.py).
+    more = [
+        d
+        for device_id in pair.cameras
+        if device_id not in (pair.device_a, pair.device_b)
+        and (d := await db.get(Device, device_id)) is not None
+    ]
     return render(
         request,
         "fireball.html",
         {
             **item,
-            "cameras": [_camera(d, session) for d in cameras],
+            "cameras": [_camera(d, session) for d in (*cameras, *more)],
             "map_config": _map_config(pair, item["area"]),
             "end_km": fireball.METEORITE_END_KM,
             "fireball_form": science.FIREBALL_FORM,

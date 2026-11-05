@@ -99,13 +99,15 @@ def fall_area(pair: MeteorPair) -> FallArea | None:
     straight = pair.low_km * ground / drop
     near_km = min(LIGHT_SHARE * straight, MAX_DARK_FLIGHT_KM)
     far_km = max(min(HEAVY_SHARE * straight, MAX_DARK_FLIGHT_KM), near_km + 2.0)
+    # Where the glow ended is only known to ``low_err_km`` (one sigma): the strip grows by it.
+    err = pair.low_err_km or 0.0
     return FallArea(
         end_km=pair.low_km,
         azimuth_deg=azimuth,
         slope_deg=slope,
-        near=destination(pair.low_lat, pair.low_lon, azimuth, near_km),
-        far=destination(pair.low_lat, pair.low_lon, azimuth, far_km),
-        half_width_km=BASE_HALF_WIDTH_KM + WIND_PER_KM_HEIGHT * pair.low_km,
+        near=destination(pair.low_lat, pair.low_lon, azimuth, max(near_km - err, 0.0)),
+        far=destination(pair.low_lat, pair.low_lon, azimuth, far_km + err),
+        half_width_km=BASE_HALF_WIDTH_KM + WIND_PER_KM_HEIGHT * pair.low_km + err,
     )
 
 

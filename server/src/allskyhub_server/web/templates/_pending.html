@@ -1,4 +1,5 @@
-{# main's new app commits against a platform's last build (admin/apps.py pending). #}
+{# main's new app commits against a platform's last build (admin/apps.py pending); a build
+   on main's state also says what comes next (Benjamin, 2026-11-05). #}
 {% macro pending(card) -%}
-{% for platform, label in (('android', 'Android'), ('ios', 'iOS')) %}{% set n = card.pending.get(platform) %}<span class="{{ 'muted' if n is none else ('tone-done' if n == 0 else 'tone-todo') }}">{{ label }} {% if n is none %}– unbekannt{% elif n == 0 %}✓ aktuell{% else %}→ {{ n }}{% if n >= 100 %}+{% endif %} neue{% if n == 1 %}r{% endif %} Commit{% if n != 1 %}s{% endif %}{% endif %}</span>{% if not loop.last %} · {% endif %}{% endfor %}
+{% for platform, label in (('android', 'Android'), ('ios', 'iOS')) %}{% set n = card.pending.get(platform) %}{% set row = card.rows | selectattr('store', 'equalto', label) | first %}<span class="{{ 'muted' if n is none else ('tone-done' if n == 0 else 'tone-todo') }}">{{ label }} {% if n is none %}– unbekannt{% elif n == 0 %}✓ aktuell{% if row and row.action in ('review-play', 'review-appstore', 'appstore') %}, bereit zum Einreichen{% elif row and row.tone == 'done' %}, eingereicht{% endif %}{% else %}→ {{ n }}{% if n >= 100 %}+{% endif %} neue{% if n == 1 %}r{% endif %} Commit{% if n != 1 %}s{% endif %}{% endif %}</span>{% if not loop.last %} · {% endif %}{% endfor %}
 {%- endmacro %}

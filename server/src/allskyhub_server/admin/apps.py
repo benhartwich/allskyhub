@@ -96,6 +96,7 @@ class Card:
     # The demo account for the screenshot run: None when the app needs none, "" when it
     # is not entered yet, else its login (OtherApp.review_vars).
     review_login: str | None = None
+    review_at: str = ""  # when the demo account was saved
 
     @property
     def waiting(self) -> bool:
@@ -432,7 +433,9 @@ async def cards(stores: Stores, only: str | None = None) -> list[Card]:
         # need an account a simulator run would not have.
         card.screenshots = bool(app and app.screenshots)
         if app and app.review_vars:
-            card.review_login = str((stores.vault.meta(app.review) or {}).get("login", ""))
+            saved = stores.vault.meta(app.review) or {}
+            card.review_login = str(saved.get("login", ""))
+            card.review_at = str(saved.get("at", ""))
         latest_file = str((job.latest or {}).get("file", ""))
         live = live_of(stores, key)
         card.live_at = str(live.get("at", ""))

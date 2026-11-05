@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import datetime as dt
 import logging
+import math
 import uuid
 from collections.abc import Awaitable, Callable
 from typing import Any
@@ -38,7 +39,7 @@ _ENDS = ("start_azimuth_deg", "start_altitude_deg", "end_azimuth_deg", "end_alti
 def sighting(device: Device, event: EventRecord) -> triangulation.Sighting | None:
     data: dict[str, Any] = event.data or {}
     values = [data.get(k) for k in _ENDS]
-    if not all(isinstance(v, int | float) for v in values):
+    if not all(isinstance(v, int | float) and math.isfinite(v) for v in values):
         return None
     settings: dict[str, Any] = (device.last_status or {}).get("settings") or {}
     lat, lon = settings.get("latitude"), settings.get("longitude")
@@ -50,7 +51,9 @@ def sighting(device: Device, event: EventRecord) -> triangulation.Sighting | Non
     # The plate solve's error (SPEC §6.3 status `orientation`) is how far its directions go.
     orientation: dict[str, Any] = (device.last_status or {}).get("orientation") or {}
     rms = orientation.get("rms_deg")
-    sigma = float(rms) if isinstance(rms, int | float) else triangulation.DEFAULT_SIGMA_DEG
+    sigma = triangulation.DEFAULT_SIGMA_DEG
+    if isinstance(rms, int | float) and math.isfinite(rms):  # JSON lets NaN through
+        sigma = min(float(rms), triangulation.MAX_SIGMA_DEG)
     return triangulation.Sighting(
         float(lat), float(lon), height, (az1, alt1), (az2, alt2), sigma_deg=sigma
     )
@@ -121,7 +124,8 @@ async def pair_event(
             fireballs = [
                 pair_id
                 for pair_id in fireballs
-                if (pair := await db.get(MeteorPair, pair_id)) is not None
+                # Fresh from the database: the session still holds the pairwise values.
+                if (pair := await db.get(MeteorPair, pair_id, populate_existing=True)) is not None
                 and pair.low_km <= fireball.METEORITE_END_KM
             ]
         if on_fireball is not None:

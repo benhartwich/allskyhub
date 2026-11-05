@@ -34,7 +34,7 @@ MIN_OVERLAP = 0.3
 # The error of a camera's directions (one sigma, degrees) when it reports none, about a plate
 # solve's usual RMS (SPEC §4.8 accepts up to 0.6°); never less than a pixel or so.
 DEFAULT_SIGMA_DEG = 0.3
-MIN_SIGMA_DEG = 0.1
+MIN_SIGMA_DEG, MAX_SIGMA_DEG = 0.1, 5.0
 # Solutions with shaken directions; fewer than half of them valid: no error to give.
 RUNS = 200
 
@@ -248,7 +248,7 @@ def _rays(s: Sighting, rng: random.Random | None = None) -> tuple[Vec, Vec]:
     out: list[Vec] = []
     for az, alt in (s.end1, s.end2):
         if rng is not None:
-            sigma = max(s.sigma_deg, MIN_SIGMA_DEG)
+            sigma = min(max(s.sigma_deg, MIN_SIGMA_DEG), MAX_SIGMA_DEG)
             az += rng.gauss(0, sigma) / max(math.cos(math.radians(alt)), 0.05)
             alt += rng.gauss(0, sigma)
         out.append(direction(s.lat, s.lon, az, alt))
@@ -270,7 +270,7 @@ def solve(sightings: list[Sighting], seed: str = "") -> Solution | None:
     if len(sightings) < 2:
         return None
     origins = [ecef(s.lat, s.lon, s.height_km) for s in sightings]
-    sigmas = [max(s.sigma_deg, MIN_SIGMA_DEG) for s in sightings]
+    sigmas = [min(max(s.sigma_deg, MIN_SIGMA_DEG), MAX_SIGMA_DEG) for s in sightings]
     rays = [_rays(s) for s in sightings]
     fitted = _fit(origins, rays, sigmas)
     ends = _ends(fitted) if fitted is not None else None

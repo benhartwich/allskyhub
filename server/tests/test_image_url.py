@@ -98,11 +98,18 @@ async def test_only_the_public_internet(url: str, code: str) -> None:
 async def test_redirects_are_checked_too() -> None:
     def to_inside(request: httpx.Request) -> httpx.Response:
         assert request.url.host == PUBLIC
-        return httpx.Response(302, headers={"location": "http://intern.example.org/x.jpg"})
+        return httpx.Response(302, headers={"location": "https://intern.example.org/x.jpg"})
 
     with pytest.raises(FetchError) as caught:
         await _fetcher(to_inside).get("https://cam.example.org/image.jpg")
     assert caught.value.code == "not_public"
+
+    def to_plain(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(302, headers={"location": "http://cam.example.org/x.jpg"})
+
+    with pytest.raises(FetchError) as caught:  # never from https down to http
+        await _fetcher(to_plain).get("https://cam.example.org/image.jpg")
+    assert caught.value.code == "insecure_redirect"
 
     def loop(request: httpx.Request) -> httpx.Response:
         return httpx.Response(302, headers={"location": "/again.jpg"})
@@ -365,3 +372,31 @@ async def test_a_meteor_from_fetched_frames(
     assert events[0].start == dt.datetime(2026, 11, 5, 20, 41, tzinfo=dt.UTC)  # the middle one
     assert data["track_px"][0] == pytest.approx([300, 300], abs=25)
     assert events[0].has_original
+
+
+@pytest.mark.parametrize(
+    ("ip", "ok"),
+    [
+        ("93.184.216.34", True),
+        ("::ffff:10.0.0.5", False),
+        ("64:ff9b::a00:5", False),  # NAT64 to 10.0.0.5
+        ("64:ff9b::5db8:d822", True),  # NAT64 to 93.184.216.34
+        ("2002:a00:5::1", False),  # 6to4 of 10.0.0.5
+        ("2606:4700::1111", True),
+    ],
+)
+def test_ipv4_inside_ipv6_counts_as_that_ipv4(ip: str, ok: bool) -> None:
+    """allsky's review of #399: NAT64 and 6to4 can reach private IPv4 addresses."""
+    assert image_url.public(ip, frozenset()) is ok
+
+
+def test_proof_pictures_stay_small(tmp_path: Path) -> None:
+    big = Image.new("L", (6000, 5000))  # 30 MP
+    out = io.BytesIO()
+    big.save(out, "PNG", optimize=True)
+    with pytest.raises(FetchError) as caught:
+        image_url.store_proof(tmp_path, "st", out.getvalue())
+    assert caught.value.code == "too_large"
+    image_url.store_proof(tmp_path, "st", _jpeg(4000, 3000))
+    with Image.open(image_url.proof_path(tmp_path, "st")) as kept:
+        assert max(kept.size) <= image_url.PROOF_EDGE

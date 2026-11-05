@@ -55,7 +55,7 @@ async def apps_page(
         {
             "cards": cards,
             "titles": TITLES,
-            "android_busy": stores.android_busy(),
+            "android_busy": stores.android_building(),
             "accounts": [
                 e
                 for e in stores.vault.entries()
@@ -89,7 +89,7 @@ async def app_card(
     return render(
         request,
         "_app_card.html",
-        {"card": found[0], "titles": TITLES, "android_busy": stores.android_busy()},
+        {"card": found[0], "titles": TITLES, "android_busy": stores.android_building()},
         session=session,
     )
 

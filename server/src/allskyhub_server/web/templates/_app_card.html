@@ -1,5 +1,5 @@
 {# One app on /admin/apps; while something of it is on its way it reloads itself (routes_apps.app_card). #}
-<section class="card stack" id="app-{{ card.key }}"{% if card.waiting %} hx-get="/admin/apps/card/{{ card.key }}" hx-trigger="every 10s" hx-swap="outerHTML"{% endif %}>
+<section class="card stack" id="app-{{ card.key }}"{% if card.waiting or android_busy %} hx-get="/admin/apps/card/{{ card.key }}" hx-trigger="every 10s" hx-swap="outerHTML"{% endif %}>
   <h2>{{ card.title }} <span class="muted small">· Version {{ card.version }}</span></h2>
   <p class="muted small">{% if card.live_at %}Stand bei Apple und Google: {{ card.live_at[:16] | replace('T', ' ') }} UTC (alle zehn Minuten neu){% else %}Apple und Google werden gerade gefragt; Seite gleich neu laden.{% endif %}</p>
   {% from "_pending.html" import pending %}
@@ -20,6 +20,9 @@
     </div>
     {% endfor %}
   </div>
+  {% if android_busy and not (card.android and card.android.busy) %}
+  <p class="muted small">⏳ Android bauen geht gerade nicht: der Server baut {{ android_busy }}, immer nur ein Build zur Zeit. Die Knöpfe kommen zurück, sobald er fertig ist.</p>
+  {% endif %}
   {% if card.test %}
   {% set t = card.test %}
   <div class="store-rows">

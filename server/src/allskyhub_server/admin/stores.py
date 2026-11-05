@@ -1590,11 +1590,18 @@ class Stores:
         log.info("test apk of %s requested by %s", app.key, by)
 
     def android_busy(self) -> bool:
-        apps = (None, *OTHER_APPS.values())
-        tests = (a for a in OTHER_APPS.values() if a.test_apk)
-        return any(self.android_job(a).busy for a in apps) or any(
-            self.test_job(a).busy for a in tests
-        )
+        return bool(self.android_building())
+
+    def android_building(self) -> str:
+        """What the server builds right now ("bortle", "Vinventory: Test-APK"), or "".
+        The cards name it where the build buttons are missing (Benjamin, 2026-11-05)."""
+        for app in (None, *OTHER_APPS.values()):
+            if self.android_job(app).busy:
+                return app.title if app else "allskyhub"
+        for app in OTHER_APPS.values():
+            if app.test_apk and self.test_job(app).busy:
+                return f"{app.title}: Test-APK"
+        return ""
 
     def _release_out(self, app: OtherApp | None) -> Path:
         """Where the root helper answers for the app (deploy/android: release-<key>)."""

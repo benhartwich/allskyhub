@@ -84,6 +84,8 @@ class Settings(BaseSettings):
     satellites: bool = True
     # Fireball package D: GMN's trajectory summaries (CC BY 4.0), matched with our meteors.
     gmn: bool = True
+    # Fireball package C: NOAA GFS winds aloft (public domain) for the dark flight.
+    winds: bool = True
     # Roadmap H8 (SPEC §7.10): flashes from Meteosat's Lightning Imager, from the EUMETSAT
     # Data Store (a free account; key and secret of its API). Off while either is empty.
     eumetsat_key: str = ""

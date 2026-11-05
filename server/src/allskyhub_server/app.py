@@ -38,7 +38,7 @@ from allskyhub_server.auth.reporters import turnstile_from
 from allskyhub_server.billing import task as billing_task
 from allskyhub_server.billing.paddle import Paddle
 from allskyhub_server.db import create_engine, create_sessionmaker
-from allskyhub_server.devices import aircraft, domains, gmn, lightning_li
+from allskyhub_server.devices import aircraft, domains, gmn, lightning_li, winds
 from allskyhub_server.devices.connections import ConnectionRegistry
 from allskyhub_server.devices.discord import Discord, Poster
 from allskyhub_server.devices.domains import HostMap
@@ -285,6 +285,10 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             )
         if settings.gmn:
             tasks.append(asyncio.create_task(gmn.run_forever(app.state.sessionmaker, adsb_client)))
+        if settings.winds:
+            tasks.append(
+                asyncio.create_task(winds.run_forever(app.state.sessionmaker, adsb_client))
+            )
         if settings.billing:
             tasks.append(
                 asyncio.create_task(

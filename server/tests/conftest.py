@@ -60,6 +60,7 @@ def settings(tmp_path_factory: pytest.TempPathFactory) -> Settings:
         adsb=False,
         satellites=False,
         gmn=False,
+        winds=False,
     )
 
 

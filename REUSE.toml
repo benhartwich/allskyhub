@@ -72,3 +72,15 @@ SPDX-License-Identifier = "BSD-2-Clause"
 path = "app/assets/geo/land.json"
 SPDX-FileCopyrightText = "Natural Earth (naturalearthdata.com)"
 SPDX-License-Identifier = "LicenseRef-PublicDomain"
+
+# Test data from outside: GMN's summary header (CC BY 4.0) and a small GFS cut around the
+# Traunsee from NOAA (a US government work, public domain).
+[[annotations]]
+path = "server/tests/data/gmn_summary_header.txt"
+SPDX-FileCopyrightText = "Global Meteor Network (globalmeteornetwork.org)"
+SPDX-License-Identifier = "CC-BY-4.0"
+
+[[annotations]]
+path = "server/tests/data/gfs_traunsee.grb2"
+SPDX-FileCopyrightText = "NOAA National Centers for Environmental Prediction"
+SPDX-License-Identifier = "LicenseRef-PublicDomain"

@@ -17,7 +17,7 @@
     <dt>Höhe</dt><dd>{{ '%.0f' | format(pair.high_km) }} km → {{ '%.0f' | format(pair.low_km) }} km</dd>
     <dt>Länge der Spur</dt><dd>{{ '%.0f' | format(pair.length_km) }} km, flog nach {{ heading }}</dd>
     {% if area %}<dt>Neigung</dt><dd>{{ area.slope_deg | round | int }}° gegen den Horizont</dd>{% endif %}
-    {% if pair.low_err_km is not none %}<dt>Genauigkeit</dt><dd>Anfang ± {{ '%.1f' | format(pair.high_err_km) | replace('.', ',') }} km, Ende ± {{ '%.1f' | format(pair.low_err_km) | replace('.', ',') }} km <span class="muted small">(aus der Ausrichtung der Kameras an den Sternen)</span></dd>{% endif %}
+    {% if pair.low_err_km is not none %}<dt>Genauigkeit</dt><dd>{% if pair.high_err_km is not none %}Anfang ± {{ '%.1f' | format(pair.high_err_km) | replace('.', ',') }} km, {% endif %}Ende ± {{ '%.1f' | format(pair.low_err_km) | replace('.', ',') }} km <span class="muted small">(aus der Ausrichtung der Kameras an den Sternen)</span></dd>{% endif %}
     <dt>Gesehen von</dt><dd>{% for c in cameras %}{% if c.link %}<a href="{{ c.link }}">{{ c.name }}</a>{% else %}{{ c.name }}{% endif %}{{ (' und ' if loop.revindex == 2 else ', ') if not loop.last }}{% endfor %}</dd>
     <dt>Schnittwinkel</dt><dd>{{ pair.convergence_deg | round | int }}° {% if pair.convergence_deg < 20 %}<span class="warn">(flach, ungenauer)</span>{% endif %}</dd>
   </dl>
@@ -27,7 +27,12 @@
 <div class="card stack">
   <h2>Mögliches Fallgebiet</h2>
   <p>Das Leuchten endete in {{ '%.0f' | format(area.end_km) }} km Höhe. So tief kommen nur Brocken, die nicht ganz verglühen. Kleine Stücke fallen fast senkrecht unter das Ende der Leuchtspur, schwere fliegen noch einige Kilometer weiter (dunkler Flug).</p>
-  <p class="muted">Eine grobe Abschätzung: ohne die Geschwindigkeit (eine Belichtung zeigt sie nicht) und ohne den Wind in der Höhe, der die Stücke um Kilometer versetzen kann. {% if pair.low_err_km is not none %}Die Unsicherheit beim Ende der Leuchtspur ist schon eingerechnet. {% endif %}Fachleute rechnen mit Videokameras und Winddaten genauer. Melde die Feuerkugel deshalb bei der International Meteor Organization, und betritt für eine Suche keine Grundstücke ohne Erlaubnis.</p>
+  {% if strewn %}
+  <p>Mit dem Wind in der Höhe ({{ wind.source }}, Lauf {{ wind.run[:13] | replace('T', ' ') }} UTC + {{ wind.step_h }} h) landen die Stücke so, gemessen vom Punkt unter dem Ende der Leuchtspur:</p>
+  <dl class="facts">{% for r in strewn %}<dt>{{ r.mass }}</dt><dd>{{ r.km }} km {{ r.where }}</dd>{% endfor %}</dl>
+  <p class="muted">Gerechnet als Steinmeteorit (Kugel, 3,5 g/cm³) mit 2,5 und 4 km/s am Ende der Leuchtspur; die Geschwindigkeit dort misst eine Belichtung nicht. Das orange Gebiet umfasst alle diese Landepunkte, dazu die Unsicherheit beim Ende der Leuchtspur und beim Wind.</p>
+  {% endif %}
+  <p class="muted">{% if strewn %}Eine Abschätzung für eine erste Suche:{% else %}Eine grobe Abschätzung: ohne die Geschwindigkeit (eine Belichtung zeigt sie nicht) und ohne den Wind in der Höhe, der die Stücke um Kilometer versetzen kann; den holt der Hub, sobald das Wettermodell da ist.{% endif %} {% if pair.low_err_km is not none %}Die Unsicherheit beim Ende der Leuchtspur ist schon eingerechnet. {% endif %}{% if strewn %}Fachleute rechnen mit der gemessenen Geschwindigkeit und Form genauer.{% else %}Fachleute rechnen mit Videokameras und Winddaten genauer.{% endif %} Melde die Feuerkugel deshalb bei der International Meteor Organization, und betritt für eine Suche keine Grundstücke ohne Erlaubnis.</p>
   <p><a class="button secondary" href="{{ fireball_form }}" rel="noopener" target="_blank">Bei der IMO melden</a></p>
 </div>
 {% endif %}

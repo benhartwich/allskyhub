@@ -280,7 +280,7 @@ async def fetch(client: httpx.AsyncClient) -> list[Trajectory]:
     for name in FILES:
         r = await client.get(BASE + name, timeout=TIMEOUT_S)
         r.raise_for_status()
-        out.extend(parse(r.text))
+        out.extend(await asyncio.to_thread(parse, r.text))  # 2 MB: off the event loop
     return out
 
 

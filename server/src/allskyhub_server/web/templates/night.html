@@ -2,6 +2,7 @@
 {% block title %}{{ night_id | night_title }} · {{ device.name }} · allskyhub{% endblock %}
 {% block head %}
   <link rel="stylesheet" href="{{ asset('uplot.min.css') }}">
+  <script src="{{ asset('locale_guard.js') }}" defer></script>
   <script src="{{ asset('uplot.min.js') }}" defer></script>
   <script src="{{ asset('charts.js') }}" defer></script>
 {% endblock %}

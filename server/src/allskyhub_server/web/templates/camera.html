@@ -2,6 +2,7 @@
 {% block title %}{{ device.name }} · allskyhub{% endblock %}
 {% block head %}
   <link rel="stylesheet" href="{{ asset('uplot.min.css') }}">
+  <script src="{{ asset('locale_guard.js') }}" defer></script>
   <script src="{{ asset('uplot.min.js') }}" defer></script>
   <script src="{{ asset('charts.js') }}" defer></script>
   <script src="{{ asset('fold.js') }}" defer></script>
@@ -41,8 +42,10 @@
   <ul class="health-list">
     {% for p in health %}<li class="health-line {{ p.level }}">{{ p.text }}</li>{% endfor %}
   </ul>
-  {% elif not paused %}
+  {% elif not paused and online %}
   <p class="health-line ok">Alles in Ordnung: verbunden, neue Bilder, genug Speicher, Temperaturen und Uhr unauffällig.</p>
+  {% elif not paused %}
+  <p class="health-line">Gerade nicht verbunden{% if device.last_seen_at %} (zuletzt {{ device.last_seen_at | when }} Uhr){% endif %}. Beim letzten Kontakt war alles in Ordnung.</p>
   {% endif %}
 </div>
 {% if observatory %}{% include "_observatory.html" %}{% endif %}

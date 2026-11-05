@@ -128,7 +128,9 @@ async def test_pairing_two_cameras(
     page = (
         await new_client.get(f"/cameras/{stranger}/events/20261013/meteor-20261013T220005Z")
     ).text
-    assert page.count("Bahn des Meteors") == 2
+    # Both pairs share the solution of all three cameras: one card naming both others.
+    assert page.count("Bahn des Meteors") == 1
+    assert "Aus allen Blickwinkeln" in page
 
     # Leaving the network takes the pairs off the other owner's pages.
     for device_id in (linz, salzburg):

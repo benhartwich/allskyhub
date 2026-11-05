@@ -33,7 +33,7 @@ class Series:
 SERIES = (
     Series("Bewölkung", "%", lambda s: None if s.cloud_cover is None else s.cloud_cover * 100,
            0, 100, "chart-clouds"),
-    Series("Himmelshelligkeit", "mag/″²", lambda s: s.sqm_mag, 16, 22, "chart-sqm", "{:.2f}"),
+    Series("Himmelshelligkeit", "mag/\u2060″²", lambda s: s.sqm_mag, 16, 22, "chart-sqm", "{:.2f}"),
     Series("Sterne", "", lambda s: None if s.stars is None else float(s.stars), 0, 0,
            "chart-stars"),
 )  # fmt: skip

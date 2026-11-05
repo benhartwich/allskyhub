@@ -46,7 +46,9 @@ def test_brighter_sky_gives_a_negative_trend() -> None:
     assert len(months) == 24
     assert sqm_trend.slope(months) == pytest.approx(-0.2)
     trend = sqm_trend.Trend(months, sqm_trend.slope(months))
-    assert trend.text == "Der Himmel wird heller: 0,20 mag/″² pro Jahr mehr Lichtverschmutzung."
+    assert trend.text == (
+        "Der Himmel wird heller: 0,20\u00a0mag/\u2060″² pro Jahr mehr Lichtverschmutzung."
+    )
 
 
 def test_steady_and_too_short() -> None:

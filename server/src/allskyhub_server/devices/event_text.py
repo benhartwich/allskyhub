@@ -40,6 +40,17 @@ SHOWER_NAMES = {
     "Leonids": "Leoniden",
     "Geminids": "Geminiden",
     "Ursids": "Ursiden",
+    # Not on the camera's list (detect/meteor.py), but from stations and other software
+    # (SPEC §10) and older events.
+    "Taurids": "Tauriden",
+    "Southern Taurids": "Südliche Tauriden",
+    "Northern Taurids": "Nördliche Tauriden",
+    "Southern Delta Aquariids": "Südliche Delta-Aquariiden",
+    "Alpha Capricornids": "Alpha-Capricorniden",
+    "Kappa Cygnids": "Kappa-Cygniden",
+    "Draconids": "Draconiden",
+    "Monocerotids": "Monocerotiden",
+    "Sigma Hydrids": "Sigma-Hydriden",
 }
 
 
@@ -160,8 +171,25 @@ def update_line(status: dict[str, Any] | None) -> tuple[str, bool] | None:
     return text, state in ("rolled_back", "failed")
 
 
+# Further keys of SPEC §6.4 with a plain label; anything else stays off the page (raw
+# keys such as `track_ordered` told the owner nothing; Benjamin, 2026-11-05).
+_LABELS = {
+    "aircraft": "Flugzeug (eigener Empfänger)",
+    "mag": "Helligkeit (mag)",
+    "source": "Quelle",
+}
+_SOURCES = {"image_url": "Bild-Adresse (SharedSky)", "indi-allsky": "indi-allsky (SharedSky)"}
+
+
+def _sky(azimuth: object, altitude: object) -> str | None:
+    if not isinstance(azimuth, int | float) or not isinstance(altitude, int | float):
+        return None
+    return f"{round(azimuth) % 360}° {compass(azimuth)}, {round(altitude)}° hoch"
+
+
 def event_rows(event: EventRecord) -> list[tuple[str, str]]:
-    """Label/value rows: meteor keys as in SPEC §6.4, unknown keys as they come."""
+    """Label/value rows in plain words: the keys of SPEC §6.4 the page knows; others are
+    left out."""
     rows = [("Sicherheit", f"{round(event.confidence * 100)} %")]
     seconds = (event.end - event.start).total_seconds()
     if seconds > 0:
@@ -181,6 +209,15 @@ def event_rows(event: EventRecord) -> list[tuple[str, str]]:
             rows.append(("Meteorstrom", shower))
         data.pop("shower", None)
         data.pop("shower_match", None)
+        # The ends of the track on the sky (SPEC §6.4, for triangulation).
+        start = _sky(data.pop("start_azimuth_deg", None), data.pop("start_altitude_deg", None))
+        end = _sky(data.pop("end_azimuth_deg", None), data.pop("end_altitude_deg", None))
+        if start and end:
+            ordered = data.get("track_ordered") is True
+            text = f"von {start} nach {end}" if ordered else f"zwischen {start} und {end}"
+            rows.append(("Spur am Himmel", text))
+        for key in ("track_ordered", "track", "track_rms_deg", "track_px", "trail"):
+            data.pop(key, None)
     if event.kind == "lightning":
         if isinstance(area := data.pop("area_frac", None), int | float):
             rows.append(("Erhellter Himmel", f"{round(area * 100)} %"))
@@ -218,5 +255,19 @@ def event_rows(event: EventRecord) -> list[tuple[str, str]]:
         rows.append(("Himmelsrichtung", f"{round(azimuth) % 360}° ({compass(azimuth)})"))
     if isinstance(altitude := data.pop("altitude_deg", None), int | float):
         rows.append(("Höhe über dem Horizont", f"{round(altitude)}°"))
-    rows.extend((key, str(value)) for key, value in data.items() if value is not None)
+    if event.kind == "transient":
+        ra, dec = data.pop("ra_deg", None), data.pop("dec_deg", None)
+        if isinstance(ra, int | float) and isinstance(dec, int | float):
+            rows.append(("Position (J2000)", f"RA {ra:.2f}°, Dec {dec:+.2f}°".replace(".", ",")))
+        if isinstance(frames := data.pop("frames", None), int | float):
+            rows.append(("Bilder", str(round(frames))))
+        if data.pop("ongoing", None) is True:
+            rows.append(("Status", "läuft noch"))
+    if isinstance(source := data.get("source"), str):
+        data["source"] = _SOURCES.get(source, source)
+    if isinstance(mag := data.get("mag"), int | float):
+        data["mag"] = f"{mag:+.1f}".replace(".", ",")
+    rows.extend(
+        (label, str(data[key])) for key, label in _LABELS.items() if data.get(key) is not None
+    )
     return rows

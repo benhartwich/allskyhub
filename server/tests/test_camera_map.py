@@ -72,7 +72,7 @@ async def test_sky_brightness_layer(
     page = (await new_client.get("/karte?layer=sqm")).text
     camera = _config(page)["cameras"][0]
     assert camera["sqm_class"] == "sqm-2"  # median 21.5: cloudy and old nights left out
-    assert camera["sqm_text"] == "21,50 mag/″² · dunkel"
+    assert camera["sqm_text"] == "21,50\u00a0mag/\u2060″² · dunkel"
     assert _config(page)["layer"] == "sqm"
     assert "Nachtlichter" in page
     assert _config((await new_client.get("/karte")).text)["layer"] == ""

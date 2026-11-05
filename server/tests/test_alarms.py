@@ -120,7 +120,7 @@ async def test_summary_of_a_night(app: FastAPI, client: httpx.AsyncClient) -> No
     assert s.best.kind == "aurora"  # rarer than meteors
     assert s.line() == (
         "2 Meteore: 1 Orioniden, 1 sporadisch, 1 Polarlicht, 1 Gewitter, 2,0 h klar, "
-        "beste Himmelshelligkeit 20,90 mag/″²"
+        "beste Himmelshelligkeit 20,90\u00a0mag/\u2060″²"
     )
     async with maker() as db:
         empty = await night_summary.summarize(db, device_id, "20261001")
@@ -160,7 +160,7 @@ async def test_camera_page_shows_last_night(app: FastAPI, client: httpx.AsyncCli
         await db.commit()
     page = (await client.get(f"/cameras/{device_id}")).text
     assert "Letzte Nacht" in page
-    assert "21,30 mag/″²" in page
+    assert "21,30\u00a0mag/\u2060″²" in page
 
 
 async def test_aurora_network_alerts_clear_cameras_around(

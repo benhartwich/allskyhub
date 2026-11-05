@@ -19,6 +19,10 @@ from allskyhub_server.devices.events import storm_key
 from allskyhub_server.i18n import english, tr
 from allskyhub_server.models import EventRecord, SkySample
 
+# The unit of sky brightness, never broken across lines (a no-break space before it,
+# a word joiner after the slash; Benjamin, 2026-11-05).
+SQM_UNIT = "\u00a0mag/\u2060″²"
+
 CLEAR_BELOW = 0.3  # cloud cover
 # Pictures worth showing as "the night's best", rarest first.
 _BEST_ORDER = ("aurora", "nlc", "meteor", "lightning")
@@ -63,7 +67,10 @@ class NightSummary:
         if self.best_sqm is not None:
             sqm = _num(self.best_sqm, 2)
             parts.append(
-                tr(f"beste Himmelshelligkeit {sqm} mag/″²", f"best sky brightness {sqm} mag/″²")
+                tr(
+                    f"beste Himmelshelligkeit {sqm}{SQM_UNIT}",
+                    f"best sky brightness {sqm}{SQM_UNIT}",
+                )
             )
         if parts:
             return ", ".join(parts)

@@ -17,7 +17,7 @@
     {% if fr.exposure_us is defined %}<span class="fact"><small>Belichtung</small>{{ '%.3g' | format(fr.exposure_us / 1e6) | replace('.', ',') }} s</span>{% endif %}
     {% if fr.gain is defined %}<span class="fact"><small>Gain</small>{{ fr.gain | round | int }}</span>{% endif %}
     {% if sky.cloud_cover is number %}<span class="fact"><small>Bewölkung</small>{{ (sky.cloud_cover * 100) | round | int }} %</span>{% endif %}
-    {% if sky.sqm_mag is number %}<span class="fact"><small>Himmelshelligkeit</small>{{ '%.2f' | format(sky.sqm_mag) | replace('.', ',') }} mag/″²</span>{% endif %}
+    {% if sky.sqm_mag is number %}<span class="fact"><small>Himmelshelligkeit</small>{{ '%.2f' | format(sky.sqm_mag) | replace('.', ',') }} mag/⁠″²</span>{% endif %}
     {% if sky.stars is number %}<span class="fact"><small>Sterne</small>{{ sky.stars }}</span>{% endif %}
   </figcaption>
   {% else %}

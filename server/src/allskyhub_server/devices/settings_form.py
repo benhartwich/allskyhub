@@ -22,6 +22,7 @@ from allskyhub_protocol import (
     schema_problems,
 )
 from allskyhub_server.devices.settings import CAMERA_CHOICES
+from allskyhub_server.devices.tonight import DEFAULT_ZONE
 from allskyhub_server.models import Device
 
 FALLBACK: list[SettingSpec] = [
@@ -142,6 +143,11 @@ def groups(
             f.checked = (spec.key in submitted) if submitted else current.get(spec.key) is True
         elif spec.type is SettingType.CHOICE:
             f.choices = [(c.value, localized(c.label, lang)) for c in spec.choices or []]
+        if spec.key == "timezone" and not f.value:
+            # An empty field looked like nothing; the hub uses its own zone meanwhile.
+            assumed = (f"Not set: the hub assumes {DEFAULT_ZONE}." if lang == "en"
+                       else f"Nicht gesetzt: Der Hub nimmt {DEFAULT_ZONE} an.")  # fmt: skip
+            f.help = f"{f.help} {assumed}" if f.help else assumed
         out.setdefault(group, FormGroup(group, [])).fields.append(f)
     return list(out.values())
 

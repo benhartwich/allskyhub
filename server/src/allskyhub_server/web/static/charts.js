@@ -4,7 +4,12 @@
 // (devices/series.py). Colours come from CSS custom properties, so the red theme works.
 (() => {
   const root = document.querySelector("[data-charts]");
-  if (!root || !window.uPlot) return;
+  if (!root) return;
+  if (!window.uPlot) {
+    const note = root.querySelector("[data-chart-meta]");
+    if (note) note.textContent = "Die Diagramme konnten in diesem Browser nicht geladen werden.";
+    return;
+  }
   const uPlot = window.uPlot;
   const withStatus = root.hasAttribute("data-status");
   // Embedded on another page: smaller, and the address bar stays that page's.
@@ -20,8 +25,8 @@
   const PANELS = [
     {
       id: "sqm", title: "Himmelshelligkeit", source: "sky", height: 260, ephemeris: true,
-      series: [{ key: "sqm", label: "Himmelshelligkeit", unit: "mag/″²", color: "--chart-sqm", scale: "sqm", digits: 2 }],
-      axes: [{ scale: "sqm", label: "mag/″² (↑ dunkler)" }],
+      series: [{ key: "sqm", label: "Himmelshelligkeit", unit: "mag/⁠″²", color: "--chart-sqm", scale: "sqm", digits: 2 }],
+      axes: [{ scale: "sqm", label: "mag/⁠″² (↑ dunkler)" }],
     },
     {
       id: "clouds", title: "Bewölkung und Sterne", source: "sky", height: 200,
@@ -278,11 +283,12 @@
 
   const describe = () => {
     const bits = [data.night ? nightTitle(data.night) : `${stamp(data.from)} – ${stamp(data.to)}`];
-    bits.push(`Ortszeit ${data.tz}`);
+    bits.push(data.tz_assumed ? `Ortszeit ${data.tz} (angenommen)` : `Ortszeit ${data.tz}`);
     if (data.ephemeris) bits.push(`Mond ${num(data.ephemeris.moon_illumination[0] * 100, 0)} % beleuchtet`);
     if (data.bucket_s) bits.push(`Mittelwerte über ${Math.round(data.bucket_s / 60)} min`);
     meta.textContent = bits.join(" · ");
-    document.querySelectorAll("[data-chart-tz]").forEach((n) => (n.textContent = data.tz));
+    const tzText = data.tz_assumed ? `${data.tz}, angenommen` : data.tz;
+    document.querySelectorAll("[data-chart-tz]").forEach((n) => (n.textContent = tzText));
     root.querySelectorAll("[data-range]").forEach((b) => {
       const on = b.dataset.range === "night" ? !!data.night : +b.dataset.range === data.hours;
       b.classList.toggle("secondary", !on);
@@ -471,12 +477,12 @@
         series: [
           { value: (u, v) => (v == null ? "–" : new Date(v * 1000).toLocaleDateString(DE, { timeZone: tz })), label: "Nacht" },
           { label: "Klare Stunden", scale: "h", stroke: css("--chart-clouds"), fill: `${css("--chart-clouds")}55`, paths: uPlot.paths.bars({ size: [0.7, 12] }), points: { show: false }, value: (u, v) => num(v, 1) },
-          { label: "Dunkelster Himmel (mag/″²)", scale: "sqm", stroke: css("--chart-sqm"), paths: () => null, points: { show: true, size: 6, fill: css("--chart-sqm") }, value: (u, v) => num(v, 2) },
+          { label: "Dunkelster Himmel (mag/⁠″²)", scale: "sqm", stroke: css("--chart-sqm"), paths: () => null, points: { show: true, size: 6, fill: css("--chart-sqm") }, value: (u, v) => num(v, 2) },
           { label: "Mond beleuchtet (%)", scale: "pct", stroke: css("--chart-moon"), width: 1, dash: [6, 4], points: { show: false }, value: (u, v) => num(v, 0) },
         ],
         axes: [
           { stroke: css("--chart-axis"), grid, font: axisFont, values: (u, splits) => splits.map((ts) => new Date(ts * 1000).toLocaleDateString(DE, { month: "short", timeZone: tz })) },
-          { scale: "sqm", label: "mag/″² (↑ dunkler)", labelSize: 18, labelFont: axisFont, stroke: css("--chart-axis"), font: axisFont, grid, size: 52, values: (u, vals) => vals.map(axisNum) },
+          { scale: "sqm", label: "mag/⁠″² (↑ dunkler)", labelSize: 18, labelFont: axisFont, stroke: css("--chart-axis"), font: axisFont, grid, size: 52, values: (u, vals) => vals.map(axisNum) },
           { scale: "h", side: 1, label: "klare Stunden", labelSize: 18, labelFont: axisFont, stroke: css("--chart-axis"), font: axisFont, grid: { show: false }, size: 44 },
         ],
         legend: { live: true },

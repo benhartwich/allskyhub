@@ -39,12 +39,13 @@
 {% set p = s.pair %}
 <div class="card trajectory">
   <h2>Bahn des Meteors</h2>
-  <p>Auch gesehen von {% if s.link %}<a href="{{ s.link }}">{{ s.name }}</a>{% else %}{{ s.name }}{% endif %}. Aus beiden Blickwinkeln ergibt sich:</p>
+  <p>Auch gesehen von {% for c in s.cameras %}{% if c.link %}<a href="{{ c.link }}">{{ c.name }}</a>{% else %}{{ c.name }}{% endif %}{{ (' und ' if loop.revindex == 2 else ', ') if not loop.last }}{% endfor %}. Aus {{ 'allen' if s.cameras | length > 1 else 'beiden' }} Blickwinkeln ergibt sich:</p>
   <dl class="facts">
     <dt>Höhe</dt><dd>{{ '%.0f' | format(p.high_km) }} km → {{ '%.0f' | format(p.low_km) }} km</dd>
     <dt>Länge der Spur</dt><dd>{{ '%.0f' | format(p.length_km) }} km</dd>
     <dt>Über</dt><dd>{{ '%.2f' | format(p.high_lat) | replace('.', ',') }}° N, {{ '%.2f' | format(p.high_lon) | replace('.', ',') }}° O → {{ '%.2f' | format(p.low_lat) | replace('.', ',') }}° N, {{ '%.2f' | format(p.low_lon) | replace('.', ',') }}° O</dd>
     <dt>Schnittwinkel</dt><dd>{{ p.convergence_deg | round | int }}° {% if p.convergence_deg < 20 %}<span class="warn">(flach, ungenauer)</span>{% endif %}</dd>
+    {% if p.low_err_km is not none %}<dt>Genauigkeit</dt><dd>{% if p.high_err_km is not none %}Anfang ± {{ '%.1f' | format(p.high_err_km) | replace('.', ',') }} km, {% endif %}Ende ± {{ '%.1f' | format(p.low_err_km) | replace('.', ',') }} km</dd>{% endif %}
   </dl>
   {% if s.fireball %}<p>{% if s.meteorite %}<span class="badge warn">Meteoritenfall möglich</span> {% endif %}<a href="/feuerkugeln/{{ p.id }}">Bahn{{ ' und mögliches Fallgebiet' if s.meteorite }} auf der Karte</a></p>{% endif %}
 </div>

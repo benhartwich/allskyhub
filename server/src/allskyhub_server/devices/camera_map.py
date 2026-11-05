@@ -22,6 +22,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from allskyhub_server.devices import public
 from allskyhub_server.models import Device, NightStat, SkyReport
 
+# The unit of sky brightness, never broken across lines (a no-break space before it,
+# a word joiner after the slash; Benjamin, 2026-11-05).
+SQM_UNIT = "\u00a0mag/\u2060″²"
+
 SQM_DAYS = 60
 SQM_MIN_NIGHTS = 3
 SQM_CLEAR_HOURS = 1.0
@@ -66,7 +70,7 @@ class MapCamera:
         if self.sqm is not None:
             label = next(label for low, _, label in SQM_CLASSES if self.sqm >= low)
             value = f"{self.sqm:.2f}".replace(".", ",")
-            return f"{value} mag/″² · {label.split(' (')[0]}"
+            return f"{value}{SQM_UNIT} · {label.split(' (')[0]}"
         if not self.shows_sky:
             return "Himmelsqualität nicht öffentlich"
         return (
@@ -152,7 +156,7 @@ class ReportCell:
         people = "1 Meldung" if self.count == 1 else f"{self.count} Meldungen"
         return {
             "lat": self.lat, "lon": self.lon, "sqm": self.sqm, "sqm_class": cls,
-            "sqm_text": f"etwa {value} mag/″² · {people} mit bloßem Auge",
+            "sqm_text": f"etwa {value}{SQM_UNIT} · {people} mit bloßem Auge",
         }  # fmt: skip
 
 

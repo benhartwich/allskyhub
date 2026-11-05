@@ -110,6 +110,7 @@ async def test_redirects_are_checked_too() -> None:
     with pytest.raises(FetchError) as caught:  # never from https down to http
         await _fetcher(to_plain).get("https://cam.example.org/image.jpg")
     assert caught.value.code == "insecure_redirect"
+    assert caught.value.code in image_url.ERRORS  # the owner reads a sentence, not a code
 
     def loop(request: httpx.Request) -> httpx.Response:
         return httpx.Response(302, headers={"location": "/again.jpg"})

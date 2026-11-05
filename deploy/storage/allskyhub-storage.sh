@@ -24,7 +24,12 @@ flock -n 9 || exit 0
 as_hub() { runuser -u "$HUB_USER" -- "$@"; }
 
 # Removed as the hub, like everything in its folder: never by root through a link.
-as_hub rm -f -- "$SPOOL/request" || exit 0
+if ! as_hub rm -f -- "$SPOOL/request"; then
+    # Not the hub's to remove: the path unit would start this again and again until
+    # systemd's start limit; say why, once per start, in the journal.
+    logger -t "$(basename "$0")" -p user.warning "$SPOOL/request gehört nicht dem Hub; nichts getan."
+    exit 0
+fi
 answer() {  # answer <file> <text>
     as_hub rm -f -- "$SPOOL/$1"
     # shellcheck disable=SC2016  # $1 is the inner shell's

@@ -114,8 +114,10 @@ async def test_event_notifications(
     first = meteor().model_copy(update={"start": fresh, "end": fresh + dt.timedelta(seconds=1)})
     async with device_ws(live_app, token) as ws:
         await send(ws, first)  # notifications are off by default
-        # Wait for the hub's background check of this detection, not a fixed time: on a
-        # loaded machine it could still be pending when notifications are switched on.
+        # Wait until the hub stored this detection and ran its background check, not a
+        # fixed time: on a loaded machine it could still be pending when notifications
+        # are switched on (CI, 2026-11-04).
+        await _stored(client, auth, dev.device_id, first.id)
         await _hub_tasks_done()
         assert fake_push.sent == []
 
@@ -283,6 +285,18 @@ async def test_push_config_for_the_app(
 
 class _ProjectSender(FakeSender):
     project_id = "allskyhub-test"
+
+
+async def _stored(
+    client: httpx.AsyncClient, auth: dict[str, str], device_id: str, event_id: str
+) -> None:
+    """Until the hub has the event (the device's message is handled after send returns)."""
+    for _ in range(200):
+        r = await client.get(f"/api/v1/cameras/{device_id}/events", headers=auth)
+        if any(e["id"] == event_id for e in r.json()):
+            return
+        await asyncio.sleep(0.05)
+    raise AssertionError(f"the hub never stored {event_id}")
 
 
 async def _hub_tasks_done() -> None:

@@ -230,7 +230,9 @@ async def test_apps_page_and_actions(
     assert "Der Server baut das App Bundle" not in page.text  # the notice only once
     # While it builds, the card polls itself (no reload of the whole page).
     assert 'hx-get="/admin/apps/card/allskyhub"' in page.text
-    assert 'hx-get="/admin/apps/card/bortle"' not in page.text
+    # The others too, to get their build buttons back; till then they say why.
+    assert 'hx-get="/admin/apps/card/bortle"' in page.text
+    assert "der Server baut allskyhub" in page.text
     card = await client.get("/admin/apps/card/allskyhub")
     assert card.status_code == 200
     assert 'id="app-allskyhub"' in card.text
@@ -345,6 +347,8 @@ async def test_vinventory_test_apk(
     assert hub.android_busy()
     with pytest.raises(stores.StoreError):
         hub.request_android(email, vinventory)
+    # The other cards say why their build buttons are missing.
+    assert "der Server baut Vinventory: Test-APK" in (await client.get("/admin/apps")).text
 
     # The root helper built it.
     (tmp_path / "android-release" / "request").unlink()

@@ -9,7 +9,7 @@
     <p class="muted">Nichts angekommen? Schau im Spam-Ordner nach.</p>
   </div>
   {% else %}
-  <p class="muted">Zum Melden der Himmelshelligkeit in der allskyhub-App. Ein Konto für eigene Kameras ist das nicht; dafür bitte <a href="/zugang">Zugang anfragen</a>.</p>
+  <p class="muted">Zum Melden der Himmelshelligkeit in der allskyhub-App. Ein Konto für eigene Kameras ist das nicht; dafür bitte {% if open_signup %}<a href="/konto/anlegen">ein Konto anlegen</a>{% else %}<a href="/zugang">Zugang anfragen</a>{% endif %}.</p>
   {% if error %}<p class="msg error" role="alert">{{ error }}</p>{% endif %}
   <form method="post" action="/melden/konto" class="card stack">
     <input type="hidden" name="csrf_token" value="{{ csrf_token }}">

@@ -25,7 +25,7 @@ from allskyhub_protocol import (
     invalid_settings,
 )
 from allskyhub_server.admin import stores as admin_stores
-from allskyhub_server.auth import accounts, app_tokens, ratelimit
+from allskyhub_server.auth import accounts, app_tokens, lockout, ratelimit
 from allskyhub_server.auth.passwords import verify_secret_async
 from allskyhub_server.auth.tokens import hash_token
 from allskyhub_server.devices import (
@@ -293,13 +293,12 @@ async def _limit(request: Request, key: str, limits: tuple[ratelimit.Limit, ...]
 async def login(
     request: Request, body: LoginRequest, db: DbSession, settings: SettingsDep
 ) -> LoginResponse:
+    email, ip = accounts.normalize_email(body.email), client_ip(request, settings)
     try:
-        await ratelimit.login(
-            request.app.state.engine,
-            accounts.normalize_email(body.email),
-            client_ip(request, settings),
-        )
+        await ratelimit.login(request.app.state.engine, email, ip)
     except ratelimit.RateLimitedError as exc:
+        if isinstance(exc, ratelimit.AccountLockedError):
+            lockout.warn_later(request.app, email, ip, settings.base_url)
         raise HTTPException(
             429, "Too many requests", {"Retry-After": str(exc.retry_after)}
         ) from None

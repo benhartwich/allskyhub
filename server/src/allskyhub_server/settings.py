@@ -93,6 +93,9 @@ class Settings(BaseSettings):
     # Reporter sign-up on /melden/konto (app "Himmelshelligkeit melden"), behind Cloudflare
     # Turnstile. Off while either is empty (Benjamin enters them, 2026-10-28).
     turnstile_site_key: str = ""
+    # Benjamin, 2026-11-05 (SharedSky): anyone may sign up on /konto/anlegen, behind
+    # Turnstile and a confirmation mail. Off until he switches it on.
+    open_signup: bool = False
     turnstile_secret: str = ""
 
     log_level: str = "INFO"

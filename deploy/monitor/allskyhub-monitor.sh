@@ -88,8 +88,10 @@ if [ -n "$iface" ] && [ -r "/sys/class/net/$iface/statistics/rx_bytes" ]; then
   today="$(date -u +%F)"
   day="$today"; sum=0; last="$now_rx"
   [ -r "$STATE_DIR/rx-day" ] && read -r day sum last < "$STATE_DIR/rx-day"
+  # A damaged state file starts anew instead of breaking the arithmetic.
+  if ! [[ "$sum" =~ ^[0-9]+$ && "$last" =~ ^[0-9]+$ ]]; then day="$today"; sum=0; last="$now_rx"; fi
   delta=$(( now_rx - last ))
-  [ "$delta" -lt 0 ] && delta=0  # the counter started anew (reboot)
+  [ "$delta" -lt 0 ] && delta="$now_rx"  # the counter started anew (reboot): all since boot
   if [ "$day" = "$today" ]; then sum=$(( sum + delta )); else day="$today"; sum="$delta"; fi
   echo "$day $sum $now_rx" > "$STATE_DIR/rx-day"
   gb=$(( sum / 1000000000 ))

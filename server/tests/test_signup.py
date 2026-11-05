@@ -47,14 +47,14 @@ async def _sign_up(
 
 
 async def _confirm(client: httpx.AsyncClient, mailer: MemoryMailer) -> httpx.Response:
-    link = re.search(r"/konto/bestaetigen\?token=(\S+)", mailer.sent[-1].body)
+    link = re.search(r"/konto/bestaetigen\?token=([^&\s]+)\S*", mailer.sent[-1].body)
     assert link
     page = await client.get(link[0])
     assert page.status_code == 200
-    return await client.post(
-        "/konto/bestaetigen",
-        data={"csrf_token": csrf_from(page.text), "token": unquote(link[1])},
-    )
+    data = {"csrf_token": csrf_from(page.text), "token": unquote(link[1])}
+    if weiter := re.search(r'name="weiter" value="([^"]+)"', page.text):
+        data["weiter"] = weiter[1]
+    return await client.post("/konto/bestaetigen", data=data)
 
 
 async def test_off_until_switched_on(app: FastAPI, client: httpx.AsyncClient) -> None:
@@ -177,3 +177,41 @@ async def test_one_address_gets_few_mails(
         )  # fmt: skip
         assert "E-Mail mit einem Link ist unterwegs" in r.text  # the page always says so
     assert len([m for m in open_signup.sent if m.to == "opfer@example.org"]) == 3
+
+
+async def test_from_mitmachen_to_kamera_verbinden(
+    client: httpx.AsyncClient, open_signup: MemoryMailer
+) -> None:
+    """Benjamin, 2026-11-05: who signs up to join SharedSky lands on the question of the
+    software (start_choose.html), not on the first steps of building a camera."""
+    assert "/konto/anlegen?weiter=sharedsky" in (await client.get("/mitmachen")).text
+    page = await client.get("/konto/anlegen", params={"weiter": "sharedsky"})
+    r = await client.post(
+        "/konto/anlegen",
+        data={"csrf_token": csrf_from(page.text), "email": "station@example.org",
+              "password": PASSWORD, "terms": "true", "cf-turnstile-response": "ok",
+              "weiter": "sharedsky"},
+    )  # fmt: skip
+    assert r.status_code == 200
+    assert "weiter=sharedsky" in open_signup.sent[-1].body
+    done = await _confirm(client, open_signup)
+    assert done.headers["location"] == "/start?kamera=ja"
+    # With open sign-up, the app's "Zugang anfragen" (older versions) leads here too.
+    r = await client.get("/zugang")
+    assert r.headers["location"] == "/konto/anlegen"
+
+
+async def test_an_unknown_target_leads_to_the_first_steps(
+    client: httpx.AsyncClient, open_signup: MemoryMailer
+) -> None:
+    page = await client.get("/konto/anlegen", params={"weiter": "https://evil.example"})
+    assert "evil" not in page.text
+    await client.post(
+        "/konto/anlegen",
+        data={"csrf_token": csrf_from(page.text), "email": "x@example.org",
+              "password": PASSWORD, "terms": "true", "cf-turnstile-response": "ok",
+              "weiter": "https://evil.example"},
+    )  # fmt: skip
+    assert "evil" not in open_signup.sent[-1].body
+    done = await _confirm(client, open_signup)
+    assert done.headers["location"] == "/start"

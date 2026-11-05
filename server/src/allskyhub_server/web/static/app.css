@@ -510,3 +510,12 @@ h1.break { overflow-wrap: anywhere; }
 .map.map-small { height: min(50vh, 380px); min-height: 260px; }
 .copy-value { overflow-wrap: anywhere; }
 .join-ways { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px; }
+
+/* The way in after signing up (start_choose.html): big answers side by side on a desktop,
+   one under the other on a phone. */
+.wizard { max-width: 960px; margin: 0 auto; display: flex; flex-direction: column; gap: 18px; }
+.choice-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 14px; }
+.choice-grid.two { grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); }
+.choice-card { display: flex; flex-direction: column; gap: 8px; padding: 20px; min-width: 0; border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface); color: var(--text); text-decoration: none; }
+.choice-card strong { font-family: var(--display); font-size: 1.15rem; }
+.choice-card:hover, .choice-card:focus-visible { border-color: var(--accent); }

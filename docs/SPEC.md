@@ -1622,3 +1622,47 @@ sky brightness) are shared under CC BY 4.0 with the station's name as credit, wh
 what lets the hub pass them to partners. Every result page names the stations behind it.
 The owner can leave at any time; their measurements already in joint results stay, under
 their name or, if they ask, as "eine Station im Netz".
+
+### 10.7 Stations by their image address
+
+Benjamin, 2026-11-05: most cameras publish their latest image at a fixed address (an
+Allsky or indi-allsky website, AllSkyKamera, own builds); such a camera joins without
+changing anything on it. Nothing is shown in its image for this: an admin checks every
+such station by hand before the hub fetches anything.
+
+**Asking.** The owner creates a station with the software "Bild-Adresse" and gives the
+image's address (`https://` or `http://`, no credentials in it), the camera's place (map
+pin or latitude, longitude, elevation), optionally the lens, and how the admin can tell
+the camera is theirs: a screenshot of the camera's own settings page that shows the
+address, a photo of the camera at that place, a link to their own website with the
+image, or a sentence. They consent to the terms (§10.6) and to the hub fetching that
+address (its traffic is theirs, §10.7 Fetching). The station waits as `pending`.
+
+**Checking.** The admin page lists pending stations with the owner's address and proof
+and, fetched once when the admin opens it, the image at the address beside a map of the
+given place. The admin approves or declines with a short reason; the owner gets a mail
+either way. Until approved the hub fetches nothing else. A station whose image no longer
+fits its place and orientation (§4.8 fails 3 nights in a row on clear frames) goes back
+to `pending`. Anyone may ask an admin to remove a station that shows their camera
+(contact on /mitmachen); the admin pauses it at once and asks its owner.
+
+**Fetching.** Every 30 s, with `If-None-Match`/`If-Modified-Since`, as
+`User-Agent: SharedSky (+https://allskyhub.org/mitmachen)`. Only addresses that resolve
+to public addresses (never loopback, private, link-local or the hub's own), checked
+again at each fetch and after each of at most 3 redirects; only `image/jpeg` or
+`image/png`, at most 8 MB and 50 MP, 15 s timeout. An unchanged image (same ETag, date
+or bytes) is not processed again. Errors back off (1 min doubling to 1 h); after 24 h of
+errors the station pauses and its owner gets a mail. A 429 or 503 is honoured with its
+`Retry-After`.
+
+**Time.** From the image's EXIF `DateTimeOriginal` with `OffsetTimeOriginal` when it has
+one, else from the camera's time zone at its place, else the response's `Last-Modified`,
+else the moment of the fetch; the source is kept with the frame. The clock check of
+§10.1 judges these times like a station's own; a station whose times come only from
+the fetch is never trusted for pairing (its meteors still count for showers and the
+night).
+
+**Processing.** Each new image is a frame of §10.2: a thumbnail is kept by §10.1, the
+hub solves the orientation from it (§10.1) and runs its meteor detection on it (the
+camera's, §5.3); a meteor keeps the full frame and becomes an event like `POST /events`
+sends. Sky brightness, clouds and aurora come from the same frames as for cameras.

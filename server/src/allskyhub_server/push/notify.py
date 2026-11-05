@@ -264,7 +264,7 @@ class Notifier:
                 await db.execute(
                     select(Device, User)
                     .join(User, User.id == Device.owner_id)
-                    .where(User.notify_offline.is_(True))
+                    .where(User.notify_offline.is_(True), Device.kind == "camera")
                 )
             ).all()
             for device, user in rows:
@@ -548,7 +548,8 @@ class Notifier:
                 await db.execute(
                     select(Device, User)
                     .join(User, User.id == Device.owner_id)
-                    .where(User.notify_summary.is_(True))
+                    # Stations (SPEC §10) get their own notices with their pages.
+                    .where(User.notify_summary.is_(True), Device.kind == "camera")
                 )
             ).all()
             for device, user in rows:
@@ -593,7 +594,7 @@ class Notifier:
                 await db.execute(
                     select(Device, User)
                     .join(User, User.id == Device.owner_id)
-                    .where(User.notify_tonight.is_(True))
+                    .where(User.notify_tonight.is_(True), Device.kind == "camera")
                 )
             ).all()
             for device, user in rows:

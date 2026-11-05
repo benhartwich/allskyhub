@@ -51,6 +51,7 @@ from allskyhub_server.devices.satellite_match import SatelliteCatalogue
 from allskyhub_server.devices.satellites import TleCache
 from allskyhub_server.devices.sky_photos import SkyPhotos
 from allskyhub_server.devices.space_weather import KpCache, OvationCache
+from allskyhub_server.devices.stations import SecretKey
 from allskyhub_server.devices.tonight import ForecastCache
 from allskyhub_server.devices.youtube import YouTube
 from allskyhub_server.i18n import LanguageMiddleware
@@ -349,6 +350,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         release_out=settings.android_dir / "release",
     )
     app.state.turnstile = turnstile_from(settings, app.state.stores.vault)
+    # SPEC §10.1: the key for indi-allsky stations' secrets exists before any station.
+    SecretKey(app.state.stores.vault).ensure()
     app.state.github.token = app.state.latest_image.token = github_token(app.state.stores.vault)
     app.add_middleware(CustomDomainMiddleware, hosts=app.state.hosts)
     app.add_middleware(LanguageMiddleware)

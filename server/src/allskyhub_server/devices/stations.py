@@ -27,16 +27,24 @@ from typing import Any
 
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 from PIL import Image
-from sqlalchemy import func, select
+from sqlalchemy import delete, func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from allskyhub_protocol import device_id_from_public_key
-from allskyhub_server.models import Device, EventRecord, User
+from allskyhub_server.models import (
+    CameraMember,
+    Device,
+    EventRecord,
+    Frame,
+    RenderJob,
+    StatusSample,
+    User,
+)
 
 log = logging.getLogger(__name__)
 
 SOFTWARE = ("indi-allsky", "allsky", "other")
-KEY_KIND = "station_key"  # in the vault (admin/stores.py), made on first use
+KEY_KIND = "station_key"  # in the vault (admin/stores.py), made at the hub's start
 # SPEC §10.1 Clock.
 CLOCK_EARLY_S = 120.0  # plus the exposure: a frame this much older than its arrival
 CLOCK_LATE_S = 60.0  # a frame from this far in the future is always wrong
@@ -47,6 +55,8 @@ EVENTS_PER_NIGHT = 3000
 FRAME_EVERY = dt.timedelta(minutes=1)
 MAX_BYTES = 2 * 1024**3
 THUMB_SIDE = 640
+# A frame larger than this is refused before it is decoded (a JPEG's size is in its header).
+MAX_PIXELS = 50_000_000
 
 
 class StationError(Exception):
@@ -64,14 +74,18 @@ class StationError(Exception):
 
 
 class SecretKey:
-    """The vault's key for indi-allsky stations' secrets (32 random bytes)."""
+    """The vault's key for indi-allsky stations' secrets (32 random bytes). ``ensure``
+    makes it once: at the hub's start, and safely if two make it at the same time."""
 
     def __init__(self, vault: Any) -> None:
         self._vault = vault
 
+    def ensure(self) -> None:
+        if not (Path(self._vault.root) / f"{KEY_KIND}.secret").exists():
+            self._vault.put_if_absent(KEY_KIND, os.urandom(32), {}, by="hub")
+
     def _key(self) -> bytes:
-        if not self._vault.has(KEY_KIND):
-            self._vault.put(KEY_KIND, os.urandom(32), {}, by="hub")
+        self.ensure()
         return bytes(self._vault.secret(KEY_KIND, "station secret"))
 
     def seal(self, secret: str) -> bytes:
@@ -114,7 +128,8 @@ async def create(
         software=software,
         terms_accepted_at=now,
         network=True,
-        clock={"trusted": True, "bad": 0, "good": 0, "recent": []},
+        # SPEC §10.1: a new station's clock is trusted once enough frames showed it.
+        clock={"trusted": False, "bad": 0, "good": 0, "recent": []},
     )
     secret = _new_secret(device, key)
     db.add(device)
@@ -171,7 +186,7 @@ def check_clock(device: Device, taken: dt.datetime, exposure_s: float, now: dt.d
         state["bad"] = 0
         if state["good"] >= CLOCK_GOOD_IN_A_ROW:
             state["trusted"] = True
-    state.setdefault("trusted", True)
+    state.setdefault("trusted", False)
     device.clock = state
 
 
@@ -187,7 +202,7 @@ def _live(recent: list[list[float]]) -> bool:
 
 def clock_trusted(device: Device, word: bool) -> bool:
     """Both the station's word and the hub's check (SPEC §10.1)."""
-    return word and bool((device.clock or {}).get("trusted", True))
+    return word and bool((device.clock or {}).get("trusted", False))
 
 
 def night_id(taken: dt.datetime, longitude: float | None) -> str:
@@ -238,23 +253,35 @@ class Picture:
     mean: float  # 0..255
 
 
-def picture(data: bytes) -> Picture:
-    """Size, a thumbnail and the mean of a JPEG; ``bad_image`` when it is none."""
+def _open(data: bytes) -> Image.Image:
+    """A JPEG, its size checked from the header before anything is decoded."""
     try:
-        with Image.open(io.BytesIO(data)) as im:
-            if im.format != "JPEG":
-                raise StationError(400, "bad_image")
-            im.load()
-            histogram = im.convert("L").resize((64, 64)).histogram()
-            width, height = im.size
-            small = im.convert("RGB")
-            small.thumbnail((THUMB_SIDE, THUMB_SIDE))
-            out = io.BytesIO()
-            small.save(out, "JPEG", quality=80)
-    except StationError:
-        raise
+        im = Image.open(io.BytesIO(data))
     except Exception as exc:  # Pillow raises many kinds for broken files
         raise StationError(400, "bad_image") from exc
+    if im.format != "JPEG":
+        im.close()
+        raise StationError(400, "bad_image")
+    if im.size[0] * im.size[1] > MAX_PIXELS:
+        im.close()
+        raise StationError(413, "too_large")
+    return im
+
+
+def picture(data: bytes) -> Picture:
+    """Size, a thumbnail and the mean of a JPEG; ``bad_image`` when it is none. Only a
+    reduced draft is decoded (JPEG's DCT scaling); the full frame stays as sent."""
+    with _open(data) as im:
+        width, height = im.size
+        try:
+            im.draft("RGB", (THUMB_SIDE, THUMB_SIDE))
+            small = im.convert("RGB")
+            small.thumbnail((THUMB_SIDE, THUMB_SIDE))
+            histogram = small.convert("L").resize((64, 64)).histogram()
+            out = io.BytesIO()
+            small.save(out, "JPEG", quality=80)
+        except Exception as exc:
+            raise StationError(400, "bad_image") from exc
     mean = sum(i * n for i, n in enumerate(histogram)) / max(sum(histogram), 1)
     return Picture(width, height, out.getvalue(), mean)
 
@@ -268,15 +295,23 @@ def _median(histogram: list[int]) -> int:
     return 0
 
 
+# The track is measured in a reduced draft of at most this many pixels on its long side.
+PEAK_SIDE = 2048
+
+
 def track_peak(data: bytes, track: list[tuple[float, float]]) -> float:
     """The track's brightness on the 0..1 scale of SPEC §6.4 when the station sends none
-    (§10.2): the brightest pixel along it above the sky's median, in the full frame."""
-    with Image.open(io.BytesIO(data)) as im:
+    (§10.2): the brightest pixel along it above the sky's median, in a draft of the frame."""
+    with _open(data) as im:
+        full_w, _ = im.size
+        im.draft("L", (PEAK_SIDE, PEAK_SIDE))
         gray = im.convert("L")
         width, height = gray.size
+        scale = width / full_w
         sky = _median(gray.resize((64, 64)).histogram())
         best = 0
-        for (x1, y1), (x2, y2) in itertools.pairwise(track):
+        points = [(x * scale, y * scale) for x, y in track]
+        for (x1, y1), (x2, y2) in itertools.pairwise(points):
             steps = max(1, math.ceil(math.hypot(x2 - x1, y2 - y1)))
             for i in range(steps + 1):
                 x = round(x1 + (x2 - x1) * i / steps)
@@ -310,6 +345,25 @@ def cap_storage(root: Path, device_id: str, limit: int = MAX_BYTES) -> int:
         total -= size
         removed += 1
     return removed
+
+
+async def remove(db: AsyncSession, device: Device) -> None:
+    """The owner removes a station (SPEC §10.1): its frames, its place and its secret go at
+    once (the caller deletes its images with ``ImageStore.delete_device`` after the
+    commit); its measurements stay in joint results (§10.6): events and meteor pairs."""
+    await db.execute(delete(Frame).where(Frame.device_id == device.id))
+    await db.execute(delete(StatusSample).where(StatusSample.device_id == device.id))
+    await db.execute(delete(RenderJob).where(RenderJob.device_id == device.id))
+    await db.execute(delete(CameraMember).where(CameraMember.device_id == device.id))
+    await db.execute(
+        update(EventRecord)
+        .where(EventRecord.device_id == device.id)
+        .values(has_full=False, has_thumb=False, has_original=False)
+    )
+    device.paired_at = None
+    device.latest_image_at = None
+    device.latest_thumb_at = None
+    forget(device)
 
 
 def forget(device: Device) -> None:

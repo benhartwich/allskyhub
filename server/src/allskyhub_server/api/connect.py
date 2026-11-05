@@ -25,7 +25,7 @@ from allskyhub_server.devices import stations
 from allskyhub_server.devices.images import ImageStore
 from allskyhub_server.devices.stations import StationError
 from allskyhub_server.models import Device, EventRecord, Frame
-from allskyhub_server.web.deps import DbSession
+from allskyhub_server.web.deps import DbSession, client_ip
 from allskyhub_sky.astro import sun_altitude
 
 router = APIRouter(prefix="/api/connect/v1")
@@ -97,14 +97,44 @@ def error(exc: StationError) -> JSONResponse:
     return JSONResponse(body, status_code=exc.status, headers=headers)
 
 
+def _ip_key(request: Request) -> str:
+    return f"station-auth:{client_ip(request, request.app.state.settings)}"
+
+
+async def ip_allowed(request: Request) -> None:
+    """Before anything is read: an address with too many wrong logins waits (SPEC §10.2,
+    like password guesses); checking does not count."""
+    retry = await ratelimit.blocked(
+        request.app.state.engine, _ip_key(request), ratelimit.STATION_AUTH_PER_IP
+    )
+    if retry:
+        raise StationError(429, "too_often", retry_after=retry)
+
+
+async def wrong_login(request: Request) -> StationError:
+    """Count a wrong login of this address; the answer to give."""
+    try:
+        await ratelimit.hit(
+            request.app.state.engine, _ip_key(request), ratelimit.STATION_AUTH_PER_IP
+        )
+    except ratelimit.RateLimitedError as exc:
+        return StationError(429, "too_often", retry_after=exc.retry_after)
+    return StationError(401, "unauthorized")
+
+
 async def station_from(request: Request, db: AsyncSession) -> Device:
-    """The station of ``Authorization: Bearer <id>:<secret>``, counted against its limit."""
+    """The station of ``Authorization: Bearer <id>:<secret>``, counted against its limit;
+    checked from the header alone, before the body is read."""
+    await ip_allowed(request)
     header = request.headers.get("authorization", "")
     scheme, _, value = header.partition(" ")
     station_id, _, secret = value.strip().partition(":")
-    if scheme.lower() != "bearer" or not station_id or not secret:
-        raise StationError(401, "unauthorized")
-    device = await stations.authenticate(db, station_id, secret)
+    try:
+        if scheme.lower() != "bearer" or not station_id or not secret:
+            raise StationError(401, "unauthorized")
+        device = await stations.authenticate(db, station_id, secret)
+    except StationError:
+        raise await wrong_login(request) from None
     try:
         await ratelimit.hit(request.app.state.engine, f"connect:{device.id}", PER_STATION)
     except ratelimit.RateLimitedError as exc:

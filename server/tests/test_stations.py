@@ -185,7 +185,7 @@ async def test_open_api(
         assert stored.data["track_px"][0] == [100.0, 100.0]
         assert stored.data["peak"] > 0.8  # the bright line
         assert stored.data["start_azimuth_deg"] is None  # no orientation yet
-        assert stored.data["time_trusted"] is True
+        assert stored.data["time_trusted"] is False  # a new station's clock (SPEC §10.1)
     store = app.state.images
     assert store.event_path(station_id, stored.night_id, event_id, EventVariant.ORIGINAL).exists()
 
@@ -222,24 +222,31 @@ async def test_limits(
 
 
 def test_clock_check() -> None:
-    """SPEC §10.1 Clock: three wrong frames make the clock untrusted, ten right ones trust it
-    again; frames sent late after an outage do not judge it."""
-    device = Device(clock={"trusted": True, "bad": 0, "good": 0, "recent": []})
+    """SPEC §10.1 Clock: a new station's clock is trusted after ten right frames; three
+    wrong ones make it untrusted again; frames sent late after an outage judge nothing."""
+    device = Device(clock={"trusted": False, "bad": 0, "good": 0, "recent": []})
     t0 = dt.datetime(2026, 11, 5, 21, 0, tzinfo=dt.UTC)
-    for i in range(3):  # a clock an hour ahead
+    for i in range(stations.CLOCK_GOOD_IN_A_ROW - 1):
         now = t0 + dt.timedelta(minutes=i)
+        stations.check_clock(device, now - dt.timedelta(seconds=20), 30, now)
+    assert not stations.clock_trusted(device, True)
+    now = t0 + dt.timedelta(minutes=9)
+    stations.check_clock(device, now - dt.timedelta(seconds=20), 30, now)
+    assert stations.clock_trusted(device, True)
+    assert not stations.clock_trusted(device, False)  # the station's own word counts too
+    for i in range(3):  # a clock an hour ahead
+        now = t0 + dt.timedelta(minutes=20 + i)
         stations.check_clock(device, now + dt.timedelta(hours=1), 30, now)
     assert not stations.clock_trusted(device, True)
     for i in range(10):
-        now = t0 + dt.timedelta(minutes=10 + i)
+        now = t0 + dt.timedelta(minutes=30 + i)
         stations.check_clock(device, now - dt.timedelta(seconds=20), 30, now)
     assert stations.clock_trusted(device, True)
-    assert not stations.clock_trusted(device, False)  # the station's own word counts too
     # After an outage: a burst of old frames, a second apart, judges nothing.
     late = t0 + dt.timedelta(hours=2)
     for i in range(5):
         stations.check_clock(
-            device, t0 + dt.timedelta(minutes=30 + i), 30, late + dt.timedelta(seconds=i)
+            device, t0 + dt.timedelta(minutes=50 + i), 30, late + dt.timedelta(seconds=i)
         )
     assert stations.clock_trusted(device, True)
     assert device.clock is not None
@@ -250,6 +257,59 @@ def test_clock_check() -> None:
         at = late + dt.timedelta(minutes=10 + i)
         stations.check_clock(device, at - dt.timedelta(minutes=10), 30, at)
     assert not stations.clock_trusted(device, True)
+
+
+def test_station_key_made_once(tmp_path: Path) -> None:
+    """SPEC §10.1: two first uses at the same time make one key, not two."""
+    from concurrent.futures import ThreadPoolExecutor
+
+    from allskyhub_server.admin.stores import Vault
+
+    vault = Vault(tmp_path / "vault")
+
+    def use(_: int) -> bytes:
+        key = SecretKey(Vault(tmp_path / "vault"))
+        return key.open(key.seal("abc")).encode() + bytes(vault.secret(stations.KEY_KIND, "t"))
+
+    with ThreadPoolExecutor(8) as pool:
+        results = set(pool.map(use, range(16)))
+    assert len(results) == 1
+    assert vault.has(stations.KEY_KIND)
+    assert len(list((tmp_path / "vault").glob(".*"))) == 0  # no leftovers
+
+
+async def test_wrong_logins_and_big_frames(
+    app: FastAPI, client: httpx.AsyncClient, new_client: httpx.AsyncClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:  # fmt: skip
+    """Security review of #390: an address with too many wrong logins waits, also with the
+    right secret, before any body is read; a frame's size is checked before decoding."""
+    station_id, secret = await _station(app, client)
+    auth = _auth(station_id, secret)
+    assert (await new_client.put("/api/connect/v1/station", json=_station_body(),
+                                 headers=auth)).status_code == 200  # fmt: skip
+    monkeypatch.setattr(stations, "MAX_PIXELS", 1000)
+    now = dt.datetime.now(dt.UTC)
+    meta = {"time": now.isoformat(), "exposure_s": 30, "night": True}
+    r = await new_client.post("/api/connect/v1/frames", files=_files(meta, _jpeg(640, 480)),
+                              headers=auth)  # fmt: skip
+    assert (r.status_code, r.json()) == (413, {"error": "too_large"})
+    monkeypatch.setattr(stations, "MAX_PIXELS", 50_000_000)
+    monkeypatch.setattr("allskyhub_server.auth.ratelimit.STATION_AUTH_PER_IP", (Limit(2, 900),))
+    wrong = _auth(station_id, "0" * 64)
+    body = _station_body()
+    codes = [
+        (await new_client.put("/api/connect/v1/station", json=body, headers=wrong)).status_code
+        for _ in range(3)
+    ]
+    assert codes == [401, 401, 429]
+    r = await new_client.put("/api/connect/v1/station", json=_station_body(), headers=auth)
+    assert (r.status_code, r.json()) == (429, {"error": "too_often"})
+    image = json.dumps({"createDate": int(time.time())}).encode()
+    r = await new_client.post("/indi-allsky/sync/v1/image",
+                              files=_indi_files(image, _jpeg()),
+                              headers=_indi_headers(station_id, secret, image))  # fmt: skip
+    assert r.status_code == 429  # checked before the body is parsed
 
 
 def test_night_id_and_storage_cap(tmp_path: Path) -> None:
@@ -336,10 +396,45 @@ async def test_indi_allsky(
         assert device is not None
         assert device.last_status is not None
         assert device.last_status["station"]["width"] == W  # the saved image's size
+        # SPEC §10.1: the clock is judged on indi-allsky's frames too, at mid-exposure.
+        assert device.clock is not None
+        assert device.clock["recent"][-1][0] == start + 15
+        assert device.clock["good"] == 1
     video = json.dumps({"type": 3}).encode()
     r = await new_client.post("/indi-allsky/sync/v1/video", files=_indi_files(video, b"x"),
                               headers=_indi_headers(station_id, secret, video))  # fmt: skip
     assert r.status_code == 200  # dropped
+
+
+async def test_remove_station(app: FastAPI, client: httpx.AsyncClient) -> None:
+    """SPEC §10.1: removing a station deletes its place and secret at once; its meteors stay
+    for joint results (§10.6)."""
+    from allskyhub_server.devices import pairing, queries
+
+    maker: async_sessionmaker[AsyncSession] = app.state.sessionmaker
+    station_id, _ = await _station(app, client)
+    async with maker() as db:
+        device = await db.get(Device, station_id)
+        assert device is not None
+        assert device.owner_id is not None
+        assert await queries.owned(db, device.owner_id) == []  # no camera pages for it
+        device.last_status = {"settings": {"latitude": 48.3, "longitude": 14.29}}
+        db.add(EventRecord(device_id=station_id, event_id="meteor-20261105T210000Z",
+                           night_id="20261105", kind="meteor", start=dt.datetime.now(dt.UTC),
+                           end=dt.datetime.now(dt.UTC), confidence=1.0, has_image=True,
+                           has_original=True, data={}))  # fmt: skip
+        await db.commit()
+        await pairing.unpair(db, device)
+        await db.commit()
+    async with maker() as db:
+        device = await db.get(Device, station_id)
+        assert device is not None
+        assert device.owner_id is None
+        assert device.last_status is None
+        assert device.station_secret_hash is None
+        event = await db.scalar(select(EventRecord).where(EventRecord.device_id == station_id))
+        assert event is not None
+        assert not event.has_original
 
 
 def test_forget() -> None:

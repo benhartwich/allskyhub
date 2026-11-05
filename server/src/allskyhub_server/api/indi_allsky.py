@@ -22,8 +22,9 @@ from typing import Any
 
 from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse
+from python_multipart.exceptions import MultipartParseError
+from python_multipart.multipart import MultipartParser, parse_options_header
 from sqlalchemy.ext.asyncio import AsyncSession
-from starlette.datastructures import UploadFile
 
 from allskyhub_server.api import connect
 from allskyhub_server.auth import ratelimit
@@ -48,25 +49,28 @@ def signature(secret: str, window: int, metadata: bytes) -> str:
 async def station_from(
     request: Request, db: AsyncSession, metadata: bytes, now: float | None = None
 ) -> Device:
+    """The station whose secret signed ``metadata``; a wrong one counts against the address
+    (SPEC §10.2), as on ``connect/v1``."""
     header = request.headers.get("authorization", "")
     scheme, _, value = header.partition(" ")
     station_id, _, received = value.strip().partition(":")
-    if scheme != "Bearer" or not station_id or not received:
-        raise StationError(401, "unauthorized")
     device = await db.get(Device, station_id) if len(station_id) == 26 else None
+    good = False
     if (
-        device is None
-        or device.kind != "station"
-        or device.owner_id is None
-        or device.station_secret_enc is None
+        scheme == "Bearer"
+        and received
+        and device is not None
+        and device.kind == "station"
+        and device.owner_id is not None
+        and device.station_secret_enc is not None
     ):
-        raise StationError(401, "unauthorized")
-    secret = SecretKey(request.app.state.stores.vault).open(device.station_secret_enc)
-    window = math.floor((now if now is not None else time.time()) / TIME_SKEW)
-    if not any(
-        hmac.compare_digest(signature(secret, window + d, metadata), received) for d in WINDOWS
-    ):
-        raise StationError(401, "unauthorized")
+        secret = SecretKey(request.app.state.stores.vault).open(device.station_secret_enc)
+        window = math.floor((now if now is not None else time.time()) / TIME_SKEW)
+        good = any(
+            hmac.compare_digest(signature(secret, window + d, metadata), received) for d in WINDOWS
+        )
+    if not good or device is None:
+        raise await connect.wrong_login(request)
     try:
         await ratelimit.hit(request.app.state.engine, f"connect:{device.id}", connect.PER_STATION)
     except ratelimit.RateLimitedError as exc:
@@ -74,19 +78,78 @@ async def station_from(
     return device
 
 
-async def _parts(request: Request) -> tuple[bytes, bytes]:
+METADATA_MAX = 64 * 1024
+
+
+async def read_signed(request: Request, db: AsyncSession) -> tuple[Device, bytes, bytes]:
+    """The station, ``metadata`` and ``media`` of a SyncAPI request, read as a stream:
+    indi-allsky sends ``metadata`` first, so its signature is checked as soon as that small
+    part is complete, before the picture is read (security review of #390)."""
+    await connect.ip_allowed(request)
     length = request.headers.get("content-length")
     if length is not None and length.isdigit() and int(length) > connect.BODY_MAX:
         raise StationError(413, "too_large")
-    form = await request.form(max_files=2, max_fields=2)
-    metadata, media = form.get("metadata"), form.get("media")
-    raw = await metadata.read() if isinstance(metadata, UploadFile) else b""
-    data = await media.read() if isinstance(media, UploadFile) else b""
-    if not raw:
+    content_type, params = parse_options_header(request.headers.get("content-type", ""))
+    boundary = params.get(b"boundary")
+    if content_type != b"multipart/form-data" or not boundary:
         raise StationError(400, "bad_request", "metadata")
-    if len(data) > connect.FRAME_MAX:
-        raise StationError(413, "too_large")
-    return raw, data
+    parts: dict[str, bytearray] = {}
+    done: set[str] = set()
+    state: dict[str, Any] = {"name": None, "field": b"", "value": b"", "headers": {}}
+
+    def on_part_begin() -> None:
+        state.update(name=None, headers={})
+
+    def on_header_field(data: bytes, start: int, end: int) -> None:
+        state["field"] += data[start:end]
+
+    def on_header_value(data: bytes, start: int, end: int) -> None:
+        state["value"] += data[start:end]
+
+    def on_header_end() -> None:
+        state["headers"][bytes(state["field"]).lower()] = bytes(state["value"])
+        state.update(field=b"", value=b"")
+
+    def on_headers_finished() -> None:
+        _, disposition = parse_options_header(state["headers"].get(b"content-disposition", b""))
+        name = disposition.get(b"name", b"").decode(errors="replace")
+        state["name"] = name if name in ("metadata", "media") else None
+        if state["name"]:
+            parts[state["name"]] = bytearray()
+
+    def on_part_data(data: bytes, start: int, end: int) -> None:
+        name = state["name"]
+        if name:
+            parts[name] += data[start:end]
+            limit = METADATA_MAX if name == "metadata" else connect.FRAME_MAX
+            if len(parts[name]) > limit:
+                raise StationError(413, "too_large")
+
+    def on_part_end() -> None:
+        if state["name"]:
+            done.add(state["name"])
+
+    callbacks: Any = {
+        "on_part_begin": on_part_begin, "on_header_field": on_header_field,
+        "on_header_value": on_header_value, "on_header_end": on_header_end,
+        "on_headers_finished": on_headers_finished, "on_part_data": on_part_data,
+        "on_part_end": on_part_end,
+    }  # fmt: skip
+    parser = MultipartParser(boundary, callbacks, max_size=connect.BODY_MAX)
+    device: Device | None = None
+    try:
+        async for chunk in request.stream():
+            parser.write(chunk)
+            if device is None and "metadata" in done:
+                device = await station_from(request, db, bytes(parts["metadata"]))
+        parser.finalize()
+    except MultipartParseError:
+        raise StationError(400, "bad_request", "metadata") from None
+    if not parts.get("metadata"):
+        raise StationError(400, "bad_request", "metadata")
+    if device is None:
+        device = await station_from(request, db, bytes(parts["metadata"]))
+    return device, bytes(parts["metadata"]), bytes(parts.get("media", b""))
 
 
 def _id(device: Device) -> int:
@@ -182,8 +245,7 @@ def _error(exc: StationError) -> JSONResponse:
 @router.api_route("/{asset}", methods=["GET", "POST", "PUT", "DELETE"])
 async def sync(request: Request, db: DbSession, asset: str) -> JSONResponse:
     try:
-        raw, data = await _parts(request)
-        device = await station_from(request, db, raw)
+        device, raw, data = await read_signed(request, db)
         try:
             meta: Any = json.loads(raw)
         except ValueError:

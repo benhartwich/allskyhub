@@ -382,6 +382,29 @@ class Vault:
         self._write(f"{kind}.json", json.dumps({**meta, "at": _now(), "by": by}).encode())
         log.info("store secret %s saved by %s", kind, by)
 
+    def put_if_absent(self, kind: str, secret: bytes, meta: dict[str, Any], by: str) -> bool:
+        """Like ``put``, but only when there is no secret of this kind yet; of two at once
+        exactly one wins (the file is linked into place complete, ``link`` fails if it
+        exists). Returns whether this one was stored."""
+        if kind not in TITLES:
+            raise ValueError(kind)
+        self.root.mkdir(mode=0o700, parents=True, exist_ok=True)
+        tmp = self.root / f".{kind}.secret.{_random.token_hex(4)}"
+        fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+        try:
+            os.write(fd, secret)
+        finally:
+            os.close(fd)
+        try:
+            os.link(tmp, self.root / f"{kind}.secret")
+        except FileExistsError:
+            return False
+        finally:
+            tmp.unlink(missing_ok=True)
+        self._write(f"{kind}.json", json.dumps({**meta, "at": _now(), "by": by}).encode())
+        log.info("store secret %s made by %s", kind, by)
+        return True
+
     def update_meta(self, kind: str, **values: Any) -> None:
         meta = self.meta(kind)
         if meta is not None:

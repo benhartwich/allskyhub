@@ -31,7 +31,7 @@ SPDX-License-Identifier = "Apache-2.0"
 
 # Camera agent, its plate solving (shared with the hub) and the Raspberry Pi image.
 [[annotations]]
-path = ["agent/**", "packages/solve/**", "image/**"]
+path = ["agent/**", "packages/solve/**", "packages/detect/**", "image/**"]
 SPDX-FileCopyrightText = "2026 Benjamin Hartwich"
 SPDX-License-Identifier = "GPL-3.0-or-later"
 

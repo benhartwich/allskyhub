@@ -1,0 +1,14 @@
+[project]
+name = "allskyhub-detect"
+version = "0.1.0"
+description = "allskyhub meteor detection: streaks in the difference of consecutive frames and the checks of a single frame, shared by hub and camera"
+license = "GPL-3.0-or-later"
+requires-python = ">=3.11"
+dependencies = [
+  "numpy>=1.24",
+  "opencv-python-headless>=4.8",
+]
+
+[build-system]
+requires = ["uv_build>=0.13,<0.14"]
+build-backend = "uv_build"

@@ -14,15 +14,14 @@ import json
 import math
 from datetime import UTC, datetime
 from functools import cache
-from pathlib import Path
 from typing import TYPE_CHECKING
 
 import cv2
 import numpy as np
 import numpy.typing as npt
 
-from allskyhub_agent.calib.solve import Solution, alt_az, sidereal_deg
 from allskyhub_protocol import Event, EventKind, EventLabel, LabelReason
+from allskyhub_solve.solve import STARS_MAG5, Solution, alt_az, sidereal_deg
 
 if TYPE_CHECKING:
     from allskyhub_agent.detect.meteor import Streak
@@ -31,7 +30,7 @@ F = npt.NDArray[np.float64]
 Gray = npt.NDArray[np.uint8]
 Mask = npt.NDArray[np.bool_]
 
-STARS = Path(__file__).parent.parent / "calib" / "stars_mag5.json"
+STARS = STARS_MAG5
 
 # SPEC §6.4: the automatic label of each verdict.
 LABELS: dict[str, tuple[LabelReason, str]] = {

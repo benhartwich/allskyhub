@@ -26,10 +26,10 @@ import cv2
 import numpy as np
 import numpy.typing as npt
 
-from allskyhub_agent.calib.solve import Solution, sky_band
 from allskyhub_agent.core.sun import sun_position
 from allskyhub_agent.detect.episodes import EpisodeTracker, EpisodeUpdate
 from allskyhub_protocol import FrameInfo
+from allskyhub_solve.solve import Solution, sky_band
 
 Mask = npt.NDArray[np.bool_]
 

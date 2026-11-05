@@ -13,12 +13,12 @@ import cv2
 import numpy as np
 import pytest
 
-from allskyhub_agent.calib import localfit
-from allskyhub_agent.calib.solve import Solution, alt_az, sidereal_deg
 from allskyhub_agent.detect.events import DetectionWorker, EventStore
 from allskyhub_agent.detect.meteor import Streak, angle_between, centre_line, sky_unit
 from allskyhub_agent.store.images import ImageStore
 from allskyhub_protocol import Event, FrameInfo, Mode
+from allskyhub_solve import localfit
+from allskyhub_solve.solve import Solution, alt_az, sidereal_deg
 
 # A made-up place and a winter evening with Orion and Taurus high in the south.
 LAT, LON = 47.0, 11.0

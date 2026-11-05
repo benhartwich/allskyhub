@@ -34,7 +34,7 @@ from allskyhub_sky.objects import PLANETS, planet_radec
 
 ROOT = Path(__file__).resolve().parents[1]
 OUT = ROOT / "app" / "test" / "store" / "sky"
-CATALOGUE = ROOT / "agent" / "src" / "allskyhub_agent" / "calib" / "stars_mag5.json"
+CATALOGUE = ROOT / "packages" / "solve" / "src" / "allskyhub_solve" / "data" / "stars_mag5.json"
 LAT, LON = 50.04, 10.39
 ZONE = dt.timezone(dt.timedelta(hours=2))
 W, H = 1080, 1080

@@ -12,7 +12,6 @@ import cv2
 import numpy as np
 import pytest
 
-from allskyhub_agent.calib.solve import Solution, alt_az, sidereal_deg
 from allskyhub_agent.detect import trail
 from allskyhub_agent.detect.events import DetectionWorker, EventStore, OpenPass, onward
 from allskyhub_agent.detect.meteor import (
@@ -28,6 +27,7 @@ from allskyhub_agent.detect.meteor import (
 )
 from allskyhub_agent.store.images import ImageStore
 from allskyhub_protocol import Event, EventKind, EventValue, FrameInfo, Mode
+from allskyhub_solve.solve import Solution, alt_az, sidereal_deg
 
 H, W = 360, 640
 T0 = datetime(2026, 10, 8, 21, 0, tzinfo=UTC)

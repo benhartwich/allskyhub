@@ -21,9 +21,7 @@ from PIL import Image as PILImage
 from pydantic import ValidationError
 
 from allskyhub_agent.adapters.camera import Image
-from allskyhub_agent.calib import localfit
 from allskyhub_agent.calib.orientation import Orienter
-from allskyhub_agent.calib.solve import Solution
 from allskyhub_agent.core.metering import Mask
 from allskyhub_agent.detect.aurora import AuroraConfig, AuroraDetector, AuroraUpdate
 from allskyhub_agent.detect.episodes import EpisodeUpdate
@@ -58,6 +56,8 @@ from allskyhub_protocol import (
     SkyMetrics,
     event_id,
 )
+from allskyhub_solve import localfit
+from allskyhub_solve.solve import Solution
 
 log = logging.getLogger(__name__)
 

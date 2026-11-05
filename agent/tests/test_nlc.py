@@ -8,10 +8,10 @@ from pathlib import Path
 import cv2
 import numpy as np
 
-from allskyhub_agent.calib.solve import Solution
 from allskyhub_agent.core.sun import sun_position
 from allskyhub_agent.detect.nlc import NlcConfig, NlcDetector, band_mask, score
 from allskyhub_protocol import FrameInfo, Mode
+from allskyhub_solve.solve import Solution
 
 H, W = 1080, 1920
 LAT, LON = 50.036, 10.389

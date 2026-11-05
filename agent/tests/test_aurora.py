@@ -158,7 +158,7 @@ def test_restart_closes_an_open_episode(tmp_path: Path) -> None:
 
 
 def test_with_an_orientation_only_the_polar_sector_counts() -> None:
-    from allskyhub_agent.calib.solve import Solution
+    from allskyhub_solve.solve import Solution
 
     sol = Solution(cx=W / 2, cy=H / 2, a1=230.0, a3=0.0, rot=0.0, flip=1.0, tilt_east=0.0,
                    tilt_north=0.0, stars=30, rms_px=1.0, rms_deg=0.1,

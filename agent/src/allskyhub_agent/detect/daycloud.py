@@ -44,10 +44,10 @@ import cv2
 import numpy as np
 import numpy.typing as npt
 
-from allskyhub_agent.calib.solve import Solution
 from allskyhub_protocol import FrameInfo
 from allskyhub_sky import alt_az, sidereal_deg
 from allskyhub_sky.astro import sun_radec
+from allskyhub_solve.solve import Solution
 
 log = logging.getLogger(__name__)
 

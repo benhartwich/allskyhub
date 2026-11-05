@@ -25,10 +25,10 @@ import cv2
 import numpy as np
 import numpy.typing as npt
 
-from allskyhub_agent.calib.solve import Solution, alt_az, sidereal_deg
 from allskyhub_agent.core.metering import circle_mask
 from allskyhub_agent.detect import trail
 from allskyhub_protocol import FrameInfo, Mode
+from allskyhub_solve.solve import Solution, alt_az, sidereal_deg
 
 Gray = npt.NDArray[np.uint8]
 Mask = npt.NDArray[np.bool_]

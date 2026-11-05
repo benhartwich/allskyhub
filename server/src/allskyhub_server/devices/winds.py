@@ -42,6 +42,10 @@ KEEP = dt.timedelta(days=9)  # NOMADS keeps about ten days
 CYCLE_H = 6
 MAX_STEP_H = 120  # hourly steps up to here
 BOX_DEG = 0.5
+# NOMADS blocks above about 120 requests a minute: a round asks for few fireballs, one
+# request at a time with a pause (up to 4 runs each).
+PER_ROUND = 10
+PAUSE_S = 1.0
 TIMEOUT_S = 30.0
 
 
@@ -115,6 +119,7 @@ async def fetch(
 ) -> tuple[dict[str, Any], dark_flight.Profile] | None:
     """The winds above the place at the time, or None when no run is out (yet)."""
     for run, step in runs(at, now):
+        await asyncio.sleep(PAUSE_S)
         r = await client.get(url(run, step, lat, lon), timeout=TIMEOUT_S)
         if r.status_code == 404 or not r.content.startswith(b"GRIB"):
             continue
@@ -154,6 +159,7 @@ async def round_once(db: AsyncSession, client: httpx.AsyncClient, now: dt.dateti
                 MeteorPair.at >= now - KEEP,
             )
             .order_by(MeteorPair.at.desc())
+            .limit(PER_ROUND)
         )
     ).all()
     done = 0
@@ -163,7 +169,7 @@ async def round_once(db: AsyncSession, client: httpx.AsyncClient, now: dt.dateti
         found = await fetch(client, pair.at, pair.low_lat, pair.low_lon, now)
         if found is None:
             continue
-        values = field_values(pair, *found)
+        values = await asyncio.to_thread(field_values, pair, *found)  # ~0.2 s of numbers
         await db.execute(
             update(MeteorPair)
             .where(

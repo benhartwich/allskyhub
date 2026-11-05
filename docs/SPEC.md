@@ -199,6 +199,15 @@ The fitted lens maps a direction (alt, az) to a pixel (x, y) of the solved frame
 `cx`, `cy`, `a1`, `a3` are pixels of a `width` × `height` frame; for another size of the
 same frame (thumbnails, the latest image) they scale with the width.
 
+**Local fit for bright meteors** (fireball package B, Benjamin 2026-11-05). For a meteor
+with `peak` ≥ 0.9 or a track of at least 15° in the sky, the agent fits the stars of the
+event's own frame within 15° of the track (magnitude ≤ 4, Hipparcos, at the mid-exposure
+time), starting from the orientation, with a small correction: a shift in altitude and
+azimuth and a rotation about the track's midpoint, each at most 1°. It is accepted only
+with ≥ 8 stars and ≤ 0.25° RMS; then the meteor's `track`, its ends and `track_rms_deg`
+(§6.4) use it, otherwise the orientation, with `track_rms_deg` = `rms_deg`. The fit takes
+at most 2 s of CPU on a Pi 4 and capture never waits for it.
+
 ### 4.9 Bad frames
 
 Roadmap L19. A frame whose measured mean (§4.3) is below `bad_dark_pct` (default 2 %) or
@@ -540,6 +549,15 @@ event's `start` and `end`, which are the frame's exposure (up to a minute at nig
 the hub pairs meteors of two cameras by overlapping intervals and matching tracks, not by
 a fixed time difference. The camera fills the track ends only while its clock is
 synchronised (`time_trusted`, §4.4), otherwise they are null.
+
+A `meteor` may also carry `track` (optional): its streak as 2–32 points
+`[[azimuth_deg, altitude_deg], …]` along the streak's centre line, evenly spaced, from the
+end in `start_*` to the end in `end_*`, and `track_rms_deg` (optional, 0–5): how far these
+directions may be off, from the local fit of §4.8 when it succeeded, otherwise the
+orientation's `rms_deg`. Like the ends, `track` is null while the clock is not trusted.
+After a trial in which the hub only collects them (roadmap N1c), the hub fits the meteor's
+plane through all points instead of both ends and weights the camera by `track_rms_deg`;
+cameras without it pair as before.
 
 A meteor's `shower` depends on `shower_match`:
 

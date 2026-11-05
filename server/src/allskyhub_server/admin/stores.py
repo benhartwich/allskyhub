@@ -99,6 +99,8 @@ TITLES = {
     "play": "Google-Play-Dienstkonto",
     "asc": "App-Store-Connect-API-Schlüssel",
     "codemagic": "Codemagic-API-Token",
+    # SharedSky (SPEC §10.1): encrypts indi-allsky stations' secrets; made by the hub itself.
+    "station_key": "SharedSky: Schlüssel für die Geheimnisse der indi-allsky-Stationen",
     "android_upload": "Android-Upload-Schlüssel",
     "ios_certificate": "Schlüssel des iOS-Zertifikats",
     "youtube": "YouTube-OAuth-Client",

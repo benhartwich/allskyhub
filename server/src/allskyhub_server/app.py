@@ -31,7 +31,9 @@ from allskyhub_server.api import (
     app_sky,
     sky_view,
 )
+from allskyhub_server.api import connect as connect_api
 from allskyhub_server.api import device as device_api
+from allskyhub_server.api import indi_allsky as indi_allsky_api
 from allskyhub_server.api import widget as app_widget
 from allskyhub_server.auth.hub_keys import HubKeys
 from allskyhub_server.auth.reporters import turnstile_from
@@ -375,6 +377,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(routes_plus.router)
     app.include_router(routes_plus.webhook_router)
     app.include_router(device_api.router)
+    app.include_router(connect_api.router)  # SPEC §10.2
+    app.include_router(indi_allsky_api.router)  # SPEC §10.3
     app.include_router(app_api.router)
     app.include_router(app_overview.router)
     app.include_router(app_manage.router)

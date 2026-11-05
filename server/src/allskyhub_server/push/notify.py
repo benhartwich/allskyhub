@@ -224,6 +224,8 @@ class Notifier:
                     .join(User, User.id == Device.owner_id)
                     .where(
                         User.notify_offline.is_(True),
+                        # Stations (SPEC §10) have no connection to come back on: not yet.
+                        Device.kind == "camera",
                         Device.last_seen_at < cutoff,
                         Device.offline_notified_at.is_(None),
                     )
@@ -747,6 +749,7 @@ class Notifier:
                     .join(User, User.id == Device.owner_id)
                     .where(
                         User.notify_offline.is_(True),
+                        Device.kind == "camera",
                         Device.last_seen_at < now - OFFLINE_MAIL_AFTER,
                         Device.offline_mailed_at.is_(None),
                     )

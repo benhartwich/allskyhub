@@ -16,6 +16,7 @@ from fastapi.responses import RedirectResponse, Response
 
 from allskyhub_server.auth import access_requests, ratelimit
 from allskyhub_server.auth.accounts import AccountError
+from allskyhub_server.auth.sessions import SessionInfo
 from allskyhub_server.mail.send import Mail, Mailer
 from allskyhub_server.web import hardware
 from allskyhub_server.web.deps import (
@@ -28,6 +29,7 @@ from allskyhub_server.web.deps import (
 )
 from allskyhub_server.web.image_download import LatestImage
 from allskyhub_server.web.lang import is_en
+from allskyhub_server.web.render import open_signup as render_open_signup
 from allskyhub_server.web.render import render
 
 log = logging.getLogger(__name__)
@@ -56,7 +58,10 @@ def _stages(en: bool) -> dict[str, str]:
 
 @router.get("/zugang")
 async def access_form(request: Request, session: OptionalSession) -> Response:
-    """German or English (web/lang.py)."""
+    """German or English (web/lang.py). With open sign-up there is nothing to ask for: the
+    app's "Zugang anfragen" (older versions) leads to the sign-up instead."""
+    if render_open_signup(request):
+        return RedirectResponse("/konto/anlegen", status_code=303)
     stages = _stages(is_en(request))
     return render(request, "zugang.html", {"stages": stages}, session=session)
 
@@ -147,10 +152,25 @@ async def download_image(request: Request) -> Response:
     return RedirectResponse(image.url if image else latest.releases_url, status_code=302)
 
 
+# The way in after signing up (Benjamin, 2026-11-05): a camera or not; which software;
+# join SharedSky or switch to allskyhub. Each answer is its own address, so the browser's
+# "back" works; the old /start?schritt=… addresses still lead to the building steps.
+WIZARD_SOFTWARE = {"allskyhub": "", "allsky": "image-url", "indi-allsky": "indi-allsky",
+                   "andere": "other"}  # fmt: skip
+
+
 @router.get("/start")
 async def first_steps(
-    request: Request, session: CurrentSession, schritt: str = STEPS[0]
+    request: Request,
+    session: CurrentSession,
+    schritt: str = "",
+    kamera: str = "",
+    software: str = "",
+    wahl: str = "",
 ) -> Response:
+    if not schritt and kamera != "nein":
+        return _wizard(request, session, kamera, software, wahl)
+    schritt = schritt or STEPS[0]
     if schritt not in STEPS:
         raise HTTPException(404)
     index = STEPS.index(schritt)
@@ -168,4 +188,22 @@ async def first_steps(
             "next": STEPS[index + 1] if index + 1 < len(STEPS) else None,
         },
         session=session,
+    )
+
+
+def _wizard(
+    request: Request, session: SessionInfo, kamera: str, software: str, wahl: str
+) -> Response:
+    if kamera != "ja":
+        return render(request, "start_choose.html", {"stage": "camera"}, session=session)
+    if software not in WIZARD_SOFTWARE:
+        return render(request, "start_choose.html", {"stage": "software"}, session=session)
+    if software == "allskyhub":
+        return RedirectResponse("/cameras/pair", status_code=303)
+    if wahl == "mitmachen":
+        return RedirectResponse(f"/stationen/neu?software={WIZARD_SOFTWARE[software]}", 303)
+    if wahl == "umsteigen":
+        return RedirectResponse("/allsky", status_code=303)
+    return render(
+        request, "start_choose.html", {"stage": "goal", "software": software}, session=session
     )

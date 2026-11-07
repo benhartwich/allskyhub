@@ -5,8 +5,9 @@ Counts are committed in their own transaction, so rejected and failed attempts c
 
 from __future__ import annotations
 
+import datetime as dt
 import math
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 
 from sqlalchemy import text
@@ -19,6 +20,15 @@ class Limit:
     window_s: int
 
 
+# The database's clock unless set (``:now`` in the queries): tests fix it, so no window
+# ends in the middle of one (tests/conftest.py; fixed-window flakes 2026-11-07).
+clock: Callable[[], dt.datetime] | None = None
+
+
+def _now() -> dt.datetime | None:
+    return clock() if clock is not None else None
+
+
 class RateLimitedError(Exception):
     def __init__(self, retry_after: int) -> None:
         super().__init__(f"rate limited, retry after {retry_after}s")
@@ -27,13 +37,16 @@ class RateLimitedError(Exception):
 
 _HIT = text(
     """
-    WITH w AS (
-        SELECT to_timestamp(floor(extract(epoch FROM now()) / :win) * :win) AS start
+    WITH c AS (SELECT COALESCE(CAST(:now AS timestamptz), now()) AS now),
+    w AS (
+        SELECT to_timestamp(floor(extract(epoch FROM c.now) / :win) * :win) AS start, c.now
+        FROM c
     )
     INSERT INTO rate_limit (key, window_start, count)
     SELECT :key, w.start, 1 FROM w
     ON CONFLICT (key, window_start) DO UPDATE SET count = rate_limit.count + 1
-    RETURNING count, extract(epoch FROM (window_start + make_interval(secs => :win) - now()))
+    RETURNING count,
+        extract(epoch FROM (window_start + make_interval(secs => :win) - (SELECT now FROM c)))
     """
 )
 
@@ -44,7 +57,9 @@ async def hit(engine: AsyncEngine, key: str, limits: Sequence[Limit]) -> None:
     async with engine.begin() as conn:
         for limit in limits:
             row = (
-                await conn.execute(_HIT, {"key": f"{key}|{limit.window_s}", "win": limit.window_s})
+                await conn.execute(
+                    _HIT, {"key": f"{key}|{limit.window_s}", "win": limit.window_s, "now": _now()}
+                )
             ).one()
             count, remaining = int(row[0]), float(row[1])
             if count > limit.count:
@@ -55,10 +70,11 @@ async def hit(engine: AsyncEngine, key: str, limits: Sequence[Limit]) -> None:
 
 _PEEK = text(
     """
-    SELECT count, extract(epoch FROM (window_start + make_interval(secs => :win) - now()))
-    FROM rate_limit
+    WITH c AS (SELECT COALESCE(CAST(:now AS timestamptz), now()) AS now)
+    SELECT count, extract(epoch FROM (window_start + make_interval(secs => :win) - c.now))
+    FROM rate_limit, c
     WHERE key = :key
-      AND window_start = to_timestamp(floor(extract(epoch FROM now()) / :win) * :win)
+      AND window_start = to_timestamp(floor(extract(epoch FROM c.now) / :win) * :win)
     """
 )
 
@@ -70,7 +86,9 @@ async def blocked(engine: AsyncEngine, key: str, limits: Sequence[Limit]) -> int
     async with engine.connect() as conn:
         for limit in limits:
             row = (
-                await conn.execute(_PEEK, {"key": f"{key}|{limit.window_s}", "win": limit.window_s})
+                await conn.execute(
+                    _PEEK, {"key": f"{key}|{limit.window_s}", "win": limit.window_s, "now": _now()}
+                )
             ).one_or_none()
             if row is not None and int(row[0]) >= limit.count:
                 retry_after = max(retry_after, max(math.ceil(float(row[1])), 1))

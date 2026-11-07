@@ -130,6 +130,20 @@ def _no_real_android_answers(tmp_path: Path) -> Iterator[None]:
 
 
 @pytest.fixture(autouse=True)
+def _rate_limit_clock() -> Iterator[None]:
+    """Rate limits count in fixed windows; a test running across a window's end saw its
+    count start again (2026-11-07, twice). Their clock stands still during a test, one
+    second after the day's start, where every window (60 s to a day) has just begun."""
+    from allskyhub_server.auth import ratelimit
+
+    now = dt.datetime.now(dt.UTC)
+    fixed = dt.datetime.combine(now.date(), dt.time(0, 0, 1), dt.UTC)
+    with pytest.MonkeyPatch.context() as patch:
+        patch.setattr(ratelimit, "clock", lambda: fixed)
+        yield
+
+
+@pytest.fixture(autouse=True)
 async def _clean_tables(request: pytest.FixtureRequest) -> AsyncIterator[None]:
     """Truncate all application tables after each test that touched the database."""
     yield

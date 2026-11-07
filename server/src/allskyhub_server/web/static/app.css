@@ -557,3 +557,37 @@ h1.break { overflow-wrap: anywhere; }
 .choice-card { display: flex; flex-direction: column; gap: 8px; padding: 20px; min-width: 0; border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface); color: var(--text); text-decoration: none; }
 .choice-card strong { font-family: var(--display); font-size: 1.15rem; }
 .choice-card:hover, .choice-card:focus-visible { border-color: var(--accent); }
+
+/* SharedSky in numbers (devices/network.py): "Im Netz", "Himmel im Vergleich" and /netz. */
+.plain-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; }
+.sky-compare svg { width: 100%; height: auto; display: block; }
+.sky-compare .grid { stroke: var(--line); stroke-width: 1; }
+.sky-compare .tick { fill: var(--text-2); font-size: 13px; }
+.sky-compare .range { fill: rgba(122, 162, 247, .35); }
+.sky-compare .own { fill: none; stroke: var(--aurora); stroke-width: 2.5; stroke-linejoin: round; }
+.sky-compare .own-dot { fill: var(--aurora); stroke: var(--bg); stroke-width: 2; }
+.sky-compare .legend { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; margin: 0; color: var(--text-2); }
+.swatch.own, .swatch.range, .swatch.dot-camera, .swatch.dot-station, .swatch.dot-idle { width: 12px; height: 12px; border-radius: 50%; display: inline-block; }
+.swatch.own { background: var(--aurora); }
+.swatch.range { background: rgba(122, 162, 247, .45); border-radius: 3px; }
+.swatch.dot-camera { background: var(--accent); }
+.swatch.dot-station { background: var(--accent-2); }
+.swatch.dot-idle { background: #3a4166; }
+.map-dot.kind-station { fill: var(--accent-2); }
+.map-dot.idle { fill: #3a4166; }
+.net-grid { display: grid; gap: 16px; }
+@media (min-width: 52rem) { .net-grid { grid-template-columns: minmax(0, 1.3fr) minmax(0, 1fr); align-items: start; } }
+.net-grid > * { min-width: 0; }
+.net-list { list-style: none; margin: 0; padding: 0; }
+.net-list li { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 2px 12px; padding: 10px 0; border-top: 1px solid var(--line); align-items: center; }
+.net-list li:first-child { border-top: 0; }
+.net-num { font-family: var(--display); font-weight: 600; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.chip { font-size: 11px; padding: 1px 8px; border-radius: 99px; border: 1px solid var(--line); color: var(--text-2); white-space: nowrap; }
+.chip.station { border-color: rgba(180, 140, 255, .5); color: var(--accent-2); }
+.chip.camera { border-color: rgba(122, 162, 247, .5); color: var(--accent); }
+.chip.ok { border-color: rgba(79, 227, 176, .5); color: var(--ok); }
+.net-bar { display: block; width: 100%; height: 5px; margin-top: 5px; }
+.net-bar rect { fill: var(--accent); }
+.net-bar .track { fill: #1f2a55; }
+.net-credit { border-left: 2px solid var(--accent-2); padding-left: 10px; }
+.camera-map.net-map .map { height: 360px; min-height: 0; }

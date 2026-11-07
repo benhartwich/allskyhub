@@ -1,0 +1,15 @@
+{# "Himmel im Vergleich" (devices/network.py Comparison): the camera's darkest reading of
+   each clear night next to the range of its neighbours, one scale for marks and labels. #}
+{% set c = comparison.chart() %}
+<div class="card stack sky-compare">
+  <div class="cam-meta"><h2>{{ heading or t('Himmel im Vergleich', 'Sky compared') }}</h2><span class="muted small">{{ t('letzte 30 Nächte, mag/⁠″², höher ist dunkler', 'last 30 nights, mag/⁠″², higher is darker') }}</span></div>
+  <svg viewBox="0 0 {{ c.width }} {{ c.height }}" role="img" aria-label="{{ t('Himmelshelligkeit und die Spanne der Nachbarn über 30 Nächte', 'Sky brightness and the range of the neighbours over 30 nights') }}">
+    {% for tk in c.ticks %}<line class="grid" x1="{{ c.left }}" x2="{{ c.right }}" y1="{{ tk.y }}" y2="{{ tk.y }}"/><text class="tick" x="{{ c.left - 8 }}" y="{{ tk.y + 4 }}" text-anchor="end">{{ tk.label if en else tk.label | replace('.', ',') }}</text>{% endfor %}
+    {% for d in c.days %}<text class="tick" x="{{ d.x }}" y="{{ c.height - 8 }}" text-anchor="{{ 'start' if loop.first else ('end' if loop.last else 'middle') }}">{{ d.night_id[6:8] }}.{{ d.night_id[4:6] }}.</text>{% endfor %}
+    {% for b in c.bars %}<rect class="range" x="{{ b.x }}" y="{{ b.y }}" width="8" height="{{ b.h }}" rx="3"/>{% endfor %}
+    {% if c.path %}<path class="own" d="{{ c.path }}"/>{% endif %}
+    {% if c.last %}<circle class="own-dot" cx="{{ c.last.x }}" cy="{{ c.last.y }}" r="5"/>{% endif %}
+  </svg>
+  <p class="legend small"><span><span class="swatch own"></span> {{ name }}</span> <span><span class="swatch range"></span> {{ t('Spanne der', 'range of the') }} {{ comparison.neighbours }} {{ t('Nachbarn bis 150 km', 'neighbours within 150 km') }}</span> <span>· {{ t('Nächte mit Wolken fehlen', 'cloudy nights are missing') }}</span></p>
+  {% if comparison.difference is not none %}{% set d = comparison.difference %}<p class="muted">{% if d > 0.05 %}{{ t('Im Mittel', 'On average') }} {{ ('%.1f' | format(d)) if en else ('%.1f' | format(d)) | replace('.', ',') }} mag/⁠″² {{ t('dunkler als die Nachbarn.', 'darker than the neighbours.') }}{% elif d < -0.05 %}{{ t('Im Mittel', 'On average') }} {{ ('%.1f' | format(-d)) if en else ('%.1f' | format(-d)) | replace('.', ',') }} mag/⁠″² {{ t('heller als die Nachbarn.', 'brighter than the neighbours.') }}{% else %}{{ t('Etwa so dunkel wie die Nachbarn.', 'About as dark as the neighbours.') }}{% endif %}</p>{% endif %}
+</div>

@@ -1,0 +1,16 @@
+{# "Im Netz" (devices/network.py Part): what a camera or station adds to the network. #}
+<div class="card stack">
+  <div class="cam-meta"><h2>{{ t('Im Netz', 'In the network') }}</h2>{% if part.since %}<span class="muted small">{{ t('seit', 'since') }} {{ part.since | when | truncate(10, true, '') }}</span>{% endif %}</div>
+  <div class="stat-tiles">
+    <div class="card"><small>{{ t('Feuerkugeln', 'Fireballs') }}</small><strong>{{ part.fireballs }}</strong><span class="muted">{{ t('mitvermessen', 'measured together') }}</span></div>
+    <div class="card"><small>{{ t('Meteore', 'Meteors') }}</small><strong>{{ part.meteors }}</strong><span class="muted">{{ t('für die Ströme', 'for the showers') }}</span></div>
+    {% if comparison %}<div class="card"><small>{{ t('Nachbarn', 'Neighbours') }}</small><strong>{{ comparison.neighbours }}</strong><span class="muted">{{ t('bis 150 km', 'within 150 km') }}</span></div>{% endif %}
+  </div>
+  {% if part.recent %}
+  <ul class="plain-list">
+    {% for f in part.recent %}
+    <li><a href="/feuerkugeln/{{ f.pair_id }}">{{ t('Feuerkugel', 'Fireball') }} {{ f.at | when }}</a><br><span class="muted small">{% if f.others %}{{ t('mit', 'with') }} {% for o in f.others %}{{ o.name }}{{ ', ' if not loop.last }}{% endfor %} · {% endif %}{{ t('Höhe', 'height') }} {{ f.high_km | round | int }} → {{ f.low_km | round | int }} km</span></li>
+    {% endfor %}
+  </ul>
+  {% endif %}
+</div>

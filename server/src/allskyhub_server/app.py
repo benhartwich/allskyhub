@@ -24,6 +24,7 @@ from allskyhub_server.admin.stores import Stores, github_token
 from allskyhub_server.api import app as app_api
 from allskyhub_server.api import (
     app_manage,
+    app_network,
     app_overview,
     app_public,
     app_reports,
@@ -83,6 +84,7 @@ from allskyhub_server.web import (
     routes_gallery,
     routes_legal,
     routes_local,
+    routes_network,
     routes_plus,
     routes_public,
     routes_report,
@@ -394,6 +396,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(routes_gallery.router)
     app.include_router(routes_legal.router)
     app.include_router(routes_public.router)
+    app.include_router(routes_network.router)
     app.include_router(routes_showers.router)
     app.include_router(routes_local.router)
     app.include_router(routes_admin.router)
@@ -411,6 +414,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(app_overview.router)
     app.include_router(app_manage.router)
     app.include_router(app_widget.router)
+    app.include_router(app_network.router)
     app.include_router(app_public.router)
     app.include_router(app_sky.router)
     app.include_router(app_reports.router)

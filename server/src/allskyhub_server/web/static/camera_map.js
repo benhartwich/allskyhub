@@ -74,9 +74,12 @@
     box.append(node("strong", "", c.title));
     if (c.place) box.append(node("span", "muted", c.place));
     if (sqm || c.sqm !== null) box.append(node("span", "map-sqm", c.sqm_text));
-    const link = node("a", "button small", "Zur Kamera →");
-    link.href = `/sky/${encodeURIComponent(c.slug)}`;
-    box.append(link);
+    // On /netz a station can be on the map without a page of its own.
+    if (c.slug) {
+      const link = node("a", "button small", c.kind === "station" ? "Zur Station →" : "Zur Kamera →");
+      link.href = `/sky/${encodeURIComponent(c.slug)}`;
+      box.append(link);
+    }
     return box;
   };
   const markers = [];
@@ -84,7 +87,7 @@
     const marker = L.circleMarker([c.lat, c.lon], {
       radius: 9,
       weight: 2,
-      className: `map-dot${sqm ? ` ${c.sqm_class}` : ""}`,
+      className: `map-dot${sqm ? ` ${c.sqm_class}` : ""}${c.kind ? ` kind-${c.kind}` : ""}${c.active === false ? " idle" : ""}`,
     });
     marker.bindPopup(() => popup(c), { maxWidth: 260, minWidth: 200 });
     marker.bindTooltip(c.title, { direction: "top", offset: [0, -8] });

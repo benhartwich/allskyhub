@@ -181,12 +181,13 @@ def credit(device: Device, viewer: uuid.UUID | None) -> dict[str, str | None]:
     if viewer is not None and device.owner_id == viewer:
         own = "stationen" if device.kind == "station" else "cameras"
         return {"name": device.name, "link": f"/{own}/{device.id}"}
-    if device.public_slug:
-        return {"name": title(device), "link": f"/sky/{device.public_slug}"}
+    link = f"/sky/{device.public_slug}" if device.public_slug else None
     if device.kind == "station":
         if device.named and device.public_from is None:
-            return {"name": device.name, "link": None}
-        return {"name": tr("eine Station im Netz", "a station in the network"), "link": None}
+            return {"name": title(device), "link": link}
+        return {"name": tr("eine Station im Netz", "a station in the network"), "link": link}
+    if link is not None:
+        return {"name": title(device), "link": link}
     return {"name": tr("eine Kamera im Kameranetz", "a camera in the network"), "link": None}
 
 

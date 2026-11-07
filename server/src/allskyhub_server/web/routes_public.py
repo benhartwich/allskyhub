@@ -15,6 +15,7 @@ from allskyhub_server.devices import (
     aircraft,
     archive,
     map_tiles,
+    network,
     public,
     series,
     sky_chart,
@@ -171,6 +172,8 @@ async def sky_page(
         {
             **_base(device, slug),
             "station": await _station(db, device),
+            "part": await network.part(db, device) if device.network else None,
+            "comparison": await network.comparison(db, device, now) if sections.sky else None,
             "night_id": night_id,
             "products": products if sections.archive else [],
             "video": await public.night_video(db, device, night_id) if night_id else None,

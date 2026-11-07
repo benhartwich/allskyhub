@@ -25,7 +25,7 @@ from allskyhub_server.api import connect
 from allskyhub_server.auth.ratelimit import Limit
 from allskyhub_server.devices import station_solve, stations
 from allskyhub_server.devices.stations import SecretKey, StationError
-from allskyhub_server.models import Device, EventRecord, Frame, User
+from allskyhub_server.models import Device, EventRecord, Frame, SkySample, User
 from tests.helpers import make_account
 
 W, H = 1200, 900
@@ -140,7 +140,7 @@ async def test_open_api(
     # Frames: a thumbnail at most once a minute.
     now = dt.datetime.now(dt.UTC)
     meta = {"time": now.isoformat(), "exposure_s": 30, "gain": 200, "night": True,
-            "clock_synced": True, "stars": 400}  # fmt: skip
+            "clock_synced": True, "stars": 400, "sky_brightness": 21.05}  # fmt: skip
     thumb = _jpeg(640, 480)
     r = await new_client.post("/api/connect/v1/frames", files=_files(meta, thumb), headers=auth)
     assert (r.status_code, r.json()) == (200, {"want_full_frame": False})
@@ -151,6 +151,9 @@ async def test_open_api(
         assert len(frames) == 1
         assert frames[0].has_thumb
         assert frames[0].mode == "night"
+        # Its own sky measurement, every frame, like a camera's (§10.2).
+        sky = (await db.scalars(select(SkySample).where(SkySample.device_id == station_id))).all()
+        assert [(s.sqm_mag, s.stars) for s in sky] == [(21.05, 400)]
         await db.execute(update(Device).where(Device.id == station_id).values(latest_thumb_at=None))
         await db.commit()
     r = await new_client.post("/api/connect/v1/frames", files=_files(meta, _jpeg(noise=True)),

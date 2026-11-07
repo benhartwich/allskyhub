@@ -169,10 +169,7 @@ async def test_how_results_name_a_station() -> None:
     station.named = False
     assert public.credit(station, None) == {"name": "eine Station im Netz", "link": None}
     station.named, station.public_slug = False, "abc"
-    assert public.credit(station, owner) == {
-        "name": "Eine Station im Netz",
-        "link": "/sky/abc",
-    }
+    assert public.credit(station, owner) == {"name": "eine Station im Netz", "link": "/sky/abc"}
     # During its week of notice a station that joined before is not named yet.
     station.named, station.public_slug = True, None
     station.public_from = dt.datetime.now(dt.UTC) + dt.timedelta(days=3)

@@ -48,6 +48,7 @@ from allskyhub_server.devices import (
     gmn,
     image_url,
     lightning_li,
+    network,
     station_detect,
     winds,
 )
@@ -347,6 +348,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.state.connections = ConnectionRegistry()
     app.state.images = ImageStore(settings.image_dir)
     app.state.kp = KpCache()
+    app.state.network = network.OverviewCache()
     app.state.hosts = HostMap()
     app.state.mailer = SmtpMailer(settings)
     app.state.ovation = OvationCache()

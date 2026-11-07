@@ -10,6 +10,7 @@ them (0.1°). Neighbours' sky values appear only as a range over at least
 
 from __future__ import annotations
 
+import asyncio
 import datetime as dt
 import statistics
 import uuid
@@ -426,12 +427,23 @@ class OverviewCache:
         self._ttl = ttl
         self._at: dt.datetime | None = None
         self._view: Overview | None = None
+        # Visitors arriving together after it ran out wait for one computation.
+        self._lock = asyncio.Lock()
+
+    def _fresh(self, now: dt.datetime) -> Overview | None:
+        if self._view is None or self._at is None or now - self._at >= self._ttl:
+            return None
+        return self._view
 
     async def get(self, db: AsyncSession, now: dt.datetime) -> Overview:
-        if self._view is None or self._at is None or now - self._at >= self._ttl:
+        if (view := self._fresh(now)) is not None:
+            return view
+        async with self._lock:
+            if (view := self._fresh(now)) is not None:
+                return view
             self._view = await overview(db, now)
             self._at = now
-        return self._view
+            return self._view
 
 
 def _shown_place(device: Device) -> tuple[float, float] | None:

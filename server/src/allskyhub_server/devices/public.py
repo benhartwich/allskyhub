@@ -43,8 +43,10 @@ IMAGE_SECTIONS = ("live", "loop", "archive", "events")
 STATION_SECTIONS = PublicSections(
     live=False, loop=False, archive=False, events=False, observatory=False, aircraft=False
 )
-# A station that joined before the choices existed is told by mail and goes public a week later.
+# A station that joined before the choices existed is told by mail and goes public a week
+# after that mail went out; until the mail went out its ``public_from`` is ``UNMAILED``.
 NOTICE = dt.timedelta(days=7)
+UNMAILED = dt.datetime(9999, 1, 1, tzinfo=dt.UTC)
 
 
 def profile(device: Device) -> PublicProfile:
@@ -162,9 +164,10 @@ def set_visibility(device: Device, choice: Visibility) -> None:
 
 
 def go_public(device: Device, now: dt.datetime) -> bool:
-    """A station that joined before gets the defaults once its week of notice is over and
-    its owner chose nothing else (``set_visibility`` ends the notice). The caller commits."""
-    if device.public_from is None or device.public_from > now:
+    """A station that joined before gets the defaults a week after its owner's mail went
+    out, if the owner chose nothing else (``set_visibility`` ends the notice); never
+    without that mail. The caller commits."""
+    if device.public_from is None or device.public_from > now or device.public_mailed_at is None:
         return False
     device.public_from = None
     enable(device)

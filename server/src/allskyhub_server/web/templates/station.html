@@ -55,7 +55,7 @@
 
 <section class="card stack" id="oeffentlich">
   <h2>{{ t('Öffentlich', 'Public') }}</h2>
-  {% if public_from %}<p class="msg warn">{% if en %}Your station joined before these choices existed. It gets them on {{ public_from | when }}, unless you save something else here.{% else %}Deine Station war schon dabei, bevor es diese Auswahl gab. Sie gilt für sie ab {{ public_from | when }}, wenn du hier nichts anderes speicherst.{% endif %}</p>
+  {% if public_from %}<p class="msg warn">{% if en %}Your station joined before these choices existed. It gets them {% if unmailed %}a week after we have told you by e-mail{% else %}on {{ public_from | when }}{% endif %}, unless you save something else here.{% else %}Deine Station war schon dabei, bevor es diese Auswahl gab. Sie gilt für sie {% if unmailed %}eine Woche nach unserer Mail an dich{% else %}ab {{ public_from | when }}{% endif %}, wenn du hier nichts anderes speicherst.{% endif %}</p>
   {% elif device.public_slug %}<p class="muted small">{{ t('Öffentliche Seite:', 'Public page:') }} <a href="/sky/{{ device.public_slug }}">{{ base }}/sky/{{ device.public_slug }}</a></p>{% endif %}
   <form method="post" action="/stationen/{{ device.id }}/oeffentlich" class="stack">
     <input type="hidden" name="csrf_token" value="{{ csrf_token }}">

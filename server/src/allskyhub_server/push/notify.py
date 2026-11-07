@@ -780,7 +780,9 @@ class Notifier:
 
     async def check_station_notice(self, now: dt.datetime | None = None) -> None:
         """SPEC §10.6 Visibility: owners of stations that joined before the choices hear once
-        that their station goes public a week later, and how to change it; then it does."""
+        that their station goes public a week later, and how to change it; a week after the
+        mail went out, it does. Without mail (none set up, or sending failed) it stays as it
+        was and the mail is tried again."""
         now = now or _now()
         async with self._maker() as db:
             rows = (
@@ -796,13 +798,15 @@ class Notifier:
                     continue
                 if device.public_mailed_at is not None or self.mailer is None or not self._mail:
                     continue
-                device.public_mailed_at = now
+                start = now + public.NOTICE
+                if not await self.mailer.send(self._station_notice(device, user, start)):
+                    continue
+                device.public_from, device.public_mailed_at = start, now
                 await db.commit()
-                await self.mailer.send(self._station_notice(device, user))
 
-    def _station_notice(self, device: Device, user: User) -> Mail:
+    def _station_notice(self, device: Device, user: User, start: dt.datetime) -> Mail:
         link = f"{self.base_url.rstrip('/')}/stationen/{device.id}#oeffentlich"
-        day = (device.public_from or _now()).astimezone(_zone()).strftime("%d.%m.%Y")
+        day = start.astimezone(_zone()).strftime("%d.%m.%Y")
         return Mail(
             to=user.email,
             subject=pick(

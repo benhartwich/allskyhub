@@ -200,6 +200,7 @@ async def station_page(
             "docs": DOCS,
             "visibility": public.visibility(device),
             "public_from": device.public_from,
+            "unmailed": device.public_from == public.UNMAILED,
             **kept,
         },
         session=session,

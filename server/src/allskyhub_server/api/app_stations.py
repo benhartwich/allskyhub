@@ -61,8 +61,10 @@ class StationItem(BaseModel):
     longitude: float | None = None
     visibility: Visibility = Visibility()
     public_url: str | None = None
-    # A station that joined before the choices: they hold from then on (§10.6).
+    # A station that joined before the choices: they hold from then on (§10.6); while its
+    # owner's mail has not gone out, ``public_waiting`` without a date.
     public_from: dt.datetime | None = None
+    public_waiting: bool = False
 
 
 class StationCreated(BaseModel):
@@ -122,7 +124,8 @@ async def _item(
         longitude=float(lon) if isinstance(lon, int | float) else None,
         visibility=Visibility(**vars(public.visibility(device))),
         public_url=f"{base.rstrip('/')}/sky/{device.public_slug}" if device.public_slug else None,
-        public_from=device.public_from,
+        public_from=device.public_from if device.public_from != public.UNMAILED else None,
+        public_waiting=device.public_from is not None,
     )
 
 

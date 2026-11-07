@@ -5,13 +5,14 @@ that joined before the choices existed."""
 from __future__ import annotations
 
 import datetime as dt
+from zoneinfo import ZoneInfo
 
 import httpx
 from fastapi import FastAPI
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from allskyhub_server.devices import public
-from allskyhub_server.mail.send import MemoryMailer
+from allskyhub_server.mail.send import Mail, MemoryMailer
 from allskyhub_server.models import Device, StationSource
 from allskyhub_server.push.notify import Notifier
 from tests.helpers import PASSWORD, csrf_from, make_account
@@ -178,6 +179,11 @@ async def test_how_results_name_a_station() -> None:
     assert public.credit(station, None) == {"name": "eine Station im Netz", "link": None}
 
 
+class _FailingMailer(MemoryMailer):
+    async def send(self, mail: Mail) -> bool:
+        return False
+
+
 async def test_week_of_notice_for_stations_that_joined_before(
     app: FastAPI, client: httpx.AsyncClient
 ) -> None:
@@ -192,25 +198,44 @@ async def test_week_of_notice_for_stations_that_joined_before(
             assert device is not None
             # As the migration leaves a station that joined before (0050).
             device.public_slug = None
-            device.public_from = now + public.NOTICE
+            device.public_from = public.UNMAILED
         await db.commit()
-    mailer = MemoryMailer()
     notifier = Notifier(maker, None)
-    notifier.mailer = mailer
     notifier.base_url = "https://hub.example.org"
+    later = now + public.NOTICE * 2
 
-    await notifier.check_station_notice(now)
-    await notifier.check_station_notice(now)  # once
+    # No mail set up, or sending fails: nothing goes public, however long it waits.
+    await notifier.check_station_notice(later)
+    notifier.mailer = _FailingMailer()
+    await notifier.check_station_notice(later)
+    for station_id in (keep, chooses):
+        device = await _device(app, station_id)
+        assert (device.public_slug, device.public_from, device.public_mailed_at) == (
+            None,
+            public.UNMAILED,
+            None,
+        )
+    page = await client.get(f"/stationen/{keep}")
+    assert "eine Woche nach unserer Mail an dich" in page.text
+
+    # The mail goes out (and is tried again after the failure): a week from then.
+    mailer = MemoryMailer()
+    notifier.mailer = mailer
+    await notifier.check_station_notice(later)
+    await notifier.check_station_notice(later)  # once
     assert sorted(m.subject.split(" wird")[0] for m in mailer.sent) == [
         "SharedSky: Altstation",
         "SharedSky: Wählerisch",
     ]
+    day = (later + public.NOTICE).astimezone(ZoneInfo("Europe/Berlin")).strftime("%d.%m.%Y")
+    assert all(day in m.subject for m in mailer.sent)
     assert f"https://hub.example.org/stationen/{keep}#oeffentlich" in "".join(
         m.body for m in mailer.sent
     )
-    assert (await _device(app, keep)).public_slug is None  # not yet
+    kept = await _device(app, keep)
+    assert (kept.public_slug, kept.public_from) == (None, later + public.NOTICE)
 
-    # The owner's page tells about it; saving a choice ends the notice.
+    # The owner's page tells the date; saving a choice ends the notice.
     page = await client.get(f"/stationen/{chooses}")
     assert "Deine Station war schon dabei" in page.text
     await client.post(
@@ -218,7 +243,9 @@ async def test_week_of_notice_for_stations_that_joined_before(
         data={"csrf_token": csrf_from(page.text), "visibility": "1", "named": "true"},
     )
 
-    await notifier.check_station_notice(now + public.NOTICE + dt.timedelta(minutes=1))
+    await notifier.check_station_notice(later + public.NOTICE - dt.timedelta(minutes=1))
+    assert (await _device(app, keep)).public_slug is None  # not before the week is over
+    await notifier.check_station_notice(later + public.NOTICE)
     kept = await _device(app, keep)
     assert (kept.public_slug is not None, kept.public_from) == (True, None)
     chose = await _device(app, chooses)

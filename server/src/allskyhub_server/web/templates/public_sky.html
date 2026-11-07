@@ -46,6 +46,9 @@
       </dl>
       {% if station.since %}<p class="muted small">Seit {{ station.since | when | truncate(10, true, '') }} im SharedSky-Netz.</p>{% endif %}
     </div>
+    {# A station has no live parts: its part in the network fills this column. #}
+    {% if part %}{% include "_network_part.html" %}{% endif %}
+    {% if comparison %}{% with name = title, heading = none %}{% include "_sky_compare.html" %}{% endwith %}{% endif %}
     {% endif %}
     {% if profile.sections.live %}
     <div hx-get="/sky/{{ slug }}/now" hx-trigger="every 30s" hx-swap="innerHTML">
@@ -92,6 +95,13 @@
     {% endif %}
   </aside>
 </div>
+
+{% if not station and (part or comparison) %}
+<div class="net-grid">
+  {% if part %}{% include "_network_part.html" %}{% endif %}
+  {% if comparison %}{% with name = title, heading = none %}{% include "_sky_compare.html" %}{% endwith %}{% endif %}
+</div>
+{% endif %}
 
 {% if sky_charts %}
 <section class="stack">

@@ -20,7 +20,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from allskyhub_protocol import FrameVariant
 from allskyhub_server.auth.sessions import SessionInfo
-from allskyhub_server.devices import image_url, map_tiles, public, station_flow, stations
+from allskyhub_server.devices import image_url, map_tiles, network, public, station_flow, stations
 from allskyhub_server.devices.images import ImageStore
 from allskyhub_server.devices.stations import SecretKey
 from allskyhub_server.i18n import pick, tr
@@ -201,6 +201,8 @@ async def station_page(
             "visibility": public.visibility(device),
             "public_from": device.public_from,
             "unmailed": device.public_from == public.UNMAILED,
+            "part": await network.part(db, device),
+            "comparison": await network.comparison(db, device, dt.datetime.now(dt.UTC)),
             **kept,
         },
         session=session,

@@ -25,7 +25,7 @@ from allskyhub_server.auth import ratelimit
 from allskyhub_server.devices import meteor_pairs, station_solve, stations
 from allskyhub_server.devices.images import ImageStore
 from allskyhub_server.devices.stations import StationError
-from allskyhub_server.models import Device, EventRecord, Frame
+from allskyhub_server.models import Device, EventRecord, Frame, SkySample
 from allskyhub_server.web.deps import DbSession, client_ip
 from allskyhub_sky.astro import sun_altitude
 
@@ -238,6 +238,19 @@ async def store_frame(
     stations.check_clock(device, meta.time, meta.exposure_s, now)
     device.last_seen_at = now
     device.last_frame = meta.model_dump(mode="json")
+    if meta.night and (meta.sky_brightness is not None or meta.stars is not None):
+        # SPEC §10.2: the station's own sky measurement, kept like a camera's (§6.3).
+        await db.execute(
+            pg_insert(SkySample)
+            .values(
+                device_id=device.id,
+                night_id=stations.night_id(meta.time, stations.longitude(device)),
+                at=meta.time,
+                sqm_mag=meta.sky_brightness,
+                stars=meta.stars,
+            )
+            .on_conflict_do_nothing(index_elements=["device_id", "at"])
+        )
     pic = await asyncio.to_thread(stations.picture, data)
     info = _station_info(device)
     full = (pic.width, pic.height) == (info.get("width"), info.get("height"))

@@ -1,0 +1,72 @@
+{% extends "base.html" %}
+{% block lang %}{{ 'en' if en else 'de' }}{% endblock %}
+{% block title %}{{ t('Das Netz', 'The network') }} · SharedSky · allskyhub{% endblock %}
+{% block head %}<link rel="stylesheet" href="{{ asset('leaflet/leaflet.css') }}">
+<script src="{{ asset('leaflet/leaflet.js') }}" defer></script>
+<script src="{{ asset('camera_map.js') }}" defer></script>
+<meta property="og:title" content="SharedSky · {{ t('Gemeinsam den Himmel vermessen', 'Measuring the sky together') }}">
+<meta property="og:description" content="{{ view.cameras + view.stations }} {{ t('Kameras messen gemeinsam Meteore, Feuerkugeln und die Dunkelheit des Himmels.', 'cameras measure meteors, fireballs and the darkness of the sky together.') }}">{% endblock %}
+{% block content %}
+{% set total = view.cameras + view.stations %}
+<div class="page-head">
+  <p class="eyebrow">SharedSky</p>
+  <h1>{{ t('Gemeinsam den Himmel vermessen', 'Measuring the sky together') }}</h1>
+  <p class="lead">{% if en %}{{ total }} cameras take part: {{ view.cameras }} allskyhub cameras and {{ view.stations }} SharedSky stations with Allsky, indi-allsky and their own software. <a href="/mitmachen">Join in</a>{% else %}{{ total }} Kameras messen mit: {{ view.cameras }} allskyhub-Kameras und {{ view.stations }} SharedSky-Stationen mit Allsky, indi-allsky und eigener Software. <a href="/mitmachen">Mitmachen</a>{% endif %}</p>
+</div>
+
+<div class="stat-tiles">
+  <div class="card"><small>{{ t('Aktiv', 'Active') }}</small><strong>{{ view.active }}</strong><span class="muted">{{ t('in den letzten 12 Stunden', 'in the last 12 hours') }}</span></div>
+  <div class="card"><small>{{ t('Meteore', 'Meteors') }}</small><strong>{{ view.meteors_tonight }}</strong><span class="muted">{{ t('heute Nacht', 'tonight') }}</span></div>
+  <div class="card"><small>{{ t('Feuerkugeln', 'Fireballs') }}</small><strong>{{ view.fireballs_month }}</strong><span class="muted">{{ t('vermessen, letzte 30 Tage', 'measured, last 30 days') }}</span></div>
+  <div class="card"><small>{{ t('Dunkelster Himmel', 'Darkest sky') }}</small><strong>{{ (('%.2f' | format(view.darkest[0].sqm)) if en else ('%.2f' | format(view.darkest[0].sqm)) | replace('.', ',')) if view.darkest else '–' }}</strong><span class="muted">mag/⁠″² · {{ t('letzte Nacht', 'last night') }}</span></div>
+</div>
+
+<div class="net-grid">
+  <figure class="card camera-map net-map">
+    <div id="map" class="map" role="region" aria-label="{{ t('Karte mit', 'Map with') }} {{ view.points | length }} {{ t('Kameras und Stationen', 'cameras and stations') }}"></div>
+    <figcaption class="legend small sky-compare"><span><span class="swatch dot-camera"></span> {{ t('allskyhub-Kamera', 'allskyhub camera') }}</span> <span><span class="swatch dot-station"></span> {{ t('SharedSky-Station', 'SharedSky station') }}</span> <span><span class="swatch dot-idle"></span> {{ t('gerade ohne Bild', 'no image lately') }}</span> <span>· {{ t('Orte auf etwa 10 km gerundet', 'places rounded to about 10 km') }}</span></figcaption>
+    <noscript><p class="muted">{{ t('Die Karte braucht JavaScript; wer mitmacht, steht unten als Liste.', 'The map needs JavaScript; everyone taking part is listed below.') }}</p></noscript>
+  </figure>
+  <section class="card stack">
+    <h2>{{ t('Heute Nacht im Netz', 'Tonight in the network') }}</h2>
+    <ul class="net-list">
+      {% for f in view.tonight %}
+      <li><span><a href="/feuerkugeln/{{ f.pair_id }}">{{ t('Feuerkugel', 'Fireball') }} {{ f.at | clock }}</a>{% if f.others %}, {{ t('von', 'by') }} {{ f.others | length }} {{ t('Kameras vermessen', 'cameras') }}{% endif %}<br><span class="muted small">{{ t('Höhe', 'Height') }} {{ f.high_km | round | int }} → {{ f.low_km | round | int }} km · {% for o in f.others %}{{ o.name }}{{ ', ' if not loop.last }}{% endfor %}</span></span><span class="chip">{{ t('Bahn', 'Path') }} ›</span></li>
+      {% endfor %}
+      {% for name, count in view.showers_tonight | dictsort(by='value', reverse=true) %}{% if loop.index <= 4 %}
+      <li><span>{{ name if name != 'sporadisch' else t('Sporadische Meteore', 'Sporadic meteors') }}</span><span class="net-num">{{ count }}</span></li>
+      {% endif %}{% endfor %}
+      {% if not view.tonight and not view.showers_tonight %}<li><span class="muted">{{ t('Noch keine Meteore heute Nacht. Die Werte kommen mit den Bildern der Kameras.', 'No meteors tonight yet. The numbers come with the cameras’ images.') }}</span></li>{% endif %}
+    </ul>
+    <p class="muted small"><a href="/meteorstroeme">{{ t('Meteorströme live', 'Meteor showers live') }}</a> · <a href="/feuerkugeln">{{ t('Alle Feuerkugeln', 'All fireballs') }}</a></p>
+  </section>
+</div>
+
+{% if view.darkest %}
+<section class="card stack">
+  <div class="cam-meta"><h2>{{ t('Himmelshelligkeit letzte Nacht', 'Sky brightness last night') }}</h2><span class="muted small">{{ t('dunkelste Messung einer klaren Nacht', 'darkest reading of a clear night') }}, mag/⁠″²</span></div>
+  <ol class="net-list">
+    {% for r in view.darkest[:10] %}
+    <li><span>{% if r.link %}<a href="{{ r.link }}">{{ r.name }}</a>{% else %}{{ r.name }}{% endif %} <span class="chip {{ r.kind }}">{{ 'SharedSky' if r.kind == 'station' else 'allskyhub' }}</span><svg class="net-bar" viewBox="0 0 100 5" preserveAspectRatio="none" aria-hidden="true"><rect class="track" width="100" height="5" rx="2"/><rect width="{{ bars[loop.index0] }}" height="5" rx="2"/></svg></span><span class="net-num">{{ ('%.2f' | format(r.sqm)) if en else ('%.2f' | format(r.sqm)) | replace('.', ',') }}</span></li>
+    {% endfor %}
+  </ol>
+  <p class="muted small">{{ t('Ungefähr, solange die Kameras nicht kalibriert sind. Höher ist dunkler.', 'Approximate while the cameras are not calibrated. Higher is darker.') }}</p>
+</section>
+{% endif %}
+
+<section class="card stack">
+  <h2>{{ t('Wer mitmacht', 'Who takes part') }}</h2>
+  {% if view.members %}
+  <ul class="net-list">
+    {% for m in view.members %}
+    <li><span>{% if m.link %}<a href="{{ m.link }}">{{ m.name }}</a>{% else %}{{ m.name }}{% endif %} <span class="chip {{ m.kind }}">{{ ({'indi-allsky': 'indi-allsky', 'image-url': 'Allsky', 'allsky': 'Allsky'}).get(m.software, t('eigene Software', 'own software')) if m.kind == 'station' else 'allskyhub' }}</span><br><span class="muted small">{% if m.since %}{{ t('seit', 'since') }} {{ m.since | when | truncate(10, true, '') }} · {% endif %}{{ m.fireballs }} {{ t('Feuerkugeln', 'fireballs') }}, {{ m.meteors }} {{ t('Meteore', 'meteors') }}</span></span><span class="chip{{ ' ok' if m.active }}">{{ t('aktiv', 'active') if m.active else t('gerade ohne Bild', 'no image lately') }}</span></li>
+    {% endfor %}
+  </ul>
+  {% else %}
+  <p class="muted">{{ t('Noch niemand öffentlich. Sei die erste Station:', 'No one public yet. Be the first station:') }} <a href="/mitmachen">{{ t('Mitmachen', 'Join in') }}</a></p>
+  {% endif %}
+</section>
+
+<p class="muted small net-credit">{{ t('Messwerte unter CC BY 4.0, mit Nennung der Stationen. Meteore von SharedSky-Stationen laufen noch als Probe: Sie zählen für die Ströme und die Nacht, aber noch nicht für gemeinsame Bahnen.', 'Measurements under CC BY 4.0, crediting the stations. Meteors from SharedSky stations are still a trial: they count for the showers and the night, not yet for joint paths.') }}</p>
+<script type="application/json" id="map-config">{{ map_config | tojson }}</script>
+{% endblock %}

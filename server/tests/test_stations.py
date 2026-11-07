@@ -23,7 +23,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from allskyhub_protocol import EventVariant
 from allskyhub_server.api import connect
 from allskyhub_server.auth.ratelimit import Limit
-from allskyhub_server.devices import stations
+from allskyhub_server.devices import station_solve, stations
 from allskyhub_server.devices.stations import SecretKey, StationError
 from allskyhub_server.models import Device, EventRecord, Frame, User
 from tests.helpers import make_account
@@ -106,8 +106,16 @@ async def test_create_and_rotate(app: FastAPI, client: httpx.AsyncClient) -> Non
 
 
 async def test_open_api(
-    app: FastAPI, client: httpx.AsyncClient, new_client: httpx.AsyncClient
+    app: FastAPI,
+    client: httpx.AsyncClient,
+    new_client: httpx.AsyncClient,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    # Daylight at the station whenever the test runs: no full frames for solving (§10.1).
+    def daylight(*_: object) -> float:
+        return 20.0
+
+    monkeypatch.setattr(station_solve, "sun_altitude", daylight)
     maker: async_sessionmaker[AsyncSession] = app.state.sessionmaker
     station_id, secret = await _station(app, client)
     auth = _auth(station_id, secret)

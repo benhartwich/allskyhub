@@ -12,16 +12,18 @@ from __future__ import annotations
 
 import datetime as dt
 import secrets
+import uuid
+from dataclasses import dataclass
 from typing import Any
 
 from pydantic import ValidationError
-from sqlalchemy import select
+from sqlalchemy import ColumnElement, and_, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from allskyhub_protocol import Observatory, PublicProfile, PublicSections, PublicState
 from allskyhub_server.devices import events
 from allskyhub_server.i18n import english, tr
-from allskyhub_server.models import Device, EventRecord, Frame, Product
+from allskyhub_server.models import Device, EventRecord, Frame, Product, StationSource
 
 # Products shown publicly as images; the night's timelapse comes separately (night_video).
 PUBLIC_PRODUCTS = ("keogram.jpg", "startrails.jpg")
@@ -34,6 +36,15 @@ PUBLIC_VIDEO_DAYS = 2
 PUBLIC_EVENT_KINDS = ("meteor", "aurora", "nlc", "lightning")
 LOOP_WINDOW = dt.timedelta(hours=1)
 LOOP_MAX_FRAMES = 90
+
+# SPEC §10.6 Visibility (Benjamin, 2026-11-07). A station's pictures are the parts of the
+# page with images; the rest (sky values, Kp) is measurements.
+IMAGE_SECTIONS = ("live", "loop", "archive", "events")
+STATION_SECTIONS = PublicSections(
+    live=False, loop=False, archive=False, events=False, observatory=False, aircraft=False
+)
+# A station that joined before the choices existed is told by mail and goes public a week later.
+NOTICE = dt.timedelta(days=7)
 
 
 def profile(device: Device) -> PublicProfile:
@@ -107,7 +118,73 @@ def state(device: Device, base_url: str) -> PublicState:
 
 
 def title(device: Device) -> str:
+    if device.kind == "station" and not device.named:
+        return tr("Eine Station im Netz", "A station in the network")
     return profile(device).title or device.name or "Allsky-Kamera"
+
+
+@dataclass(frozen=True)
+class Visibility:
+    """What a station shows (SPEC §10.6), the owner's four choices; the defaults are
+    Benjamin's (2026-11-07): named, on the map and with a page, but no pictures."""
+
+    named: bool = True
+    on_map: bool = True
+    page: bool = True
+    images: bool = False
+
+
+def visibility(device: Device) -> Visibility:
+    """The choices as stored; during a week of notice the page it is about to get."""
+    shown = profile(device)
+    return Visibility(
+        named=device.named,
+        on_map=shown.show_coordinates,
+        page=device.public_slug is not None or device.public_from is not None,
+        images=shown.sections.live,
+    )
+
+
+def set_visibility(device: Device, choice: Visibility) -> None:
+    """The owner's choice holds at once, also during a week of notice. The caller commits."""
+    shown = profile(device)
+    sections = shown.sections if device.public_profile else STATION_SECTIONS
+    sections = sections.model_copy(update=dict.fromkeys(IMAGE_SECTIONS, choice.images))
+    device.public_profile = shown.model_copy(
+        update={"show_coordinates": choice.on_map, "sections": sections}
+    ).model_dump(mode="json")
+    device.named = choice.named
+    device.public_from = None
+    if choice.page:
+        enable(device)
+    else:
+        disable(device)
+
+
+def go_public(device: Device, now: dt.datetime) -> bool:
+    """A station that joined before gets the defaults once its week of notice is over and
+    its owner chose nothing else (``set_visibility`` ends the notice). The caller commits."""
+    if device.public_from is None or device.public_from > now:
+        return False
+    device.public_from = None
+    enable(device)
+    return True
+
+
+def credit(device: Device, viewer: uuid.UUID | None) -> dict[str, str | None]:
+    """How results name a camera or station (SPEC §10.6): its owner sees it as their own;
+    others by its public page, a station by its name unless the owner chose not to be
+    named, everything else anonymously."""
+    if viewer is not None and device.owner_id == viewer:
+        own = "stationen" if device.kind == "station" else "cameras"
+        return {"name": device.name, "link": f"/{own}/{device.id}"}
+    if device.public_slug:
+        return {"name": title(device), "link": f"/sky/{device.public_slug}"}
+    if device.kind == "station":
+        if device.named and device.public_from is None:
+            return {"name": device.name, "link": None}
+        return {"name": tr("eine Station im Netz", "a station in the network"), "link": None}
+    return {"name": tr("eine Kamera im Kameranetz", "a camera in the network"), "link": None}
 
 
 def coordinates(device: Device) -> tuple[float, float] | None:
@@ -219,13 +296,30 @@ def disable(device: Device) -> None:
     device.public_slug = None
 
 
+def shown() -> ColumnElement[bool]:
+    """Devices with a public page: paired, and a station by its image address only once an
+    admin checked it (SPEC §10.7), not while an admin paused it (a removal ask); a pause
+    after errors keeps the page."""
+    checked = select(StationSource.device_id).where(
+        or_(
+            StationSource.state == "approved",
+            and_(
+                StationSource.state == "paused", StationSource.reviewed_by.is_distinct_from("pause")
+            ),
+        )
+    )
+    return and_(
+        Device.public_slug.is_not(None),
+        Device.owner_id.is_not(None),
+        or_(Device.software.is_(None), Device.software != "image-url", Device.id.in_(checked)),
+    )
+
+
 async def by_slug(db: AsyncSession, slug: str) -> Device | None:
-    """A paired device with that public page, or None."""
+    """A device with that public page, or None."""
     if not slug or len(slug) > 32:
         return None
-    return await db.scalar(
-        select(Device).where(Device.public_slug == slug, Device.owner_id.is_not(None))
-    )
+    return await db.scalar(select(Device).where(Device.public_slug == slug, shown()))
 
 
 async def newest_products(db: AsyncSession, device: Device) -> tuple[str | None, list[Product]]:

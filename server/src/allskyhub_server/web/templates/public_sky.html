@@ -18,7 +18,7 @@
 {% block content %}
 <header class="sky-head">
   <div>
-    <p class="eyebrow">Allsky-Kamera{% if profile.location_label %} · {{ profile.location_label }}{% endif %}</p>
+    <p class="eyebrow">{% if station %}SharedSky-Station · {{ station.software }}{% else %}Allsky-Kamera{% endif %}{% if profile.location_label %} · {{ profile.location_label }}{% endif %}</p>
     <h1>{{ title }}</h1>
     {% if coordinates %}<p class="muted">{{ '%.1f' | format(coordinates[0]) }}° {{ 'N' if coordinates[0] >= 0 else 'S' }}, {{ '%.1f' | format(coordinates[1]) }}° {{ 'O' if coordinates[1] >= 0 else 'W' }}</p>{% endif %}
   </div>
@@ -35,6 +35,18 @@
 
 <div class="sky-grid">
   <section class="sky-main">
+    {% if station %}
+    <div class="card">
+      <h2>Heute Nacht</h2>
+      <dl class="facts">
+        <dt>Bilder</dt><dd>{{ station.frames }}</dd>
+        <dt>Meteore</dt><dd>{{ station.meteors }}{% if station.meteors %} <span class="badge warn" title="Meteore von SharedSky-Stationen zählen für Ströme und die Nacht, noch nicht für gemeinsame Bahnen.">Probe</span>{% endif %}</dd>
+        <dt>Ausrichtung</dt><dd>{% if station.oriented %}an den Sternen gelöst{% else %}wartet auf eine klare Nacht{% endif %}</dd>
+        <dt>Uhr</dt><dd>{% if station.clock_trusted %}gestellt{% else %}wird noch geprüft{% endif %}</dd>
+      </dl>
+      {% if station.since %}<p class="muted small">Seit {{ station.since | when | truncate(10, true, '') }} im SharedSky-Netz.</p>{% endif %}
+    </div>
+    {% endif %}
     {% if profile.sections.live %}
     <div hx-get="/sky/{{ slug }}/now" hx-trigger="every 30s" hx-swap="innerHTML">
       {% include "_public_now.html" %}
@@ -133,5 +145,9 @@
   </ul>
 </section>
 {% endif %}
+{% if station %}
+<p class="muted center">Eine Station im <a href="/mitmachen">SharedSky-Netz</a> von allskyhub. Ihre Messwerte stehen unter CC BY 4.0 mit dem Namen der Station; die Bilder gehören ihrem Besitzer.</p>
+{% else %}
 <p class="muted center">Eine Allsky-Kamera mit <a href="/">allskyhub</a> – freie Software für den ganzen Himmel.</p>
+{% endif %}
 {% endblock %}

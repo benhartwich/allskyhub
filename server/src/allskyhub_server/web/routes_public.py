@@ -19,6 +19,7 @@ from allskyhub_server.devices import (
     series,
     sky_chart,
     space_weather,
+    station_flow,
     tonight,
 )
 from allskyhub_server.devices import camera_map as camera_map_mod
@@ -55,6 +56,31 @@ def _jpeg(path: FsPath, cache: str) -> Response:
     if not path.is_file():
         raise HTTPException(404)
     return FileResponse(path, media_type="image/jpeg", headers={"Cache-Control": cache})
+
+
+# How a station's public page names its software (SPEC §10.6); an image address is
+# almost always Allsky's website (§10.7).
+STATION_SOFTWARE = {
+    "indi-allsky": "indi-allsky",
+    "allsky": "Allsky",
+    "image-url": "Allsky",
+    "other": "eigene Software",
+}
+
+
+async def _station(db: DbSession, device: Device) -> dict[str, object] | None:
+    """What a station's page shows instead of the camera's live parts."""
+    if device.kind != "station":
+        return None
+    frames, meteors = await station_flow.today(db, device)
+    return {
+        "software": STATION_SOFTWARE.get(device.software or "", "eigene Software"),
+        "since": device.terms_accepted_at,
+        "frames": frames,
+        "meteors": meteors,
+        "oriented": bool((device.last_status or {}).get("orientation")),
+        "clock_trusted": bool((device.clock or {}).get("trusted")),
+    }
 
 
 def _base(device: Device, slug: str) -> dict[str, object]:
@@ -144,6 +170,7 @@ async def sky_page(
         "public_sky.html",
         {
             **_base(device, slug),
+            "station": await _station(db, device),
             "night_id": night_id,
             "products": products if sections.archive else [],
             "video": await public.night_video(db, device, night_id) if night_id else None,

@@ -20,7 +20,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from allskyhub_protocol import FrameVariant
 from allskyhub_server.auth.sessions import SessionInfo
-from allskyhub_server.devices import image_url, map_tiles, station_flow, stations
+from allskyhub_server.devices import image_url, map_tiles, public, station_flow, stations
 from allskyhub_server.devices.images import ImageStore
 from allskyhub_server.devices.stations import SecretKey
 from allskyhub_server.i18n import pick, tr
@@ -70,6 +70,15 @@ async def _own_station(db: AsyncSession, session: SessionInfo, device_id: str) -
     return device
 
 
+def _visibility(
+    sent: str, named: bool, on_map: bool, page: bool, images: bool
+) -> public.Visibility:
+    """SPEC §10.6 Visibility from the form; the defaults when it had no such boxes."""
+    if not sent:
+        return public.Visibility()
+    return public.Visibility(named=named, on_map=on_map, page=page, images=images)
+
+
 def _map_config(lat: float | None, lon: float | None, editable: bool) -> dict[str, Any]:
     return {
         "maxZoom": map_tiles.MAX_ZOOM,
@@ -93,6 +102,7 @@ async def new_form(request: Request, session: CurrentSession, software: str = ""
             "software": software if software in SOFTWARE else "",
             "choices": SOFTWARE,
             "form": {},
+            "visibility": public.Visibility(),
             "map_config": _map_config(None, None, editable=True),
         },
         session=session,
@@ -116,9 +126,15 @@ async def create(
     focal_mm: Annotated[str, Form(max_length=10)] = "",
     proof_text: Annotated[str, Form(max_length=2000)] = "",
     proof: Annotated[UploadFile | None, File()] = None,
+    visibility: Annotated[str, Form(max_length=1)] = "",
+    named: Annotated[bool, Form()] = False,
+    on_map: Annotated[bool, Form()] = False,
+    page: Annotated[bool, Form()] = False,
+    images: Annotated[bool, Form()] = False,
 ) -> Response:
     """SPEC §10.1 creating a station; §10.7 asking with an image address
     (devices/station_flow.py, the same for the app)."""
+    shown = _visibility(visibility, named, on_map, page, images)
     form = {
         "name": name, "url": url, "latitude": latitude, "longitude": longitude,
         "elevation_m": elevation_m, "timezone": timezone, "focal_mm": focal_mm,
@@ -133,7 +149,7 @@ async def create(
     ask = station_flow.Ask(
         software=software, name=name, terms=terms, url=url, latitude=latitude,
         longitude=longitude, elevation_m=elevation_m, timezone=timezone, focal_mm=focal_mm,
-        proof_text=proof_text, proof=proof_bytes,
+        proof_text=proof_text, proof=proof_bytes, visibility=shown,
     )  # fmt: skip
     try:
         device, secret = await station_flow.create(
@@ -144,7 +160,7 @@ async def create(
             request,
             "station_new.html",
             {"software": software, "choices": SOFTWARE, "form": form, "error": exc.message,
-             "map_config": _map_config(None, None, editable=True)},
+             "visibility": shown, "map_config": _map_config(None, None, editable=True)},
             session=session,
             status_code=400,
         )  # fmt: skip
@@ -182,6 +198,8 @@ async def station_page(
             "time_source": (device.last_frame or {}).get("time_source"),
             "place": settings_,
             "docs": DOCS,
+            "visibility": public.visibility(device),
+            "public_from": device.public_from,
             **kept,
         },
         session=session,
@@ -219,6 +237,31 @@ async def new_secret(
     await db.commit()
     log.info("station secret renewed", extra={"device_id": device.id})
     return flash.redirect(request, session, back, 200, {"secret": secret})
+
+
+@router.post("/stationen/{device_id}/oeffentlich")
+async def set_visibility(
+    request: Request,
+    db: DbSession,
+    session: CurrentSession,
+    device_id: str,
+    visibility: Annotated[str, Form(max_length=1)] = "",
+    named: Annotated[bool, Form()] = False,
+    on_map: Annotated[bool, Form()] = False,
+    page: Annotated[bool, Form()] = False,
+    images: Annotated[bool, Form()] = False,
+) -> Response:
+    """SPEC §10.6 Visibility; switching the page off ends its address."""
+    device = await _own_station(db, session, device_id)
+    public.set_visibility(device, _visibility(visibility, named, on_map, page, images))
+    await db.commit()
+    return flash.redirect(
+        request,
+        session,
+        f"/stationen/{device.id}",
+        200,
+        {"notice": tr("Gespeichert.", "Saved.")},
+    )
 
 
 @router.post("/stationen/{device_id}/fortsetzen")

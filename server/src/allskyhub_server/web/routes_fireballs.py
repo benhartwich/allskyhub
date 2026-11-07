@@ -44,12 +44,8 @@ async def _visible(
 
 
 def _camera(device: Device, session: SessionInfo | None) -> dict[str, Any]:
-    """How a camera is named: by its public page if it has one, else anonymously."""
-    if session is not None and device.owner_id == session.user.id:
-        return {"name": device.name, "link": f"/cameras/{device.id}"}
-    if device.public_slug:
-        return {"name": public.title(device), "link": f"/sky/{device.public_slug}"}
-    return {"name": "eine Kamera im Kameranetz", "link": None}
+    """How a camera or station is named (SPEC §10.6)."""
+    return public.credit(device, session.user.id if session is not None else None)
 
 
 async def _gmn(db: AsyncSession, pair: MeteorPair) -> GmnMeteor | None:

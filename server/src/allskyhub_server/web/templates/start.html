@@ -1,6 +1,7 @@
 {% extends "base.html" %}
 {% block lang %}{{ 'en' if en else 'de' }}{% endblock %}
 {% block title %}{{ t('Erste Schritte', 'Getting started') }} · allskyhub{% endblock %}
+{% from "_stores.html" import stores %}
 {% block content %}
 <p class="muted small"><a class="back" href="/start">{{ t('Zurück zur Auswahl', 'Back to the choice') }}</a></p>
 <div class="page-head"><h1>{{ t('Erste Schritte', 'Getting started') }}</h1></div>
@@ -115,7 +116,7 @@
 <section class="card stack">
   <h2>With Wi-Fi and the app</h2>
   <p class="muted">Without a network cable the camera opens its own Wi-Fi <code>allskyhub-XXXX</code>. The allskyhub app then gives it your home network, location and time zone and pairs it. The Wi-Fi key is in the file <code>allskyhub-setup-key.txt</code> on the memory card.</p>
-  <p><a class="button secondary" href="{{ play_store_url }}" rel="noopener">App on Google Play ↗</a> <span class="muted small">iOS follows soon.</span></p>
+  {{ stores(true) }}
 </section>
 <p><a class="button" href="/cameras/pair">Pair a camera</a></p>
 {% else %}
@@ -132,7 +133,7 @@
 <section class="card stack">
   <h2>Mit WLAN und App</h2>
   <p class="muted">Ohne Netzwerkkabel öffnet die Kamera ein eigenes WLAN <code>allskyhub-XXXX</code>. Die allskyhub-App gibt ihr dann dein Heimnetz, Standort und Zeitzone und koppelt sie. Den WLAN-Schlüssel findest du in der Datei <code>allskyhub-setup-key.txt</code> auf der Speicherkarte.</p>
-  <p><a class="button secondary" href="{{ play_store_url }}" rel="noopener">App bei Google Play ↗</a> <span class="muted small">iOS folgt in Kürze.</span></p>
+  {{ stores(false) }}
 </section>
 <p><a class="button" href="/cameras/pair">Kamera koppeln</a></p>
 {% endif %}

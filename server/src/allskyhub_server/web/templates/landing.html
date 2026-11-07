@@ -1,6 +1,7 @@
 {% extends "base.html" %}
 {% block lang %}{{ 'en' if en else 'de' }}{% endblock %}
 {% block title %}{{ 'allskyhub – your all-sky camera, made simple' if en else 'allskyhub – deine Allsky-Kamera, einfach' }}{% endblock %}
+{% from "_stores.html" import stores %}
 {% block content %}
 <section class="hero">
   <div class="stack">
@@ -9,9 +10,9 @@
     <h1>The whole sky, on your phone.</h1>
     <p class="lead">allskyhub is an all-sky camera you just plug in: a Raspberry Pi with a tested camera, a ready-made SD card image, set up from your phone. No FTP, no port forwarding, no installation marathons.</p>
     <p class="lead">Free and open source: run the camera software, the hub and the app yourself, or use the hosted hub on allskyhub.org.</p>
-    <p class="soon"><span aria-hidden="true">📱</span> <span><a href="{{ play_store_url }}" rel="noopener">Get the app on Google Play ↗</a> · iOS coming soon</span></p>
+    {{ stores(en) }}
     <p class="actions">
-      <a class="button" href="/zugang">Ask for access</a>
+      {% if open_signup %}<a class="button" href="/konto/anlegen">Create a free account</a>{% else %}<a class="button" href="/zugang">Ask for access</a>{% endif %}
       <a class="button secondary" href="/allsky">Already running Allsky?</a>
     </p>
     <p class="hero-links">
@@ -23,9 +24,9 @@
     <h1>Der ganze Himmel, auf deinem Handy.</h1>
     <p class="lead">allskyhub ist eine Allsky-Kamera zum Einstecken: Raspberry Pi mit getesteter Kamera, fertiges Image, Einrichtung mit dem Handy. Kein FTP, keine Portfreigabe, keine Installationsorgien.</p>
     <p class="lead">Frei und Open Source: Kamera-Software, Hub und App kannst du selbst betreiben, oder du nutzt den Hub auf allskyhub.org.</p>
-    <p class="soon"><span aria-hidden="true">📱</span> <span><a href="{{ play_store_url }}" rel="noopener">App bei Google Play ↗</a> · iOS folgt in Kürze</span></p>
+    {{ stores(en) }}
     <p class="actions">
-      <a class="button" href="/zugang">Zugang beantragen</a>
+      {% if open_signup %}<a class="button" href="/konto/anlegen">Kostenloses Konto anlegen</a>{% else %}<a class="button" href="/zugang">Zugang beantragen</a>{% endif %}
       <a class="button secondary" href="/allsky">Schon eine Allsky-Kamera?</a>
     </p>
     <p class="hero-links">
@@ -115,13 +116,14 @@
   <div class="card">
     <div class="feature-icon" aria-hidden="true">📱</div>
     <h2>Apps for Android and iOS</h2>
-    <p class="muted">Coming soon: set up the camera, watch the live sky and browse your nights. Until then everything works in the browser.</p>
+    <p class="muted">Your sky on your phone: live image, meteors, aurora and timelapses, and the public cameras without an account. The app also sets up the camera.</p>
+    {{ stores(en, small=true) }}
   </div>
 </section>
 
 <section class="card note">
   <h2>Status</h2>
-  <p class="muted">allskyhub is in development and in testing; accounts on the hosted hub are by invitation for now. The first supported camera is the ZWO ASI678MC on a Raspberry Pi 4/5. Already running <a href="https://github.com/AllskyTeam/allsky" rel="noopener">Allsky</a>? allskyhub installs next to it without a new SD card: <a href="/allsky">how it works</a>. Follow along and contribute on <a href="https://github.com/benhartwich/allskyhub">GitHub</a>. Parts of the site, such as the parts list, the legal pages and the camera pages, are in German so far.</p>
+  <p class="muted">allskyhub is in development and in testing; {% if open_signup %}an account on the hosted hub is free.{% else %}accounts on the hosted hub are by invitation for now.{% endif %} The first supported camera is the ZWO ASI678MC on a Raspberry Pi 4/5. Already running <a href="https://github.com/AllskyTeam/allsky" rel="noopener">Allsky</a>? allskyhub installs next to it without a new SD card: <a href="/allsky">how it works</a>. Follow along and contribute on <a href="https://github.com/benhartwich/allskyhub">GitHub</a>. Parts of the site, such as the parts list, the legal pages and the camera pages, are in German so far.</p>
 </section>
 {% else %}
 <section class="features">
@@ -153,13 +155,14 @@
   <div class="card">
     <div class="feature-icon" aria-hidden="true">📱</div>
     <h2>Apps für Android und iOS</h2>
-    <p class="muted">Kommen in Kürze: Kamera einrichten, Livehimmel ansehen und durch deine Nächte blättern. Bis dahin geht alles im Browser.</p>
+    <p class="muted">Dein Himmel am Handy: Live-Bild, Meteore, Polarlicht und Zeitraffer, die öffentlichen Kameras auch ohne Konto. Die App richtet auch die Kamera ein.</p>
+    {{ stores(en, small=true) }}
   </div>
 </section>
 
 <section class="card note">
   <h2>Stand</h2>
-  <p class="muted">allskyhub ist in Entwicklung und im Testbetrieb; Konten gibt es derzeit nur auf Einladung. Die erste unterstützte Kamera ist die ZWO ASI678MC am Raspberry Pi 4/5. Kamera-Software, Hub und App sind frei – mitlesen und mitmachen auf <a href="https://github.com/benhartwich/allskyhub">GitHub</a>.</p>
+  <p class="muted">allskyhub ist in Entwicklung und im Testbetrieb; {% if open_signup %}ein Konto auf allskyhub.org ist kostenlos.{% else %}Konten gibt es derzeit nur auf Einladung.{% endif %} Die erste unterstützte Kamera ist die ZWO ASI678MC am Raspberry Pi 4/5. Kamera-Software, Hub und App sind frei – mitlesen und mitmachen auf <a href="https://github.com/benhartwich/allskyhub">GitHub</a>.</p>
 </section>
 {% endif %}
 {% endblock %}

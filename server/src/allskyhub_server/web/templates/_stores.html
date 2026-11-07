@@ -1,0 +1,8 @@
+{# The app in both stores (Benjamin, 2026-11-07: iOS is out, show it prominently). Our own
+   buttons, not the stores' badges: plain names, no store logos. #}
+{% macro stores(en, small=false) -%}
+<p class="stores{{ ' stores-small' if small }}">
+  <a class="store" href="{{ app_store_url }}" rel="noopener"><span class="store-for">{{ 'Download on the' if en else 'Laden im' }}</span><span class="store-name">App Store</span></a>
+  <a class="store" href="{{ play_store_url }}" rel="noopener"><span class="store-for">{{ 'Get it on' if en else 'Jetzt bei' }}</span><span class="store-name">Google Play</span></a>
+</p>
+{%- endmacro %}

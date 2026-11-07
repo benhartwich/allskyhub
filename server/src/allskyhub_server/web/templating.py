@@ -166,9 +166,13 @@ def t(context: Context, de: str, en: str) -> str:
 
 cast(dict[str, Any], templates.env.globals)["t"] = t
 cast(dict[str, Any], templates.env.globals)["asset"] = asset
-# The app in the stores (Benjamin, 2026-10-28); iOS joins once Apple has released it.
+# The app in the stores (Benjamin, 2026-10-28; iOS released 2026-11-07).
 PLAY_STORE_URL = "https://play.google.com/store/apps/details?id=org.allskyhub.app"
+APP_STORE_ID = "6826841463"
+APP_STORE_URL = f"https://apps.apple.com/app/id{APP_STORE_ID}"
 cast(dict[str, Any], templates.env.globals)["play_store_url"] = PLAY_STORE_URL
+cast(dict[str, Any], templates.env.globals)["app_store_url"] = APP_STORE_URL
+cast(dict[str, Any], templates.env.globals)["app_store_id"] = APP_STORE_ID
 cast(dict[str, Any], templates.env.globals)["heater_text"] = heater_text
 cast(dict[str, Any], templates.env.globals)["air_overlay"] = air_overlay
 cast(dict[str, Any], templates.env.globals)["sky_overlay"] = sky_overlay

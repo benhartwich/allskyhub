@@ -209,13 +209,16 @@ async def test_limits(
     assert r.status_code == 200
     r = await new_client.post("/api/connect/v1/events", files=_files(event, _jpeg()), headers=auth)
     assert (r.status_code, r.json()) == (429, {"error": "night_full"})
-    monkeypatch.setattr(connect, "PER_STATION", (Limit(4, 60),))
+    # A window of its own (the requests above counted in the 60 s one) and so long that no
+    # window ends during the test: four go through, the fifth is refused. With 60 s the
+    # count began again whenever the test crossed a minute (allsky, #414's CI).
+    monkeypatch.setattr(connect, "PER_STATION", (Limit(4, 10**9),))
     body = _station_body()
     codes = [
         (await new_client.put("/api/connect/v1/test/station", json=body, headers=auth)).status_code
-        for _ in range(3)
+        for _ in range(5)
     ]
-    assert codes[-1] == 429
+    assert codes == [200, 200, 200, 200, 429]
     r = await new_client.put("/api/connect/v1/test/station", json=_station_body(), headers=auth)
     assert r.json() == {"error": "too_often"}
     assert int(r.headers["Retry-After"]) >= 1

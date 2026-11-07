@@ -1,0 +1,5 @@
+New: SharedSky – measuring the sky together.
+• Connect your Allsky, indi-allsky or own camera to the open camera network, without changing anything on it.
+• A short way in guides you: a camera or not, which software, connect.
+• Your stations show up in the camera list.
+When several cameras see the same fireball, allskyhub works out its path.

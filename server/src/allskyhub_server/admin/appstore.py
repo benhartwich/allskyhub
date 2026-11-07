@@ -29,6 +29,7 @@ from allskyhub_server.admin.stores import (
     LISTING,
     PACKAGE,
     UPLOAD_TIMEOUT,
+    WHATS_NEW,
     OtherApp,
     Report,
     StoreError,
@@ -37,6 +38,7 @@ from allskyhub_server.admin.stores import (
     _list,  # pyright: ignore[reportPrivateUsage]
     _message,  # pyright: ignore[reportPrivateUsage]
     _now,  # pyright: ignore[reportPrivateUsage]
+    whats_new,
 )
 
 log = logging.getLogger(__name__)
@@ -338,7 +340,9 @@ async def push(
         )
     if version is not None:
         await _soft(report, "Versionsnummer", _version_string(api, version, p.version))
-        await _version_texts(api, report, version, root, play, p, made)
+        # Apple wants "what's new" for every update and refuses it on an app's first one.
+        update = any(_state(v) in RELEASED for v in versions)
+        await _version_texts(api, report, version, root, play, p, made, update)
         await _soft(report, "Prüfnotizen", _review_notes(api, str(version["id"]), root))
 
     builds = await api.items(
@@ -431,10 +435,20 @@ async def _version_texts(
     play: Path,
     p: Profile = ALLSKYHUB,
     made: Path | None = None,
+    update: bool = False,
 ) -> None:
-    """Texts and screenshots of the version in preparation, in both languages."""
+    """Texts and screenshots of the version in preparation, in both languages; for an
+    update also what's new (app/store/whats_new, allskyhub only so far)."""
     version_id = str(version["id"])
     number = _dict(version.get("attributes")).get("versionString", p.version)
+    news = whats_new(WHATS_NEW) if update and p.key == "allskyhub" else {}
+    if update and any(locale not in news for locale in LOCALES):
+        report.add(
+            "Neu in dieser Version",
+            "warn",
+            "Apple verlangt den Text für ein Update; bitte in App Store Connect eintragen"
+            + (" (app/store/whats_new fehlt)." if p.key == "allskyhub" else "."),
+        )
 
     known = {
         str(_dict(x.get("attributes")).get("locale")): str(x["id"])
@@ -444,16 +458,19 @@ async def _version_texts(
     }
     for locale in LOCALES:
         t = texts(locale, root, play)
+        attributes: dict[str, Any] = {
+            "description": t["description"],
+            "keywords": t["keywords"],
+            "promotionalText": t["promotionalText"],
+            "supportUrl": p.support_url,
+            "marketingUrl": p.support_url,
+        }
+        if locale in news:
+            attributes["whatsNew"] = news[locale]
         localization = await api.upsert(
             known.get(locale),
             "appStoreVersionLocalizations",
-            {
-                "description": t["description"],
-                "keywords": t["keywords"],
-                "promotionalText": t["promotionalText"],
-                "supportUrl": p.support_url,
-                "marketingUrl": p.support_url,
-            },
+            attributes,
             {
                 "attributes": {"locale": locale},
                 "relationships": {"appStoreVersion": _rel("appStoreVersions", version_id)},

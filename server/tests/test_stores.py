@@ -642,6 +642,7 @@ async def test_push_appstore(tmp_path: Path) -> None:
     beta_contact: list[dict[str, Any]] = []
     busy_review: list[bool] = []
     review_notes: list[str] = []
+    released: list[dict[str, Any]] = []
 
     def answer(request: httpx.Request) -> httpx.Response:
         path, method = request.url.path, request.method
@@ -718,13 +719,14 @@ async def test_push_appstore(tmp_path: Path) -> None:
             found = [{"id": "INFO-DE", "attributes": {"locale": "de-DE"}}]
         elif path.endswith("/appStoreVersions"):
             found = [
+                *released,
                 {
                     "id": "V1",
                     "attributes": {
                         "versionString": "1.0",
                         "appVersionState": version_state[0],
                     },
-                }
+                },
             ]
         elif path.endswith("/appStoreVersionLocalizations"):
             found = [{"id": "VL-DE", "attributes": {"locale": "de-DE"}}]
@@ -801,6 +803,7 @@ async def test_push_appstore(tmp_path: Path) -> None:
     assert len(english["keywords"]) <= 100
     assert len(english["promotionalText"]) <= 170
     assert "German for now" not in english["description"]
+    assert "whatsNew" not in english  # Apple refuses it on an app's first version
     assert {a["screenshotDisplayType"] for a in created["appScreenshotSets"]} == {"APP_IPHONE_67"}
     per_language = len(appstore.screenshots("de-DE"))
     assert per_language >= 3
@@ -852,6 +855,16 @@ async def test_push_appstore(tmp_path: Path) -> None:
     assert step.state == "warn"
     assert "HTTP 422" in step.text
     assert all("s3cret" not in s.text for s in report.steps)
+
+    # An update: what's new from app/store/whats_new, in both languages.
+    version_state[0] = "PREPARE_FOR_SUBMISSION"
+    released.append({"id": "V0", "attributes": {"appVersionState": "READY_FOR_SALE"}})
+    created.pop("appStoreVersionLocalizations", None)
+    report = await appstore.push_report(hub)
+    assert "Neu in dieser Version" not in [s.title for s in report.steps], report.steps
+    news = stores.whats_new()
+    assert set(news) == {"de-DE", "en-US"}
+    assert created["appStoreVersionLocalizations"][0]["whatsNew"] == news["en-US"]
 
 
 async def test_a_further_app_shares_the_keys(tmp_path: Path) -> None:
@@ -1678,6 +1691,13 @@ async def test_submit_to_play_production(tmp_path: Path) -> None:
     assert ("PUT", "/androidpublisher/v3/applications/eu.bortle.app/edits/E1/tracks/production",
             {"track": "production", "releases": [
                 {"versionCodes": ["301"], "status": "completed"}]}) in seen  # fmt: skip
+    # allskyhub's own release takes what's new (app/store/whats_new), within Google's 500.
+    seen.clear()
+    await hub.submit_play()
+    put = next(b for m, path, b in seen if m == "PUT" and path.endswith("/tracks/production"))
+    notes = put["releases"][0]["releaseNotes"]
+    assert [n["language"] for n in notes] == ["de-DE", "en-US"]
+    assert all(0 < len(n["text"]) <= stores.WHATS_NEW_PLAY_MAX for n in notes)
     draft_only = True
     report = await hub.submit_play()
     assert report.steps[0].state == "warn"

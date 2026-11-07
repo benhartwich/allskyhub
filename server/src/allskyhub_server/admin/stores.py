@@ -79,6 +79,25 @@ RELEASE_OUT = Path("/var/lib/allskyhub-android/release")  # deploy/android, root
 # screenshots uploaded on the admin page take the place of the repository's.
 LISTING = Path(__file__).resolve().parents[4] / "app" / "store" / "play"
 LANGUAGES = ("de-DE", "en-US")  # the first is the default language
+# What's new in a version, one text per language for both stores (app/store/whats_new):
+# Apple wants it for every update, Google shows it on the listing (Benjamin, 2026-11-07).
+WHATS_NEW = LISTING.parent / "whats_new"
+WHATS_NEW_PLAY_MAX = 500
+
+
+def whats_new(folder: Path = WHATS_NEW) -> dict[str, str]:
+    """The texts there are, by language."""
+    found: dict[str, str] = {}
+    for language in LANGUAGES:
+        try:
+            text = (folder / f"{language}.txt").read_text().strip()
+        except OSError:
+            continue
+        if text:
+            found[language] = text
+    return found
+
+
 CONTACT_EMAIL = "support@webinx.eu"  # as in the imprint
 CONTACT_WEBSITE = "https://allskyhub.org"
 SCREENSHOTS = (2, 8)
@@ -2006,7 +2025,13 @@ class Stores:
         if not codes:
             raise StoreError("Im internen Test liegt noch keine Version; erst Release bauen.")
         code = str(max(codes))
-        body = {"track": "production", "releases": [{"versionCodes": [code], "status": status}]}
+        release: dict[str, Any] = {"versionCodes": [code], "status": status}
+        if package == PACKAGE and (notes := whats_new()):
+            release["releaseNotes"] = [
+                {"language": language, "text": text[:WHATS_NEW_PLAY_MAX]}
+                for language, text in notes.items()
+            ]
+        body = {"track": "production", "releases": [release]}
         r = await client.put(f"{app}/edits/{edit}/tracks/production", json=body, headers=auth)
         if r.status_code == 400 and status != "draft" and "draft" in r.text.lower():
             await client.delete(f"{app}/edits/{edit}", headers=auth)

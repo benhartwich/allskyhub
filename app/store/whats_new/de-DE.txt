@@ -1,0 +1,5 @@
+Neu: SharedSky – gemeinsam den Himmel vermessen.
+• Verbinde deine Allsky-, indi-allsky- oder eigene Kamera mit dem offenen Kameranetz, ohne etwas an ihr zu ändern.
+• Ein kurzer Einstieg führt dich hin: Kamera oder nicht, welche Software, verbinden.
+• Deine Stationen erscheinen in der Kameraliste.
+Sehen mehrere Kameras dieselbe Feuerkugel, berechnet allskyhub ihre Bahn.

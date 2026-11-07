@@ -232,10 +232,15 @@ void main() {
     await tester.tap(find.byKey(const Key('station-create')));
     await tester.pumpAndSettle();
     expect(find.text('wartet auf Prüfung'), findsOneWidget);
-    final body = latin1.decode(hub.sent.last.bodyBytes);
+    // The station's page then asks for its part in the network: the POST before it.
+    final post = hub.sent.lastWhere((r) => r.method == 'POST');
+    final body = latin1.decode(post.bodyBytes);
     expect(body, contains('name="latitude"\r\n\r\n47.80321'));
     expect(body, contains('name="timezone"\r\n\r\nEurope/Vienna'));
     expect(body, contains('filename="beweis.jpg"'));
+    // The defaults of what the station shows (SPEC §10.6).
+    expect(body, contains('name="page"\r\n\r\ntrue'));
+    expect(body, contains('name="images"\r\n\r\nfalse'));
   });
 
   testWidgets("the hub's sentence when something is missing", (tester) async {

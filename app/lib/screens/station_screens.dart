@@ -16,6 +16,7 @@ import '../l10n.dart';
 import '../platform/location.dart';
 import 'cameras_screen.dart';
 import 'join_screen.dart';
+import 'network_screens.dart';
 
 /// The answers of the second question, and what "Kamera verbinden" sends for them.
 const _software = {
@@ -440,6 +441,7 @@ class _StationConnectScreenState extends State<StationConnectScreen> {
   final _proof = TextEditingController();
   (Uint8List, String)? _photo;
   bool _terms = false;
+  var _visibility = const StationVisibility();
   bool _sending = false;
   bool _locating = false;
   String? _error;
@@ -528,6 +530,7 @@ class _StationConnectScreenState extends State<StationConnectScreen> {
         proofText: _proof.text.trim(),
         proof: _photo?.$1,
         proofName: _photo?.$2 ?? 'proof.jpg',
+        visibility: _visibility,
       );
       if (!mounted) return;
       await Navigator.of(context).push(
@@ -759,6 +762,22 @@ class _StationConnectScreenState extends State<StationConnectScreen> {
             ),
           ],
           const SizedBox(height: 16),
+          Text(
+            tr('Was öffentlich zu sehen ist', 'What the public sees'),
+            style: Theme.of(context).textTheme.titleSmall,
+          ),
+          StationVisibilitySwitches(
+            visibility: _visibility,
+            onChanged: (v) => setState(() => _visibility = v),
+          ),
+          Text(
+            tr(
+              'Das kannst du später bei der Station ändern.',
+              'You can change this later on the station.',
+            ),
+            style: Theme.of(context).textTheme.bodySmall,
+          ),
+          const SizedBox(height: 8),
           CheckboxListTile(
             key: const Key('station-terms'),
             contentPadding: EdgeInsets.zero,
@@ -983,13 +1002,38 @@ class StationScreen extends StatefulWidget {
 
 class _StationScreenState extends State<StationScreen> {
   late Station _station = widget.station;
+  late Future<NetworkPart?> _part = _loadPart();
+  bool _saving = false;
+
+  Future<NetworkPart?> _loadPart() =>
+      widget.client.networkPart(_station.id).catchError((Object _) => null);
 
   Future<void> _refresh() async {
     try {
       final next = await widget.client.station(_station.id);
-      if (mounted) setState(() => _station = next);
+      if (mounted) {
+        setState(() {
+          _station = next;
+          _part = _loadPart();
+        });
+      }
     } on Object {
       // keep what we have
+    }
+  }
+
+  Future<void> _show(StationVisibility visibility) async {
+    setState(() => _saving = true);
+    try {
+      final next = await widget.client.setStationVisibility(
+        _station.id,
+        visibility,
+      );
+      if (mounted) setState(() => _station = next);
+    } on HubException catch (e) {
+      if (mounted) _say(e.message);
+    } finally {
+      if (mounted) setState(() => _saving = false);
     }
   }
 
@@ -1162,6 +1206,29 @@ class _StationScreenState extends State<StationScreen> {
                 ],
               ),
             ),
+            FutureBuilder(
+              future: _part,
+              builder: (context, snapshot) {
+                final part = snapshot.data;
+                if (part == null) return const SizedBox.shrink();
+                return Column(
+                  children: [
+                    NetworkPartCard(part: part),
+                    if (part.comparison case final c?)
+                      SkyComparisonCard(comparison: c, name: s.name),
+                  ],
+                );
+              },
+            ),
+            if (s.visibility case final visibility?)
+              StationVisibilityCard(
+                key: const Key('station-visibility'),
+                visibility: visibility,
+                publicUrl: s.publicUrl,
+                publicFrom: s.publicFrom,
+                waiting: s.publicWaiting,
+                onChanged: _saving ? null : _show,
+              ),
             const SizedBox(height: 16),
             if (s.software != 'image-url')
               OutlinedButton.icon(

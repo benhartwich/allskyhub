@@ -1811,6 +1811,10 @@ class Station {
     this.clockTrusted = false,
     this.framesToday = 0,
     this.meteorsToday = 0,
+    this.visibility,
+    this.publicUrl,
+    this.publicFrom,
+    this.publicWaiting = false,
   });
 
   factory Station.fromJson(Map<String, dynamic> json) => Station(
@@ -1828,6 +1832,16 @@ class Station {
     clockTrusted: json['clock_trusted'] as bool? ?? false,
     framesToday: json['frames_today'] as int? ?? 0,
     meteorsToday: json['meteors_today'] as int? ?? 0,
+    visibility: json['visibility'] == null
+        ? null
+        : StationVisibility.fromJson(
+            json['visibility'] as Map<String, dynamic>,
+          ),
+    publicUrl: json['public_url'] as String?,
+    publicFrom: json['public_from'] == null
+        ? null
+        : DateTime.parse(json['public_from'] as String),
+    publicWaiting: json['public_waiting'] as bool? ?? false,
   );
 
   final String id;
@@ -1846,6 +1860,57 @@ class Station {
   final bool clockTrusted;
   final int framesToday;
   final int meteorsToday;
+
+  /// What the station shows publicly (SPEC §10.6); null from a hub before these choices.
+  final StationVisibility? visibility;
+  final String? publicUrl;
+
+  /// A station that joined before the choices: they hold from then on; while its owner's
+  /// mail has not gone out, [publicWaiting] without a date.
+  final DateTime? publicFrom;
+  final bool publicWaiting;
+}
+
+/// SPEC §10.6 Visibility: the owner's four choices; the defaults are the hub's.
+class StationVisibility {
+  const StationVisibility({
+    this.named = true,
+    this.onMap = true,
+    this.page = true,
+    this.images = false,
+  });
+
+  factory StationVisibility.fromJson(Map<String, dynamic> json) =>
+      StationVisibility(
+        named: json['named'] as bool? ?? true,
+        onMap: json['on_map'] as bool? ?? true,
+        page: json['page'] as bool? ?? true,
+        images: json['images'] as bool? ?? false,
+      );
+
+  final bool named;
+  final bool onMap;
+  final bool page;
+  final bool images;
+
+  StationVisibility copyWith({
+    bool? named,
+    bool? onMap,
+    bool? page,
+    bool? images,
+  }) => StationVisibility(
+    named: named ?? this.named,
+    onMap: onMap ?? this.onMap,
+    page: page ?? this.page,
+    images: images ?? this.images,
+  );
+
+  Map<String, Object> toJson() => {
+    'named': named,
+    'on_map': onMap,
+    'page': page,
+    'images': images,
+  };
 }
 
 /// The answer to "Kamera verbinden": the secret only this once.
@@ -1921,12 +1986,14 @@ extension Stations on HubClient {
     String proofText = '',
     Uint8List? proof,
     String proofName = 'proof.jpg',
+    StationVisibility visibility = const StationVisibility(),
   }) async {
     final request = http.MultipartRequest('POST', _uri('/stations'))
       ..fields.addAll({
         'software': software,
         'name': name,
         'terms': '$terms',
+        for (final e in visibility.toJson().entries) e.key: '${e.value}',
         if (software == 'image-url') ...{
           'url': url,
           'latitude': latitude?.toString() ?? '',
@@ -1945,6 +2012,41 @@ extension Stations on HubClient {
     return StationCreated.fromJson(
       await _sendMultipart(request) as Map<String, dynamic>,
     );
+  }
+
+  /// SPEC §10.6: switching the page off ends its address.
+  Future<Station> setStationVisibility(
+    String id,
+    StationVisibility visibility,
+  ) async => Station.fromJson(
+    await _send('PUT', '/stations/$id/visibility', body: visibility.toJson())
+        as Map<String, dynamic>,
+  );
+
+  /// "Im Netz" and "Dein Himmel im Vergleich" of the account's own camera or station;
+  /// null from an older hub (404).
+  Future<NetworkPart?> networkPart(String deviceId) async {
+    try {
+      return NetworkPart.fromJson(
+        await _send('GET', '/devices/$deviceId/network')
+            as Map<String, dynamic>,
+      );
+    } on HubException catch (e) {
+      if (e.statusCode == 404) return null;
+      rethrow;
+    }
+  }
+
+  /// The network as on /netz, without login; null from an older hub (404).
+  Future<NetworkView?> networkView() async {
+    try {
+      return NetworkView.fromJson(
+        await _send('GET', '/public/network') as Map<String, dynamic>,
+      );
+    } on HubException catch (e) {
+      if (e.statusCode == 404) return null;
+      rethrow;
+    }
   }
 
   Future<String> renewStationSecret(String id, String password) async {
@@ -1972,4 +2074,233 @@ extension Stations on HubClient {
       return null;
     }
   }
+}
+
+/// A fireball the network measured together (SPEC §10.6); [cameras] as results name them.
+class NetworkFireball {
+  NetworkFireball({
+    required this.id,
+    required this.at,
+    required this.highKm,
+    required this.lowKm,
+    required this.cameras,
+  });
+
+  factory NetworkFireball.fromJson(Map<String, dynamic> json) =>
+      NetworkFireball(
+        id: json['id'] as String,
+        at: DateTime.parse(json['at'] as String),
+        highKm: (json['high_km'] as num).toDouble(),
+        lowKm: (json['low_km'] as num).toDouble(),
+        cameras: [
+          for (final c in json['cameras'] as List<dynamic>) c as String,
+        ],
+      );
+
+  final String id;
+  final DateTime at;
+  final double highKm;
+  final double lowKm;
+  final List<String> cameras;
+}
+
+/// One night of "Himmel im Vergleich": the camera's darkest reading of a clear night and
+/// the range of its neighbours, mag/arcsec²; null where there is none.
+class ComparedNight {
+  ComparedNight({required this.nightId, this.own, this.low, this.high});
+
+  factory ComparedNight.fromJson(Map<String, dynamic> json) => ComparedNight(
+    nightId: json['night_id'] as String,
+    own: (json['own'] as num?)?.toDouble(),
+    low: (json['low'] as num?)?.toDouble(),
+    high: (json['high'] as num?)?.toDouble(),
+  );
+
+  final String nightId;
+  final double? own;
+  final double? low;
+  final double? high;
+}
+
+class SkyComparison {
+  SkyComparison({
+    required this.nights,
+    required this.neighbours,
+    this.difference,
+  });
+
+  factory SkyComparison.fromJson(Map<String, dynamic> json) => SkyComparison(
+    nights: [
+      for (final n in json['nights'] as List<dynamic>)
+        ComparedNight.fromJson(n as Map<String, dynamic>),
+    ],
+    neighbours: json['neighbours'] as int,
+    difference: (json['difference'] as num?)?.toDouble(),
+  );
+
+  final List<ComparedNight> nights;
+  final int neighbours;
+
+  /// The camera minus the neighbours' median, averaged; positive: darker.
+  final double? difference;
+}
+
+/// "Im Netz": what the account's camera or station adds to the network.
+class NetworkPart {
+  NetworkPart({
+    required this.fireballs,
+    required this.meteors,
+    required this.recent,
+    this.since,
+    this.comparison,
+  });
+
+  factory NetworkPart.fromJson(Map<String, dynamic> json) => NetworkPart(
+    since: json['since'] == null
+        ? null
+        : DateTime.parse(json['since'] as String),
+    fireballs: json['fireballs'] as int,
+    meteors: json['meteors'] as int,
+    recent: [
+      for (final f in json['recent'] as List<dynamic>)
+        NetworkFireball.fromJson(f as Map<String, dynamic>),
+    ],
+    comparison: json['comparison'] == null
+        ? null
+        : SkyComparison.fromJson(json['comparison'] as Map<String, dynamic>),
+  );
+
+  final DateTime? since;
+  final int fireballs;
+  final int meteors;
+  final List<NetworkFireball> recent;
+  final SkyComparison? comparison;
+}
+
+/// Someone taking part, as /netz lists them; [slug] opens their public page.
+class NetworkMember {
+  NetworkMember({
+    required this.name,
+    required this.kind,
+    required this.active,
+    required this.meteors,
+    required this.fireballs,
+    this.slug,
+    this.software,
+    this.since,
+  });
+
+  factory NetworkMember.fromJson(Map<String, dynamic> json) => NetworkMember(
+    name: json['name'] as String,
+    slug: json['slug'] as String?,
+    kind: json['kind'] as String,
+    software: json['software'] as String?,
+    since: json['since'] == null
+        ? null
+        : DateTime.parse(json['since'] as String),
+    active: json['active'] as bool,
+    meteors: json['meteors'] as int,
+    fireballs: json['fireballs'] as int,
+  );
+
+  final String name;
+  final String? slug;
+
+  /// `camera` (allskyhub) or `station` (SharedSky).
+  final String kind;
+  final String? software;
+  final DateTime? since;
+  final bool active;
+  final int meteors;
+  final int fireballs;
+}
+
+class NetworkPoint {
+  NetworkPoint({
+    required this.lat,
+    required this.lon,
+    required this.title,
+    required this.kind,
+    required this.active,
+    this.slug,
+  });
+
+  factory NetworkPoint.fromJson(Map<String, dynamic> json) => NetworkPoint(
+    lat: (json['lat'] as num).toDouble(),
+    lon: (json['lon'] as num).toDouble(),
+    title: json['title'] as String,
+    slug: json['slug'] as String?,
+    kind: json['kind'] as String,
+    active: json['active'] as bool,
+  );
+
+  final double lat;
+  final double lon;
+  final String title;
+  final String? slug;
+  final String kind;
+  final bool active;
+}
+
+/// The network as on /netz (SPEC §10.6).
+class NetworkView {
+  NetworkView({
+    required this.cameras,
+    required this.stations,
+    required this.active,
+    required this.meteorsTonight,
+    required this.fireballsMonth,
+    required this.showersTonight,
+    required this.tonight,
+    required this.darkest,
+    required this.members,
+    required this.points,
+  });
+
+  factory NetworkView.fromJson(Map<String, dynamic> json) => NetworkView(
+    cameras: json['cameras'] as int,
+    stations: json['stations'] as int,
+    active: json['active'] as int,
+    meteorsTonight: json['meteors_tonight'] as int,
+    fireballsMonth: json['fireballs_month'] as int,
+    showersTonight: [
+      for (final s in json['showers_tonight'] as List<dynamic>)
+        (
+          name: (s as Map<String, dynamic>)['name'] as String,
+          count: s['count'] as int,
+        ),
+    ],
+    tonight: [
+      for (final f in json['tonight'] as List<dynamic>)
+        NetworkFireball.fromJson(f as Map<String, dynamic>),
+    ],
+    darkest: [
+      for (final r in json['darkest'] as List<dynamic>)
+        (
+          name: (r as Map<String, dynamic>)['name'] as String,
+          slug: r['slug'] as String?,
+          kind: r['kind'] as String,
+          sqm: (r['sqm'] as num).toDouble(),
+        ),
+    ],
+    members: [
+      for (final m in json['members'] as List<dynamic>)
+        NetworkMember.fromJson(m as Map<String, dynamic>),
+    ],
+    points: [
+      for (final p in json['points'] as List<dynamic>)
+        NetworkPoint.fromJson(p as Map<String, dynamic>),
+    ],
+  );
+
+  final int cameras;
+  final int stations;
+  final int active;
+  final int meteorsTonight;
+  final int fireballsMonth;
+  final List<({String name, int count})> showersTonight;
+  final List<NetworkFireball> tonight;
+  final List<({String name, String? slug, String kind, double sqm})> darkest;
+  final List<NetworkMember> members;
+  final List<NetworkPoint> points;
 }

@@ -4,6 +4,8 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="theme-color" content="#04060f">
+  {# Safari on iPhone offers the app above the page (Benjamin, 2026-11-07). #}
+  <meta name="apple-itunes-app" content="app-id={{ app_store_id }}">
   <link rel="icon" href="{{ asset('favicon.svg') }}" type="image/svg+xml">
   <title>{% block title %}allskyhub{% endblock %}</title>
   <meta name="htmx-config" content='{"includeIndicatorStyles": false, "allowEval": false}'>
@@ -14,9 +16,16 @@
   <script src="{{ asset('htmx.min.js') }}" defer></script>
   <script src="{{ asset('lightbox.js') }}" defer></script>
   <script src="{{ asset('overlay.js') }}" defer></script>
+  <script src="{{ asset('app_banner.js') }}" defer></script>
   {% block head %}{% endblock %}
 </head>
 <body {% if csrf_token %}hx-headers='{"X-CSRF-Token": "{{ csrf_token }}"}'{% endif %}>
+  <div class="app-banner" id="app-banner" hidden>
+    <img src="{{ asset('favicon.svg') }}" width="32" height="32" alt="">
+    <span class="app-banner-text"><strong>{{ 'allskyhub app' if en else 'allskyhub-App' }}</strong><span>{{ 'Free on Google Play' if en else 'Kostenlos bei Google Play' }}</span></span>
+    <a class="button" href="{{ play_store_url }}" rel="noopener">{{ 'Open' if en else 'Öffnen' }}</a>
+    <button type="button" class="app-banner-close" data-app-banner-close aria-label="{{ 'Close' if en else 'Schließen' }}">×</button>
+  </div>
   <header class="appbar">
     <a class="brand" href="/"><img src="{{ asset('favicon.svg') }}" width="28" height="28" alt=""><span class="brand-name">allskyhub</span></a>
     <nav class="appbar-end" aria-label="{{ 'Main menu' if en else 'Hauptmenü' }}">

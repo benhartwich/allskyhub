@@ -1,5 +1,6 @@
 {% extends "base.html" %}
 {% block title %}Meine Kameras · allskyhub{% endblock %}
+{% from "_stores.html" import stores %}
 {% block content %}
 <div class="page-head">
   <h1>Meine Kameras</h1>
@@ -54,5 +55,9 @@
   <p class="muted">Deine Kamera läuft mit indi-allsky, Allsky oder eigener Software? <a href="/stationen/neu">Verbinde sie mit SharedSky</a> und miss gemeinsam mit den anderen Kameras Feuerkugeln, Meteorströme und die Himmelshelligkeit. <a href="/mitmachen">Mehr erfahren</a></p>
   {% endif %}
 </section>
-<p class="muted small">Unterwegs: <a href="{{ play_store_url }}" rel="noopener">allskyhub-App bei Google Play ↗</a> · iOS folgt in Kürze.</p>
+<section class="card app-card stack">
+  <h2>Die App</h2>
+  <p class="muted">Deine Kameras unterwegs: Live-Bild, Meteore, Polarlicht und Zeitraffer, mit Benachrichtigung bei Ereignissen.</p>
+  {{ stores(false) }}
+</section>
 {% endblock %}

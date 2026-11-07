@@ -7,14 +7,14 @@ from __future__ import annotations
 
 import datetime as dt
 import logging
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from allskyhub_server.devices import image_url, pairing, stations
+from allskyhub_server.devices import image_url, pairing, public, stations
 from allskyhub_server.devices.images import ImageStore
 from allskyhub_server.devices.stations import SecretKey
 from allskyhub_server.i18n import tr
@@ -50,6 +50,7 @@ class Ask:
     focal_mm: str = ""
     proof_text: str = ""
     proof: bytes = b""
+    visibility: public.Visibility = field(default_factory=public.Visibility)
 
 
 @dataclass(frozen=True)
@@ -116,6 +117,7 @@ async def create(
         )
     if ask.software != "image-url":
         device, secret = await stations.create(db, user, ask.name, ask.software, key)
+        public.set_visibility(device, ask.visibility)  # SPEC §10.6 Visibility
         await db.commit()
         log.info("station created", extra={"device_id": device.id, "software": ask.software})
         return device, secret
@@ -136,6 +138,7 @@ async def create(
             )
         )
     device, _ = await stations.create(db, user, ask.name, ask.software, key)
+    public.set_visibility(device, ask.visibility)  # shown once an admin approved it (§10.7)
     if ask.proof:
         try:
             image_url.store_proof(proofs_dir(settings), device.id, ask.proof)

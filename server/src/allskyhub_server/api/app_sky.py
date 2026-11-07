@@ -268,9 +268,7 @@ def distance_km(a: tuple[float, float], b: tuple[float, float]) -> float:
 async def _nearby(db: DbSession, place: tuple[float, float], now: dt.datetime) -> Nearby | None:
     """The nearest public camera that shows its place, live image and sky values, with a
     fresh measurement."""
-    rows = await db.scalars(
-        select(Device).where(Device.public_slug.is_not(None), Device.owner_id.is_not(None))
-    )
+    rows = await db.scalars(select(Device).where(public.shown()))
     best: tuple[float, Device] | None = None
     for device in rows:
         coords = public.coordinates(device)

@@ -175,9 +175,7 @@ def _event(device: Device, e: EventRecord) -> PublicEvent:
 
 
 async def _public_devices(db: DbSession) -> list[Device]:
-    rows = await db.scalars(
-        select(Device).where(Device.public_slug.is_not(None), Device.owner_id.is_not(None))
-    )
+    rows = await db.scalars(select(Device).where(public.shown()))
     return [d for d in rows if _listed(d)]
 
 

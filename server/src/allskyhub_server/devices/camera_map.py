@@ -106,11 +106,7 @@ async def _sqm(db: AsyncSession, device_ids: list[str], now: dt.datetime) -> dic
 
 
 async def cameras(db: AsyncSession, now: dt.datetime | None = None) -> list[MapCamera]:
-    rows = list(
-        await db.scalars(
-            select(Device).where(Device.public_slug.is_not(None), Device.owner_id.is_not(None))
-        )
-    )
+    rows = list(await db.scalars(select(Device).where(public.shown())))
     shows_sky = [d.id for d in rows if public.profile(d).sections.sky]
     sqm = await _sqm(db, shows_sky, now or dt.datetime.now(dt.UTC)) if shows_sky else {}
     out: list[MapCamera] = []
@@ -198,8 +194,7 @@ async def home_cameras(db: AsyncSession) -> list[HomeCamera]:
     rows = await db.scalars(
         select(Device)
         .where(
-            Device.public_slug.is_not(None),
-            Device.owner_id.is_not(None),
+            public.shown(),
             Device.public_on_home.is_(True),
         )
         .order_by(Device.latest_image_at.desc().nulls_last(), Device.id)

@@ -1624,6 +1624,13 @@ what lets the hub pass them to partners. Every result page names the stations be
 The owner can leave at any time; their measurements already in joint results stay, under
 their name or, if they ask, as "eine Station im Netz".
 
+**Visibility** (Benjamin, 2026-11-07). The owner chooses, when connecting and at any time
+after, whether the station is named (otherwise "eine Station im Netz"), is on the network's
+map (its place rounded to 0.1°), has a public page (`/sky/<slug>` as in §6.8) and shows
+its images there; all but the images are on by default. Stations that joined before these
+choices existed get the same defaults a week after a mail to their owner, unless the
+owner chose otherwise.
+
 ### 10.7 Stations by their image address
 
 Benjamin, 2026-11-05: most cameras publish their latest image at a fixed address (an

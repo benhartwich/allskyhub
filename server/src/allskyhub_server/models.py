@@ -270,6 +270,13 @@ class Device(Base):
     station_secret_enc: Mapped[bytes | None] = mapped_column(LargeBinary)
     terms_accepted_at: Mapped[dt.datetime | None] = mapped_column(_tz())
     clock: Mapped[dict[str, Any] | None] = mapped_column(JSONB)
+    # SPEC §10.6 Visibility: a station named in results and lists (else "eine Station im
+    # Netz"); the rest of what it shows is ``public_slug`` and ``public_profile``. A station
+    # that joined before these choices existed shows nothing publicly until ``public_from``,
+    # a week after its owner was told by mail (``public_mailed_at``).
+    named: Mapped[bool] = mapped_column(Boolean, default=True, server_default="true")
+    public_from: Mapped[dt.datetime | None] = mapped_column(_tz())
+    public_mailed_at: Mapped[dt.datetime | None] = mapped_column(_tz())
     # Roadmap N7, "Plus": the longer archive (maintenance.py) until ``plus_until``; a gift
     # (``plus_gift``, set by an admin) never ends. Paid and trial periods come from Paddle.
     plus_until: Mapped[dt.datetime | None] = mapped_column(_tz())

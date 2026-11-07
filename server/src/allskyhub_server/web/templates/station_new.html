@@ -47,6 +47,9 @@
   <label>{{ t('Ein paar Worte oder ein Link', 'A few words or a link') }}<textarea name="proof_text" maxlength="2000" rows="3">{{ form.proof_text or '' }}</textarea></label>
   <label>{{ t('Bild (optional, höchstens 5 MB)', 'Image (optional, at most 5 MB)') }}<input type="file" name="proof" accept="image/jpeg,image/png,image/webp"></label>
   {% endif %}
+  <h3>{{ t('Was öffentlich zu sehen ist', 'What the public sees') }}</h3>
+  {% set vis = visibility %}{% include "_station_visibility.html" %}
+  <p class="muted small">{{ t('Das kannst du später auf der Seite der Station ändern.', "You can change this later on the station's page.") }}</p>
   <label class="check"><input type="checkbox" name="terms" value="true" required> <span>{% if en %}I agree to the <a href="/mitmachen#bedingungen">terms of SharedSky</a>: my images stay mine; my station's measurements are shared with its name under CC BY 4.0.{% if software == 'image-url' %} The hub may fetch the address above.{% endif %}{% else %}Ich stimme den <a href="/mitmachen#bedingungen">Teilnahmebedingungen</a> zu: Meine Bilder bleiben meine; die Messwerte meiner Station werden mit ihrem Namen unter CC BY 4.0 geteilt.{% if software == 'image-url' %} Der Hub darf die Adresse oben abrufen.{% endif %}{% endif %}</span></label>
   <button type="submit">{% if software == 'image-url' %}{{ t('Zur Prüfung schicken', 'Send for checking') }}{% else %}{{ t('Station anlegen', 'Create station') }}{% endif %}</button>
 </form>

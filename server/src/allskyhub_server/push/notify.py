@@ -24,6 +24,7 @@ from allskyhub_server.devices import (
     fireball,
     health,
     night_summary,
+    public,
     sightings,
     space_weather,
     tonight,
@@ -33,6 +34,7 @@ from allskyhub_server.devices.discord import Discord
 from allskyhub_server.devices.event_text import EVENT_TITLES
 from allskyhub_server.devices.events import storm_key
 from allskyhub_server.devices.tonight import ForecastCache
+from allskyhub_server.i18n import pick
 from allskyhub_server.mail.send import Mail, Mailer
 from allskyhub_server.models import (
     AuroraReport,
@@ -776,12 +778,69 @@ class Notifier:
                     )
                 )
 
+    async def check_station_notice(self, now: dt.datetime | None = None) -> None:
+        """SPEC §10.6 Visibility: owners of stations that joined before the choices hear once
+        that their station goes public a week later, and how to change it; a week after the
+        mail went out, it does. Without mail (none set up, or sending failed) it stays as it
+        was and the mail is tried again."""
+        now = now or _now()
+        async with self._maker() as db:
+            rows = (
+                await db.execute(
+                    select(Device, User)
+                    .join(User, User.id == Device.owner_id)
+                    .where(Device.kind == "station", Device.public_from.is_not(None))
+                )
+            ).all()
+            for device, user in rows:
+                if public.go_public(device, now):
+                    await db.commit()
+                    continue
+                if device.public_mailed_at is not None or self.mailer is None or not self._mail:
+                    continue
+                start = now + public.NOTICE
+                if not await self.mailer.send(self._station_notice(device, user, start)):
+                    continue
+                device.public_from, device.public_mailed_at = start, now
+                await db.commit()
+
+    def _station_notice(self, device: Device, user: User, start: dt.datetime) -> Mail:
+        link = f"{self.base_url.rstrip('/')}/stationen/{device.id}#oeffentlich"
+        day = start.astimezone(_zone()).strftime("%d.%m.%Y")
+        return Mail(
+            to=user.email,
+            subject=pick(
+                user.lang,
+                f"SharedSky: {device.name} wird ab {day} öffentlich gezeigt",
+                f"SharedSky: {device.name} will be shown publicly from {day}",
+            ),
+            body=pick(
+                user.lang,
+                f"Hallo,\n\nSharedSky zeigt ab jetzt, wer mitmacht: auf der Seite „Das Netz“, "
+                f"auf einer Karte und mit einer öffentlichen Seite pro Station. Deine Station "
+                f"„{device.name}“ erscheint dort ab {day}: mit Namen, auf der Karte (der Ort "
+                f"auf etwa 10 km gerundet) und mit einer eigenen Seite mit Himmel und Meteoren. "
+                f"Bilder zeigt der Hub nur, wenn du es einschaltest.\n\n"
+                f"Wenn du das anders möchtest, stell es hier ein:\n{link}\n\nallskyhub\n",
+                f'Hello,\n\nSharedSky now shows who takes part: on the page "The network", '
+                f'on a map and with a public page per station. Your station "{device.name}" '
+                f"appears there from {day}: with its name, on the map (its place rounded to "
+                f"about 10 km) and with its own page with the sky and meteors. The hub shows "
+                f"images only if you switch them on.\n\n"
+                f"If you would like it otherwise, set it here:\n{link}\n\nallskyhub\n",
+            ),
+        )
+
     async def run_offline_checks(self, registry: ConnectionRegistry) -> None:
         while True:
             try:
                 await self.check_offline_mail(registry)
             except Exception:
                 log.exception("mail: offline check failed")
+            try:
+                await self.check_station_notice()
+            except Exception:
+                log.exception("mail: station notice failed")
             try:
                 await self.check_offline(registry)
             except Exception:

@@ -20,7 +20,7 @@ from allskyhub_protocol import FrameVariant
 from allskyhub_server.api.app import AppUser
 from allskyhub_server.auth import ratelimit
 from allskyhub_server.auth.passwords import verify_secret_async
-from allskyhub_server.devices import image_url, station_flow, stations
+from allskyhub_server.devices import image_url, public, station_flow, stations
 from allskyhub_server.devices.images import ImageStore
 from allskyhub_server.devices.stations import SecretKey
 from allskyhub_server.i18n import tr
@@ -30,6 +30,17 @@ from allskyhub_server.web.deps import DbSession, SettingsDep
 router = APIRouter(prefix="/api/v1")
 
 DOCS = "/entwickler/connect"
+
+
+class Visibility(BaseModel):
+    """SPEC §10.6 Visibility, the owner's four choices."""
+
+    model_config = ConfigDict(extra="ignore")
+
+    named: bool = True
+    on_map: bool = True
+    page: bool = True
+    images: bool = False
 
 
 class StationItem(BaseModel):
@@ -48,6 +59,12 @@ class StationItem(BaseModel):
     meteors_today: int = 0
     latitude: float | None = None
     longitude: float | None = None
+    visibility: Visibility = Visibility()
+    public_url: str | None = None
+    # A station that joined before the choices: they hold from then on (§10.6); while its
+    # owner's mail has not gone out, ``public_waiting`` without a date.
+    public_from: dt.datetime | None = None
+    public_waiting: bool = False
 
 
 class StationCreated(BaseModel):
@@ -79,7 +96,9 @@ async def _own(db: DbSession, user: User, device_id: str) -> Device:
     return device
 
 
-async def _item(db: DbSession, device: Device, source: StationSource | None) -> StationItem:
+async def _item(
+    db: DbSession, device: Device, source: StationSource | None, base: str = ""
+) -> StationItem:
     status: dict[str, Any] = device.last_status or {}
     place: dict[str, Any] = status.get("settings") or {}
     frames, meteors = await station_flow.today(db, device)
@@ -103,6 +122,10 @@ async def _item(db: DbSession, device: Device, source: StationSource | None) -> 
         meteors_today=meteors,
         latitude=float(lat) if isinstance(lat, int | float) else None,
         longitude=float(lon) if isinstance(lon, int | float) else None,
+        visibility=Visibility(**vars(public.visibility(device))),
+        public_url=f"{base.rstrip('/')}/sky/{device.public_slug}" if device.public_slug else None,
+        public_from=device.public_from if device.public_from != public.UNMAILED else None,
+        public_waiting=device.public_from is not None,
     )
 
 
@@ -120,7 +143,7 @@ async def _password(request: Request, user: User, password: str) -> None:
 
 
 @router.get("/stations")
-async def list_stations(db: DbSession, user: AppUser) -> list[StationItem]:
+async def list_stations(db: DbSession, settings: SettingsDep, user: AppUser) -> list[StationItem]:
     found = await db.scalars(
         select(Device)
         .where(Device.owner_id == user.id, Device.kind == "station")
@@ -128,7 +151,8 @@ async def list_stations(db: DbSession, user: AppUser) -> list[StationItem]:
     )
     out: list[StationItem] = []
     for device in found:
-        out.append(await _item(db, device, await db.get(StationSource, device.id)))
+        source = await db.get(StationSource, device.id)
+        out.append(await _item(db, device, source, settings.base_url))
     return out
 
 
@@ -149,8 +173,13 @@ async def create_station(
     focal_mm: Annotated[str, Form(max_length=10)] = "",
     proof_text: Annotated[str, Form(max_length=2000)] = "",
     proof: Annotated[UploadFile | None, File()] = None,
+    named: Annotated[bool, Form()] = True,
+    on_map: Annotated[bool, Form()] = True,
+    page: Annotated[bool, Form()] = True,
+    images: Annotated[bool, Form()] = False,
 ) -> StationCreated:
-    """SPEC §10.1 and §10.7, like "Kamera verbinden" on the web."""
+    """SPEC §10.1 and §10.7, like "Kamera verbinden" on the web; §10.6 Visibility with its
+    defaults when the app does not ask (1.2.0)."""
     proof_bytes = b""
     if software == "image-url" and proof is not None and proof.filename:
         proof_bytes = await proof.read(image_url.PROOF_MAX_UPLOAD + 1)
@@ -158,6 +187,7 @@ async def create_station(
         software=software, name=name, terms=terms, url=url, latitude=latitude,
         longitude=longitude, elevation_m=elevation_m, timezone=timezone, focal_mm=focal_mm,
         proof_text=proof_text, proof=proof_bytes,
+        visibility=public.Visibility(named=named, on_map=on_map, page=page, images=images),
     )  # fmt: skip
     try:
         device, secret = await station_flow.create(
@@ -167,7 +197,7 @@ async def create_station(
         raise HTTPException(400, exc.message) from None
     base = settings.base_url.rstrip("/")
     return StationCreated(
-        station=await _item(db, device, await db.get(StationSource, device.id)),
+        station=await _item(db, device, await db.get(StationSource, device.id), base),
         secret=secret,
         base_url=f"{base}/indi-allsky" if software == "indi-allsky" else None,
         docs_url=f"{base}{DOCS}",
@@ -175,9 +205,22 @@ async def create_station(
 
 
 @router.get("/stations/{device_id}")
-async def get_station(db: DbSession, user: AppUser, device_id: str) -> StationItem:
+async def get_station(
+    db: DbSession, settings: SettingsDep, user: AppUser, device_id: str
+) -> StationItem:
     device = await _own(db, user, device_id)
-    return await _item(db, device, await db.get(StationSource, device.id))
+    return await _item(db, device, await db.get(StationSource, device.id), settings.base_url)
+
+
+@router.put("/stations/{device_id}/visibility")
+async def set_visibility(
+    db: DbSession, settings: SettingsDep, user: AppUser, device_id: str, body: Visibility
+) -> StationItem:
+    """SPEC §10.6 Visibility; switching the page off ends its address."""
+    device = await _own(db, user, device_id)
+    public.set_visibility(device, public.Visibility(**body.model_dump()))
+    await db.commit()
+    return await _item(db, device, await db.get(StationSource, device.id), settings.base_url)
 
 
 @router.get("/stations/{device_id}/image.jpg")

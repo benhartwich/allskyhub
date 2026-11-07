@@ -53,6 +53,18 @@
   </dl>
 </section>
 
+<section class="card stack" id="oeffentlich">
+  <h2>{{ t('Öffentlich', 'Public') }}</h2>
+  {% if public_from %}<p class="msg warn">{% if en %}Your station joined before these choices existed. It gets them {% if unmailed %}a week after we have told you by e-mail{% else %}on {{ public_from | when }}{% endif %}, unless you save something else here.{% else %}Deine Station war schon dabei, bevor es diese Auswahl gab. Sie gilt für sie {% if unmailed %}eine Woche nach unserer Mail an dich{% else %}ab {{ public_from | when }}{% endif %}, wenn du hier nichts anderes speicherst.{% endif %}</p>
+  {% elif device.public_slug %}<p class="muted small">{{ t('Öffentliche Seite:', 'Public page:') }} <a href="/sky/{{ device.public_slug }}">{{ base }}/sky/{{ device.public_slug }}</a></p>{% endif %}
+  <form method="post" action="/stationen/{{ device.id }}/oeffentlich" class="stack">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    {% set vis = visibility %}{% include "_station_visibility.html" %}
+    <button type="submit">{{ t('Speichern', 'Save') }}</button>
+  </form>
+  <p class="muted small">{{ t('Schaltest du die Seite aus und später wieder an, bekommt sie eine neue Adresse.', 'If you switch the page off and on again later, it gets a new address.') }}</p>
+</section>
+
 <section class="card stack">
   <h2>{{ t('Verwalten', 'Manage') }}</h2>
   {% if device.software != 'image-url' %}

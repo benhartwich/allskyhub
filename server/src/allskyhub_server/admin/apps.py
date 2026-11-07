@@ -349,6 +349,19 @@ def version_of(stores: Stores, app: OtherApp | None) -> str:
     return appstore.listing_version(stores, app)
 
 
+def _newer(a: str, b: str) -> bool:
+    """Whether version ``a`` is past ``b`` ("0.4.0" > "0.3.1"); unreadable ones are not."""
+
+    def parts(v: str) -> tuple[int, ...] | None:
+        try:
+            return tuple(int(x) for x in v.split("+")[0].split("."))
+        except ValueError:
+            return None
+
+    pa, pb = parts(a), parts(b)
+    return pa is not None and pb is not None and pa > pb
+
+
 def _production(play: dict[str, Any] | None, code: str) -> dict[str, Any] | None:
     """The production release holding that version code, if Google has one."""
     releases: list[dict[str, Any]] = (play or {}).get("production") or []
@@ -371,6 +384,7 @@ def android_steps(
     review: dict[str, Any] | None,
     aab: str,
     play: dict[str, Any] | None = None,
+    further: bool = False,
 ) -> Steps:
     latest = job.latest or {}
 
@@ -405,6 +419,13 @@ def android_steps(
     if not latest:
         return way(Step("Gebaut", "current", "Noch kein Build.", action="build-android",
                         label="Release bauen"))  # fmt: skip
+    if built != version and further and _newer(built, version):
+        # The build is main; the hub's copy of a further app's version is from the last
+        # listing fetch. Building again never changes that (bortle, Benjamin 2026-11-07).
+        stale = (f"Build {number} ist Version {built}; der Hub kennt noch {version}. "
+                 "„Store-Eintrag übertragen“ holt den neuen Stand aus dem Repository.")  # fmt: skip
+        return way(Step("Gebaut", "current", stale, at, action="play-listing",
+                        label="Store-Eintrag übertragen"))  # fmt: skip
     if built != version:
         other = f"Build {number} ist Version {built}, nicht {version}."
         return way(Step("Gebaut", "current", other, at, action="build-android",
@@ -450,8 +471,9 @@ def android_row(
     review: dict[str, Any] | None,
     aab: str,
     play: dict[str, Any] | None = None,
+    further: bool = False,
 ) -> Row:
-    return android_steps(version, has_key, job, review, aab, play).row
+    return android_steps(version, has_key, job, review, aab, play, further).row
 
 
 IOS = ("Gebaut", "Übertragen", "Bei Apple", "Eingereicht", "Apple")
@@ -617,6 +639,7 @@ async def cards(stores: Stores, only: str | None = None) -> list[Card]:
                 stores.vault.read_json(review_file(key, "play")),
                 f"/admin/stores-android/{latest_file}" if latest_file else "",
                 live.get("play"),
+                further=app is not None,
             )
         )
         codemagic = (

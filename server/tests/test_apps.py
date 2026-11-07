@@ -36,6 +36,13 @@ def test_android_steps() -> None:
         "build-android",
         "Build 323 ist Version 1.0.0, nicht 1.1.0.",
     )
+    # A further app built past the hub's copy of its version: fetch the listing, don't
+    # build again (bortle 0.4.0 against 0.3.x, 2026-11-07).
+    row = apps.android_row("0.3.1", True, _job(version="0.4.0"), None, "", further=True)
+    assert (row.action, row.label) == ("play-listing", "Store-Eintrag übertragen")
+    assert "der Hub kennt noch 0.3.1" in row.status
+    row = apps.android_row("0.4.0", True, _job(version="0.3.1"), None, "", further=True)
+    assert row.action == "build-android"
     row = apps.android_row("1.1.0", True, _job("failed"), None, "")
     assert (row.tone, row.action) == ("fail", "build-android")
     row = apps.android_row("1.1.0", True, _job("built"), None, "/admin/stores-android/a.aab")

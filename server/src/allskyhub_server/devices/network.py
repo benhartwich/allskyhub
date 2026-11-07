@@ -418,6 +418,22 @@ async def overview(db: AsyncSession, now: dt.datetime) -> Overview:
     return out
 
 
+class OverviewCache:
+    """/netz and the app's network for everyone, without login: computed at most once per
+    ``ttl`` (the answers' Cache-Control), so anonymous visitors cannot load the database."""
+
+    def __init__(self, ttl: dt.timedelta = dt.timedelta(seconds=60)) -> None:
+        self._ttl = ttl
+        self._at: dt.datetime | None = None
+        self._view: Overview | None = None
+
+    async def get(self, db: AsyncSession, now: dt.datetime) -> Overview:
+        if self._view is None or self._at is None or now - self._at >= self._ttl:
+            self._view = await overview(db, now)
+            self._at = now
+        return self._view
+
+
 def _shown_place(device: Device) -> tuple[float, float] | None:
     """A station is on the map by its owner's choice even without a page; a camera, as on
     /karte, with its page."""

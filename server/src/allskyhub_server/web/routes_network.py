@@ -20,7 +20,8 @@ BAR_LOW, BAR_HIGH = 18.0, 22.0
 
 @router.get("/netz")
 async def network_page(request: Request, db: DbSession, session: OptionalSession) -> Response:
-    view = await network.overview(db, dt.datetime.now(dt.UTC))
+    cache: network.OverviewCache = request.app.state.network
+    view = await cache.get(db, dt.datetime.now(dt.UTC))
     _, lat, lon, zoom = camera_map.REGIONS["europa"]
     config = {
         "view": [lat, lon, zoom],

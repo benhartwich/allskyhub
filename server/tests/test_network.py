@@ -195,3 +195,16 @@ async def test_network_for_the_app(
         f"/api/v1/devices/{ids['Sternwarte Musterberg']}/network", headers=auth2
     )
     assert refused.status_code == 404
+
+
+async def test_overview_is_computed_once_a_minute(
+    app: FastAPI, client: httpx.AsyncClient, new_client: httpx.AsyncClient
+) -> None:
+    await _stations(app, client)
+    cache: network.OverviewCache = app.state.network
+    maker: async_sessionmaker[AsyncSession] = app.state.sessionmaker
+    async with maker() as db:
+        first = await cache.get(db, NOW)
+        assert await cache.get(db, NOW + dt.timedelta(seconds=59)) is first
+        assert await cache.get(db, NOW + dt.timedelta(seconds=60)) is not first
+    assert (await new_client.get("/netz")).status_code == 200

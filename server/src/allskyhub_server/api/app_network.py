@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import datetime as dt
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
@@ -112,8 +112,9 @@ def _shower(name: str) -> str:
 
 
 @router.get("/public/network")
-async def network_view(db: DbSession) -> JSONResponse:
-    view = await network.overview(db, dt.datetime.now(dt.UTC))
+async def network_view(request: Request, db: DbSession) -> JSONResponse:
+    cache: network.OverviewCache = request.app.state.network
+    view = await cache.get(db, dt.datetime.now(dt.UTC))
     showers = sorted(view.showers_tonight.items(), key=lambda kv: -kv[1])
     out = NetworkOut(
         cameras=view.cameras,

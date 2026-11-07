@@ -9,6 +9,7 @@ import '../design.dart';
 import '../l10n.dart';
 import 'camera_status.dart';
 import 'globe.dart';
+import 'network_screens.dart';
 import 'public_camera_screen.dart';
 
 class ExploreScreen extends StatefulWidget {
@@ -25,15 +26,18 @@ class ExploreScreen extends StatefulWidget {
 }
 
 class _ExploreScreenState extends State<ExploreScreen> {
-  late Future<(List<PublicCamera>, List<PublicEvent>)> _data = _load();
+  late Future<(List<PublicCamera>, List<PublicEvent>, NetworkView?)> _data =
+      _load();
   String _query = '';
 
-  Future<(List<PublicCamera>, List<PublicEvent>)> _load() async {
+  Future<(List<PublicCamera>, List<PublicEvent>, NetworkView?)> _load() async {
     final cameras = widget.client.publicCameras();
     final feed = widget.client.publicFeed().catchError(
       (Object _) => <PublicEvent>[],
     );
-    return (await cameras, await feed);
+    // SharedSky's network (SPEC §10.6); none from an older hub or when it fails.
+    final network = widget.client.networkView().catchError((Object _) => null);
+    return (await cameras, await feed, await network);
   }
 
   Future<void> _reload() async {
@@ -96,7 +100,7 @@ class _ExploreScreenState extends State<ExploreScreen> {
           if (data == null) {
             return const Center(child: CircularProgressIndicator());
           }
-          final (all, feed) = data;
+          final (all, feed, network) = data;
           final cameras = all.where(_matches).toList();
           final onGlobe = [
             for (final c in cameras)
@@ -132,6 +136,10 @@ class _ExploreScreenState extends State<ExploreScreen> {
                 ),
               ),
               const _Legend(),
+              if (network != null &&
+                  network.cameras + network.stations > 0 &&
+                  _query.isEmpty)
+                NetworkCard(client: widget.client, view: network),
               if (feed.isNotEmpty) ...[
                 _Heading(tr('Gerade passiert', 'Just happened')),
                 SizedBox(

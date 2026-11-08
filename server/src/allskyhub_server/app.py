@@ -23,6 +23,7 @@ from allskyhub_server.admin.deploy import GitHub
 from allskyhub_server.admin.stores import Stores, github_token
 from allskyhub_server.api import app as app_api
 from allskyhub_server.api import (
+    app_late,
     app_manage,
     app_network,
     app_overview,
@@ -427,6 +428,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(app_reports.router)
     app.include_router(app_sightings.router)
     app.include_router(app_stations.router)
+    app.include_router(app_late.router)  # SPEC §10.8
     app.include_router(sky_view.router)
     app.include_router(routes_admin.reload_router)  # last: it catches GET /admin/*
 

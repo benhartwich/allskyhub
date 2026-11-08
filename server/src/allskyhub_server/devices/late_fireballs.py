@@ -19,6 +19,7 @@ import itertools
 import logging
 import math
 import uuid
+import zoneinfo
 from typing import Any
 
 import numpy as np
@@ -145,6 +146,78 @@ async def count(engine: AsyncEngine, device: Device, what: str) -> None:
         await ratelimit.hit(engine, f"late-{what}:{device.owner_id}", limits)
     except ratelimit.RateLimitedError as exc:
         raise LateError("today" if what == "upload" else "checks_today") from exc
+
+
+ZONES = sorted(zoneinfo.available_timezones() - {"Factory", "localtime"})
+
+
+def local_time(value: str, zone: str) -> dt.datetime:
+    """The owner's local mid-exposure (``2026-11-03T21:45:12``, no offset) in UTC."""
+    if zone not in ZONES:
+        raise LateError("time")
+    try:
+        local = dt.datetime.fromisoformat(value)
+    except ValueError as exc:
+        raise LateError("time") from exc
+    if local.tzinfo is not None:
+        raise LateError("time")
+    return local.replace(tzinfo=zoneinfo.ZoneInfo(zone)).astimezone(dt.UTC)
+
+
+async def create(
+    db: AsyncSession,
+    engine: AsyncEngine,
+    store: ImageStore,
+    device: Device,
+    raw: bytes,
+    taken: dt.datetime,
+    exposure_s: float,
+    now: dt.datetime,
+) -> LateFireball:
+    """Step 1 (web and app alike): the frame and its time, checked at once
+    (``LateError``), stored to wait for its track. Commits."""
+    sizes = await frame_sizes(db, device)
+    if not sizes:
+        raise LateError("no_orientation")
+    check_time(taken, exposure_s, now)
+    data = as_jpeg(raw)
+    size = await asyncio.to_thread(image_size, data)
+    if size not in sizes:
+        raise LateError("size")
+    await count(engine, device, "upload")
+    upload = LateFireball(
+        device_id=device.id,
+        taken_at=taken,
+        exposure_s=exposure_s,
+        track_px=[],
+        width=size[0],
+        height=size[1],
+    )
+    db.add(upload)
+    await db.flush()
+    await asyncio.to_thread(store.save_late, device.id, str(upload.id), data)
+    await db.commit()
+    return upload
+
+
+async def recheck(
+    db: AsyncSession,
+    engine: AsyncEngine,
+    maker: async_sessionmaker[AsyncSession],
+    store: ImageStore,
+    device: Device,
+    upload: LateFireball,
+    taken: dt.datetime | None = None,
+    exposure_s: float | None = None,
+) -> None:
+    """Steps 2 and again: counts the check (``LateError`` past the day's), then starts it
+    in the background. Commits."""
+    await count(engine, device, "check")
+    if taken is not None and exposure_s is not None:
+        upload.taken_at, upload.exposure_s = taken, exposure_s
+    upload.state, upload.reason, upload.check = "checking", None, {}
+    await db.commit()
+    start(maker, store, upload.id)
 
 
 def check_time(taken: dt.datetime, exposure_s: float, now: dt.datetime) -> None:

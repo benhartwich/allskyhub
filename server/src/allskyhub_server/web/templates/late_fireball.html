@@ -12,11 +12,14 @@
   <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
   <h2>{{ t('Spur markieren', 'Mark the track') }}</h2>
   <div class="late-track" data-width="{{ upload.width }}" data-height="{{ upload.height }}">
-    <img src="/nachreichen/{{ device.id }}/{{ upload.id }}/bild.jpg" alt="{{ t('Die Aufnahme', 'The recording') }}" id="late-frame">
-    <svg viewBox="0 0 {{ upload.width }} {{ upload.height }}" preserveAspectRatio="none" aria-hidden="true" id="late-marks"></svg>
+    <div class="late-stage">
+      <img src="/nachreichen/{{ device.id }}/{{ upload.id }}/bild.jpg" alt="{{ t('Die Aufnahme', 'The recording') }}" id="late-frame" draggable="false">
+      <svg viewBox="0 0 {{ upload.width }} {{ upload.height }}" preserveAspectRatio="none" aria-hidden="true" id="late-marks"></svg>
+    </div>
   </div>
+  <div class="choice-row late-zoom"><button type="button" class="secondary small" id="late-zoom-in" aria-label="{{ t('Vergrößern', 'Zoom in') }}">+</button><button type="button" class="secondary small" id="late-zoom-out" aria-label="{{ t('Verkleinern', 'Zoom out') }}">−</button><button type="button" class="secondary small" id="late-zoom-reset">{{ t('Ganzes Bild', 'Whole image') }}</button></div>
   <input type="hidden" name="track" id="late-track" value="{{ upload.track_px | tojson }}">
-  <p class="muted small">{{ t('Tippe von einem Ende der Spur zum anderen, 2 bis 32 Punkte. Die Richtung ist egal.', 'Tap from one end of the track to the other, 2 to 32 points. The direction does not matter.') }} <span id="late-count"></span></p>
+  <p class="muted small">{{ t('Tippe von einem Ende der Spur zum anderen, 2 bis 32 Punkte. Die Richtung ist egal. Zoomen mit dem Mausrad, zwei Fingern oder den Knöpfen; ziehen verschiebt.', 'Tap from one end of the track to the other, 2 to 32 points. The direction does not matter. Zoom with the mouse wheel, two fingers or the buttons; drag to move.') }} <span id="late-count"></span></p>
   <div class="choice-row"><button type="button" class="secondary" id="late-undo">{{ t('Letzten Punkt entfernen', 'Remove the last point') }}</button><button type="submit">{{ t('Prüfen lassen', 'Have it checked') }}</button></div>
 </form>
 {% endif %}

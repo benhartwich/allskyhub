@@ -16,6 +16,7 @@ import '../l10n.dart';
 import '../platform/location.dart';
 import 'cameras_screen.dart';
 import 'join_screen.dart';
+import 'late_fireball_screens.dart';
 import 'network_screens.dart';
 
 /// The answers of the second question, and what "Kamera verbinden" sends for them.
@@ -1230,6 +1231,23 @@ class _StationScreenState extends State<StationScreen> {
                 onChanged: _saving ? null : _show,
               ),
             const SizedBox(height: 16),
+            OutlinedButton.icon(
+              key: const Key('station-late'),
+              onPressed: () => Navigator.of(context).push(
+                MaterialPageRoute<void>(
+                  builder: (_) => LateFireballsScreen(
+                    client: widget.client,
+                    deviceId: s.id,
+                    name: s.name,
+                  ),
+                ),
+              ),
+              icon: const Icon(Icons.auto_awesome),
+              label: Text(
+                tr('Feuerkugel nachreichen', 'Send a fireball later'),
+              ),
+            ),
+            const SizedBox(height: 8),
             if (s.software != 'image-url')
               OutlinedButton.icon(
                 key: const Key('station-renew'),

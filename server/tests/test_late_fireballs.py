@@ -39,7 +39,7 @@ from allskyhub_server.models import (
     User,
 )
 from allskyhub_solve.solve import project
-from tests.helpers import csrf_from, make_account
+from tests.helpers import PASSWORD, csrf_from, make_account
 from tests.test_station_solve import (
     AT,
     FLIP,
@@ -550,3 +550,56 @@ async def test_a_wrong_day_fails_on_the_moon(
     upload = await _upload(app, url)
     assert (upload.state, upload.reason) == ("failed", "moon")
     assert "Mond" in (await client.get(url)).text
+
+
+async def test_sent_later_from_the_app(
+    app: FastAPI, client: httpx.AsyncClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The app's steps (api/app_late.py): list, send, track, check, delete; the same checks
+    and words as the web pages."""
+    monkeypatch.setattr(late_fireballs, "sun_altitude", _sun(-30.0))
+    email = await make_account(client)
+    r = await client.post("/api/v1/auth/login", json={"email": email, "password": PASSWORD})
+    auth = {"Authorization": f"Bearer {r.json()['access_token']}"}
+    linz = await _station(app, email, LINZ)
+    base = f"/api/v1/devices/{linz}/late"
+
+    listed = (await client.get(base, headers=auth)).json()
+    assert listed["sizes"] == [[W, H]]
+    assert listed["uploads"] == []
+    small = io.BytesIO()
+    Image.new("RGB", (640, 360)).save(small, "JPEG")
+    form = {"taken": AT.strftime("%Y-%m-%dT%H:%M:%S"), "zone": "UTC", "exposure_s": "30"}
+    r = await client.post(
+        base, headers=auth, data=form, files={"image": ("a.jpg", small.getvalue(), "image/jpeg")}
+    )
+    assert r.status_code == 400
+    assert "Größe" in r.json()["detail"]
+    r = await client.post(
+        base,
+        headers=auth,
+        data=form,
+        files={"image": ("a.jpg", _with_fireball(LINZ), "image/jpeg")},
+    )
+    assert r.status_code == 201
+    item = r.json()
+    assert (item["state"], item["local"]) == ("track", "2026-10-07T21:01:00")
+    url = f"{base}/{item['id']}"
+    assert (await client.get(f"{url}/image.jpg", headers=auth)).status_code == 200
+
+    r = await client.post(f"{url}/track", headers=auth, json={"track": [[1, 2]]})
+    assert r.status_code == 400
+    r = await client.post(f"{url}/track", headers=auth, json={"track": _track(LINZ)})
+    assert r.json()["state"] == "checking"
+    await _settle()
+    item = (await client.get(url, headers=auth)).json()
+    assert item["state"] == "accepted", item["reason_text"]
+    assert item["offset_deg"] <= late_fireballs.MAX_OFF_DEG
+    assert (
+        await client.post(f"{url}/track", headers=auth, json={"track": _track(LINZ)})
+    ).status_code == 409
+
+    other = {"Authorization": auth["Authorization"] + "x"}
+    assert (await client.get(url, headers=other)).status_code == 401
+    assert (await client.delete(url, headers=auth)).status_code == 204
+    assert (await client.get(url, headers=auth)).status_code == 404

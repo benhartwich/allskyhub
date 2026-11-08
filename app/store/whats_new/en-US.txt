@@ -1,5 +1,4 @@
-New: SharedSky – measuring the sky together.
-• Connect your Allsky, indi-allsky or own camera to the open camera network, without changing anything on it.
-• A short way in guides you: a camera or not, which software, connect.
-• Your stations show up in the camera list.
-When several cameras see the same fireball, allskyhub works out its path.
+New: the network and fireballs sent later.
+• "The network tonight" under Explore: all cameras and stations on the globe, the night's fireballs and meteor showers, the darkest sky.
+• Your station: "In the network" and your sky compared with its neighbours. You choose what it shows publicly.
+• Send a fireball later: an older recording is checked against the stars and measured with other cameras.

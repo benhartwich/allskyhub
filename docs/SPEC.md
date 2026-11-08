@@ -1723,7 +1723,7 @@ When a camera is moved, its orientation before is kept (Benjamin, 2026-11-08): w
 new orientation (§6.3 from the camera, §4.8 from the hub for a station) puts the sky more
 than 1° from the one before as above, is mirrored otherwise or has another size, and when
 a new frame size drops it (§10.2), the one before is stored with the time it was replaced,
-unless it is within 1° of one stored already, which then holds until now; at most 20 a
+unless it is within 1° of the one stored last, which then holds until now; at most 20 a
 camera, none older than 12 months. An orientation held from the time the one before it was
 replaced until its own; an upload is compared with those of its size that held at the
 given time, 2 days either side (a solve trails a move), and passes when one fits. Last, the hub's

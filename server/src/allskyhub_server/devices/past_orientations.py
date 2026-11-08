@@ -4,7 +4,7 @@ before the move is checked against the orientation it then had.
 When a new orientation (§6.3, from the camera's own solve or the hub's for a station, §4.8)
 puts the sky more than ``SAME_DEG`` from the one before, or is mirrored or sized otherwise,
 the one before is kept here with the time it was replaced; so is one a new frame size drops
-(§10.2). A pose kept already only holds longer. At most ``MAX_KEPT`` a camera, none older
+(§10.2). The pose kept last only holds longer. At most ``MAX_KEPT`` a camera, none older
 than ``KEEP`` (maintenance.py).
 """
 
@@ -61,17 +61,22 @@ async def keep(
     after: dict[str, Any] | None,
     now: dt.datetime,
 ) -> bool:
-    """Keep ``before`` when ``after`` is another pose; True when kept. A pose kept already
-    (within ``SAME_DEG``) only holds longer. The caller commits."""
+    """Keep ``before`` when ``after`` is another pose; True when kept. The pose kept last
+    (within ``SAME_DEG``) only holds longer; an older one again is a row of its own, so that
+    the windows stay in order (A, B, A again: allsky, 2026-11-08). The caller commits."""
     if before is None or not moved(before, after):
         return False
     old = station_solve.from_orientation(before)
-    rows = await db.scalars(select(PastOrientation).where(PastOrientation.device_id == device_id))
-    for row in rows.all():
-        sol = station_solve.from_orientation(row.orientation)
-        if old is not None and sol is not None and _same(old, sol):
-            row.until = max(row.until, now)
-            return True
+    last = await db.scalar(
+        select(PastOrientation)
+        .where(PastOrientation.device_id == device_id)
+        .order_by(PastOrientation.until.desc())
+        .limit(1)
+    )
+    sol = station_solve.from_orientation(last.orientation) if last else None
+    if last is not None and old is not None and sol is not None and _same(old, sol):
+        last.until = max(last.until, now)
+        return True
     db.add(PastOrientation(device_id=device_id, orientation=before, until=now))
     log.info("camera moved, orientation kept", extra={"device_id": device_id})
     return True

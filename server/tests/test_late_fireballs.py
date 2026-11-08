@@ -437,7 +437,14 @@ async def test_a_fireball_from_before_the_camera_was_moved(
         await db.commit()
         assert len((await db.scalars(select(PastOrientation))).all()) == 1
         known = await past_orientations.known(db, device)
-    assert [w for _, w in known] == [(later, None), (None, later)]
+        assert [w for _, w in known] == [(later, None), (None, later)]
+        # Back to an older pose and away again (A, B, A, C): A twice, each in its time.
+        t2, t3 = later + dt.timedelta(days=10), later + dt.timedelta(days=20)
+        assert await past_orientations.keep(db, linz, pose(2.0, later), pose(0.0, t2), t2)
+        assert await past_orientations.keep(db, linz, pose(0.0, t2), pose(5.0, t3), t3)
+        windows = [w for _, w in await past_orientations.known(db, device)]
+        await db.rollback()
+    assert windows[1:] == [(t2, t3), (later, t2), (None, later)]
     found = _true()
     assert late_fireballs.best_match(found, known, AT)[0] is None
     # Taken while the camera stood turned: the old pose does not count then.

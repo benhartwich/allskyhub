@@ -292,7 +292,7 @@ def picture(data: bytes) -> Picture:
     return Picture(width, height, out.getvalue(), mean)
 
 
-def _median(histogram: list[int]) -> int:
+def median(histogram: list[int]) -> int:
     half, seen = sum(histogram) / 2, 0
     for value, count in enumerate(histogram):
         seen += count
@@ -314,7 +314,7 @@ def track_peak(data: bytes, track: list[tuple[float, float]]) -> float:
         gray = im.convert("L")
         width, height = gray.size
         scale = width / full_w
-        sky = _median(gray.resize((64, 64)).histogram())
+        sky = median(gray.resize((64, 64)).histogram())
         best = 0
         points = [(x * scale, y * scale) for x, y in track]
         for (x1, y1), (x2, y2) in itertools.pairwise(points):

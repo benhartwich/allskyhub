@@ -10,6 +10,7 @@
     <strong>{{ p.at | when }} Uhr</strong>
     <span class="muted">{{ '%.0f' | format(p.high_km) }} km → {{ '%.0f' | format(p.low_km) }} km Höhe, flog nach {{ i.heading }}</span>
     {% if i.area %}<span class="badge warn">Meteoritenfall möglich</span>{% endif %}
+    {% if p.late %}<span class="badge">nachgereicht</span>{% endif %}
   </a></li>
   {% endfor %}
 </ul>

@@ -1,0 +1,24 @@
+{% extends "base.html" %}
+{% block title %}Nachgereichte Feuerkugeln · Admin · allskyhub{% endblock %}
+{% block content %}
+<div class="page-head"><h1>Nachgereichte Feuerkugeln</h1><p class="muted"><a href="/admin">Admin</a> › Nachgereicht</p></div>
+{% if notice %}<p class="msg ok" role="status">{{ notice }}</p>{% endif %}
+<section class="card stack">
+  <p class="muted small">Aufnahmen, die die Sternprobe bestanden haben (SPEC §10.8). Ausblenden nimmt sie aus allen Zählungen und löscht ihre Bahnen; der Besitzer sieht den Hinweis.</p>
+  <div class="table-scroll"><table class="stats users-list">
+    <tr><th>Bild</th><th>Kamera</th><th>Besitzer</th><th>Zeit</th><th>Probe</th><th></th></tr>
+    {% for upload, device, owner in rows %}
+    <tr>
+      <td><img class="late-thumb" src="/admin/nachgereicht/{{ upload.id }}/bild.jpg" alt="" loading="lazy"></td>
+      <td>{{ device.name }}</td>
+      <td>{{ owner.email if owner else '–' }}</td>
+      <td>{{ upload.taken_at | localtime }}</td>
+      <td class="small">{{ upload.check.stars }} Sterne, {{ upload.check.offset_deg }}°, Helligkeit {{ upload.check.peak }}</td>
+      <td>{% if upload.check.get('hidden') %}<span class="badge warn">ausgeblendet</span>{% else %}<form method="post" action="/admin/nachgereicht/{{ upload.id }}/ausblenden"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><button type="submit" class="secondary small">Ausblenden</button></form>{% endif %}</td>
+    </tr>
+    {% else %}
+    <tr><td colspan="6" class="muted">Noch nichts nachgereicht.</td></tr>
+    {% endfor %}
+  </table></div>
+</section>
+{% endblock %}

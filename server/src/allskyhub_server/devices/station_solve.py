@@ -131,6 +131,31 @@ def from_orientation(found: dict[str, Any]) -> Solution | None:
     )  # fmt: skip
 
 
+MIN_COMPARE_ALT = 30.0  # the sky compared: from this altitude up
+
+
+def offset_deg(found: Solution, known: Solution) -> float | None:
+    """The largest angle between where both solutions put the same pixel, over the sky
+    from ``MIN_COMPARE_ALT`` up: a wrong time turns the sky rigidly about the pole, which
+    the fit takes as another lie of the camera, shared between north, tilt and centre
+    (allsky's review, 2026-11-08); the directions show it as about 15°/h at any latitude.
+    None without such sky."""
+    w, h = known.width, known.height
+    xs = [w * (i + 0.5) / 40 for i in range(40)]
+    ys = [h * (j + 0.5) / 30 for j in range(30)]
+    x = np.array([v for _ in ys for v in xs], dtype=np.float64)
+    y = np.array([v for v in ys for _ in xs], dtype=np.float64)
+    alt1, az1 = known.unproject(x, y)
+    alt2, az2 = found.unproject(x, y)
+    a1, z1, a2, z2 = (np.radians(v) for v in (alt1, az1, alt2, az2))
+    cos = np.sin(a1) * np.sin(a2) + np.cos(a1) * np.cos(a2) * np.cos(z1 - z2)
+    angle = np.degrees(np.arccos(np.minimum(1.0, np.maximum(-1.0, cos))))
+    keep = np.isfinite(angle) & np.isfinite(alt1) & (alt1 >= MIN_COMPARE_ALT)
+    if not bool(keep.any()):
+        return None
+    return float(angle[keep].max())
+
+
 def directions(sol: Solution, track_px: list[list[float]]) -> dict[str, Any] | None:
     """SPEC §6.4 from a pixel track: both ends and ``track`` as [azimuth, altitude]."""
     points = [sol.position(float(x), float(y), sol.width, sol.height) for x, y in track_px]
@@ -216,6 +241,14 @@ async def solve(
         if (info.get("width"), info.get("height")) != (sol.width, sol.height):
             return False  # the station changed its frame size meanwhile
         status = dict(device.last_status or {})
+        before = from_orientation(status["orientation"]) if status.get("orientation") else None
+        if before is not None and (before.width, before.height) == (sol.width, sol.height):
+            # How far two good solutions of one camera lie apart: the spread the check of
+            # fireballs sent later (§10.8, MAX_OFF_DEG) has to allow (allsky, 2026-11-08).
+            log.info(
+                "station solved again",
+                extra={"device_id": device_id, "offset_deg": offset_deg(sol, before)},
+            )
         status["orientation"] = to_orientation(sol, dt.datetime.now(dt.UTC))
         status["solve"] = {**dict(status.get("solve") or {}), "fails": []}
         device.last_status = status

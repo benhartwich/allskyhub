@@ -54,6 +54,7 @@
 </section>
 
 {% include "_network_part.html" %}
+<p class="muted small"><a href="/nachreichen/{{ device.id }}">{{ t('Feuerkugel nachreichen', 'Send a fireball later') }}</a> · {{ t('eine ältere Aufnahme, geprüft an den Sternen', 'an older recording, checked against the stars') }}</p>
 {% if comparison %}{% with name = device.name, heading = t('Dein Himmel im Vergleich', 'Your sky compared') %}{% include "_sky_compare.html" %}{% endwith %}{% endif %}
 
 <section class="card stack" id="oeffentlich">

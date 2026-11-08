@@ -7,6 +7,7 @@
 <a class="back" href="/feuerkugeln">Alle Feuerkugeln</a>
 <div class="page-head"><h1>Feuerkugel am {{ pair.at | when }} Uhr</h1></div>
 {% if area %}<p class="badge warn">Meteoritenfall möglich</p>{% endif %}
+{% if pair.late %}<p class="muted small"><span class="badge">nachgereicht</span> Eine der Aufnahmen hat ihr Besitzer später nachgereicht. Der Hub hat sie an den Sternen geprüft; Datum und Sekunden sind die Angabe des Besitzers.</p>{% endif %}
 <figure class="card camera-map">
   <div id="map" class="map" role="region" aria-label="Karte mit Bahn{% if area %} und möglichem Fallgebiet{% endif %}"></div>
   <figcaption class="muted small">Blau: die Bahn über dem Boden, vom ersten Aufleuchten ({{ '%.0f' | format(pair.high_km) }} km Höhe) bis zum Erlöschen ({{ '%.0f' | format(pair.low_km) }} km).{% if area %} Orange: das mögliche Fallgebiet.{% endif %}</figcaption>

@@ -30,7 +30,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from allskyhub_protocol import EventVariant
 from allskyhub_server.api import connect
 from allskyhub_server.auth import ratelimit
-from allskyhub_server.devices import station_detect, stations
+from allskyhub_server.devices import past_orientations, station_detect, stations
 from allskyhub_server.devices.images import ImageStore
 from allskyhub_server.devices.stations import SecretKey, StationError
 from allskyhub_server.models import Device, EventRecord
@@ -213,6 +213,7 @@ async def _image(
     info = dict(status.get("station") or {})
     if (info.get("width"), info.get("height")) != (pic.width, pic.height):
         info.update(width=pic.width, height=pic.height)
+        past_orientations.dropped(device, dt.datetime.now(dt.UTC))
         status.update(station=info, orientation=None)
         device.last_status = status
     frame = connect.FrameIn(

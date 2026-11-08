@@ -14,7 +14,14 @@ from allskyhub_protocol import EventVariant, FrameVariant
 from allskyhub_server.auth import access_requests, password_reset, reporters
 from allskyhub_server.auth.accounts import DEFAULT_EVENT_KEEP_DAYS
 from allskyhub_server.auth.sessions import IDLE_TIMEOUT
-from allskyhub_server.devices import camera_map, late_fireballs, renders, sightings, stats
+from allskyhub_server.devices import (
+    camera_map,
+    late_fireballs,
+    past_orientations,
+    renders,
+    sightings,
+    stats,
+)
 from allskyhub_server.devices.images import ImageStore
 from allskyhub_server.models import (
     AircraftPass,
@@ -92,6 +99,7 @@ async def purge(
     await sightings.sweep(db, settings.data_dir / "sightings")
     await access_requests.purge(db, now)
     await late_fireballs.purge(db, store, now)
+    await past_orientations.purge(db, now)
     await _purge_frames(db, store, settings, now)
     # Roadmap H9: the day's aircraft go with the night's other data.
     await db.execute(

@@ -7,6 +7,7 @@ import 'dart:typed_data';
 import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
+import 'package:file_picker/file_picker.dart';
 import 'package:image_picker/image_picker.dart';
 
 import '../api/hub_client.dart';
@@ -222,8 +223,19 @@ class _LateSendScreenState extends State<LateSendScreen> {
     return file == null ? null : (await file.readAsBytes(), file.name);
   }
 
-  Future<void> _choose() async {
-    final picked = await (widget.pick ?? _pickFromGallery)();
+  /// From Files or Downloads: name and bytes as they are (allsky's review, 2026-11-08: the
+  /// photo library renames, on iOS to image_picker_….jpg, and converts HEIC).
+  Future<(List<int>, String)?> _pickFromFiles() async {
+    final file = await FilePicker.pickFile(
+      type: FileType.custom,
+      allowedExtensions: const ['jpg', 'jpeg', 'png'],
+    );
+    return file == null ? null : (await file.xFile.readAsBytes(), file.name);
+  }
+
+  Future<void> _choose({bool photos = false}) async {
+    final picked =
+        await (widget.pick ?? (photos ? _pickFromGallery : _pickFromFiles))();
     if (picked == null || !mounted) return;
     final (bytes, name) = picked;
     ({int width, int height})? size;
@@ -309,15 +321,23 @@ class _LateSendScreenState extends State<LateSendScreen> {
       body: ListView(
         padding: const EdgeInsets.fromLTRB(16, 8, 16, 32),
         children: [
-          OutlinedButton.icon(
-            key: const Key('late-pick'),
-            icon: const Icon(Icons.image_outlined),
-            label: Text(
-              _image == null
-                  ? tr('Aufnahme wählen', 'Choose a recording')
-                  : _name,
-            ),
-            onPressed: _sending ? null : _choose,
+          if (_image != null) Text(_name, style: theme.textTheme.titleSmall),
+          Wrap(
+            spacing: 8,
+            children: [
+              OutlinedButton.icon(
+                key: const Key('late-pick'),
+                icon: const Icon(Icons.folder_open_outlined),
+                label: Text(tr('Aus Dateien', 'From files')),
+                onPressed: _sending ? null : _choose,
+              ),
+              OutlinedButton.icon(
+                key: const Key('late-pick-photos'),
+                icon: const Icon(Icons.photo_library_outlined),
+                label: Text(tr('Aus Fotos', 'From photos')),
+                onPressed: _sending ? null : () => _choose(photos: true),
+              ),
+            ],
           ),
           const SizedBox(height: 4),
           Text(

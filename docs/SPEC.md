@@ -1694,7 +1694,8 @@ frame with the one before and after:
 ### 10.8 Fireballs sent later
 
 Benjamin, 2026-11-08. The owner of a station or camera may send a fireball recorded before,
-up to 12 months back, on the web page `/nachreichen/<id>`: its full frame (JPEG or PNG,
+up to 12 months back, on the web page `/nachreichen/<id>` or in the app (the same steps
+through `/api/v1/devices/<id>/late`): its full frame (JPEG or PNG,
 ≤ 8 MB, in the size of the camera's orientation, §4.8), the mid-exposure time as local
 time with a time zone, the exposure (≤ 120 s) and then its track as 2–32 pixel points
 along the streak; the size may also be one of an orientation the camera had before (below).

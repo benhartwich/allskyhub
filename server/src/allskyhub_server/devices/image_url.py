@@ -45,7 +45,7 @@ from PIL import Image, ImageOps, UnidentifiedImageError
 from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
-from allskyhub_server.devices import station_detect
+from allskyhub_server.devices import past_orientations, station_detect
 from allskyhub_server.devices.images import ImageStore
 from allskyhub_server.i18n import pick, tr
 from allskyhub_server.mail.send import Mail, Mailer
@@ -663,6 +663,7 @@ def _apply_size(device: Device, width: int, height: int) -> None:
     if (info.get("width"), info.get("height")) != (width, height):
         info["width"], info["height"] = width, height
         status["station"] = info
+        past_orientations.dropped(device, dt.datetime.now(dt.UTC))
         status["orientation"] = None
         device.last_status = status
 

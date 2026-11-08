@@ -9,12 +9,13 @@
 {% if error %}<p class="msg error" role="alert">{{ error }}</p>{% endif %}
 <p class="muted">{{ t('Eine ältere Aufnahme einer Feuerkugel, bis 12 Monate zurück. Der Hub prüft sie an den Sternen: Passt der Himmel im Bild zur Ausrichtung deiner Kamera, zählt sie wie eine live gemeldete und wird mit anderen Kameras zur selben Zeit vermessen.', 'An older recording of a fireball, up to 12 months back. The hub checks it against the stars: if the sky in the image fits your camera’s orientation, it counts like one sent live and is measured with other cameras at the same time.') }}</p>
 
-{% if size %}
+{% set size = sizes | map('join', ' × ') | join(' / ') %}
+{% if sizes %}
 <form method="post" action="/nachreichen/{{ device.id }}" class="card stack" enctype="multipart/form-data">
   <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
   <h2>{{ t('Aufnahme', 'Recording') }}</h2>
   <label>{{ t('Bild', 'Image') }}<input type="file" name="image" id="late-image" accept="image/jpeg,image/png" required></label>
-  <p class="muted small">{% if en %}The full image in the size the camera sends ({{ size[0] }} × {{ size[1] }}), JPEG or PNG, at most 8 MB. Not a crop and not a stack.{% else %}Das volle Bild in der Größe, die die Kamera sendet ({{ size[0] }} × {{ size[1] }}), JPEG oder PNG, höchstens 8 MB. Kein Ausschnitt und kein Stack.{% endif %}</p>
+  <p class="muted small">{% if en %}The full image in the size the camera sends ({{ size }}), JPEG or PNG, at most 8 MB. Not a crop and not a stack.{% else %}Das volle Bild in der Größe, die die Kamera sendet ({{ size }}), JPEG oder PNG, höchstens 8 MB. Kein Ausschnitt und kein Stack.{% endif %}</p>
   <div class="search-row">
     <label>{{ t('Mitte der Belichtung (Ortszeit)', 'Middle of the exposure (local time)') }}<input type="datetime-local" step="1" name="taken" id="late-taken" value="{{ form.taken if form else '' }}" required></label>
     <label>{{ t('Zeitzone', 'Time zone') }}<select name="zone">{% for z in zones %}<option value="{{ z }}"{% if z == (form.zone if form else zone) %} selected{% endif %}>{{ z }}</option>{% endfor %}</select></label>

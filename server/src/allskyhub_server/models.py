@@ -711,6 +711,19 @@ class LateFireball(Base):
     created_at: Mapped[dt.datetime] = mapped_column(_tz(), server_default=func.now())
 
 
+class PastOrientation(Base):
+    """An orientation (SPEC §6.3) a camera had until it was moved (devices/past_orientations.py),
+    so that fireballs sent later from before are checked against it (§10.8)."""
+
+    __tablename__ = "past_orientation"
+
+    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid7)
+    device_id: Mapped[str] = mapped_column(ForeignKey("device.id", ondelete="CASCADE"), index=True)
+    orientation: Mapped[dict[str, Any]] = mapped_column(JSONB)
+    # When the hub saw that it no longer held.
+    until: Mapped[dt.datetime] = mapped_column(_tz())
+
+
 class GmnMeteor(Base):
     """A meteor of ours the Global Meteor Network measured too (devices/gmn.py; CC BY 4.0):
     its time, path, speed and orbit. Kept after the event expires, like a pair."""

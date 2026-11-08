@@ -22,7 +22,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from allskyhub_protocol import Lens, Orientation
-from allskyhub_server.devices import meteor_pairs, stations
+from allskyhub_server.devices import meteor_pairs, past_orientations, stations
 from allskyhub_server.models import Device, EventRecord
 from allskyhub_sky.astro import sun_altitude
 from allskyhub_solve import Solution, solve_verdict
@@ -251,7 +251,11 @@ async def solve(
                 "station solved again",
                 extra={"device_id": device_id, "offset_deg": offset_deg(sol, before)},
             )
-        status["orientation"] = to_orientation(sol, dt.datetime.now(dt.UTC))
+        now = dt.datetime.now(dt.UTC)
+        found = to_orientation(sol, now)
+        # Moved: the one before stays for fireballs sent later from then (§10.8).
+        await past_orientations.keep(db, device_id, status.get("orientation"), found, now)
+        status["orientation"] = found
         status["solve"] = {**dict(status.get("solve") or {}), "fails": []}
         device.last_status = status
         await db.commit()

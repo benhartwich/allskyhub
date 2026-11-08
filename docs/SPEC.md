@@ -1697,7 +1697,8 @@ Benjamin, 2026-11-08. The owner of a station or camera may send a fireball recor
 up to 12 months back, on the web page `/nachreichen/<id>`: its full frame (JPEG or PNG,
 ≤ 8 MB, in the size of the camera's orientation, §4.8), the mid-exposure time as local
 time with a time zone, the exposure (≤ 120 s) and then its track as 2–32 pixel points
-along the streak. A camera without an orientation cannot send any yet. At most 20 uploads
+along the streak; the size may also be one of an orientation the camera had before (below).
+A camera without an orientation cannot send any yet. At most 20 uploads
 and 60 checks a day per owner, deleted ones included.
 
 The hub checks it in the background. The sun must have been at −18° or lower at the
@@ -1709,7 +1710,23 @@ from 30° altitude up within 0.5° of each other. A wrong time turns the sky rig
 the pole, which the fit takes as another lie of the camera; compared as directions this is
 about 15° an hour at any latitude, so 0.5° is the same camera at the same place with the
 sidereal time right to about 2 minutes. The stars cannot tell the date (a day later and
-3 min 56 s earlier fits as well): date and seconds are the owner's word. Last, the hub's
+3 min 56 s earlier fits as well): date and seconds are the owner's word, unless the moon
+says otherwise. When the moon stood at least 10° high and at least a tenth lit at the given
+time, the hub looks at the frame's saturated patches (the track painted over; none within 5°
+of the track, the fireball's own glow, nor at the frame's edge, where overlay text is): one
+that reaches within 3° of where the frame's own solution puts the moon confirms the date;
+without one, a compact patch at least 2° across above 20° altitude elsewhere (the moon of
+another day) fails the check (`moon`). Anything else says nothing, a missing moon too
+(clouds, or a camera that shortens its exposure for the moon).
+
+When a camera is moved, its orientation before is kept (Benjamin, 2026-11-08): whenever a
+new orientation (§6.3 from the camera, §4.8 from the hub for a station) puts the sky more
+than 1° from the one before as above, is mirrored otherwise or has another size, and when
+a new frame size drops it (§10.2), the one before is stored with the time it was replaced,
+unless it is within 1° of the one stored last, which then holds until now; at most 20 a
+camera, none older than 12 months. An orientation held from the time the one before it was
+replaced until its own; an upload is compared with those of its size that held at the
+given time, 2 days either side (a solve trails a move), and passes when one fits. Last, the hub's
 own measure of the track (§10.2 `peak`, and its ends' directions from the frame's own
 solution) must give a fireball: `peak` ≥ 0.9 or a track of at least 15°.
 

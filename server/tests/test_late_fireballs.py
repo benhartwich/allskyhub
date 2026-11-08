@@ -20,10 +20,24 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from allskyhub_server.auth import ratelimit
-from allskyhub_server.devices import labels, late_fireballs, meteor_pairs, station_solve, stations
+from allskyhub_server.devices import (
+    labels,
+    late_fireballs,
+    meteor_pairs,
+    past_orientations,
+    station_solve,
+    stations,
+)
 from allskyhub_server.devices import triangulation as t
 from allskyhub_server.devices.stations import SecretKey
-from allskyhub_server.models import Device, EventRecord, LateFireball, MeteorPair, User
+from allskyhub_server.models import (
+    Device,
+    EventRecord,
+    LateFireball,
+    MeteorPair,
+    PastOrientation,
+    User,
+)
 from allskyhub_solve.solve import project
 from tests.helpers import csrf_from, make_account
 from tests.test_station_solve import (
@@ -375,3 +389,164 @@ def test_waiting_uploads_count_not_for_the_station(tmp_path: Path) -> None:
     (tmp_path / "dev" / "n" / "original" / "b.jpg").write_bytes(b"x" * 100)
     assert stations.cap_storage(tmp_path, "dev", limit=500) == 0
     assert (tmp_path / "dev" / "n" / "original" / "b.jpg").exists()
+
+
+def test_a_moved_camera_is_told_apart() -> None:
+    """SPEC §10.8: a new solution of the same pose is no move; a turn, another mirror or
+    another size is."""
+    at = station_solve.to_orientation(_true(), AT)
+    again_at = AT + dt.timedelta(hours=1)
+    again = station_solve.to_orientation(_true(), AT + dt.timedelta(days=1))
+    turned = station_solve.to_orientation(
+        dataclasses.replace(_true(), rot=_true().rot + 2.0), again_at
+    )
+    smaller = station_solve.to_orientation(dataclasses.replace(_true(), width=W // 2), again_at)
+    assert not past_orientations.moved(at, again)
+    assert not past_orientations.moved(at, at)  # the same report again
+    assert past_orientations.moved(at, turned)
+    assert past_orientations.moved(at, smaller)
+    assert past_orientations.moved(at, None)  # dropped for a new size
+    assert not past_orientations.moved(None, at)
+
+
+async def test_a_fireball_from_before_the_camera_was_moved(
+    app: FastAPI, client: httpx.AsyncClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The camera was turned by 2° since: the frame is checked against the orientation it
+    had then, and only while it held (allsky's review). A pose kept already only holds
+    longer; old ones go after a year, at most 20 are kept."""
+    monkeypatch.setattr(late_fireballs, "sun_altitude", _sun(-30.0))
+    maker: async_sessionmaker[AsyncSession] = app.state.sessionmaker
+    linz = await _station(app, await make_account(client), LINZ)
+    later = AT + dt.timedelta(days=30)
+
+    def pose(turn: float, at: dt.datetime) -> dict[str, Any]:
+        return station_solve.to_orientation(
+            dataclasses.replace(_true(), rot=_true().rot + turn), at
+        )
+
+    async with maker() as db:
+        device = await db.get(Device, linz)
+        assert device is not None
+        before = (device.last_status or {})["orientation"]
+        assert await past_orientations.keep(db, linz, before, pose(2.0, later), later)
+        device.last_status = {**(device.last_status or {}), "orientation": pose(2.0, later)}
+        await db.commit()
+        # The same pose solved again (0.5° off) is no new one: it holds longer.
+        assert await past_orientations.keep(db, linz, pose(0.5, AT), pose(2.0, later), later)
+        await db.commit()
+        assert len((await db.scalars(select(PastOrientation))).all()) == 1
+        known = await past_orientations.known(db, device)
+        assert [w for _, w in known] == [(later, None), (None, later)]
+        # Back to an older pose and away again (A, B, A, C): A twice, each in its time.
+        t2, t3 = later + dt.timedelta(days=10), later + dt.timedelta(days=20)
+        assert await past_orientations.keep(db, linz, pose(2.0, later), pose(0.0, t2), t2)
+        assert await past_orientations.keep(db, linz, pose(0.0, t2), pose(5.0, t3), t3)
+        windows = [w for _, w in await past_orientations.known(db, device)]
+        await db.rollback()
+    assert windows[1:] == [(t2, t3), (later, t2), (None, later)]
+    found = _true()
+    assert late_fireballs.best_match(found, known, AT)[0] is None
+    # Taken while the camera stood turned: the old pose does not count then.
+    assert late_fireballs.best_match(found, known, later + dt.timedelta(days=5))[0] == "turned"
+
+    upload = await _accepted(app, client, linz)
+    assert upload.check["orientation_until"] is not None
+    assert upload.check["offset_deg"] <= late_fireballs.MAX_OFF_DEG
+
+    async with maker() as db:
+        for k in range(25):
+            await past_orientations.keep(
+                db, linz, pose(3.0 + 2 * k, AT), pose(90.0, later), later + dt.timedelta(days=k)
+            )
+        await past_orientations.keep(
+            db, linz, pose(-30.0, AT), pose(90.0, later), later - dt.timedelta(days=400)
+        )
+        await db.commit()
+        await past_orientations.purge(db, later + dt.timedelta(days=30))
+        await db.commit()
+        rows = (await db.scalars(select(PastOrientation))).all()
+    assert len(rows) == past_orientations.MAX_KEPT
+
+
+async def test_a_new_frame_size_keeps_the_orientation(
+    app: FastAPI, client: httpx.AsyncClient
+) -> None:
+    maker: async_sessionmaker[AsyncSession] = app.state.sessionmaker
+    linz = await _station(app, await make_account(client), LINZ)
+    async with maker() as db:
+        device = await db.get(Device, linz)
+        assert device is not None
+        past_orientations.dropped(device, AT)
+        await db.commit()
+        assert len((await db.scalars(select(PastOrientation))).all()) == 1
+        assert await late_fireballs.frame_sizes(db, device) == [(W, H)]
+
+
+def _disc(im: Image.Image, alt: float, az: float, across: float) -> None:
+    """A saturated disc ``across`` degrees wide at (alt, az): a moon with its glow."""
+    x, y = project(np.array([alt]), np.array([az]), TRUE, FLIP)
+    x2, y2 = project(np.array([alt + 1.0]), np.array([az]), TRUE, FLIP)
+    r = across / 2 * math.hypot(float(x2[0] - x[0]), float(y2[0] - y[0]))
+    cx, cy = float(x[0]), float(y[0])
+    white = 255 if im.mode == "L" else (255, 255, 255)
+    ImageDraw.Draw(im).ellipse((cx - r, cy - r, cx + r, cy + r), fill=white)
+
+
+def _moon_frame(*discs: tuple[float, float, float]) -> np.ndarray[Any, np.dtype[np.uint8]]:
+    im = Image.open(io.BytesIO(_render(*LINZ))).convert("L")
+    for disc in discs:
+        _disc(im, *disc)
+    return np.asarray(im).copy()
+
+
+def test_the_moon_checks_the_date() -> None:
+    """SPEC §10.8 after allsky's review: the moon where it stood confirms the date, its glow
+    however wide; a compact moon-sized patch elsewhere contradicts it; a missing moon, a
+    small bright point, the fireball's own glow, a low or thin moon say nothing."""
+    sol, track = _true(), _track(LINZ)
+    here = (45.0, 100.0, 0.6)
+
+    def check(
+        *discs: tuple[float, float, float], moon: tuple[float, float, float] = here
+    ) -> str | None:
+        return late_fireballs.moon_check(_moon_frame(*discs), sol, moon, track)
+
+    assert check((45.0, 100.0, 15.0)) == "confirmed"
+    assert check((45.0, 100.0, 15.0), (50.0, 250.0, 3.0)) == "confirmed"  # a ghost besides
+    assert check((50.0, 250.0, 3.0)) == "contradicted"
+    assert check() is None  # clouds, or a lower exposure
+    assert check((50.0, 250.0, 0.8)) is None  # Venus
+    a, b = track
+    mid = sol.position((a[0] + b[0]) / 2, (a[1] + b[1]) / 2, W, H)
+    assert mid is not None
+    assert check((mid[1], mid[0], 4.0)) is None  # the fireball's own glow
+    assert check((50.0, 250.0, 3.0), moon=(5.0, 100.0, 0.9)) is None
+    assert check((50.0, 250.0, 3.0), moon=(45.0, 100.0, 0.05)) is None
+    # The real moon of that night is computed where it stood.
+    alt, az, lit = late_fireballs.moon_place(AT, *LINZ)
+    assert -90 <= alt <= 90
+    assert 0 <= az < 360
+    assert 0 <= lit <= 1
+
+
+async def test_a_wrong_day_fails_on_the_moon(
+    app: FastAPI, client: httpx.AsyncClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(late_fireballs, "sun_altitude", _sun(-30.0))
+
+    def moon_then(*_: object) -> tuple[float, float, float]:
+        return 45.0, 100.0, 0.9  # where it stood on the given day
+
+    monkeypatch.setattr(late_fireballs, "moon_place", moon_then)
+    linz = await _station(app, await make_account(client), LINZ)
+    im = Image.open(io.BytesIO(_with_fireball(LINZ)))
+    _disc(im, 50.0, 250.0, 3.0)  # the moon of another day
+    out = io.BytesIO()
+    im.save(out, "JPEG", quality=97)
+    r = await _send(client, linz, out.getvalue(), AT)
+    url = r.headers["location"]
+    await _mark(client, url, _track(LINZ))
+    upload = await _upload(app, url)
+    assert (upload.state, upload.reason) == ("failed", "moon")
+    assert "Mond" in (await client.get(url)).text

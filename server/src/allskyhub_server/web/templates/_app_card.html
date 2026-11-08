@@ -1,9 +1,14 @@
 {# One app on /admin/apps; while something of it is on its way it reloads itself (routes_apps.app_card). #}
 <section class="card stack" id="app-{{ card.key }}"{% if card.waiting or android_busy %} hx-get="/admin/apps/card/{{ card.key }}" hx-trigger="every 10s" hx-swap="outerHTML"{% endif %}>
   <h2>{{ card.title }} <span class="muted small">· Version {{ card.version }}</span></h2>
+  {% if card.stores %}
   <p class="muted small">{% if card.live_at %}Stand bei Apple und Google: {{ card.live_at[:16] | replace('T', ' ') }} UTC (alle zehn Minuten neu){% else %}Apple und Google werden gerade gefragt; Seite gleich neu laden.{% endif %}</p>
   {% from "_pending.html" import pending %}
   <p class="small">Seit dem letzten Build: {{ pending(card) }}</p>
+  {% else %}
+  {% set n = card.pending.get('test') %}
+  <p class="small">Nur Test-APK, nicht in den Stores. Seit dem letzten Build: <span class="{{ 'muted' if n is none else ('tone-done' if n == 0 else 'tone-todo') }}">{% if n is none %}unbekannt{% elif n == 0 %}✓ aktuell{% else %}→ {{ n }}{% if n >= 100 %}+{% endif %} neue{% if n == 1 %}r{% endif %} Commit{% if n != 1 %}s{% endif %}{% endif %}</span></p>
+  {% endif %}
   {# Each platform's way as steps (admin/apps.py Steps): ✓ done, ● the next thing to do
      with its one button, ⏳ busy, ✕ failed, ○ later. #}
   <div class="platforms">
@@ -53,8 +58,16 @@
       {% else %}<span></span>{% endif %}
     </div>
   </div>
-  <p class="muted small">Eigene App „{{ card.title }} Test“ ({{ card.package }}.test) neben der Store-Version, vom Server signiert, ohne Push. Der Link ist öffentlich.</p>
+  <p class="muted small">Eigene App „{{ card.title }} Test“ ({{ card.package }}.test){% if card.stores %} neben der Store-Version{% endif %}, vom Server signiert, ohne Push. Der Link ist öffentlich{% if not card.stores %}; die App fragt <code>/download/{{ card.key }}-test.json</code> nach neuen Builds{% endif %}.</p>
   {% endif %}
+  {% if not card.stores %}
+  {% if card.test and card.test.log %}
+  <details data-fold="apps-{{ card.key }}-test-log">
+    <summary>Protokoll der Test-APK</summary>
+    <pre class="small">{{ card.test.log }}</pre>
+  </details>
+  {% endif %}
+  {% else %}
   <details data-fold="apps-{{ card.key }}-more">
     <summary>Mehr: neu bauen, Store-Einträge, Protokolle</summary>
     <div class="row-links wrap">
@@ -114,4 +127,5 @@
     {% endif %}
     {% endfor %}
   </details>
+  {% endif %}
 </section>

@@ -69,6 +69,14 @@ Further apps (admin/stores.py `OTHER_APPS`) come from the request's first line,
   back it up with the folder, an update installs only with the same key). Answers in
   `release-vinventory-test/`; the hub serves the newest APK at
   `/download/vinventory-test.apk` (public, rate-limited). Admin page → Apps → "Test-APK bauen".
+- `app=wichtl-test`: only a test APK, no store (Benjamin, 2026-11-08): Flutter in `app/` of
+  the private github.com/benhartwich/wichtl-app, cloned with the token (it needs read access
+  to that repository too). `flutter build apk` for arm64 with `WICHTL_VARIANT=test` (package
+  `eu.webinx.wichtl.test`), signed from `WICHTL_*` with
+  `/var/lib/allskyhub-android/keys/wichtl-test.{p12,env}` (made on the first run, like
+  Vinventory's), `--dart-define=WICHTL_BUILD=<commit count>` and `WICHTL_CHANNEL=test`. The hub
+  serves `/download/wichtl-test.apk` and its `latest.json` as `/download/wichtl-test.json`,
+  which the app reads for its update notice.
 
 The hub only drops `request` into its folder; root never writes there (anything in a
 folder the hub owns could be a symlink). The answers, state (`running`, `ok`, `built` =

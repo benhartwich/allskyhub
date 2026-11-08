@@ -106,6 +106,8 @@ async def apps_action(
     other = admin_stores.OTHER_APPS.get(app)
     if (app != "allskyhub" and other is None) or action not in apps.ACTIONS:
         return await apps_page(request, session, 400, error="Unbekannte App oder Aktion.")
+    if other is not None and not other.stores and action != "build-test-apk":
+        return await apps_page(request, session, 400, error=f"{other.title}: nur die Test-APK.")
     stores: admin_stores.Stores = request.app.state.stores
     by = session.user.email
     name = other.title if other else "allskyhub"

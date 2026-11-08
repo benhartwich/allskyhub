@@ -21,7 +21,10 @@
 #                                          this server, published for the hub's
 #                                          /download/vinventory-test.apk, no upload
 #                                          "app=currywursttest" the Flutter app of the
-#                                          private github.com/benhartwich/currywursttest-app
+#                                          private github.com/benhartwich/currywursttest-app;
+#                                          "app=wichtl-test" the test APK of the Flutter
+#                                          app in app/ of the private
+#                                          github.com/benhartwich/wichtl-app (no store)
 #
 # Flutter and Gradle run in a container (ghcr.io/cirruslabs/flutter; for the Expo app
 # reactnativecommunity/react-native-android), limited in CPU and memory so the hub keeps
@@ -102,6 +105,14 @@ main() {
             PRIVATE=1
             REPO_URL=${ALLSKYHUB_CURRYWURSTTEST_REPO_URL:-https://github.com/benhartwich/currywursttest-app.git}
             RELEASE=${ALLSKYHUB_CURRYWURSTTEST_RELEASE_OUT:-$BASE/release-currywursttest}
+        elif [[ $first == app=wichtl-test ]]; then
+            # Only a test APK (Benjamin, 2026-11-08: no store before 2027): Flutter in app/
+            # of the private github.com/benhartwich/wichtl-app; its Gradle file signs from
+            # WICHTL_* and takes the ".test" package from WICHTL_VARIANT.
+            app=wichtl APP_DIR=app PREFIX=WICHTL PACKAGE=eu.webinx.wichtl.test
+            SRC=$BASE/src-wichtl PRIVATE=1 VARIANT=test
+            REPO_URL=${ALLSKYHUB_WICHTL_REPO_URL:-https://github.com/benhartwich/wichtl-app.git}
+            RELEASE=$BASE/release-wichtl-test
         fi
         install -d -m 755 "$RELEASE"
         rm -f -- "$RELEASE/log"
@@ -324,6 +335,14 @@ signed_build() {
                     -Pkotlin.compiler.execution.strategy=in-process \
                     -PreactNativeArchitectures=arm64-v8a,armeabi-v7a $task"
         aab=$SRC/$APP_DIR/android/app/build/outputs/bundle/release/app-release.aab
+    elif [[ -n $VARIANT ]]; then
+        # A Flutter test APK, like allskyhub's: arm64, the build number and the channel
+        # for the app's own update notice (<PREFIX>_BUILD, <PREFIX>_CHANNEL).
+        "${run[@]}" -v "allskyhub-android-pub-cache-$app:/root/.pub-cache" \
+            -e "${PREFIX}_VARIANT=$VARIANT" -w "/work/$APP_DIR" "$IMAGE" \
+            sh -c "flutter pub get && flutter build apk --release --target-platform android-arm64 \
+                --build-number=$build --dart-define=${PREFIX}_BUILD=$build \
+                --dart-define=${PREFIX}_CHANNEL=$VARIANT"
     else
         "${run[@]}" -v "allskyhub-android-pub-cache-$app:/root/.pub-cache" \
             -w "/work/$APP_DIR" "$IMAGE" \
@@ -331,8 +350,11 @@ signed_build() {
         aab=$SRC/$APP_DIR/build/app/outputs/bundle/release/app-release.aab
     fi
     rm -rf "$KEY_TMP"
-    if [[ -n $VARIANT ]]; then
+    if [[ -n $VARIANT && $KIND == expo ]]; then
         publish_variant "$SRC/$APP_DIR/android/app/build/outputs/apk/release/app-release.apk"
+        return
+    elif [[ -n $VARIANT ]]; then
+        publish_variant "$SRC/$APP_DIR/build/app/outputs/flutter-apk/app-release.apk"
         return
     fi
 

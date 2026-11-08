@@ -169,7 +169,7 @@ async def page(
             "stores": stores.vault.entries(),
             "store_titles": admin_stores.TITLES,
             "youtube_redirect": youtube.redirect_uri(request.app.state.settings.base_url),
-            "other_apps": list(admin_stores.OTHER_APPS.values()),
+            "other_apps": [a for a in admin_stores.OTHER_APPS.values() if a.stores],
             "screenshots": len(stores.screenshots()),
             "uploaded_screenshots": stores.screenshot_dir.is_dir()
             and any(stores.screenshot_dir.iterdir()),

@@ -193,6 +193,8 @@ async def apply(
         trusted: list[str] = []
         for event in rows:
             data = dict(event.data or {})
+            if data.get("source") == "late":  # its directions are its own frame's (§10.8)
+                continue
             track = data.get("track_px")
             if not isinstance(track, list) or len(track) < 2:  # pyright: ignore[reportUnknownArgumentType]
                 continue

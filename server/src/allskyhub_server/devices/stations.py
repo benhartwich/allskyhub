@@ -332,7 +332,12 @@ def cap_storage(root: Path, device_id: str, limit: int = MAX_BYTES) -> int:
     """SPEC §10.1: at most ``limit`` bytes per station; the oldest full frames go first
     (event originals and full frames, never thumbnails). Returns the files removed."""
     folder = root / device_id
-    files = [p for p in folder.rglob("*.jpg") if p.is_file() and not p.is_symlink()]
+    # Fireballs waiting for their check are not the station's to cap (SPEC §10.8).
+    files = [
+        p
+        for p in folder.rglob("*.jpg")
+        if p.is_file() and not p.is_symlink() and p.relative_to(folder).parts[0] != "late"
+    ]
     total = sum(p.stat().st_size for p in files)
     if total <= limit:
         return 0

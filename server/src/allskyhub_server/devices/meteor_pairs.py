@@ -90,6 +90,8 @@ async def pair_event(
             )
             if device is None or event is None or event.kind != "meteor":
                 return 0
+            if events.dismissed(event):  # hidden or removed: counts nowhere (§6.4, §10.8)
+                return 0
             mine = sighting(device, event)
             if mine is None:
                 return 0
@@ -118,7 +120,8 @@ async def pair_event(
                 pair_id = await _store(db, (device, event), (other, other_event), trajectory)
                 stored += 1
                 found.append((other, other_event, theirs))
-                fireballs.append(pair_id)
+                if not (_late(event) or _late(other_event)):  # never an alarm (SPEC §10.8)
+                    fireballs.append(pair_id)
             if found:
                 await _solve_together(db, [(device, event, mine), *found])
             await db.commit()
@@ -208,6 +211,11 @@ async def _solve_together(db: AsyncSession, members: list[Member]) -> None:
     )
 
 
+def _late(event: EventRecord) -> bool:
+    """A fireball sent later by its owner (SPEC §10.8)."""
+    return (event.data or {}).get("source") == "late"
+
+
 def _peak(event: EventRecord) -> float | None:
     peak = (event.data or {}).get("peak")
     return float(peak) if isinstance(peak, int | float) else None
@@ -229,6 +237,9 @@ async def _store(
         "length_km": trajectory.length_km, "convergence_deg": trajectory.convergence_deg,
         "peak": max(peaks) if peaks else None,
     }  # fmt: skip
+    if _late(ea) or _late(eb):
+        # SPEC §10.8: shown as sent later, whichever side paired it; never alerted.
+        values |= {"late": True, "alerted": True}
     result = await db.execute(
         pg_insert(MeteorPair)
         .values(device_a=da.id, event_a=ea.event_id, device_b=db_.id, event_b=eb.event_id, **values)

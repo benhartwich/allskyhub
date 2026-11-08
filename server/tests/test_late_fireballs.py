@@ -8,17 +8,19 @@ import datetime as dt
 import io
 import json
 import math
+from pathlib import Path
 from typing import Any
 
 import httpx
 import numpy as np
 import pytest
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from PIL import Image, ImageDraw
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
-from allskyhub_server.devices import late_fireballs, station_solve, stations
+from allskyhub_server.auth import ratelimit
+from allskyhub_server.devices import labels, late_fireballs, meteor_pairs, station_solve, stations
 from allskyhub_server.devices import triangulation as t
 from allskyhub_server.devices.stations import SecretKey
 from allskyhub_server.models import Device, EventRecord, LateFireball, MeteorPair, User
@@ -234,3 +236,142 @@ async def test_a_faint_short_meteor_is_no_fireball(
     await _mark(client, url, short)
     upload = await _upload(app, url)
     assert (upload.state, upload.reason) == ("failed", "not_fireball")
+
+
+async def _accepted(app: FastAPI, client: httpx.AsyncClient, device_id: str) -> LateFireball:
+    r = await _send(client, device_id, _with_fireball(LINZ), AT)
+    url = r.headers["location"]
+    await _mark(client, url, _track(LINZ))
+    upload = await _upload(app, url)
+    assert upload.state == "accepted", upload.reason
+    return upload
+
+
+async def test_a_check_a_restart_ended_starts_again(
+    app: FastAPI, client: httpx.AsyncClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """allsky's review: a deploy ends the task, the upload must not stay "checking"; one
+    that never ends goes with the failed ones."""
+    monkeypatch.setattr(late_fireballs, "sun_altitude", _sun(-30.0))
+    maker: async_sessionmaker[AsyncSession] = app.state.sessionmaker
+    linz = await _station(app, await make_account(client), LINZ)
+    r = await _send(client, linz, _with_fireball(LINZ), AT)
+    upload_id = r.headers["location"].rsplit("/", 1)[1]
+    async with maker() as db:
+        upload = await db.get(LateFireball, upload_id)
+        assert upload is not None
+        upload.state, upload.track_px = "checking", _track(LINZ)  # as a restart left it
+        await db.commit()
+    assert await late_fireballs.resume(maker, app.state.images) == 1
+    await _settle()
+    async with maker() as db:
+        upload = await db.get(LateFireball, upload_id)
+        assert upload is not None
+        assert upload.state == "accepted"
+        stuck = LateFireball(
+            device_id=linz, taken_at=AT, exposure_s=30.0, track_px=[], width=W, height=H,
+            state="checking", created_at=AT,
+        )  # fmt: skip
+        db.add(stuck)
+        await db.commit()
+        await late_fireballs.purge(db, app.state.images, AT + late_fireballs.KEEP_FAILED * 2)
+        await db.commit()
+        assert await db.get(LateFireball, stuck.id) is None
+
+
+async def test_paired_later_still_sent_later(
+    app: FastAPI, client: httpx.AsyncClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """allsky's review: the pair a live camera makes with a fireball sent later is marked
+    so and never alarms; the station's new orientation keeps its own directions; once
+    hidden it pairs no more and its label stays."""
+    monkeypatch.setattr(late_fireballs, "sun_altitude", _sun(-30.0))
+    maker: async_sessionmaker[AsyncSession] = app.state.sessionmaker
+    email = await make_account(client)
+    linz = await _station(app, email, LINZ)
+    salzburg = await _station(app, email, SALZBURG)
+    upload = await _accepted(app, client, linz)
+    assert upload.event_id is not None
+
+    sky = station_solve.directions(_true(), _track(SALZBURG))
+    assert sky is not None
+    async with maker() as db:
+        device = await db.get(Device, salzburg)
+        assert device is not None
+        live = await stations.event_id(db, device, "meteor", AT)
+        db.add(EventRecord(
+            device_id=salzburg, event_id=live, night_id="20261007", kind="meteor", has_image=False,
+            start=AT - dt.timedelta(seconds=15), end=AT + dt.timedelta(seconds=15),
+            confidence=1.0, data={"track_px": _track(SALZBURG), "time_trusted": True,
+                                  "peak": 0.95} | sky,
+        ))  # fmt: skip
+        await db.commit()
+    alarms: list[Any] = []
+
+    async def alarm(pair_id: Any) -> None:
+        alarms.append(pair_id)
+
+    assert await meteor_pairs.pair_event(maker, salzburg, live, on_fireball=alarm) == 1
+    assert alarms == []
+    async with maker() as db:
+        pair = await db.scalar(select(MeteorPair))
+        assert pair is not None
+        assert (pair.late, pair.alerted) == (True, True)
+        event = await db.scalar(
+            select(EventRecord).where(
+                EventRecord.device_id == linz, EventRecord.event_id == upload.event_id
+            )
+        )
+        assert event is not None
+        before = dict(event.data)
+        device = await db.get(Device, linz)
+        assert device is not None
+        turned = dataclasses.replace(_true(), rot=_true().rot + 2.0)
+        orientation = station_solve.to_orientation(turned, AT)
+        device.last_status = {**(device.last_status or {}), "orientation": orientation}
+        await db.commit()
+    changed = await station_solve.apply(maker, linz, AT + dt.timedelta(hours=1))
+    assert upload.event_id not in changed
+    async with maker() as db:
+        row = await db.get(LateFireball, upload.id)
+        assert row is not None
+        await late_fireballs.hide(db, row)
+        await db.commit()
+        event = await db.scalar(
+            select(EventRecord).where(
+                EventRecord.device_id == linz, EventRecord.event_id == upload.event_id
+            )
+        )
+        assert event is not None
+        assert {k: v for k, v in event.data.items() if k != "hidden"} == before
+        assert (await db.scalars(select(MeteorPair))).all() == []
+        with pytest.raises(HTTPException):
+            await labels.set_on_hub(db, linz, event.night_id, event.event_id, None)
+    assert await meteor_pairs.pair_event(maker, linz, upload.event_id) == 0
+    assert await meteor_pairs.pair_event(maker, salzburg, live) == 0
+
+
+async def test_deleting_frees_no_upload(
+    app: FastAPI, client: httpx.AsyncClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """allsky's review: the day's uploads and checks are counted apart from the rows."""
+    monkeypatch.setattr(late_fireballs, "UPLOADS_PER_DAY", (ratelimit.Limit(1, 86400),))
+    linz = await _station(app, await make_account(client), LINZ)
+    r = await _send(client, linz, _render(*LINZ), AT)
+    url = r.headers["location"]
+    page = await client.get(url)
+    r = await client.post(f"{url}/loeschen", data={"csrf_token": csrf_from(page.text)})
+    assert r.status_code == 303
+    r = await _send(client, linz, _render(*LINZ), AT)
+    assert r.status_code == 400
+    assert "20" in r.text
+
+
+def test_waiting_uploads_count_not_for_the_station(tmp_path: Path) -> None:
+    """allsky's review: late/ is not the station's storage to cap."""
+    (tmp_path / "dev" / "late").mkdir(parents=True)
+    (tmp_path / "dev" / "late" / "a.jpg").write_bytes(b"x" * 1000)
+    (tmp_path / "dev" / "n" / "original").mkdir(parents=True)
+    (tmp_path / "dev" / "n" / "original" / "b.jpg").write_bytes(b"x" * 100)
+    assert stations.cap_storage(tmp_path, "dev", limit=500) == 0
+    assert (tmp_path / "dev" / "n" / "original" / "b.jpg").exists()

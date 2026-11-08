@@ -1697,8 +1697,8 @@ Benjamin, 2026-11-08. The owner of a station or camera may send a fireball recor
 up to 12 months back, on the web page `/nachreichen/<id>`: its full frame (JPEG or PNG,
 ≤ 8 MB, in the size of the camera's orientation, §4.8), the mid-exposure time as local
 time with a time zone, the exposure (≤ 120 s) and then its track as 2–32 pixel points
-along the streak. A camera without an orientation cannot send any yet. At most 20 a day
-per owner.
+along the streak. A camera without an orientation cannot send any yet. At most 20 uploads
+and 60 checks a day per owner, deleted ones included.
 
 The hub checks it in the background. The sun must have been at −18° or lower at the
 given time and place. The frame is solved (§4.8, the same acceptance, without a second

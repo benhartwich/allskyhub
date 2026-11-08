@@ -22,11 +22,12 @@ from typing import Any
 
 import numpy as np
 from PIL import Image, ImageDraw
-from sqlalchemy import delete, func, or_, select, update
-from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
+from sqlalchemy import delete, or_, select
+from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker
 
 from allskyhub_protocol import EventVariant
-from allskyhub_server.devices import fireball, meteor_pairs, station_solve, stations
+from allskyhub_server.auth import ratelimit
+from allskyhub_server.devices import fireball, meteor_pairs, station_solve, stations, stats
 from allskyhub_server.devices.images import ImageStore
 from allskyhub_server.models import Device, EventRecord, LateFireball, MeteorPair
 from allskyhub_sky.astro import sun_altitude
@@ -36,6 +37,9 @@ log = logging.getLogger(__name__)
 
 MAX_AGE = dt.timedelta(days=365)
 PER_DAY = 20
+UPLOADS_PER_DAY = (ratelimit.Limit(PER_DAY, 86400),)
+# Each check is a full solve on the hub; another time may be tried a few times per upload.
+CHECKS_PER_DAY = (ratelimit.Limit(60, 86400),)
 MAX_BYTES = 8 * 1024**2
 MAX_EXPOSURE_S = 120.0
 MIN_TRACK, MAX_TRACK = 2, 32
@@ -105,18 +109,14 @@ def frame_size(device: Device) -> tuple[int, int] | None:
     return sol.width, sol.height
 
 
-async def sent_today(db: AsyncSession, device: Device, now: dt.datetime) -> int:
-    """Uploads of the owner's cameras in the last day."""
-    count = await db.scalar(
-        select(func.count())
-        .select_from(LateFireball)
-        .join(Device, Device.id == LateFireball.device_id)
-        .where(
-            Device.owner_id == device.owner_id,
-            LateFireball.created_at >= now - dt.timedelta(days=1),
-        )
-    )
-    return int(count or 0)
+async def count(engine: AsyncEngine, device: Device, what: str) -> None:
+    """One upload (``"upload"``) or check (``"check"``) of the owner's; ``LateError`` past
+    the day's limit. Counted apart from the rows, so deleting one frees nothing."""
+    limits = UPLOADS_PER_DAY if what == "upload" else CHECKS_PER_DAY
+    try:
+        await ratelimit.hit(engine, f"late-{what}:{device.owner_id}", limits)
+    except ratelimit.RateLimitedError as exc:
+        raise LateError("today" if what == "upload" else "checks_today") from exc
 
 
 def check_time(taken: dt.datetime, exposure_s: float, now: dt.datetime) -> None:
@@ -189,6 +189,18 @@ def start(maker: async_sessionmaker[AsyncSession], store: ImageStore, upload_id:
     task = asyncio.get_running_loop().create_task(check(maker, store, upload_id))
     task.add_done_callback(TASKS.discard)
     TASKS.add(task)
+
+
+async def resume(maker: async_sessionmaker[AsyncSession], store: ImageStore) -> int:
+    """At the hub's start: the checks a restart ended start again (allsky's review,
+    2026-11-08). Returns how many."""
+    async with maker() as db:
+        waiting = (
+            await db.scalars(select(LateFireball.id).where(LateFireball.state == "checking"))
+        ).all()
+    for upload_id in waiting:
+        start(maker, store, upload_id)
+    return len(waiting)
 
 
 async def _fail(
@@ -268,8 +280,8 @@ async def _check(
     event_id = await _keep(maker, store, upload_id, data, sky, peak, result)
     if event_id is None:
         return
+    # meteor_pairs marks its pairs as sent later, now and when paired again (§10.8).
     await meteor_pairs.pair_event(maker, device.id, event_id)
-    await mark_pairs(maker, device.id, event_id)
 
 
 async def _keep(
@@ -325,17 +337,6 @@ async def _keep(
     return event_id
 
 
-async def mark_pairs(
-    maker: async_sessionmaker[AsyncSession], device_id: str, event_id: str
-) -> None:
-    """Every pair of the event is one with a meteor sent later; never an alarm for it."""
-    async with maker() as db:
-        await db.execute(
-            update(MeteorPair).where(_of_event(device_id, event_id)).values(late=True, alerted=True)
-        )
-        await db.commit()
-
-
 def _of_event(device_id: str, event_id: str) -> Any:
     return or_(
         (MeteorPair.device_a == device_id) & (MeteorPair.event_a == event_id),
@@ -367,19 +368,26 @@ async def hide(db: AsyncSession, upload: LateFireball) -> None:
     if upload.event_id is None:
         return
     await db.execute(delete(MeteorPair).where(_of_event(upload.device_id, upload.event_id)))
-    await db.execute(
-        update(EventRecord)
-        .where(EventRecord.device_id == upload.device_id, EventRecord.event_id == upload.event_id)
-        .values(label="false_positive")
+    event = await db.scalar(
+        select(EventRecord).where(
+            EventRecord.device_id == upload.device_id, EventRecord.event_id == upload.event_id
+        )
     )
+    if event is not None:
+        # labels.set_on_hub refuses to change it back (``hidden``).
+        event.label, event.label_reason = "false_positive", "other"
+        event.labelled_at, event.label_auto = dt.datetime.now(dt.UTC), False
+        event.data = {**(event.data or {}), "hidden": True}
+        await stats.refresh_night(db, upload.device_id, event.night_id)
     upload.check = {**upload.check, "hidden": True}
 
 
 async def purge(db: AsyncSession, store: ImageStore, now: dt.datetime) -> None:
-    """Uploads that never passed go after ``KEEP_FAILED`` (maintenance.py)."""
+    """Uploads that never passed go after ``KEEP_FAILED`` (maintenance.py), a check that
+    never ended too."""
     old = await db.scalars(
         select(LateFireball).where(
-            LateFireball.state.in_(("track", "failed")),
+            LateFireball.state.in_(("track", "checking", "failed")),
             LateFireball.created_at < now - KEEP_FAILED,
         )
     )

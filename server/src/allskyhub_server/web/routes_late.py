@@ -58,6 +58,10 @@ def _refused(what: str) -> str:
             "Heute gingen schon 20 Aufnahmen ein. Morgen geht es weiter.",
             "20 recordings came in today already. More tomorrow.",
         ),
+        "checks_today": tr(
+            "Heute liefen schon 60 Prüfungen. Morgen geht es weiter.",
+            "60 checks ran today already. More tomorrow.",
+        ),
         "no_orientation": tr(
             "Die Kamera hat noch keine Ausrichtung. Sie kommt mit der ersten klaren Nacht.",
             "The camera has no orientation yet. It comes with the first clear night.",
@@ -211,13 +215,12 @@ async def send(
         size = late_fireballs.frame_size(device)
         if size is None:
             raise LateError("no_orientation")
-        if await late_fireballs.sent_today(db, device, now) >= late_fireballs.PER_DAY:
-            raise LateError("today")
         at = _local_time(taken, zone)
         late_fireballs.check_time(at, exposure_s, now)
         data = late_fireballs.as_jpeg(await image.read(late_fireballs.MAX_BYTES + 1))
         if await asyncio.to_thread(late_fireballs.image_size, data) != size:
             raise LateError("size")
+        await late_fireballs.count(request.app.state.engine, device, "upload")
     except LateError as exc:
         return await _list_page(
             request, db, session, device, 400, error=_refused(exc.what), form=form
@@ -310,7 +313,10 @@ async def set_track(
         upload.track_px = late_fireballs.check_track(points, upload.width, upload.height)  # pyright: ignore[reportUnknownArgumentType]
     except (ValueError, TypeError, LateError):
         return flash.redirect(request, session, back, 400, {"error": _refused("track")})
-    await _recheck(request, db, upload)
+    try:
+        await _recheck(request, db, device, upload)
+    except LateError as exc:
+        return flash.redirect(request, session, back, 429, {"error": _refused(exc.what)})
     return RedirectResponse(back, status_code=303)
 
 
@@ -336,12 +342,25 @@ async def set_time(
         late_fireballs.check_time(at, exposure_s, dt.datetime.now(dt.UTC))
     except LateError as exc:
         return flash.redirect(request, session, back, 400, {"error": _refused(exc.what)})
-    upload.taken_at, upload.exposure_s = at, exposure_s
-    await _recheck(request, db, upload)
+    try:
+        await _recheck(request, db, device, upload, at, exposure_s)
+    except LateError as exc:
+        return flash.redirect(request, session, back, 429, {"error": _refused(exc.what)})
     return RedirectResponse(back, status_code=303)
 
 
-async def _recheck(request: Request, db: AsyncSession, upload: LateFireball) -> None:
+async def _recheck(
+    request: Request,
+    db: AsyncSession,
+    device: Device,
+    upload: LateFireball,
+    taken: dt.datetime | None = None,
+    exposure_s: float | None = None,
+) -> None:
+    """Counts the check (``LateError`` past the day's), then starts it."""
+    await late_fireballs.count(request.app.state.engine, device, "check")
+    if taken is not None and exposure_s is not None:
+        upload.taken_at, upload.exposure_s = taken, exposure_s
     upload.state, upload.reason, upload.check = "checking", None, {}
     await db.commit()
     late_fireballs.start(request.app.state.sessionmaker, request.app.state.images, upload.id)

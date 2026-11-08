@@ -15,6 +15,7 @@ from __future__ import annotations
 import asyncio
 import datetime as dt
 import io
+import itertools
 import logging
 import math
 import uuid
@@ -56,15 +57,20 @@ MIN_TRACK, MAX_TRACK = 2, 32
 DARK_SUN_DEG = -18.0
 MAX_OFF_DEG = 0.5
 MIN_TRACK_DEG = 15.0
-# The moon checks the date (SPEC §10.8): only when it stood this high and lit; found within
-# MOON_NEAR_DEG of where the frame's solution puts it; a blob elsewhere counts above
-# MOON_SKY_ALT (no street lights).
+# The moon checks the date (SPEC §10.8; allsky's review, 2026-11-08: rather seldom say no than
+# refuse a real fireball). Only when it stood this high and lit. Saturated patches on a
+# coarse grid: one reaching within MOON_NEAR_DEG of where the frame's own solution puts it
+# confirms; without one, a compact patch at least MOON_BLOB_DEG across above MOON_SKY_ALT
+# contradicts: the moon of another day. Never near the track (the fireball's own glow), nor
+# at the frame's edge (overlay text); a missing moon says nothing (clouds, lower exposure).
 MOON_MIN_ALT = 10.0
 MOON_MIN_LIT = 0.1
 MOON_NEAR_DEG = 3.0
 MOON_SKY_ALT = 20.0
-# Missing although it stood this high and bright: that date it was not.
-MOON_SURE_ALT, MOON_SURE_LIT = 20.0, 0.5
+MOON_BLOB_DEG = 2.0
+MOON_FILL = 0.5
+TRACK_CLEAR_DEG = 5.0
+EDGE = 0.03
 SATURATED = 250
 # A failed one stays for its owner this long (maintenance.py).
 KEEP_FAILED = dt.timedelta(days=30)
@@ -174,19 +180,18 @@ def compare(found: Solution, known: Solution) -> tuple[str | None, float | None]
 
 
 def best_match(
-    found: Solution, known: list[tuple[Solution, dt.datetime | None]]
+    found: Solution, known: list[tuple[Solution, past_orientations.Window]], taken: dt.datetime
 ) -> tuple[str | None, float | None, dt.datetime | None]:
-    """``compare`` against every orientation of the camera of the frame's size (now and
-    before it was moved): the reason none fits, the smallest offset, and until when the
-    one that fits held (None: the current one)."""
-    same = [
-        (sol, until)
-        for sol, until in known
-        if (sol.width, sol.height) == (found.width, found.height)
-    ]
-    if not same:
+    """``compare`` against the orientations of the frame's size that held at ``taken`` (now
+    or before the camera was moved, with past_orientations.SLACK; allsky, 2026-11-08: a wrong
+    time that turns the sky must not fit an older pose by chance): the reason none fits,
+    the smallest offset, and until when the one that fits held (None: the current one)."""
+    size = (found.width, found.height)
+    same = [(sol, w) for sol, w in known if (sol.width, sol.height) == size]
+    then = [(sol, w) for sol, w in same if past_orientations.held(w, taken)]
+    if not then:
         return "size", None, None
-    results = [(*compare(found, sol), until) for sol, until in same]
+    results = [(*compare(found, sol), w[1]) for sol, w in then]
     passed = [r for r in results if r[0] is None]
     if passed:
         return min(passed, key=lambda r: r[1] if r[1] is not None else 0.0)
@@ -203,12 +208,34 @@ def moon_place(taken: dt.datetime, lat: float, lon: float) -> tuple[float, float
     return moon_altitude(taken, lat, lon), float(az[0]), moon_illumination(taken)
 
 
+def _patches(cells: set[tuple[int, int]]) -> list[list[tuple[int, int]]]:
+    """Grid cells joined by their eight neighbours."""
+    out: list[list[tuple[int, int]]] = []
+    left = set(cells)
+    while left:
+        todo = [left.pop()]
+        patch: list[tuple[int, int]] = []
+        while todo:
+            r, c = todo.pop()
+            patch.append((r, c))
+            for dr in (-1, 0, 1):
+                for dc in (-1, 0, 1):
+                    if (r + dr, c + dc) in left:
+                        left.remove((r + dr, c + dc))
+                        todo.append((r + dr, c + dc))
+        out.append(patch)
+    return out
+
+
 def moon_check(
-    gray: np.ndarray[Any, np.dtype[np.uint8]], sol: Solution, moon: tuple[float, float, float]
+    gray: np.ndarray[Any, np.dtype[np.uint8]],
+    sol: Solution,
+    moon: tuple[float, float, float],
+    track: list[list[float]],
 ) -> str | None:
     """SPEC §10.8: ``"confirmed"`` when the moon is in the frame where it stood at the
-    given date and time, ``"contradicted"`` when it is clearly elsewhere or clearly missing,
-    None when it says nothing (down, thin, outside the frame, or the sky too bright)."""
+    given date and time, ``"contradicted"`` when it is clearly elsewhere, None when it says
+    nothing (down, thin, outside the frame, hidden, or the sky too bright)."""
     alt, az, lit = moon
     if alt < MOON_MIN_ALT or lit < MOON_MIN_LIT:
         return None
@@ -216,30 +243,45 @@ def moon_check(
     mx, my = sol.project(np.array([alt]), np.array([az]))
     if not (0 <= mx[0] < w and 0 <= my[0] < h):
         return None
-    # Saturated points on a coarse grid, as directions; the fireball is painted over.
     step = max(2, round(w / 400))
     ys, xs = np.nonzero(gray[::step, ::step] >= SATURATED)
     if len(xs) > 4000:
         return None  # a bright sky everywhere
-    p_alt, p_az = sol.unproject(xs.astype(np.float64) * step, ys.astype(np.float64) * step)
-    sep = _separations(p_alt, p_az, alt, az)
-    # The disc's size in grid points: half a degree across, at the scale where it stands.
+    px, py = xs.astype(np.float64) * step, ys.astype(np.float64) * step
+    p_alt, p_az = sol.unproject(px, py)
+    # The track, densely, as directions: its glow is no moon.
+    along = [
+        (a[0] + (b[0] - a[0]) * f / 19, a[1] + (b[1] - a[1]) * f / 19)
+        for a, b in itertools.pairwise(track)
+        for f in range(20)
+    ]
+    tx, ty = np.array([p[0] for p in along]), np.array([p[1] for p in along])
+    t_alt, t_az = sol.unproject(tx, ty)
+    keep = (px >= EDGE * w) & (px <= (1 - EDGE) * w) & (py >= EDGE * h) & (py <= (1 - EDGE) * h)
+    for k in range(len(t_alt)):
+        keep &= _separations(p_alt, p_az, float(t_alt[k]), float(t_az[k])) > TRACK_CLEAR_DEG
+    index = {(int(ys[k]), int(xs[k])): k for k in range(len(xs)) if keep[k]}
+    # One grid cell in square degrees where the moon stands.
     x1, y1 = sol.project(np.array([alt + 1.0]), np.array([az]))
     per_deg = math.hypot(float(x1[0] - mx[0]), float(y1[0] - my[0])) / step
-    least = max(3.0, math.pi * (0.25 * per_deg) ** 2)
-    if int((sep <= MOON_NEAR_DEG).sum()) >= least:
-        return "confirmed"
-    far = (sep > 2 * MOON_NEAR_DEG) & (p_alt >= MOON_SKY_ALT)
-    f_alt, f_az = p_alt[far], p_az[far]
-    for i in range(len(f_alt)):
-        if (
-            int((_separations(f_alt, f_az, f_alt[i], f_az[i]) <= MOON_NEAR_DEG / 2).sum())
-            >= 2 * least
-        ):
-            return "contradicted"  # a moon where it did not stand that day
-    if alt >= MOON_SURE_ALT and lit >= MOON_SURE_LIT:
-        return "contradicted"
-    return None
+    cell = 1.0 / max(per_deg, 1e-6) ** 2
+    blob = False
+    for patch in _patches(set(index)):
+        ks = np.array([index[rc] for rc in patch])
+        a, b = p_alt[ks], p_az[ks]
+        if float(_separations(a, b, alt, az).min()) <= MOON_NEAR_DEG:
+            return "confirmed"
+        # Its middle, as the mean of its directions, and how far it reaches from there.
+        ra, rb = np.radians(a), np.radians(b)
+        cx = float((np.cos(ra) * np.sin(rb)).mean())
+        cy = float((np.cos(ra) * np.cos(rb)).mean())
+        cz = float(np.sin(ra).mean())
+        c_alt = math.degrees(math.atan2(cz, math.hypot(cx, cy)))
+        c_az = math.degrees(math.atan2(cx, cy)) % 360.0
+        across = 2 * float(_separations(a, b, c_alt, c_az).max())
+        fill = len(patch) * cell / (math.pi * (across / 2) ** 2) if across > 0 else 0.0
+        blob |= c_alt >= MOON_SKY_ALT and across >= MOON_BLOB_DEG and fill >= MOON_FILL
+    return "contradicted" if blob else None
 
 
 def _separations(alt: Floats, az: Floats, alt0: float, az0: float) -> Floats:
@@ -341,7 +383,7 @@ async def _check(
     if not known or place is None:
         await _fail(maker, upload_id, "no_orientation")
         return
-    if all((sol.width, sol.height) != size for sol, _ in known):
+    if all((sol.width, sol.height) != size for sol, _w in known):
         await _fail(maker, upload_id, "size")
         return
     if sun_altitude(taken, *place) > DARK_SUN_DEG:
@@ -356,7 +398,7 @@ async def _check(
         reason = "few_stars" if verdict.reason == "few stars" else "no_match"
         await _fail(maker, upload_id, reason)
         return
-    off, offset, until = best_match(sol, known)
+    off, offset, until = best_match(sol, known, taken)
     result: dict[str, Any] = {
         "stars": sol.stars,
         "rms_deg": sol.rms_deg,
@@ -367,7 +409,7 @@ async def _check(
     if off is not None:
         await _fail(maker, upload_id, off, result)
         return
-    result["moon"] = moon_check(gray, sol, moon_place(taken, *place))
+    result["moon"] = moon_check(gray, sol, moon_place(taken, *place), track)
     if result["moon"] == "contradicted":
         await _fail(maker, upload_id, "moon", result)
         return

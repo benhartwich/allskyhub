@@ -590,7 +590,7 @@ async def _handle(
         old, new = (last or {}).get("orientation"), status.get("orientation")
         if new is not None and past_orientations.moved(old, new):
             async with maker() as db:
-                past_orientations.keep(db, conn.device_id, old, new, _now())
+                await past_orientations.keep(db, conn.device_id, old, new, _now())
                 await db.commit()
         await _store_status(maker, conn.device_id, body)
         # Roadmap C15: tell the owner when the sky turns unsafe for the telescope.

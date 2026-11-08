@@ -254,7 +254,7 @@ async def solve(
         now = dt.datetime.now(dt.UTC)
         found = to_orientation(sol, now)
         # Moved: the one before stays for fireballs sent later from then (§10.8).
-        past_orientations.keep(db, device_id, status.get("orientation"), found, now)
+        await past_orientations.keep(db, device_id, status.get("orientation"), found, now)
         status["orientation"] = found
         status["solve"] = {**dict(status.get("solve") or {}), "fails": []}
         device.last_status = status

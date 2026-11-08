@@ -1712,17 +1712,21 @@ about 15° an hour at any latitude, so 0.5° is the same camera at the same plac
 sidereal time right to about 2 minutes. The stars cannot tell the date (a day later and
 3 min 56 s earlier fits as well): date and seconds are the owner's word, unless the moon
 says otherwise. When the moon stood at least 10° high and at least a tenth lit at the given
-time, the hub looks for it in the frame (saturated, the track painted over) within 3° of
-where the frame's own solution puts it: found there, the date counts as confirmed; a blob of
-its size elsewhere above 20°, or no moon although it stood at least 20° high and at least
-half lit, fails the check (`moon`); anything else says nothing.
+time, the hub looks at the frame's saturated patches (the track painted over; none within 5°
+of the track, the fireball's own glow, nor at the frame's edge, where overlay text is): one
+that reaches within 3° of where the frame's own solution puts the moon confirms the date;
+without one, a compact patch at least 2° across above 20° altitude elsewhere (the moon of
+another day) fails the check (`moon`). Anything else says nothing, a missing moon too
+(clouds, or a camera that shortens its exposure for the moon).
 
 When a camera is moved, its orientation before is kept (Benjamin, 2026-11-08): whenever a
 new orientation (§6.3 from the camera, §4.8 from the hub for a station) puts the sky more
-than 0.5° from the one before as above, is mirrored otherwise or has another size, and when
-a new frame size drops it (§10.2), the one before is stored with the time it was replaced;
-at most 20 a camera, none older than 12 months. An upload is compared with every
-orientation the camera had in its size and passes when one fits. Last, the hub's
+than 1° from the one before as above, is mirrored otherwise or has another size, and when
+a new frame size drops it (§10.2), the one before is stored with the time it was replaced,
+unless it is within 1° of one stored already, which then holds until now; at most 20 a
+camera, none older than 12 months. An orientation held from the time the one before it was
+replaced until its own; an upload is compared with those of its size that held at the
+given time, 2 days either side (a solve trails a move), and passes when one fits. Last, the hub's
 own measure of the track (§10.2 `peak`, and its ends' directions from the frame's own
 solution) must give a fireball: `peak` ≥ 0.9 or a track of at least 15°.
 

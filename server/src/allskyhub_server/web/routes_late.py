@@ -117,6 +117,12 @@ def reason_text(reason: str | None, check: dict[str, Any]) -> str:
             "Die Kamera hat zu dieser Zeit schon einen Meteor.",
             "The camera has a meteor at this time already.",
         ),
+        "moon": tr(
+            "Die Sterne passen, aber der Mond nicht: An diesem Datum stand er woanders. "
+            "Stimmt der Tag?",
+            "The stars fit, but the moon does not: on this date it stood elsewhere. Is the "
+            "day right?",
+        ),
     }
     return words.get(reason or "", reason or "")
 
@@ -174,7 +180,7 @@ async def _list_page(
         {
             "device": device,
             "back": _back(device),
-            "size": late_fireballs.frame_size(device),
+            "sizes": await late_fireballs.frame_sizes(db, device),
             "uploads": uploads,
             "zones": ZONES,
             "zone": str(series.zone(device)),
@@ -212,13 +218,14 @@ async def send(
     store: ImageStore = request.app.state.images
     form = {"taken": taken, "zone": zone, "exposure_s": exposure_s}
     try:
-        size = late_fireballs.frame_size(device)
-        if size is None:
+        sizes = await late_fireballs.frame_sizes(db, device)
+        if not sizes:
             raise LateError("no_orientation")
         at = _local_time(taken, zone)
         late_fireballs.check_time(at, exposure_s, now)
         data = late_fireballs.as_jpeg(await image.read(late_fireballs.MAX_BYTES + 1))
-        if await asyncio.to_thread(late_fireballs.image_size, data) != size:
+        size = await asyncio.to_thread(late_fireballs.image_size, data)
+        if size not in sizes:
             raise LateError("size")
         await late_fireballs.count(request.app.state.engine, device, "upload")
     except LateError as exc:

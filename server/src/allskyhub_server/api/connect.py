@@ -22,7 +22,7 @@ from starlette.datastructures import UploadFile
 
 from allskyhub_protocol import EventVariant, FrameVariant
 from allskyhub_server.auth import ratelimit
-from allskyhub_server.devices import meteor_pairs, station_solve, stations
+from allskyhub_server.devices import meteor_pairs, past_orientations, station_solve, stations
 from allskyhub_server.devices.images import ImageStore
 from allskyhub_server.devices.stations import StationError
 from allskyhub_server.models import Device, EventRecord, Frame, SkySample
@@ -201,6 +201,7 @@ def apply_station(device: Device, body: StationIn) -> None:
         "clock_synced": body.clock_synced,
     }
     if (old.get("width"), old.get("height")) != (body.width, body.height):
+        past_orientations.dropped(device, dt.datetime.now(dt.UTC))
         status["orientation"] = None
     device.last_status = status
     device.name = body.name.strip()[:100]

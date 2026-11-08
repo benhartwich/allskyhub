@@ -6,6 +6,7 @@ import asyncio
 import datetime as dt
 
 import httpx
+import pytest
 from fastapi import FastAPI
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
@@ -59,3 +60,44 @@ async def test_status_is_kept_every_five_minutes(
     night_page = (await client.get(f"/cameras/{dev.device_id}/nights/{night_id}")).text
     assert f'data-default="{night_id}"' in night_page  # the viewer, camera state included
     assert "data-status" in night_page
+
+
+async def test_a_moved_camera_keeps_its_orientation_before(
+    app: FastAPI, client: httpx.AsyncClient, live_app: str
+) -> None:
+    """SPEC §10.8: the camera reports a turned orientation; the one before stays for
+    fireballs sent later from then. The same one again keeps nothing."""
+    import dataclasses
+
+    from allskyhub_protocol import Orientation
+    from allskyhub_server.devices import station_solve
+    from allskyhub_server.models import PastOrientation
+    from tests.test_station_solve import AT, _true  # pyright: ignore[reportPrivateUsage]
+
+    def status(rot: float, at: dt.datetime) -> Status:
+        found = station_solve.to_orientation(dataclasses.replace(_true(), rot=rot), at)
+        return _status(20_000_000).model_copy(
+            update={"orientation": Orientation.model_validate(found)}
+        )
+
+    dev = FakeDevice()
+    token = await paired_token(client, dev)
+    maker: async_sessionmaker[AsyncSession] = app.state.sessionmaker
+    rot = _true().rot
+    async with device_ws(live_app, token) as ws:
+        for message in (
+            status(rot, AT),
+            status(rot, AT),
+            status(rot + 3.0, AT + dt.timedelta(days=2)),
+        ):
+            await send(ws, message)
+        for _ in range(100):
+            async with maker() as db:
+                if await db.scalar(select(func.count()).select_from(PastOrientation)):
+                    break
+            await asyncio.sleep(0.05)
+        await asyncio.sleep(0.3)
+    async with maker() as db:
+        rows = list(await db.scalars(select(PastOrientation)))
+    assert len(rows) == 1
+    assert rows[0].orientation["north_deg"] == pytest.approx(rot % 360, abs=0.1)

@@ -60,6 +60,7 @@ from allskyhub_server.devices import (
     meteor_pairs,
     nowcast,
     pairing,
+    past_orientations,
     public,
     settings_form,
     youtube,
@@ -524,10 +525,15 @@ def _env_values(status: Status) -> dict[str, float | None]:
     }
 
 
-async def _safe(maker: async_sessionmaker[AsyncSession], device_id: str) -> bool | None:
-    """The last reported ``status.observatory.safe`` (SPEC §6.3), or None."""
+async def _last_status(
+    maker: async_sessionmaker[AsyncSession], device_id: str
+) -> dict[str, Any] | None:
     async with maker() as db:
-        status = await db.scalar(select(Device.last_status).where(Device.id == device_id))
+        return await db.scalar(select(Device.last_status).where(Device.id == device_id))
+
+
+def _safe(status: dict[str, Any] | None) -> bool | None:
+    """The last reported ``status.observatory.safe`` (SPEC §6.3), or None."""
     observatory: dict[str, Any] = (status or {}).get("observatory") or {}
     safe = observatory.get("safe")
     return safe if isinstance(safe, bool) else None
@@ -576,8 +582,16 @@ async def _handle(
         # SPEC §6.4 Labels: labels set on the hub until the camera acknowledges them.
         _background(labels.deliver(maker, registry, conn.device_id))
     elif isinstance(body, Status):
-        before = await _safe(maker, conn.device_id)
-        await _touch(maker, conn.device_id, last_status=body.model_dump(mode="json"))
+        last = await _last_status(maker, conn.device_id)
+        before = _safe(last)
+        status = body.model_dump(mode="json")
+        await _touch(maker, conn.device_id, last_status=status)
+        # SPEC §10.8: a camera moved keeps its orientation before for fireballs sent later.
+        old, new = (last or {}).get("orientation"), status.get("orientation")
+        if new is not None and past_orientations.moved(old, new):
+            async with maker() as db:
+                past_orientations.keep(db, conn.device_id, old, new, _now())
+                await db.commit()
         await _store_status(maker, conn.device_id, body)
         # Roadmap C15: tell the owner when the sky turns unsafe for the telescope.
         if before is True and body.observatory is not None and body.observatory.safe is False:

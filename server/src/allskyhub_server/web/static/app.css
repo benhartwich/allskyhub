@@ -591,3 +591,11 @@ h1.break { overflow-wrap: anywhere; }
 .net-bar .track { fill: #1f2a55; }
 .net-credit { border-left: 2px solid var(--accent-2); padding-left: 10px; }
 .camera-map.net-map .map { height: 360px; min-height: 0; }
+
+/* Fireballs sent later (SPEC §10.8): the frame with the owner's marks over it. */
+.late-track { position: relative; width: 100%; max-width: 960px; }
+.late-track img { display: block; width: 100%; height: auto; border-radius: 8px; background: #05070f; }
+.late-track svg { position: absolute; inset: 0; width: 100%; height: 100%; cursor: crosshair; }
+.late-line { fill: none; stroke: var(--accent, #f08a50); stroke-dasharray: 8 6; }
+.late-point { fill: none; stroke: var(--accent, #f08a50); }
+.late-thumb { width: 96px; border-radius: 6px; }

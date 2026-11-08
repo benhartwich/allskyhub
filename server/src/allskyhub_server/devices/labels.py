@@ -67,6 +67,8 @@ async def set_on_hub(
     event = await _event(db, device_id, night_id, event_id)
     if event is None:
         raise HTTPException(404, "Not found")
+    if (event.data or {}).get("hidden"):  # an admin hid it (SPEC §10.8)
+        raise HTTPException(409, "Hidden by an admin")
     event.label = label
     event.label_reason = reason
     event.labelled_at = dt.datetime.now(dt.UTC)
@@ -122,7 +124,7 @@ async def from_device(db: AsyncSession, device_id: str, body: EventLabel) -> boo
     """`event_label` from the camera: taken if it wins over the stored one
     (``EventLabel.replaces``, the same rule on both sides). Commits."""
     event = await _event(db, device_id, body.night_id, body.event_id)
-    if event is None:
+    if event is None or (event.data or {}).get("hidden"):
         return False
     if not body.replaces(stored(event)):
         return False

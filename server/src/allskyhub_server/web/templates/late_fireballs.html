@@ -1,0 +1,40 @@
+{% extends "base.html" %}
+{% block lang %}{{ 'en' if en else 'de' }}{% endblock %}
+{% block title %}{{ t('Feuerkugeln nachreichen', 'Send fireballs later') }} · {{ device.name }} · allskyhub{% endblock %}
+{% block head %}<script src="{{ asset('late_fireball.js') }}" defer></script>{% endblock %}
+{% block content %}
+{% set states = {'track': t('Spur fehlt', 'track missing'), 'checking': t('wird geprüft', 'being checked'), 'accepted': t('angenommen', 'accepted'), 'failed': t('nicht bestanden', 'not passed')} %}
+<div class="page-head"><h1>{{ t('Feuerkugeln nachreichen', 'Send fireballs later') }}</h1><p class="muted"><a href="{{ back }}">{{ device.name }}</a> › {{ t('Nachreichen', 'Send later') }}</p></div>
+{% if notice %}<p class="msg ok" role="status">{{ notice }}</p>{% endif %}
+{% if error %}<p class="msg error" role="alert">{{ error }}</p>{% endif %}
+<p class="muted">{{ t('Eine ältere Aufnahme einer Feuerkugel, bis 12 Monate zurück. Der Hub prüft sie an den Sternen: Passt der Himmel im Bild zur Ausrichtung deiner Kamera, zählt sie wie eine live gemeldete und wird mit anderen Kameras zur selben Zeit vermessen.', 'An older recording of a fireball, up to 12 months back. The hub checks it against the stars: if the sky in the image fits your camera’s orientation, it counts like one sent live and is measured with other cameras at the same time.') }}</p>
+
+{% if size %}
+<form method="post" action="/nachreichen/{{ device.id }}" class="card stack" enctype="multipart/form-data">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+  <h2>{{ t('Aufnahme', 'Recording') }}</h2>
+  <label>{{ t('Bild', 'Image') }}<input type="file" name="image" id="late-image" accept="image/jpeg,image/png" required></label>
+  <p class="muted small">{% if en %}The full image in the size the camera sends ({{ size[0] }} × {{ size[1] }}), JPEG or PNG, at most 8 MB. Not a crop and not a stack.{% else %}Das volle Bild in der Größe, die die Kamera sendet ({{ size[0] }} × {{ size[1] }}), JPEG oder PNG, höchstens 8 MB. Kein Ausschnitt und kein Stack.{% endif %}</p>
+  <div class="search-row">
+    <label>{{ t('Mitte der Belichtung (Ortszeit)', 'Middle of the exposure (local time)') }}<input type="datetime-local" step="1" name="taken" id="late-taken" value="{{ form.taken if form else '' }}" required></label>
+    <label>{{ t('Zeitzone', 'Time zone') }}<select name="zone">{% for z in zones %}<option value="{{ z }}"{% if z == (form.zone if form else zone) %} selected{% endif %}>{{ z }}</option>{% endfor %}</select></label>
+    <label class="narrow">{{ t('Belichtung (s)', 'Exposure (s)') }}<input name="exposure_s" type="number" min="0.001" max="120" step="any" value="{{ form.exposure_s if form else '' }}" required></label>
+  </div>
+  <p class="muted small">{{ t('Bei Allsky steht die Zeit im Dateinamen (image-JJJJMMTTHHMMSS.jpg); sie wird dann übernommen. Die Sterne prüfen die Uhrzeit auf etwa 2 Minuten, nicht das Datum: Datum und Sekunden sind dein Wort.', 'With Allsky the time is in the file name (image-YYYYMMDDHHMMSS.jpg) and is taken from there. The stars check the time of day to about 2 minutes, not the date: date and seconds are your word.') }}</p>
+  <button type="submit">{{ t('Weiter zur Spur', 'On to the track') }}</button>
+</form>
+{% else %}
+<p class="msg warn">{{ t('Deine Kamera hat noch keine Ausrichtung. Sie kommt mit der ersten klaren Nacht; danach kannst du nachreichen.', 'Your camera has no orientation yet. It comes with the first clear night; after that you can send fireballs later.') }}</p>
+{% endif %}
+
+{% if uploads %}
+<section class="card stack">
+  <h2>{{ t('Bisher nachgereicht', 'Sent so far') }}</h2>
+  <ul class="plain-list">
+    {% for u in uploads %}
+    <li><a href="/nachreichen/{{ device.id }}/{{ u.id }}">{{ t('Feuerkugel', 'Fireball') }} {{ u.taken_at | when }}</a> <span class="badge {{ 'ok' if u.state == 'accepted' else ('warn' if u.state == 'failed' else '') }}">{{ states.get(u.state, u.state) }}</span>{% if u.check.get('hidden') %} <span class="badge warn">{{ t('ausgeblendet', 'hidden') }}</span>{% endif %}{% if u.state == 'failed' %}<br><span class="muted small">{{ reason_text(u.reason, u.check) }}</span>{% endif %}</li>
+    {% endfor %}
+  </ul>
+</section>
+{% endif %}
+{% endblock %}

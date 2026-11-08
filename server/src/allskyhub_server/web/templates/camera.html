@@ -105,6 +105,7 @@
     <label class="check"><input type="checkbox" name="network"{% if device.network %} checked{% endif %}> Diese Kamera nimmt am Kameranetz teil</label>
     <button type="submit" class="secondary">Speichern</button>
   </form>
+  {% if role == 'owner' %}<p class="muted small"><a href="/nachreichen/{{ device.id }}">Feuerkugel nachreichen</a> · eine ältere Aufnahme, geprüft an den Sternen</p>{% endif %}
 </details>
 <details class="card fold" id="flugzeuge" data-fold="flugzeuge">
   <summary><h2>Flugzeuge am Tag</h2></summary>

@@ -1690,3 +1690,34 @@ frame with the one before and after:
   so such a meteor carries `source: "image_url"` in its data, and until a trial has
   shown its quality (as in N1c) it counts for showers and the night but is not paired.
   A meteor keeps its full frame and is an event like one from `POST /events`.
+
+### 10.8 Fireballs sent later
+
+Benjamin, 2026-11-08. The owner of a station or camera may send a fireball recorded before,
+up to 12 months back, on the web page `/nachreichen/<id>`: its full frame (JPEG or PNG,
+≤ 8 MB, in the size of the camera's orientation, §4.8), the mid-exposure time as local
+time with a time zone, the exposure (≤ 120 s) and then its track as 2–32 pixel points
+along the streak. A camera without an orientation cannot send any yet. At most 20 uploads
+and 60 checks a day per owner, deleted ones included.
+
+The hub checks it in the background. The sun must have been at −18° or lower at the
+given time and place. The frame is solved (§4.8, the same acceptance, without a second
+frame; the track is painted over in the sky's median first, so the fireball's fragments
+are not taken for stars) at that time and the camera's place, and accepted only when it
+is mirrored like the camera's orientation and both solutions put every pixel of the sky
+from 30° altitude up within 0.5° of each other. A wrong time turns the sky rigidly about
+the pole, which the fit takes as another lie of the camera; compared as directions this is
+about 15° an hour at any latitude, so 0.5° is the same camera at the same place with the
+sidereal time right to about 2 minutes. The stars cannot tell the date (a day later and
+3 min 56 s earlier fits as well): date and seconds are the owner's word. Last, the hub's
+own measure of the track (§10.2 `peak`, and its ends' directions from the frame's own
+solution) must give a fireball: `peak` ≥ 0.9 or a track of at least 15°.
+
+An accepted fireball becomes a `meteor` event with `imported: true` (§6.4) at the given
+time (`start`, `end` from the exposure), with its pictures; it is never a push or an alarm,
+and is paired by the rules of §6.4 and §10.1 with the owner's time taken as trusted. Its
+pairs are marked as sent later wherever they are shown. A camera that already has a
+meteor in that window refuses it. One that fails stays visible to its owner only, may be
+checked again with another time, and goes after 30 days. The owner can delete one at any
+time, and with it every pair it made; an admin can hide an accepted one, which then counts
+nowhere and loses its pairs.

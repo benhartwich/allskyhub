@@ -47,6 +47,7 @@ from allskyhub_server.devices import (
     domains,
     gmn,
     image_url,
+    late_fireballs,
     lightning_li,
     network,
     station_detect,
@@ -83,6 +84,7 @@ from allskyhub_server.web import (
     routes_cameras,
     routes_fireballs,
     routes_gallery,
+    routes_late,
     routes_legal,
     routes_local,
     routes_network,
@@ -242,6 +244,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         cleanup = asyncio.create_task(
             maintenance.run_forever(app.state.sessionmaker, app.state.images, settings)
         )
+        # SPEC §10.8: checks a restart ended start again.
+        await late_fireballs.resume(app.state.sessionmaker, app.state.images)
         # The service account from the settings, else from the admin page's vault.
         vault = app.state.stores.vault
         sender = (
@@ -395,6 +399,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(routes_account.router)
     app.include_router(routes_cameras.router)
     app.include_router(routes_stations.router)  # SPEC §10
+    app.include_router(routes_late.router)  # SPEC §10.8
     app.include_router(routes_gallery.router)
     app.include_router(routes_legal.router)
     app.include_router(routes_public.router)

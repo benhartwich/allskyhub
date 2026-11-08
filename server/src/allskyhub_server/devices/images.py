@@ -118,6 +118,26 @@ class ImageStore:
             except OSError:
                 break
 
+    def late_path(self, device_id: str, upload_id: str) -> Path:
+        """A fireball sent later (SPEC §10.8) while it waits for its check; ``upload_id``
+        is a UUID."""
+        return self._inside(device_id, self.root / device_id / "late" / f"{upload_id}.jpg")
+
+    def save_late(self, device_id: str, upload_id: str, data: bytes) -> None:
+        target = self.late_path(device_id, upload_id)
+        target.parent.mkdir(parents=True, exist_ok=True)
+        fd, tmp = tempfile.mkstemp(dir=target.parent, suffix=".part")
+        try:
+            with os.fdopen(fd, "wb") as fh:
+                fh.write(data)
+            Path(tmp).replace(target)
+        except BaseException:
+            Path(tmp).unlink(missing_ok=True)
+            raise
+
+    def delete_late(self, device_id: str, upload_id: str) -> None:
+        self.late_path(device_id, upload_id).unlink(missing_ok=True)
+
     def delete_frame(self, device_id: str, night_id: str, name: str, variant: FrameVariant) -> None:
         try:
             path = self.frame_path(device_id, night_id, name, variant)

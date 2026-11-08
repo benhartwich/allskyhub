@@ -683,6 +683,31 @@ class MeteorPair(Base):
     # field they give (devices/dark_flight.py: landings, outline); None until fetched.
     wind: Mapped[dict[str, Any] | None] = mapped_column(JSONB)
     strewn: Mapped[dict[str, Any] | None] = mapped_column(JSONB)
+    # One of its meteors was sent later (SPEC §10.8): shown as such, never an alarm.
+    late: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
+    created_at: Mapped[dt.datetime] = mapped_column(_tz(), server_default=func.now())
+
+
+class LateFireball(Base):
+    """A fireball its camera's owner sent later (SPEC §10.8): the frame waits here until the
+    hub checked it against the stars; an accepted one becomes the meteor ``event_id``."""
+
+    __tablename__ = "late_fireball"
+
+    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid7)
+    device_id: Mapped[str] = mapped_column(ForeignKey("device.id", ondelete="CASCADE"), index=True)
+    # Mid-exposure, as the owner gave it, and the exposure in seconds.
+    taken_at: Mapped[dt.datetime] = mapped_column(_tz())
+    exposure_s: Mapped[float] = mapped_column(Float)
+    track_px: Mapped[list[list[float]]] = mapped_column(JSONB, default=list)
+    width: Mapped[int] = mapped_column(Integer)
+    height: Mapped[int] = mapped_column(Integer)
+    # "track" (waits for its track), "checking", "accepted", "failed".
+    state: Mapped[str] = mapped_column(String(16), default="track", server_default="track")
+    # Why it failed (devices/late_fireballs.py REASONS) and what the check found.
+    reason: Mapped[str | None] = mapped_column(String(32))
+    check: Mapped[dict[str, Any]] = mapped_column(JSONB, default=dict, server_default="{}")
+    event_id: Mapped[str | None] = mapped_column(String(64))
     created_at: Mapped[dt.datetime] = mapped_column(_tz(), server_default=func.now())
 
 

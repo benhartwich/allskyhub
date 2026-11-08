@@ -1,0 +1,60 @@
+{% extends "base.html" %}
+{% block lang %}{{ 'en' if en else 'de' }}{% endblock %}
+{% block title %}{{ t('Feuerkugel', 'Fireball') }} {{ local.strftime('%d.%m.%Y %H:%M') }} · allskyhub{% endblock %}
+{% block head %}{% if upload.state == 'checking' %}<meta http-equiv="refresh" content="10">{% endif %}<script src="{{ asset('late_fireball.js') }}" defer></script>{% endblock %}
+{% block content %}
+<div class="page-head"><h1>{{ t('Feuerkugel vom', 'Fireball of') }} {{ local.strftime('%d.%m.%Y, %H:%M:%S') }} <span class="badge">{{ t('nachgereicht', 'sent later') }}</span></h1><p class="muted"><a href="{{ back }}">{{ device.name }}</a> › <a href="/nachreichen/{{ device.id }}">{{ t('Nachreichen', 'Send later') }}</a> › {{ zone }}</p></div>
+{% if notice %}<p class="msg ok" role="status">{{ notice }}</p>{% endif %}
+{% if error %}<p class="msg error" role="alert">{{ error }}</p>{% endif %}
+
+{% if upload.state in ('track', 'failed') %}
+<form method="post" action="/nachreichen/{{ device.id }}/{{ upload.id }}/spur" class="card stack">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+  <h2>{{ t('Spur markieren', 'Mark the track') }}</h2>
+  <div class="late-track" data-width="{{ upload.width }}" data-height="{{ upload.height }}">
+    <img src="/nachreichen/{{ device.id }}/{{ upload.id }}/bild.jpg" alt="{{ t('Die Aufnahme', 'The recording') }}" id="late-frame">
+    <svg viewBox="0 0 {{ upload.width }} {{ upload.height }}" preserveAspectRatio="none" aria-hidden="true" id="late-marks"></svg>
+  </div>
+  <input type="hidden" name="track" id="late-track" value="{{ upload.track_px | tojson }}">
+  <p class="muted small">{{ t('Tippe von einem Ende der Spur zum anderen, 2 bis 32 Punkte. Die Richtung ist egal.', 'Tap from one end of the track to the other, 2 to 32 points. The direction does not matter.') }} <span id="late-count"></span></p>
+  <div class="choice-row"><button type="button" class="secondary" id="late-undo">{{ t('Letzten Punkt entfernen', 'Remove the last point') }}</button><button type="submit">{{ t('Prüfen lassen', 'Have it checked') }}</button></div>
+</form>
+{% endif %}
+
+<section class="card stack">
+  <h2>{{ t('Prüfung', 'Check') }}</h2>
+  {% if upload.state == 'track' %}<p class="muted">{{ t('Wartet auf die Spur.', 'Waiting for the track.') }}</p>
+  {% elif upload.state == 'checking' %}<p><span class="badge">{{ t('wird geprüft', 'being checked') }}</span> {{ t('Der Hub sucht die Sterne. Das dauert meist unter einer Minute; die Seite lädt sich selbst neu.', 'The hub looks for the stars. That mostly takes less than a minute; the page reloads itself.') }}</p>
+  {% elif upload.state == 'failed' %}<p><span class="badge warn">{{ t('nicht bestanden', 'not passed') }}</span> {{ reason }}</p>
+  {% else %}
+  <ul class="plain-list">
+    <li><span class="badge ok">{{ t('bestanden', 'passed') }}</span> {% if en %}Star check: {{ upload.check.stars }} stars, {{ '%.2f' | format(upload.check.rms_deg) }}° RMS; the sky lies {{ '%.2f' | format(upload.check.offset_deg) }}° from the camera’s orientation.{% else %}Sternprobe: {{ upload.check.stars }} Sterne, {{ ('%.2f' | format(upload.check.rms_deg)) | replace('.', ',') }}° RMS; der Himmel liegt {{ ('%.2f' | format(upload.check.offset_deg)) | replace('.', ',') }}° neben der Ausrichtung der Kamera.{% endif %}</li>
+    <li><span class="badge ok">{{ t('Feuerkugel', 'Fireball') }}</span> {{ t('Helligkeit', 'Brightness') }} {{ ('%.2f' | format(upload.check.peak)) | replace('.', ',' if not en else '.') }}</li>
+    {% if pairs %}
+    {% for pair, other in pairs %}<li><span class="badge ok">{{ t('vermessen', 'measured') }}</span> <a href="/feuerkugeln/{{ pair.id }}">{{ t('Bahn mit', 'Path with') }} {{ other.name }}</a>, {{ pair.high_km | round | int }} → {{ pair.low_km | round | int }} km</li>{% endfor %}
+    {% else %}<li><span class="badge warn">{{ t('wartet', 'waiting') }}</span> {{ t('Noch keine zweite Kamera zur selben Zeit. Reicht eine andere Kamera diese Feuerkugel nach, wird neu abgeglichen.', 'No second camera at the same time yet. If another camera sends this fireball later, it is matched again.') }}</li>{% endif %}
+  </ul>
+  {% if upload.check.get('hidden') %}<p class="msg warn">{{ t('Ein Admin hat diese Feuerkugel ausgeblendet. Sie zählt nirgends.', 'An admin hid this fireball. It counts nowhere.') }}</p>{% endif %}
+  {% endif %}
+  <img class="station-latest" src="/nachreichen/{{ device.id }}/{{ upload.id }}/bild.jpg" alt="{{ t('Die Aufnahme', 'The recording') }}" loading="lazy">
+</section>
+
+{% if upload.state == 'failed' and upload.track_px %}
+<form method="post" action="/nachreichen/{{ device.id }}/{{ upload.id }}/zeit" class="card stack">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+  <h2>{{ t('Zeit ändern und erneut prüfen', 'Change the time and check again') }}</h2>
+  <div class="search-row">
+    <label>{{ t('Mitte der Belichtung (Ortszeit)', 'Middle of the exposure (local time)') }}<input type="datetime-local" step="1" name="taken" value="{{ local.strftime('%Y-%m-%dT%H:%M:%S') }}" required></label>
+    <label>{{ t('Zeitzone', 'Time zone') }}<select name="zone">{% for z in zones %}<option value="{{ z }}"{% if z == zone %} selected{% endif %}>{{ z }}</option>{% endfor %}</select></label>
+    <label class="narrow">{{ t('Belichtung (s)', 'Exposure (s)') }}<input name="exposure_s" type="number" min="0.001" max="120" step="any" value="{{ upload.exposure_s }}" required></label>
+  </div>
+  <button type="submit" class="secondary">{{ t('Erneut prüfen', 'Check again') }}</button>
+</form>
+{% endif %}
+
+<form method="post" action="/nachreichen/{{ device.id }}/{{ upload.id }}/loeschen" class="card stack">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+  <p class="muted small">{{ t('Löschen nimmt die Aufnahme und jede Bahn, die nur durch sie bestand, sofort heraus.', 'Deleting removes the recording and every path that only it made at once.') }}</p>
+  <button type="submit" class="secondary">{{ t('Löschen', 'Delete') }}</button>
+</form>
+{% endblock %}

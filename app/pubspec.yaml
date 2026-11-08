@@ -58,7 +58,7 @@ dependencies:
   firebase_core: ^5.1.0
   firebase_messaging: ^17.0.1
   # A fireball's frame from Files or Downloads, name and bytes unchanged (SPEC §10.8), MIT.
-  file_picker: ^13.3.2
+  file_picker: 13.2.0
 
 dev_dependencies:
   flutter_test:
@@ -136,3 +136,14 @@ flutter:
   #
   # For details regarding fonts from package dependencies,
   # see https://flutter.dev/to/font-from-package
+
+# file_picker's platform packages at releases at least two weeks old when it was added
+# (allsky's review of #425, 2026-11-08: the family was released anew on 2026-11-02).
+dependency_overrides:
+  android_file_picker: 2.1.1
+  file_picker_darwin: 2.3.4
+  # 2.0.1 and 2.0.2 need dbus 0.8, geolocator_linux 0.7; the app has no Linux build.
+  file_picker_linux: 2.0.0
+  file_picker_platform_interface: 4.2.0
+  file_picker_web: 4.2.0
+  windows_file_picker: 2.0.1

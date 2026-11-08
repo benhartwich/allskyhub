@@ -117,7 +117,7 @@ async def fcm_app(
               "ios_api_key": ios_api_key}  # fmt: skip
     packages = {
         admin_stores.PACKAGE: "",
-        **{a.package: a.key for a in admin_stores.OTHER_APPS.values()},
+        **{a.package: a.key for a in admin_stores.OTHER_APPS.values() if a.stores},
     }
     found: dict[str, dict[str, str]] = {}  # package -> identifiers from the files
     try:
@@ -255,7 +255,11 @@ async def other_app(
     """A further iOS app on the same accounts (admin/stores.py ``OTHER_APPS``)."""
     admin_only(session, settings)
     other = admin_stores.OTHER_APPS.get(app)
-    if other is None or action not in ("setup", "build", "android", "play", "appstore"):
+    if (
+        other is None
+        or not other.stores
+        or action not in ("setup", "build", "android", "play", "appstore")
+    ):
         return await page(request, db, session, 400, error="Unbekannte App.")
     stores: admin_stores.Stores = request.app.state.stores
     if action in ("play", "appstore"):
@@ -300,7 +304,7 @@ async def submit_review(
     """Submit to the stores' review: Apple's App Store, Google Play's production."""
     admin_only(session, settings)
     other = admin_stores.OTHER_APPS.get(app) if app else None
-    if (app and other is None) or store not in ("appstore", "play"):
+    if (app and (other is None or not other.stores)) or store not in ("appstore", "play"):
         return await page(request, db, session, 400, error="Unbekannte App oder Store.")
     stores: admin_stores.Stores = request.app.state.stores
     if store == "play":

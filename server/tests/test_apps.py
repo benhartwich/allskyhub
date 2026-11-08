@@ -337,7 +337,7 @@ async def test_vinventory_test_apk(
     monkeypatch.setattr(settings, "admin_emails", email)
     page = await client.get("/admin/apps")
     assert "Test-APK" in page.text
-    assert page.text.count('value="build-test-apk"') == 1  # Vinventory only
+    assert page.text.count('value="build-test-apk"') == 2  # Vinventory and Wichtl
     token = csrf_from(page.text)
     r = await client.post(
         follow_redirects=True,
@@ -386,6 +386,67 @@ async def test_vinventory_test_apk(
     # A latest.json naming another file is not served.
     (done / "latest.json").write_text(json.dumps({**latest, "file": "../store/play.secret"}))
     assert (await client.get("/download/vinventory-test.apk")).status_code == 404
+
+
+async def test_wichtl_only_a_test_apk(
+    app: FastAPI,
+    client: httpx.AsyncClient,
+    settings: Settings,
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    """Benjamin, 2026-11-08: Wichtl has only its test APK, no store; the app reads
+    /download/wichtl-test.json for its update notice."""
+    hub = stores.Stores(
+        tmp_path / "store", "benhartwich/allskyhub", release_out=tmp_path / "release"
+    )
+    monkeypatch.setattr(app.state, "stores", hub)
+    email = await make_account(client)
+    monkeypatch.setattr(settings, "admin_emails", email)
+    page = await client.get("/admin/apps")
+    card = page.text.split('id="app-wichtl"', 1)[1].split("</section>\n", 1)[0]
+    assert "Nur Test-APK" in card
+    assert 'value="build-test-apk"' in card
+    assert 'value="setup"' not in card
+    assert 'value="build-android"' not in card
+    token = csrf_from(page.text)
+    for action in ("setup", "build-ios", "apk"):
+        r = await client.post(
+            "/admin/apps", follow_redirects=True,
+            data={"csrf_token": token, "app": "wichtl", "action": action},
+        )  # fmt: skip
+        assert "nur die Test-APK" in r.text
+    r = await client.post(
+        "/admin/apps", follow_redirects=True,
+        data={"csrf_token": token, "app": "wichtl", "action": "build-test-apk"},
+    )  # fmt: skip
+    assert "baut die Test-APK" in r.text
+    request = (tmp_path / "android-release" / "request").read_text()
+    assert request.startswith("app=wichtl-test\n")
+    wichtl = stores.OTHER_APPS["wichtl"]
+    with pytest.raises(stores.StoreError):  # the script would build allskyhub's
+        hub.request_android(email, wichtl)
+    with pytest.raises(stores.StoreError):
+        await hub.build("ios", email, app=wichtl)
+
+    assert (await client.get("/download/wichtl-test.json")).status_code == 404  # none yet
+    (tmp_path / "android-release" / "request").unlink()
+    done = tmp_path / "release-wichtl-test"
+    done.mkdir()
+    (done / "state").write_text("ok\n")
+    (done / "wichtl-test-7.apk").write_bytes(b"PK\x03\x04test")
+    latest = {"build": 7, "version": "0.1.0", "commit": "abc1234",
+              "built_at": "2026-11-08T12:00:00Z", "size": 8, "sha256": "00",
+              "file": "wichtl-test-7.apk"}  # fmt: skip
+    (done / "latest.json").write_text(json.dumps(latest))
+    r = await client.get("/download/wichtl-test.json")
+    assert r.status_code == 200
+    assert r.json() == latest | {"url": "/download/wichtl-test.apk"}
+    r = await client.get("/download/wichtl-test.apk")
+    assert r.content == b"PK\x03\x04test"
+    assert (await client.get("/download/bortle-test.json")).status_code == 404
+    (done / "latest.json").write_text(json.dumps({**latest, "file": "../x.apk"}))
+    assert (await client.get("/download/wichtl-test.json")).status_code == 404
 
 
 async def test_a_flash_only_for_its_session(

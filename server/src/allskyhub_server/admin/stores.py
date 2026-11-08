@@ -197,6 +197,9 @@ class OtherApp:
     # <package>.test beside the store app, signed with a key of the server, public at
     # /download/<key>-test.apk (Benjamin, 2026-10-29: Google's universal APK sends to Play).
     test_apk: bool = False
+    # False: nothing in the stores, only the test APK (Wichtl, Benjamin 2026-11-08: no
+    # store before 2027); Apple, Google Play and Codemagic are never asked for it.
+    stores: bool = True
     # App Store age-rating answers other than "none"/"no" (appstore.AGE_RATING).
     age_rating: dict[str, Any] = field(default_factory=dict[str, Any])
     # The folders whose commits change the app (admin/apps.py, "N neue Commits"); empty:
@@ -294,6 +297,26 @@ OTHER_APPS = {
     ),
     # Benjamin, 2026-10-30: the Currywurst Test app (Flutter, private repository) on the
     # same accounts and keys; Android built on the hub's server (app=currywursttest).
+    # Benjamin, 2026-11-08: Wichtl (Flutter in app/ of a private repository), for now only
+    # its test APK built here (app=wichtl-test), read at /download/wichtl-test.json.
+    "wichtl": OtherApp(
+        key="wichtl",
+        title="Wichtl",
+        package="eu.webinx.wichtl",
+        name="Wichtl",
+        repo="benhartwich/wichtl-app",
+        codemagic_name="",
+        group="",
+        contact_email="support@webinx.eu",
+        website="https://wichtl.eu",
+        privacy_url="https://wichtl.eu/datenschutz",
+        version_file="app/pubspec.yaml",
+        private=True,
+        test_apk=True,
+        stores=False,
+        app_paths=("app",),
+        capabilities=(),
+    ),
     "currywursttest": OtherApp(
         key="currywursttest",
         title="Currywurst Test",
@@ -1442,6 +1465,8 @@ class Stores:
         self, platform: str, by: str, branch: str = "main", app: OtherApp | None = None
     ) -> str:
         """Start a release build; the build id (Codemagic's, or "local")."""
+        if app is not None and not app.stores:
+            raise StoreError(f"{app.title} kommt nicht in die Stores, nur die Test-APK.")
         if platform == "screenshots" and app is not None and not app.screenshots:
             raise StoreError("Diese App macht noch keine Screenshots bei Codemagic.")
         if platform == "android":
@@ -1611,6 +1636,9 @@ class Stores:
     def request_android(self, by: str, app: OtherApp | None = None) -> None:
         """Leave a request for the root helper (allskyhub-android-release.path); for a
         further app its first line is ``app=<key>``. One build at a time."""
+        if app is not None and not app.stores:
+            # The build script knows no store build of it and would build allskyhub's.
+            raise StoreError(f"{app.title} kommt nicht in die Stores, nur die Test-APK.")
         if not self.vault.has(app.android_upload if app else "android_upload"):
             raise StoreError("Erst „Prüfen und einrichten“, dann bauen.")
         if self.android_busy():

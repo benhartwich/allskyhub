@@ -8,7 +8,8 @@ Public: the app is open source, and Android installs an update only with the sam
 
 ``/download/<app>.apk`` is the store app itself: Google's universal APK of the newest App
 Bundle, fetched on the admin's app page (Stores.fetch_apk), public as Benjamin chose
-(2026-10-29).
+(2026-10-29). ``/download/<app>-test.apk`` and ``-test.json`` are a further app's test APK
+built here and its facts.
 """
 
 from __future__ import annotations
@@ -87,6 +88,20 @@ async def test_apk(request: Request, name: str, settings: SettingsDep) -> Respon
         filename=name,
         headers={"Cache-Control": "public, max-age=86400, immutable"},
     )
+
+
+@router.get("/download/{key}-test.json")
+async def other_test_build(request: Request, key: str) -> Response:
+    """A further app's test APK (OtherApp.test_apk), for its update notice: the build
+    script's latest.json and where the APK is (Wichtl, 2026-11-08)."""
+    stores: admin_stores.Stores = request.app.state.stores
+    app = admin_stores.OTHER_APPS.get(key)
+    info = stores.test_job(app).latest if app is not None and app.test_apk else None
+    if info is None:
+        raise HTTPException(404)
+    keys = ("build", "version", "commit", "built_at", "size", "sha256", "file")
+    body = {k: info.get(k) for k in keys} | {"url": f"/download/{key}-test.apk"}
+    return JSONResponse(body, headers={"Cache-Control": "no-cache"})
 
 
 @router.get("/download/{key}.apk")

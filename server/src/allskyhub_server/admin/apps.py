@@ -140,6 +140,7 @@ class Card:
     # is not entered yet, else its login (OtherApp.review_vars).
     review_login: str | None = None
     review_at: str = ""  # when the demo account was saved
+    stores: bool = True  # False: only the test APK (OtherApp.stores)
 
     @property
     def waiting(self) -> bool:
@@ -179,6 +180,20 @@ async def refresh_live(stores: Stores) -> None:
         for app in (None, *OTHER_APPS.values()):
             key = app.key if app else "allskyhub"
             found: dict[str, Any] = {"at": _now()}
+            if app is not None and not app.stores:
+                # Only the test APK: main's commits since its last build, nothing else.
+                built = str((stores.test_job(app).latest or {}).get("built_at", ""))
+                since = (_when(built) or dt.datetime.now(dt.UTC)) - dt.timedelta(
+                    days=1 if built else COMMITS_DEFAULT_DAYS
+                )
+                try:
+                    found["commits"] = await main_commits(
+                        client, stores, app, since.isoformat(timespec="seconds")
+                    )
+                except (StoreError, httpx.HTTPError, KeyError, ValueError) as exc:
+                    log.info("main's commits of %s: %s", key, exc)
+                stores.vault.write_json(live_file(key), found)
+                continue
             if stores.vault.has("asc"):
                 try:
                     found["apple"] = await appstore.live(
@@ -603,6 +618,21 @@ def ios_row(
     return ios_steps(codemagic, build, pushed, review, apple, version).row
 
 
+def _test_only(stores: Stores, app: OtherApp, card: Card) -> Card:
+    """The card of an app with only a test APK: its build and main's commits since."""
+    card.stores, card.android = False, None
+    card.test = stores.test_job(app)
+    latest = card.test.latest or {}
+    card.version = str(latest.get("version") or card.version)
+    live = live_of(stores, app.key)
+    card.live_at = str(live.get("at", ""))
+    commits = cast(list[dict[str, str]] | None, live.get("commits"))
+    card.pending = {
+        "test": pending(commits, str(latest.get("commit", "")), str(latest.get("built_at", "")))
+    }
+    return card
+
+
 async def cards(stores: Stores, only: str | None = None) -> list[Card]:
     """Every app's card, or only the one with the key ``only`` (a card polling itself)."""
     builds = await stores.recent_builds(limit=10)
@@ -622,6 +652,9 @@ async def cards(stores: Stores, only: str | None = None) -> list[Card]:
             saved = stores.vault.meta(app.review) or {}
             card.review_login = str(saved.get("login", ""))
             card.review_at = str(saved.get("at", ""))
+        if app is not None and not app.stores:
+            out.append(_test_only(stores, app, card))
+            continue
         latest_file = str((job.latest or {}).get("file", ""))
         live = live_of(stores, key)
         card.live_at = str(live.get("at", ""))

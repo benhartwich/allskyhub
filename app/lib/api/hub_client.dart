@@ -7,8 +7,10 @@ import 'dart:typed_data';
 import 'package:http/http.dart' as http;
 
 import '../l10n.dart';
+import 'late_fireballs.dart';
 import 'test_update.dart';
 
+export 'late_fireballs.dart';
 export 'test_update.dart' show TestBuild;
 
 /// Default hub (SPEC §2); self-hosters enter their own URL at login.
@@ -2063,6 +2065,81 @@ extension Stations on HubClient {
 
   Uri stationImageUrl(String id, {int? bust}) =>
       _uri('/stations/$id/image.jpg', {if (bust != null) 't': '$bust'});
+
+  // Fireballs sent later (SPEC §10.8), for a station or a camera of one's own.
+
+  Future<LateFireballs> lateFireballs(String deviceId) async =>
+      LateFireballs.fromJson(
+        await _send('GET', '/devices/$deviceId/late') as Map<String, dynamic>,
+      );
+
+  /// [taken] is the mid-exposure as a wall clock in [zone] (an IANA name).
+  Future<LateFireball> sendLateFireball(
+    String deviceId, {
+    required List<int> image,
+    required String imageName,
+    required DateTime taken,
+    required String zone,
+    required double exposureS,
+  }) async {
+    final request =
+        http.MultipartRequest('POST', _uri('/devices/$deviceId/late'))
+          ..fields.addAll({
+            'taken': wallClock(taken),
+            'zone': zone,
+            'exposure_s': '$exposureS',
+          })
+          ..files.add(
+            http.MultipartFile.fromBytes('image', image, filename: imageName),
+          );
+    return LateFireball.fromJson(
+      await _sendMultipart(request) as Map<String, dynamic>,
+    );
+  }
+
+  Future<LateFireball> lateFireball(String deviceId, String id) async =>
+      LateFireball.fromJson(
+        await _send('GET', '/devices/$deviceId/late/$id')
+            as Map<String, dynamic>,
+      );
+
+  Uri lateImageUrl(String deviceId, String id) =>
+      _uri('/devices/$deviceId/late/$id/image.jpg');
+
+  Future<LateFireball> setLateTrack(
+    String deviceId,
+    String id,
+    List<List<double>> track,
+  ) async => LateFireball.fromJson(
+    await _send(
+          'POST',
+          '/devices/$deviceId/late/$id/track',
+          body: {'track': track},
+        )
+        as Map<String, dynamic>,
+  );
+
+  Future<LateFireball> setLateTime(
+    String deviceId,
+    String id, {
+    required DateTime taken,
+    required String zone,
+    required double exposureS,
+  }) async => LateFireball.fromJson(
+    await _send(
+          'POST',
+          '/devices/$deviceId/late/$id/time',
+          body: {
+            'taken': wallClock(taken),
+            'zone': zone,
+            'exposure_s': exposureS,
+          },
+        )
+        as Map<String, dynamic>,
+  );
+
+  Future<void> deleteLateFireball(String deviceId, String id) =>
+      _send('DELETE', '/devices/$deviceId/late/$id');
 
   /// Null from an older hub (404) or offline: the app then asks for access as before.
   Future<HubInfo?> hubInfo() async {

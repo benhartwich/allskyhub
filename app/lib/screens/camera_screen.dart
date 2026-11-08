@@ -10,6 +10,7 @@ import '../platform/location.dart';
 import '../platform/sky_widget.dart';
 import 'camera_settings_screen.dart';
 import 'camera_status.dart';
+import 'late_fireball_screens.dart';
 import 'manage_screens.dart';
 import 'measurements_screen.dart';
 import 'sky_view_screen.dart';
@@ -447,6 +448,20 @@ class _CameraScreenState extends State<CameraScreen> {
                     onPressed: () => _open(
                       () =>
                           DiscordScreen(client: widget.client, camera: _camera),
+                    ),
+                  ),
+                  OutlinedButton.icon(
+                    key: const Key('open-late'),
+                    icon: const Icon(Icons.auto_awesome),
+                    label: Text(
+                      tr('Feuerkugel nachreichen', 'Send a fireball later'),
+                    ),
+                    onPressed: () => _open(
+                      () => LateFireballsScreen(
+                        client: widget.client,
+                        deviceId: _camera.id,
+                        name: _camera.name,
+                      ),
                     ),
                   ),
                   OutlinedButton.icon(

@@ -5,11 +5,9 @@ admin's list to hide one. The check itself runs in the background
 
 from __future__ import annotations
 
-import asyncio
 import datetime as dt
 import json
 import uuid
-import zoneinfo
 from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile
@@ -31,10 +29,10 @@ from allskyhub_server.web.routes_admin import admin_only
 
 router = APIRouter(dependencies=[Depends(csrf_protect)])
 
-ZONES = sorted(zoneinfo.available_timezones() - {"Factory", "localtime"})
+ZONES = late_fireballs.ZONES
 
 
-def _refused(what: str) -> str:
+def refused(what: str) -> str:
     """The words for an upload refused at once (LateError)."""
     words = {
         "too_large": tr("Das Bild ist größer als 8 MB.", "The image is larger than 8 MB."),
@@ -84,7 +82,7 @@ def reason_text(reason: str | None, check: dict[str, Any]) -> str:
         "about 0.5°) or the camera was moved since.",
     )
     words = {
-        "no_orientation": _refused("no_orientation"),
+        "no_orientation": refused("no_orientation"),
         "size": tr(
             "Die Kamera liefert inzwischen Bilder anderer Größe.",
             "The camera sends images of another size by now.",
@@ -143,19 +141,6 @@ async def _upload(db: AsyncSession, device: Device, upload_id: uuid.UUID) -> Lat
 
 def _back(device: Device) -> str:
     return f"/stationen/{device.id}" if device.kind == "station" else f"/cameras/{device.id}"
-
-
-def _local_time(value: str, zone: str) -> dt.datetime:
-    """The owner's local mid-exposure in UTC."""
-    if zone not in ZONES:
-        raise LateError("time")
-    try:
-        local = dt.datetime.fromisoformat(value)
-    except ValueError as exc:
-        raise LateError("time") from exc
-    if local.tzinfo is not None:
-        raise LateError("time")
-    return local.replace(tzinfo=zoneinfo.ZoneInfo(zone)).astimezone(dt.UTC)
 
 
 async def _list_page(
@@ -218,32 +203,15 @@ async def send(
     store: ImageStore = request.app.state.images
     form = {"taken": taken, "zone": zone, "exposure_s": exposure_s}
     try:
-        sizes = await late_fireballs.frame_sizes(db, device)
-        if not sizes:
-            raise LateError("no_orientation")
-        at = _local_time(taken, zone)
-        late_fireballs.check_time(at, exposure_s, now)
-        data = late_fireballs.as_jpeg(await image.read(late_fireballs.MAX_BYTES + 1))
-        size = await asyncio.to_thread(late_fireballs.image_size, data)
-        if size not in sizes:
-            raise LateError("size")
-        await late_fireballs.count(request.app.state.engine, device, "upload")
+        at = late_fireballs.local_time(taken, zone)
+        raw = await image.read(late_fireballs.MAX_BYTES + 1)
+        upload = await late_fireballs.create(
+            db, request.app.state.engine, store, device, raw, at, exposure_s, now
+        )
     except LateError as exc:
         return await _list_page(
-            request, db, session, device, 400, error=_refused(exc.what), form=form
+            request, db, session, device, 400, error=refused(exc.what), form=form
         )
-    upload = LateFireball(
-        device_id=device.id,
-        taken_at=at,
-        exposure_s=exposure_s,
-        track_px=[],
-        width=size[0],
-        height=size[1],
-    )
-    db.add(upload)
-    await db.flush()
-    await asyncio.to_thread(store.save_late, device.id, str(upload.id), data)
-    await db.commit()
     return RedirectResponse(f"/nachreichen/{device.id}/{upload.id}", status_code=303)
 
 
@@ -319,11 +287,11 @@ async def set_track(
             raise LateError("track")
         upload.track_px = late_fireballs.check_track(points, upload.width, upload.height)  # pyright: ignore[reportUnknownArgumentType]
     except (ValueError, TypeError, LateError):
-        return flash.redirect(request, session, back, 400, {"error": _refused("track")})
+        return flash.redirect(request, session, back, 400, {"error": refused("track")})
     try:
         await _recheck(request, db, device, upload)
     except LateError as exc:
-        return flash.redirect(request, session, back, 429, {"error": _refused(exc.what)})
+        return flash.redirect(request, session, back, 429, {"error": refused(exc.what)})
     return RedirectResponse(back, status_code=303)
 
 
@@ -345,14 +313,14 @@ async def set_time(
     if upload.state != "failed" or not upload.track_px:
         raise HTTPException(409)
     try:
-        at = _local_time(taken, zone)
+        at = late_fireballs.local_time(taken, zone)
         late_fireballs.check_time(at, exposure_s, dt.datetime.now(dt.UTC))
     except LateError as exc:
-        return flash.redirect(request, session, back, 400, {"error": _refused(exc.what)})
+        return flash.redirect(request, session, back, 400, {"error": refused(exc.what)})
     try:
         await _recheck(request, db, device, upload, at, exposure_s)
     except LateError as exc:
-        return flash.redirect(request, session, back, 429, {"error": _refused(exc.what)})
+        return flash.redirect(request, session, back, 429, {"error": refused(exc.what)})
     return RedirectResponse(back, status_code=303)
 
 
@@ -364,13 +332,10 @@ async def _recheck(
     taken: dt.datetime | None = None,
     exposure_s: float | None = None,
 ) -> None:
-    """Counts the check (``LateError`` past the day's), then starts it."""
-    await late_fireballs.count(request.app.state.engine, device, "check")
-    if taken is not None and exposure_s is not None:
-        upload.taken_at, upload.exposure_s = taken, exposure_s
-    upload.state, upload.reason, upload.check = "checking", None, {}
-    await db.commit()
-    late_fireballs.start(request.app.state.sessionmaker, request.app.state.images, upload.id)
+    state = request.app.state
+    await late_fireballs.recheck(
+        db, state.engine, state.sessionmaker, state.images, device, upload, taken, exposure_s
+    )
 
 
 @router.post("/nachreichen/{device_id}/{upload_id}/loeschen")

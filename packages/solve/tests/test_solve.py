@@ -14,7 +14,7 @@ from allskyhub_solve.solve import catalogue, project, unproject
 
 H, W = 1080, 1920
 AT = datetime(2026, 10, 7, 21, 1, tzinfo=UTC)
-LAT, LON = 47.5, 12.3  # an invented place
+LAT, LON = 47.5, 2.3  # an invented place
 TRUE = [985.0, 532.0, 1005.0, -130.0, 18.2, 0.0, 0.0]
 FLIP = -1.0
 

@@ -63,7 +63,7 @@ def _auth(station_id: str, secret: str) -> dict[str, str]:
 
 def _station_body(**changes: Any) -> dict[str, Any]:
     return {
-        "name": "Sternwarte Musterberg", "latitude": 48.3, "longitude": 14.29,
+        "name": "Sternwarte Musterberg", "latitude": 48.3, "longitude": 4.29,
         "elevation_m": 300, "software": "MySky", "software_version": "1.2",
         "lens": {"focal_mm": 1.55, "f_ratio": 2.0, "projection": "equidistant"},
         "width": W, "height": H, "clock_synced": True, **changes,
@@ -133,7 +133,7 @@ async def test_open_api(
         device = await db.get(Device, station_id)
         assert device is not None
         assert device.last_status is not None
-        assert device.last_status["settings"] == {"latitude": 48.3, "longitude": 14.29,
+        assert device.last_status["settings"] == {"latitude": 48.3, "longitude": 4.29,
                                                   "elevation_m": 300}  # fmt: skip
         assert device.last_status["station"]["width"] == W
 
@@ -366,7 +366,7 @@ async def test_indi_allsky(
     maker: async_sessionmaker[AsyncSession] = app.state.sessionmaker
     station_id, secret = await _station(app, client, "indi-allsky")
     camera = json.dumps({
-        "type": 1, "uuid": "abc", "name": "ZWO ASI178MC", "latitude": 47.8, "longitude": 13.04,
+        "type": 1, "uuid": "abc", "name": "ZWO ASI178MC", "latitude": 47.8, "longitude": 3.04,
         "elevation": 430, "lensFocalLength": 1.55, "lensFocalRatio": 2.0, "width": 3096,
         "height": 2080,
     }).encode()  # fmt: skip
@@ -464,7 +464,7 @@ async def test_remove_station(app: FastAPI, client: httpx.AsyncClient) -> None:
         assert device is not None
         assert device.owner_id is not None
         assert await queries.owned(db, device.owner_id) == []  # no camera pages for it
-        device.last_status = {"settings": {"latitude": 48.3, "longitude": 14.29}}
+        device.last_status = {"settings": {"latitude": 48.3, "longitude": 4.29}}
         db.add(EventRecord(device_id=station_id, event_id="meteor-20261105T210000Z",
                            night_id="20261105", kind="meteor", start=dt.datetime.now(dt.UTC),
                            end=dt.datetime.now(dt.UTC), confidence=1.0, has_image=True,

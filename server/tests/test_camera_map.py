@@ -97,8 +97,8 @@ class _FakeServices:
     def __call__(self, request: httpx.Request) -> httpx.Response:
         self.paths.append(request.url.path)
         if request.url.host == "nominatim.openstreetmap.org":
-            assert request.url.params["q"] == "Linz"
-            place = {"display_name": "Linz, Oberösterreich", "lat": "48.3", "lon": "14.29",
+            assert request.url.params["q"] == "Nordheim"
+            place = {"display_name": "Nordheim, Musterland", "lat": "48.3", "lon": "4.29",
                      "boundingbox": ["50.1", "50.3", "14.2", "10.4"]}  # fmt: skip
             return httpx.Response(200, json=[place])
         return httpx.Response(200, content=b"\x89PNG fake tile")
@@ -117,10 +117,10 @@ async def test_tiles_and_search_through_the_hub(tmp_path: Path) -> None:
     assert await tiles.tile("satellit", 3, 1, 2) is not None
     assert fake.paths[-1].endswith("/g/3/2/1.jpg")  # EOX: row before column
 
-    places = await tiles.search("  Linz ")
-    assert places == [{"name": "Linz, Oberösterreich", "lat": 48.3, "lon": 14.29,
+    places = await tiles.search("  Nordheim ")
+    assert places == [{"name": "Nordheim, Musterland", "lat": 48.3, "lon": 4.29,
                        "bbox": [50.1, 50.3, 14.2, 10.4]}]  # fmt: skip
-    assert await tiles.search("linz") == places  # cached, no second request
+    assert await tiles.search("nordheim") == places  # cached, no second request
     assert fake.paths.count("/search") == 1
     assert await tiles.search("x") == []
 

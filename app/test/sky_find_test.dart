@@ -131,15 +131,15 @@ void main() {
       MaterialApp(
         home: SkyViewScreen(
           client: client,
-          load: () => client.publicSkyView(48.1, 14.4),
-          place: 'Linz',
+          load: () => client.publicSkyView(48.1, 4.4),
+          place: 'Nordheim',
           poseSource: _FixedPose(),
           useCamera: false,
         ),
       ),
     );
     await tester.pumpAndSettle();
-    expect(find.textContaining('Linz'), findsOneWidget);
+    expect(find.textContaining('Nordheim'), findsOneWidget);
     // No meteors or overflights without a camera.
     expect(find.byKey(const Key('sky-toggle-overflights')), findsNothing);
 

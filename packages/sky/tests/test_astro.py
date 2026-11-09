@@ -6,7 +6,7 @@ import datetime as dt
 
 from allskyhub_sky import astro
 
-VIENNA = (48.2, 16.4)
+PLACE = (48.2, 6.4)
 
 
 def test_moon_phase() -> None:
@@ -19,18 +19,18 @@ def test_bright_moon_up() -> None:
     # Full moon on 26 October 2026: up around local midnight, below the horizon at noon.
     midnight = dt.datetime(2026, 10, 25, 23, 0, tzinfo=dt.UTC)
     noon = dt.datetime(2026, 10, 26, 11, 0, tzinfo=dt.UTC)
-    assert astro.moon_altitude(midnight, *VIENNA) > 30
-    assert astro.bright_moon_up(midnight, *VIENNA)
-    assert not astro.bright_moon_up(noon, *VIENNA)
+    assert astro.moon_altitude(midnight, *PLACE) > 30
+    assert astro.bright_moon_up(midnight, *PLACE)
+    assert not astro.bright_moon_up(noon, *PLACE)
     # New moon: never bright, even when it is up.
     new = dt.datetime(2026, 10, 10, 11, 0, tzinfo=dt.UTC)
-    assert astro.moon_altitude(new, *VIENNA) > 0
-    assert not astro.bright_moon_up(new, *VIENNA)
+    assert astro.moon_altitude(new, *PLACE) > 0
+    assert not astro.bright_moon_up(new, *PLACE)
 
 
 def test_sun() -> None:
     noon = dt.datetime(2026, 6, 21, 11, 0, tzinfo=dt.UTC)
-    assert 63 < astro.sun_altitude(noon, *VIENNA) < 66
+    assert 63 < astro.sun_altitude(noon, *PLACE) < 66
 
 
 def test_sun_radec() -> None:

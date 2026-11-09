@@ -23,7 +23,7 @@ const current = {
 class PhoneAt implements LocationSource {
   @override
   Future<LocationResult> current() async =>
-      LocationResult.found(CameraLocation(47.81, 13.05));
+      LocationResult.found(CameraLocation(47.81, 3.05));
 
   @override
   Future<String?> timezone() async => 'Europe/Berlin';
@@ -286,7 +286,7 @@ void main() {
       await tester.pumpAndSettle();
       expect(sent.single, {
         'latitude': 47.81,
-        'longitude': 13.05,
+        'longitude': 3.05,
         'timezone': 'Europe/Berlin',
       });
       expect(find.textContaining('Gespeichert'), findsOneWidget);

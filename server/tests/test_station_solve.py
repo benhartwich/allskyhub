@@ -28,8 +28,8 @@ from tests.helpers import make_account
 
 H, W = 1080, 1920
 AT = dt.datetime(2026, 10, 7, 21, 1, tzinfo=dt.UTC)
-LINZ = (48.30, 14.29)
-SALZBURG = (47.80, 13.04)
+NORDHEIM = (48.30, 4.29)
+SUEDTAL = (47.80, 3.04)
 TRUE = [985.0, 532.0, 1005.0, -130.0, 18.2, 0.0, 0.0]
 FLIP = -1.0
 
@@ -113,17 +113,16 @@ async def test_station_is_oriented(
     background, and then asks no more; at most three tries a night."""
     maker: async_sessionmaker[AsyncSession] = app.state.sessionmaker
     monkeypatch.setattr(station_solve, "sun_altitude", _sun(10.0))  # daylight
-    station_id, auth = await _station(app, client, LINZ)
-    r = await client.put("/api/connect/v1/station", json={"name": "S", "latitude": LINZ[0],
-                         "longitude": LINZ[1], "width": W, "height": H}, headers=auth)  # fmt: skip
+    station_id, auth = await _station(app, client, NORDHEIM)
+    body = {"name": "S", "latitude": NORDHEIM[0], "longitude": NORDHEIM[1], "width": W, "height": H}
+    r = await client.put("/api/connect/v1/station", json=body, headers=auth)
     assert r.json()["want_full_frame"] is False
     monkeypatch.setattr(station_solve, "sun_altitude", _sun(-30.0))  # night
-    r = await client.put("/api/connect/v1/station", json={"name": "S", "latitude": LINZ[0],
-                         "longitude": LINZ[1], "width": W, "height": H}, headers=auth)  # fmt: skip
+    r = await client.put("/api/connect/v1/station", json=body, headers=auth)
     assert r.json() == {"orientation": None, "want_full_frame": True}
 
     meta = {"time": AT.isoformat(), "exposure_s": 30, "night": True, "clock_synced": True}
-    r = await client.post("/api/connect/v1/frames", files=_files(meta, _render(*LINZ)),
+    r = await client.post("/api/connect/v1/frames", files=_files(meta, _render(*NORDHEIM)),
                           headers=auth)  # fmt: skip
     assert r.status_code == 200
     await _settle()
@@ -143,7 +142,7 @@ async def test_station_is_oriented(
     assert r.json() == {"want_full_frame": False}  # oriented: no more full frames
 
     # A sky the solver cannot use: three tries tonight, then no more asking.
-    other_id, other = await _station(app, client, SALZBURG)
+    other_id, other = await _station(app, client, SUEDTAL)
     answers: list[bool] = []
     for i in range(4):
         meta["time"] = (AT + dt.timedelta(minutes=10 + i)).isoformat()
@@ -184,11 +183,11 @@ async def test_two_stations_pair(app: FastAPI, client: httpx.AsyncClient) -> Non
     """Oriented stations with trusted clocks: a meteor seen by both is triangulated; one sent
     before its station was oriented gets its directions afterwards."""
     maker: async_sessionmaker[AsyncSession] = app.state.sessionmaker
-    top, bottom = t.ecef(47.95, 13.80, 95.0), t.ecef(47.80, 13.95, 75.0)
+    top, bottom = t.ecef(47.95, 3.80, 95.0), t.ecef(47.80, 3.95, 75.0)
     now = dt.datetime.now(dt.UTC)
     ids: list[str] = []
     auths: list[dict[str, str]] = []
-    for place in (LINZ, SALZBURG):
+    for place in (NORDHEIM, SUEDTAL):
         station_id, auth = await _station(app, client, place)
         ids.append(station_id)
         auths.append(auth)
@@ -211,17 +210,17 @@ async def test_two_stations_pair(app: FastAPI, client: httpx.AsyncClient) -> Non
                 "end": (start + dt.timedelta(seconds=30)).isoformat(), "peak": 0.9,
                 "track": track(place), "clock_synced": True}  # fmt: skip
 
-    # Linz is oriented first; Salzburg's meteor arrives before Salzburg is.
+    # Nordheim is oriented first; Südtal's meteor arrives before Südtal is.
     async with maker() as db:
-        linz = await db.get(Device, ids[0])
-        assert linz is not None
-        linz.last_status = {**(linz.last_status or {}),
+        nordheim = await db.get(Device, ids[0])
+        assert nordheim is not None
+        nordheim.last_status = {**(nordheim.last_status or {}),
                             "orientation": station_solve.to_orientation(_true(), now)}  # fmt: skip
         await db.commit()
-    r = await client.post("/api/connect/v1/events", files=_files(event(LINZ, 0), _blank()),
+    r = await client.post("/api/connect/v1/events", files=_files(event(NORDHEIM, 0), _blank()),
                           headers=auths[0])  # fmt: skip
     assert r.status_code == 200
-    later = _files(event(SALZBURG, 10), _blank())
+    later = _files(event(SUEDTAL, 10), _blank())
     r = await client.post("/api/connect/v1/events", files=later, headers=auths[1])
     assert r.status_code == 200
     async with maker() as db:

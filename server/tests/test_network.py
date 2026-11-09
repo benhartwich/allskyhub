@@ -27,7 +27,7 @@ async def _stations(
     places = {
         "Sternwarte Musterberg": (49.89, 10.89),
         "Hochrhön": (50.45, 9.95),
-        "Lanzenberg": (50.25, 10.96),
+        "Hügelfeld": (50.25, 10.96),
         "Ohne Namen": (49.6, 11.0),
         "Weit weg": (53.55, 10.0),
     }
@@ -52,7 +52,7 @@ async def _nights(app: FastAPI, ids: dict[str, str]) -> None:
     """Ten clear nights; Musterberg 0.4 darker than its neighbours."""
     maker: async_sessionmaker[AsyncSession] = app.state.sessionmaker
     last = dt.date.fromisoformat(stations.night_id(NOW, 10.9))
-    base = {"Sternwarte Musterberg": 21.4, "Hochrhön": 21.1, "Lanzenberg": 20.9,
+    base = {"Sternwarte Musterberg": 21.4, "Hochrhön": 21.1, "Hügelfeld": 20.9,
             "Ohne Namen": 21.0, "Weit weg": 19.5}  # fmt: skip
     async with maker() as db:
         for name, device_id in ids.items():
@@ -99,7 +99,7 @@ async def test_part_and_network_page(
     ids = await _stations(app, client)
     await _nights(app, ids)
     maker: async_sessionmaker[AsyncSession] = app.state.sessionmaker
-    a, b, c = ids["Sternwarte Musterberg"], ids["Lanzenberg"], ids["Ohne Namen"]
+    a, b, c = ids["Sternwarte Musterberg"], ids["Hügelfeld"], ids["Ohne Namen"]
     async with maker() as db:
         pair = MeteorPair(
             device_a=min(a, b), event_a="meteor-1", device_b=max(a, b), event_b="meteor-2",
@@ -113,7 +113,7 @@ async def test_part_and_network_page(
         assert device is not None
         part = await network.part(db, device)
     assert (part.fireballs, part.meteors) == (1, 30)
-    assert [o["name"] for o in part.recent[0].others] == ["Lanzenberg", "eine Station im Netz"]
+    assert [o["name"] for o in part.recent[0].others] == ["Hügelfeld", "eine Station im Netz"]
 
     # The station's public page: "Im Netz" and the comparison.
     async with maker() as db:
@@ -142,7 +142,7 @@ async def test_part_and_network_page(
     text = net.text
     assert "Gemeinsam den Himmel vermessen" in text
     assert "4 Kameras messen mit: 0 allskyhub-Kameras und 4 SharedSky-Stationen" in text
-    for name in ("Sternwarte Musterberg", "Hochrhön", "Lanzenberg", "eine Station im Netz"):
+    for name in ("Sternwarte Musterberg", "Hochrhön", "Hügelfeld", "eine Station im Netz"):
         assert name in text
     assert "Ohne Namen" not in text
     assert "Weit weg" not in text
@@ -155,7 +155,7 @@ async def test_part_and_network_page(
         view = await network.overview(db, NOW)
     assert (view.stations, view.active, view.fireballs_month) == (4, 4, 1)
     assert sorted(p.title for p in view.points) == [
-        "Hochrhön", "Lanzenberg", "Sternwarte Musterberg", "eine Station im Netz",
+        "Hochrhön", "Hügelfeld", "Sternwarte Musterberg", "eine Station im Netz",
     ]  # fmt: skip
 
 

@@ -234,7 +234,7 @@ async def _approved_station(app: FastAPI, client: httpx.AsyncClient) -> str:
             db, user, "Gartensternwarte", "image-url", SecretKey(app.state.stores.vault)
         )
         assert secret == ""  # nothing to send, nothing to sign
-        device.last_status = {"settings": {"latitude": 48.3, "longitude": 14.29,
+        device.last_status = {"settings": {"latitude": 48.3, "longitude": 4.29,
                                            "timezone": "Europe/Vienna"}}  # fmt: skip
         db.add(StationSource(device_id=device.id, url="https://cam.example.org/image.jpg",
                              state="approved"))  # fmt: skip

@@ -12,7 +12,7 @@ import pytest
 from allskyhub_agent.adsb import AdsbReader, Tracks, apparent, match, parse
 from allskyhub_protocol import Aircraft, AircraftPosition, Event, EventKind
 
-LAT, LON = 48.0, 11.0
+LAT, LON = 48.0, 1.0
 T0 = datetime(2026, 10, 13, 21, 0, tzinfo=UTC)
 
 
@@ -24,13 +24,13 @@ def test_parse_keeps_near_fresh_positions_nearest_first() -> None:
     data = {
         "now": 0,
         "aircraft": [
-            _plane("3c6444", 48.5, 11.0, flight="DLH4AB  ", gs=450.2, track=90.0),
-            _plane("4b1805", 48.1, 11.0),
-            _plane("~1234ab", 48.1, 11.0),  # TIS-B, no ICAO address
+            _plane("3c6444", 48.5, 1.0, flight="DLH4AB  ", gs=450.2, track=90.0),
+            _plane("4b1805", 48.1, 1.0),
+            _plane("~1234ab", 48.1, 1.0),  # TIS-B, no ICAO address
             _plane("3c0001", 50.0, 11.0),  # 222 km away
-            _plane("3c0002", 48.1, 11.1, seen_pos=75),  # position too old
+            _plane("3c0002", 48.1, 1.1, seen_pos=75),  # position too old
             {"hex": "3c0003", "seen": 1},  # no position
-            _plane("3c0004", 48.2, 11.0, alt_baro="ground"),
+            _plane("3c0004", 48.2, 1.0, alt_baro="ground"),
         ],
     }
     got = parse(data, LAT, LON)

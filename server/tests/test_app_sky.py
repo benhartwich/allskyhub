@@ -20,11 +20,11 @@ ALL_SECTIONS = {f"section_{s}": "on" for s in ("live", "loop", "archive", "event
 
 async def test_three_nights_aurora_and_rounding(new_client: httpx.AsyncClient) -> None:
     r = await new_client.get(
-        "/api/v1/public/sky", params={"lat": 48.1234, "lon": 14.4567, "tz": "Europe/Vienna"}
+        "/api/v1/public/sky", params={"lat": 48.1234, "lon": 4.4567, "tz": "Europe/Vienna"}
     )
     assert r.status_code == 200, r.text
     sky = r.json()
-    assert (sky["lat"], sky["lon"], sky["tz"]) == (48.1, 14.5, "Europe/Vienna")
+    assert (sky["lat"], sky["lon"], sky["tz"]) == (48.1, 4.5, "Europe/Vienna")
     assert len(sky["nights"]) == 3
     evenings = [dt.date.fromisoformat(n["evening"]) for n in sky["nights"]]
     assert evenings[1] - evenings[0] == dt.timedelta(days=1)
@@ -91,7 +91,7 @@ async def test_nearby_camera_measures_the_sky(
 
 
 async def test_calendar_lists_what_comes(new_client: httpx.AsyncClient) -> None:
-    r = await new_client.get("/api/v1/public/calendar", params={"lat": 48.1, "lon": 14.4})
+    r = await new_client.get("/api/v1/public/calendar", params={"lat": 48.1, "lon": 4.4})
     items = r.json()["items"]
     kinds = {i["kind"] for i in items}
     assert {"new_moon", "full_moon"} <= kinds  # two months always hold both
@@ -110,7 +110,7 @@ def test_moon_phases_hit_known_dates() -> None:
 
 
 def test_distance() -> None:
-    assert round(app_sky.distance_km((48.2, 16.4), (48.3, 14.3))) == 156  # Vienna – Linz
+    assert round(app_sky.distance_km((48.2, 6.4), (48.3, 4.3))) == 156  # Ort – Nordheim
 
 
 async def test_privacy_policy_names_the_sky_tab(new_client: httpx.AsyncClient) -> None:
@@ -123,22 +123,22 @@ def test_eclipses_and_planets_at_known_dates() -> None:
     from allskyhub_server.devices import sky_events
 
     u = dt.UTC
-    # 12 Aug 2026: total in Spain, partial in Vienna, night in Sydney.
+    # 12 Aug 2026: total in Spain, partial at PLACE, night in Sydney.
     new_moon = dt.datetime(2026, 8, 12, 17, 37, tzinfo=u)
     madrid = sky_events.solar_eclipse(new_moon, 40.4, -3.7)
     assert madrid is not None
     assert abs(madrid.at - dt.datetime(2026, 8, 12, 18, 30, tzinfo=u)) < dt.timedelta(minutes=20)
-    assert sky_events.solar_eclipse(new_moon, 48.2, 16.4) is not None
+    assert sky_events.solar_eclipse(new_moon, 48.2, 6.4) is not None
     assert sky_events.solar_eclipse(new_moon, -33.9, 151.2) is None
     # A new moon without an eclipse.
-    assert sky_events.solar_eclipse(dt.datetime(2026, 11, 9, 7, 2, tzinfo=u), 48.2, 16.4) is None
+    assert sky_events.solar_eclipse(dt.datetime(2026, 11, 9, 7, 2, tzinfo=u), 48.2, 6.4) is None
     # 3 Mar 2026: total lunar eclipse at 11:33 UTC, seen in America, not in Europe.
     full = dt.datetime(2026, 3, 3, 11, 38, tzinfo=u)
     la = sky_events.lunar_eclipse(full, 34.0, -118.2)
     assert la is not None
     assert la.depth == "umbral"
-    assert sky_events.lunar_eclipse(full, 48.2, 16.4) is None
-    assert sky_events.lunar_eclipse(dt.datetime(2026, 10, 26, 4, 12, tzinfo=u), 48.2, 16.4) is None
+    assert sky_events.lunar_eclipse(full, 48.2, 6.4) is None
+    assert sky_events.lunar_eclipse(dt.datetime(2026, 10, 26, 4, 12, tzinfo=u), 48.2, 6.4) is None
     # Late October 2026: Saturn in the evening sky, Jupiter in the morning.
     found = {
         w.key: w
@@ -146,7 +146,7 @@ def test_eclipses_and_planets_at_known_dates() -> None:
             dt.datetime(2026, 10, 28, 15, 50, tzinfo=u),
             dt.datetime(2026, 10, 29, 5, 40, tzinfo=u),
             48.1,
-            14.4,
+            4.4,
         )
     }
     assert found["saturn"].start.hour < 18
@@ -155,7 +155,7 @@ def test_eclipses_and_planets_at_known_dates() -> None:
 
 
 async def test_sky_lists_tonights_planets(new_client: httpx.AsyncClient) -> None:
-    sky = (await new_client.get("/api/v1/public/sky", params={"lat": 48.1, "lon": 14.4})).json()
+    sky = (await new_client.get("/api/v1/public/sky", params={"lat": 48.1, "lon": 4.4})).json()
     assert isinstance(sky["planets"], list)
     for p in sky["planets"]:
         assert p["key"] in ("mercury", "venus", "mars", "jupiter", "saturn")
@@ -177,7 +177,7 @@ async def test_public_sky_view_and_object_info(
         tmp_path, httpx.AsyncClient(transport=httpx.MockTransport(commons))
     )
     view = (
-        await new_client.get("/api/v1/public/sky-view", params={"lat": 48.1, "lon": 14.4})
+        await new_client.get("/api/v1/public/sky-view", params={"lat": 48.1, "lon": 4.4})
     ).json()
     keys = {o["key"] for o in view["objects"]}
     assert {"moon", "jupiter", "M31", "M42", "Ori", "UMa"} <= keys  # also below the horizon

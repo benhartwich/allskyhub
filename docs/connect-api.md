@@ -29,7 +29,7 @@ Schick das beim Start und wenn sich etwas ändert:
 {
   "name": "Sternwarte Musterberg",
   "latitude": 48.3,
-  "longitude": 14.29,
+  "longitude": 4.29,
   "elevation_m": 300,
   "software": "MySky",
   "software_version": "1.2",

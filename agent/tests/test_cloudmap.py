@@ -18,7 +18,7 @@ from allskyhub_solve.solve import Solution, alt_az, sidereal_deg
 W = H = 2000
 SOL = Solution(cx=1000.0, cy=1000.0, a1=900.0, a3=0.0, rot=20.0, flip=-1.0, tilt_east=0.0,
                tilt_north=0.0, stars=30, rms_px=1.0, rms_deg=0.1, width=W, height=H)  # fmt: skip
-LAT, LON = 48.2, 16.4
+LAT, LON = 48.2, 6.4
 F = npt.NDArray[np.float64]
 NEW_MOON = datetime(2026, 10, 10, 22, 0, tzinfo=UTC)
 FULL_MOON = datetime(2026, 10, 25, 23, 0, tzinfo=UTC)

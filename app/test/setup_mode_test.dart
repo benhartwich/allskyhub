@@ -264,14 +264,14 @@ void main() {
       findsOneWidget,
     );
     await tester.enterText(find.byKey(const Key('latitude')), '47,8');
-    await tester.enterText(find.byKey(const Key('longitude')), '13.05');
+    await tester.enterText(find.byKey(const Key('longitude')), '3.05');
     await tester.pump();
     await tester.ensureVisible(send);
     await tester.tap(send);
     await tester.pumpAndSettle();
     expect(f.sent, containsPair('password', 'long enough'));
     expect(f.sent, containsPair('latitude', 47.8));
-    expect(f.sent, containsPair('longitude', 13.05));
+    expect(f.sent, containsPair('longitude', 3.05));
     expect(f.sent, containsPair('timezone', 'Europe/Vienna'));
     expect(
       find.text('Weiter suchen'),
@@ -280,7 +280,7 @@ void main() {
   });
 
   test('manual coordinates are checked and rounded', () {
-    expect(CameraLocation.tryParse('47,812', '13.049')?.latitude, 47.81);
+    expect(CameraLocation.tryParse('47,812', '3.049')?.latitude, 47.81);
     expect(CameraLocation.tryParse('91', '13'), isNull);
     expect(CameraLocation.tryParse('47', 'x'), isNull);
     expect(CameraLocation.tryParse('-33.9', '151.2')?.longitude, 151.2);

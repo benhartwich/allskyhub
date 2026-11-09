@@ -18,12 +18,12 @@ from tests.fake_device import FakeDevice
 from tests.helpers import claim, make_account
 from tests.test_push import FakeSender
 
-LINZ = (48.30, 14.29)
-SALZBURG = (47.80, 13.04)
-NEARBY = (48.20, 13.60)
+NORDHEIM = (48.30, 4.29)
+SUEDTAL = (47.80, 3.04)
+NEARBY = (48.20, 3.60)
 HAMBURG = (53.55, 10.0)
 # Glows from 90 km down to 25 km, flying south-east.
-TOP, BOTTOM = (48.05, 13.70, 90.0), (47.90, 13.95, 25.0)
+TOP, BOTTOM = (48.05, 3.70, 90.0), (47.90, 3.95, 25.0)
 
 
 def _pair(**values: float) -> MeteorPair:
@@ -58,7 +58,7 @@ def test_high_end_has_no_fall_area() -> None:
 
 
 def test_steep_fall_lands_close_to_the_end() -> None:
-    steep = _pair(high_lat=47.91, high_lon=13.95)
+    steep = _pair(high_lat=47.91, high_lon=3.95)
     area = fireball.fall_area(steep)
     assert area is not None
     assert fireball.distance_km(BOTTOM[0], BOTTOM[1], *area.far) < 3
@@ -100,18 +100,18 @@ async def test_alarm_and_pages(app: FastAPI, client: httpx.AsyncClient) -> None:
             await db.commit()
         return dev.device_id
 
-    linz = await camera(LINZ, 0, True)
-    salzburg = await camera(SALZBURG, 10, True)
+    nordheim = await camera(NORDHEIM, 0, True)
+    salzburg = await camera(SUEDTAL, 10, True)
     await camera(NEARBY, 0, False)
     await camera(HAMBURG, 0, False)
 
     sender = FakeSender()
     notifier = Notifier(maker, sender)
-    assert await meteor_pairs.pair_event(maker, linz, "meteor-0", notifier.fireball) == 1
+    assert await meteor_pairs.pair_event(maker, nordheim, "meteor-0", notifier.fireball) == 1
     # The same meteor again (an updated event): no second alarm.
     assert await meteor_pairs.pair_event(maker, salzburg, "meteor-10", notifier.fireball) == 1
     tokens = sorted(tokens[0] for tokens, _ in sender.sent)
-    assert tokens == sorted(f"t-{p}" for p in (LINZ, SALZBURG, NEARBY))
+    assert tokens == sorted(f"t-{p}" for p in (NORDHEIM, SUEDTAL, NEARBY))
     message = sender.sent[0][1]
     assert message.title == "Feuerkugel: Meteoritenfall möglich"
     assert "in 25 km Höhe" in message.body
@@ -129,7 +129,7 @@ async def test_alarm_and_pages(app: FastAPI, client: httpx.AsyncClient) -> None:
 
     # One owner leaves: no longer public.
     async with maker() as db:
-        await db.execute(update(Device).where(Device.id == linz).values(network=False))
+        await db.execute(update(Device).where(Device.id == nordheim).values(network=False))
         await db.commit()
     assert (await client.get(f"/feuerkugeln/{pair_id}")).status_code == 404
     assert f"/feuerkugeln/{pair_id}" not in (await client.get("/feuerkugeln")).text

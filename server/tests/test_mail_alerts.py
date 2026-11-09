@@ -36,7 +36,7 @@ class FakeForecast:
 async def _setup(
     app: FastAPI, client: httpx.AsyncClient, **user: bool
 ) -> tuple[str, MemoryMailer, Notifier]:
-    """A camera near Linz whose owner has no phone: e-mail only."""
+    """A camera near Nordheim whose owner has no phone: e-mail only."""
     dev = FakeDevice()
     await paired_token(client, dev)
     mailer = MemoryMailer()

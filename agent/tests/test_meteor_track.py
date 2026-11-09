@@ -21,7 +21,7 @@ from allskyhub_solve import localfit
 from allskyhub_solve.solve import Solution, alt_az, sidereal_deg
 
 # A made-up place and a winter evening with Orion and Taurus high in the south.
-LAT, LON = 47.0, 11.0
+LAT, LON = 47.0, 1.0
 AT = datetime(2026, 1, 15, 21, 0, tzinfo=UTC)
 H, W = 1400, 1400
 SOL = Solution(

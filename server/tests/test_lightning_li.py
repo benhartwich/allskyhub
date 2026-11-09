@@ -79,18 +79,18 @@ class FakeStore:
 
 def test_parse_unpacks_and_keeps_europe() -> None:
     t = dt.datetime(2026, 10, 14, 22, 0, 5, tzinfo=dt.UTC)
-    data = body([(t, 48.5, 14.0), (t, -20.0, 14.0), (t, 48.0, 60.0)])
+    data = body([(t, 48.5, 4.0), (t, -20.0, 14.0), (t, 48.0, 60.0)])
     [(at, lat, lon)] = lightning_li.parse(data)
     assert abs((at - t).total_seconds()) < 1e-3
     assert abs(lat - 48.5) < 0.003
-    assert abs(lon - 14.0) < 0.003
+    assert abs(lon - 4.0) < 0.003
     # Unpacked floats, and the BODY inside a zip as the Data Store serves whole products.
-    plain = body([(t, 47.0, 13.0)], packed=False)
+    plain = body([(t, 47.0, 3.0)], packed=False)
     archive = io.BytesIO()
     with zipfile.ZipFile(archive, "w") as z:
         z.writestr("x_TRAIL_0001.nc", b"")
         z.writestr("x_BODY_0001.nc", plain)
-    assert [(a, o) for _, a, o in lightning_li.parse(archive.getvalue())] == [(47.0, 13.0)]
+    assert [(a, o) for _, a, o in lightning_li.parse(archive.getvalue())] == [(47.0, 3.0)]
 
 
 def test_search_page_and_summary() -> None:

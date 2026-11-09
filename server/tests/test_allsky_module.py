@@ -71,7 +71,7 @@ class _Allsky:
         shared.ALLSKYPATH = str(home)  # type: ignore[attr-defined]
         shared.get_environment_variable = self.env.get  # type: ignore[attr-defined]
         shared.get_setting = {"location": "Sternwarte Musterberg"}.get  # type: ignore[attr-defined]
-        shared.get_lat_lon = lambda: (48.3, 14.29)  # type: ignore[attr-defined]
+        shared.get_lat_lon = lambda: (48.3, 4.29)  # type: ignore[attr-defined]
         shared.get_allsky_variable = {"AS_STARCOUNT": "412"}.get  # type: ignore[attr-defined]
         shared.network_ok = lambda name: None  # type: ignore[attr-defined]
         shared.network_failure = self._failure  # type: ignore[attr-defined]

@@ -15,7 +15,7 @@ from tests.fake_device import FakeDevice
 from tests.ws_helpers import paired_token
 
 NOW = dt.datetime(2026, 10, 14, 22, 30, tzinfo=dt.UTC)
-HERE = (48.30, 14.29)
+HERE = (48.30, 4.29)
 
 
 def _hours(kmh: float, wind_from: float) -> list[Hour]:

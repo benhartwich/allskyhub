@@ -25,7 +25,7 @@ from allskyhub_agent.store.images import ImageStore
 from allskyhub_protocol import Mode, ProductKind
 
 BERLIN = ZoneInfo("Europe/Berlin")
-VIENNA = ZoneInfo("Europe/Vienna")
+PLACE = ZoneInfo("Europe/Vienna")
 UUID = "0f1e2d3c-4b5a-6978-8796-a5b4c3d2e1f0"
 
 # The tables and columns as indi-allsky's SQLAlchemy models create them
@@ -162,8 +162,8 @@ def make_indi(root: Path) -> tuple[Path, Path]:
 def make_importer(
     tmp_path: Path, db: Path, copy: bool = False, camera_id: int | None = None
 ) -> tuple[IndiAllskyImporter, ImageStore]:
-    store = ImageStore(tmp_path / "data", VIENNA)
-    imp = IndiAllskyImporter(db, store, VIENNA, "zwo-asi678mc", camera_id=camera_id,
+    store = ImageStore(tmp_path / "data", PLACE)
+    imp = IndiAllskyImporter(db, store, PLACE, "zwo-asi678mc", camera_id=camera_id,
                              source_tz=BERLIN, copy=copy, progress=lambda _: None)  # fmt: skip
     return imp, store
 

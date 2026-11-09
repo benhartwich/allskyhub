@@ -30,4 +30,4 @@ def test_midnight_is_below_horizon() -> None:
 
 def test_naive_time_rejected() -> None:
     with pytest.raises(ValueError, match="timezone-aware"):
-        sun_elevation(datetime(2026, 10, 6, 12, 0), 48.0, 14.0)  # noqa: DTZ001
+        sun_elevation(datetime(2026, 10, 6, 12, 0), 48.0, 4.0)  # noqa: DTZ001

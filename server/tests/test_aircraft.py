@@ -39,25 +39,25 @@ def test_look_up_and_around() -> None:
 
 def test_interpolation_and_dead_reckoning() -> None:
     tracks = Tracks()
-    tracks.add("adsb.lol", "3C6444", _fix(T0, 48.0, 14.0, track=90.0, speed=400.0))
-    tracks.add("adsb.lol", "3c6444", _fix(T0 + dt.timedelta(seconds=10), 48.0, 14.1))
+    tracks.add("adsb.lol", "3C6444", _fix(T0, 48.0, 4.0, track=90.0, speed=400.0))
+    tracks.add("adsb.lol", "3c6444", _fix(T0 + dt.timedelta(seconds=10), 48.0, 4.1))
     mid = tracks.at(T0 + dt.timedelta(seconds=5))["3c6444"]
-    assert abs(mid.lon - 14.05) < 1e-9
+    assert abs(mid.lon - 4.05) < 1e-9
     assert tracks.at(T0 - dt.timedelta(seconds=1)) == {}
     # Past the newest: along the last track, at most 30 s.
-    tracks.add("adsb.lol", "aaaaaa", _fix(T0, 48.0, 14.0, track=90.0, speed=400.0))
+    tracks.add("adsb.lol", "aaaaaa", _fix(T0, 48.0, 4.0, track=90.0, speed=400.0))
     ahead = tracks.at(T0 + dt.timedelta(seconds=20))["aaaaaa"]
-    assert ahead.lon > 14.0  # flew east
+    assert ahead.lon > 4.0  # flew east
     assert abs(ahead.lat - 48.0) < 0.01
     assert "aaaaaa" not in tracks.at(T0 + dt.timedelta(seconds=31))
 
 
 def test_the_receiver_wins_while_fresh() -> None:
     tracks = Tracks()
-    tracks.add("adsb.lol", "abc123", _fix(T0, 48.0, 14.0))
-    tracks.add("adsb.lol", "abc123", _fix(T0 + dt.timedelta(seconds=60), 48.0, 14.6))
-    tracks.add("receiver", "abc123", _fix(T0, 48.2, 14.0))
-    tracks.add("receiver", "abc123", _fix(T0 + dt.timedelta(seconds=10), 48.2, 14.1))
+    tracks.add("adsb.lol", "abc123", _fix(T0, 48.0, 4.0))
+    tracks.add("adsb.lol", "abc123", _fix(T0 + dt.timedelta(seconds=60), 48.0, 4.6))
+    tracks.add("receiver", "abc123", _fix(T0, 48.2, 4.0))
+    tracks.add("receiver", "abc123", _fix(T0 + dt.timedelta(seconds=10), 48.2, 4.1))
     assert tracks.at(T0 + dt.timedelta(seconds=5))["abc123"].lat == 48.2
     later = tracks.at(T0 + dt.timedelta(seconds=50))["abc123"]
     assert later.lat == 48.0  # the receiver's newest is 40 s old: adsb.lol
@@ -115,9 +115,9 @@ def test_parse_adsb_lol() -> None:
         "ac": [
             {"hex": "3C7424", "flight": "TUI1TX  ", "alt_baro": 8825, "gs": 255.4,
              "track": 323.76, "lat": 50.0, "lon": 12.4, "seen_pos": 0.5},
-            {"hex": "~2a0001", "alt_baro": 30000, "lat": 48.2, "lon": 14.0},
-            {"hex": "abcdef", "alt_baro": "ground", "lat": 48.0, "lon": 14.0},
-            {"hex": "fedcba", "alt_baro": 1000, "lat": 48.0, "lon": 14.0, "seen_pos": 90},
+            {"hex": "~2a0001", "alt_baro": 30000, "lat": 48.2, "lon": 4.0},
+            {"hex": "abcdef", "alt_baro": "ground", "lat": 48.0, "lon": 4.0},
+            {"hex": "fedcba", "alt_baro": 1000, "lat": 48.0, "lon": 4.0, "seen_pos": 90},
             {"hex": "000001", "alt_baro": 1000},
         ],
     }  # fmt: skip
@@ -216,7 +216,7 @@ async def test_camera_page_has_the_switch(app: FastAPI, client: httpx.AsyncClien
 def test_a_receiver_counts_only_for_its_camera() -> None:
     """Security review 2026-11-04: one camera's relays never label another's meteors."""
     tracks = Tracks()
-    tracks.add("receiver", "abc123", _fix(T0, 48.2, 14.0), "cam-a")
+    tracks.add("receiver", "abc123", _fix(T0, 48.2, 4.0), "cam-a")
     assert "abc123" in tracks.at(T0, "cam-a")
     assert tracks.at(T0, "cam-b") == {}
     assert tracks.at(T0) == {}
@@ -224,7 +224,7 @@ def test_a_receiver_counts_only_for_its_camera() -> None:
 
 def test_relays_not_about_now_are_dropped() -> None:
     position = SimpleNamespace(
-        hex="abc123", seen_s=0.0, lat=48.2, lon=14.0, alt_m=9000.0, track_deg=None,
+        hex="abc123", seen_s=0.0, lat=48.2, lon=4.0, alt_m=9000.0, track_deg=None,
         speed_kn=None, flight=None,
     )  # fmt: skip
     hub = aircraft.Watch.__new__(aircraft.Watch)
@@ -235,5 +235,5 @@ def test_relays_not_about_now_are_dropped() -> None:
     hub.receive("cam", T0, [position], now=T0 + dt.timedelta(seconds=5))
     assert "abc123" in hub.tracks.at(T0, "cam")
     for n in range(aircraft.RECEIVER_MAX_AIRCRAFT + 10):
-        hub.tracks.add("receiver", f"{n:06x}", _fix(T0, 48.0, 14.0), "cam2")
+        hub.tracks.add("receiver", f"{n:06x}", _fix(T0, 48.0, 4.0), "cam2")
     assert len(hub.tracks.at(T0, "cam2")) == aircraft.RECEIVER_MAX_AIRCRAFT

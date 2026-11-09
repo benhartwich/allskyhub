@@ -28,9 +28,9 @@ ISS (ZARYA)
 1 25544U 98067A   26285.85396186  .00006018  00000+0  11791-3 0  9995
 2 25544  51.6314  77.7958 0006705 255.2292 104.7953 15.48843879589996
 """
-LAT, LON = 48.3, 14.29
-# The ISS high in the south over Linz, in sunlight before dawn.
-AT = dt.datetime(2026, 10, 13, 6, 3, 30, tzinfo=dt.UTC)
+LAT, LON = 48.3, 4.29
+# The ISS high in the west over Nordheim.
+AT = dt.datetime(2026, 10, 13, 7, 38, 50, tzinfo=dt.UTC)
 
 
 def _where(at: dt.datetime) -> tuple[float, float]:

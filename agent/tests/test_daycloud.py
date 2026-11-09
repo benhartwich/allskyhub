@@ -24,7 +24,7 @@ from allskyhub_solve.solve import Solution
 H, W = 720, 1280
 SOL = Solution(cx=640.0, cy=360.0, a1=330.0, a3=0.0, rot=20.0, flip=-1.0, tilt_east=0.0,
                tilt_north=0.0, stars=30, rms_px=1.0, rms_deg=0.1, width=W, height=H)  # fmt: skip
-LAT, LON = 48.2, 16.4
+LAT, LON = 48.2, 6.4
 NOON = datetime(2026, 6, 21, 11, 0, tzinfo=UTC)  # the sun about 65° high
 SKY = circle_mask(H, W, 0.48)
 BLUE = (60, 120, 230)  # clear: saturation 0.74

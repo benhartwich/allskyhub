@@ -24,9 +24,9 @@ HEADER = "\n".join(
     for line in (Path(__file__).parent / "data" / "gmn_summary_header.txt").read_text().splitlines()
     if line.strip()
 )
-LINZ = (48.30, 14.29)
-SALZBURG = (47.80, 13.04)
-BEG, END = (47.95, 13.80, 95.0), (47.80, 13.95, 30.0)
+NORDHEIM = (48.30, 4.29)
+SUEDTAL = (47.80, 3.04)
+BEG, END = (47.95, 3.80, 95.0), (47.80, 3.95, 30.0)
 AT = dt.datetime(2026, 11, 5, 21, 0, 12, 345000, tzinfo=dt.UTC)
 
 
@@ -80,17 +80,17 @@ def _seen(place: tuple[float, float], top: t.Vec, bottom: t.Vec) -> t.Sighting:
 def test_offset_against_the_path_seen_from_the_camera() -> None:
     trajectory = gmn.parse(_summary([_row()]))[0]
     top, bottom = t.ecef(*BEG), t.ecef(*END)
-    exact = gmn.offset_deg(_seen(LINZ, top, bottom), trajectory)
+    exact = gmn.offset_deg(_seen(NORDHEIM, top, bottom), trajectory)
     assert exact is not None
     assert exact < 0.01
     # Our camera saw only the middle part: still the same meteor.
-    middle = t.ecef(47.875, 13.875, 62.0)
-    part = gmn.offset_deg(_seen(LINZ, top, middle), trajectory)
+    middle = t.ecef(47.875, 3.875, 62.0)
+    part = gmn.offset_deg(_seen(NORDHEIM, top, middle), trajectory)
     assert part is not None
     assert part < 0.5
     # Another meteor elsewhere in the sky.
     other = gmn.offset_deg(
-        _seen(LINZ, t.ecef(48.9, 15.5, 90.0), t.ecef(49.0, 15.8, 70.0)), trajectory
+        _seen(NORDHEIM, t.ecef(48.9, 5.5, 90.0), t.ecef(49.0, 5.8, 70.0)), trajectory
     )
     assert other is None or other > gmn.MATCH_DEG
 
@@ -127,8 +127,8 @@ async def test_matched_and_shown(app: FastAPI, client: httpx.AsyncClient) -> Non
     fireball page, with GMN's credit."""
     maker: async_sessionmaker[AsyncSession] = app.state.sessionmaker
     await make_account(client)
-    linz = await _camera(client, maker, LINZ)
-    salzburg = await _camera(client, maker, SALZBURG)
+    nordheim = await _camera(client, maker, NORDHEIM)
+    salzburg = await _camera(client, maker, SUEDTAL)
     later = AT + dt.timedelta(minutes=5)  # outside both exposures
     trajectories = gmn.parse(_summary([_row(), _row(later, {"Unique trajectory#0": "x"})]))
     async with maker() as db:
@@ -138,14 +138,14 @@ async def test_matched_and_shown(app: FastAPI, client: httpx.AsyncClient) -> Non
     assert len(rows) == 2
     assert {r.gmn_id for r in rows} == {"20261105210012_abcde"}
 
-    page = (await client.get(f"/cameras/{linz}/events/20261105/meteor-20261105T210000Z")).text
+    page = (await client.get(f"/cameras/{nordheim}/events/20261105/meteor-20261105T210000Z")).text
     assert "Vom Global Meteor Network vermessen" in page
     assert "28,4 km/s" in page
     assert "Südliche Tauriden" in page
     assert "CC BY 4.0" in page
 
     assert await meteor_pairs.pair_event(maker, salzburg, "meteor-20261105T210000Z") == 1
-    page = (await client.get(f"/cameras/{linz}/events/20261105/meteor-20261105T210000Z")).text
+    page = (await client.get(f"/cameras/{nordheim}/events/20261105/meteor-20261105T210000Z")).text
     pair_id = page.split('href="/feuerkugeln/')[1].split('"')[0]
     fireball_page = (await client.get(f"/feuerkugeln/{pair_id}")).text
     assert "Vom Global Meteor Network vermessen" in fireball_page

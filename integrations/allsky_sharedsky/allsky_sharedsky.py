@@ -229,8 +229,15 @@ def meteors(
         if not isinstance(entries, list):
             continue
         stamp = METEOR_SIDECAR.fullmatch(sidecar.name).group(1)  # type: ignore[union-attr]
-        start = time.mktime(time.strptime(stamp, "%Y%m%d%H%M%S"))
-        exposure = exposure_at(int(start)) or 0.0
+        start = int(time.mktime(time.strptime(stamp, "%Y%m%d%H%M%S")))
+        # The hour repeated when the clocks go back: mktime may be an hour off, the frame
+        # this module saw tells which. Unknown (the module did not run): the exposure is 0.
+        exposure = 0.0
+        for guess in (start, start - 3600, start + 3600):
+            found = exposure_at(guess)
+            if found is not None:
+                start, exposure = guess, found
+                break
         for n, entry in enumerate(entries):
             key = f"{stamp}:{n}"
             if key in sent or not isinstance(entry, dict):

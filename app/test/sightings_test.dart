@@ -25,7 +25,7 @@ class _FixedPose implements PoseSource {
 class _Here implements LocationSource {
   @override
   Future<LocationResult> current() async =>
-      LocationResult.found(CameraLocation(48.31, 14.29));
+      LocationResult.found(CameraLocation(48.31, 4.29));
 
   @override
   Future<String?> timezone() async => 'Europe/Vienna';
@@ -60,7 +60,7 @@ HubClient _hub(List<http.Request> seen) => HubClient(
       ('POST', '/api/v1/sightings/fireball') => _json({
         'id': 'f1',
         'cameras': [
-          {'at': '2026-10-28T21:14:08Z', 'title': 'Lanzenberg', 'image': null},
+          {'at': '2026-10-28T21:14:08Z', 'title': 'Hügelfeld', 'image': null},
           {'at': '2026-10-28T21:14:09Z', 'title': null, 'image': null},
         ],
         'tracks': ['/feuerkugeln/p1'],
@@ -136,7 +136,7 @@ void main() {
     expect(body['brightness'], 'venus');
     expect(body['details'], ['green']);
     expect(find.text('2 Kameras um diese Zeit'), findsOneWidget);
-    expect(find.text('Lanzenberg'), findsOneWidget);
+    expect(find.text('Hügelfeld'), findsOneWidget);
     expect(find.textContaining('50 km, 100 km entfernt'), findsOneWidget);
   });
 
@@ -212,7 +212,7 @@ void main() {
     expect(jsonDecode(put.body), {
       'aurora': true,
       'lat': 48.31,
-      'lon': 14.29,
+      'lon': 4.29,
       'tz': 'Europe/Vienna',
     });
     expect(push.registered, 1); // the phone registers for push

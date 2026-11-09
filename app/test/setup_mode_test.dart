@@ -280,7 +280,7 @@ void main() {
   });
 
   test('manual coordinates are checked and rounded', () {
-    expect(CameraLocation.tryParse('47,812', '13.049')?.latitude, 47.81);
+    expect(CameraLocation.tryParse('47,812', '3.049')?.latitude, 47.81);
     expect(CameraLocation.tryParse('91', '13'), isNull);
     expect(CameraLocation.tryParse('47', 'x'), isNull);
     expect(CameraLocation.tryParse('-33.9', '151.2')?.longitude, 151.2);

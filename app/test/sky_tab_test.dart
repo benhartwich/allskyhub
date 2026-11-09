@@ -100,7 +100,7 @@ HubClient _hub(List<Uri> seen) => HubClient(
         utf8.encode(
           jsonEncode({
             'lat': 48.1,
-            'lon': 14.4,
+            'lon': 4.4,
             'tz': 'Europe/Vienna',
             'nights': [
               _night('2026-10-28', 'good', 4),
@@ -117,7 +117,7 @@ HubClient _hub(List<Uri> seen) => HubClient(
             'passes': <Object>[],
             'nearby': {
               'slug': 'abc',
-              'title': 'Lanzenberg',
+              'title': 'Hügelfeld',
               'distance_km': 12,
               'at': '2026-10-28T08:00:00Z',
               'cloud_cover': 0.2,
@@ -165,9 +165,9 @@ HubClient _hub(List<Uri> seen) => HubClient(
         utf8.encode(
           jsonEncode([
             {
-              'name': 'Linz, Oberösterreich, Österreich',
+              'name': 'Nordheim, Musterland, Österreich',
               'lat': 48.3,
-              'lon': 14.29,
+              'lon': 4.29,
             },
           ]),
         ),
@@ -201,23 +201,23 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.byKey(const Key('sky-choose')));
     await tester.pumpAndSettle();
-    await tester.enterText(find.byKey(const Key('place-query')), 'Linz');
+    await tester.enterText(find.byKey(const Key('place-query')), 'Nordheim');
     await tester.testTextInput.receiveAction(TextInputAction.search);
     await tester.pumpAndSettle();
-    await tester.tap(find.widgetWithText(ListTile, 'Linz'));
+    await tester.tap(find.widgetWithText(ListTile, 'Nordheim'));
     await tester.pumpAndSettle();
 
-    expect(places.place?.place?.name, startsWith('Linz'));
+    expect(places.place?.place?.name, startsWith('Nordheim'));
     final asked = seen.firstWhere((u) => u.path == '/api/v1/public/sky');
     expect(asked.queryParameters, {
       'lat': '48.3',
-      'lon': '14.3',
+      'lon': '4.3',
       'tz': 'Europe/Vienna',
     });
     expect(find.text('gut'), findsOneWidget);
     expect(find.text('mäßig'), findsOneWidget);
     expect(find.textContaining('GEMESSEN · 12 km'), findsOneWidget);
-    expect(find.textContaining('Lanzenberg · 20 % Wolken'), findsOneWidget);
+    expect(find.textContaining('Hügelfeld · 20 % Wolken'), findsOneWidget);
     expect(find.text('bei dir ab Kp 8'), findsOneWidget);
     expect(find.textContaining('Leoniden-Maximum'), findsOneWidget);
     expect(find.textContaining('Saturn: '), findsOneWidget);
@@ -264,7 +264,7 @@ void main() {
         home: NightScreen(
           nights: [SkyNight.fromJson(_night('2026-10-28', 'good', 4))],
           initial: 0,
-          place: 'Linz',
+          place: 'Nordheim',
         ),
       ),
     );

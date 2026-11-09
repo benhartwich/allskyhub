@@ -16,12 +16,12 @@ from tests.fake_device import FakeDevice
 from tests.ws_helpers import paired_token
 
 LAT, LON = 50.036, 10.39  # Musterdorf
-VIENNA = ZoneInfo("Europe/Vienna")
+PLACE = ZoneInfo("Europe/Vienna")
 
 
 def _local(t: dt.datetime | None) -> str:
     assert t is not None
-    return t.astimezone(VIENNA).strftime("%d. %H:%M")
+    return t.astimezone(PLACE).strftime("%d. %H:%M")
 
 
 def test_night_times_and_moon() -> None:
@@ -43,7 +43,7 @@ def test_no_dark_night_in_the_arctic_summer() -> None:
     n = astro.night_after(dt.datetime(2026, 6, 21, 10, tzinfo=dt.UTC), 69.6, 18.9)
     assert n.dusk is None
     assert n.dawn is None
-    t = tonight.build(dt.datetime(2026, 6, 21, 12, tzinfo=dt.UTC), 69.6, 18.9, VIENNA, [])
+    t = tonight.build(dt.datetime(2026, 6, 21, 12, tzinfo=dt.UTC), 69.6, 18.9, PLACE, [])
     assert t.summary == "Heute wird es nicht astronomisch dunkel."
 
 
@@ -59,33 +59,33 @@ def test_best_window_and_summary() -> None:
     now = dt.datetime(2026, 10, 12, 15, tzinfo=dt.UTC)
     # Clear from 21 UTC (hour 9) to 02 UTC, cloudy otherwise; the moon is new.
     clear = dict.fromkeys(range(9, 14), 10)
-    t = tonight.build(now, LAT, LON, VIENNA, _forecast(clear))
+    t = tonight.build(now, LAT, LON, PLACE, _forecast(clear))
     assert t.best is not None
     assert t.summary == "Klar und dunkel von 23:00 bis 04:00 Uhr."
     assert [h.good for h in t.hours].count(True) == 5
     assert t.fmt(None) == "–"
     assert t.moon_phase == "zunehmende Sichel"
 
-    cloudy = tonight.build(now, LAT, LON, VIENNA, _forecast({}))
+    cloudy = tonight.build(now, LAT, LON, PLACE, _forecast({}))
     assert cloudy.best is None
     assert cloudy.summary == "Bewölkt, die ganze Nacht."
-    assert tonight.build(now, LAT, LON, VIENNA, []).summary == "Keine Wolkenvorhersage verfügbar."
+    assert tonight.build(now, LAT, LON, PLACE, []).summary == "Keine Wolkenvorhersage verfügbar."
 
 
 def test_bright_moon_spoils_clear_hours() -> None:
     """Near full moon (26 October) clear hours with the moon up are not good."""
     now = dt.datetime(2026, 10, 26, 15, tzinfo=dt.UTC)
-    t = tonight.build(now, LAT, LON, VIENNA, _forecast(dict.fromkeys(range(24), 0), day=26))
+    t = tonight.build(now, LAT, LON, PLACE, _forecast(dict.fromkeys(range(24), 0), day=26))
     assert t.night.moon_illumination > 0.9
     assert all(not h.good for h in t.hours if h.moon_up)
     assert any(h.moon_up for h in t.hours)
 
 
 def test_after_midnight_it_is_still_the_same_night() -> None:
-    before = tonight.build(dt.datetime(2026, 10, 12, 20, tzinfo=dt.UTC), LAT, LON, VIENNA, [])
-    after = tonight.build(dt.datetime(2026, 10, 13, 1, tzinfo=dt.UTC), LAT, LON, VIENNA, [])
+    before = tonight.build(dt.datetime(2026, 10, 12, 20, tzinfo=dt.UTC), LAT, LON, PLACE, [])
+    after = tonight.build(dt.datetime(2026, 10, 13, 1, tzinfo=dt.UTC), LAT, LON, PLACE, [])
     assert before.night.dusk == after.night.dusk
-    later = tonight.build(dt.datetime(2026, 10, 13, 9, tzinfo=dt.UTC), LAT, LON, VIENNA, [])
+    later = tonight.build(dt.datetime(2026, 10, 13, 9, tzinfo=dt.UTC), LAT, LON, PLACE, [])
     assert later.night.dusk != before.night.dusk
 
 

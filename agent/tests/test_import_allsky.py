@@ -25,7 +25,7 @@ from allskyhub_agent.store.images import ImageStore
 from allskyhub_protocol import EventKind, Mode
 
 BERLIN = ZoneInfo("Europe/Berlin")
-VIENNA = ZoneInfo("Europe/Vienna")
+PLACE = ZoneInfo("Europe/Vienna")
 
 
 def _jpeg(path: Path, value: int = 40) -> None:
@@ -80,9 +80,9 @@ def make_allsky(root: Path) -> Path:
 def make_importer(
     tmp_path: Path, home: Path, copy: bool = False
 ) -> tuple[AllskyImporter, ImageStore, EventStore]:
-    store = ImageStore(tmp_path / "data", VIENNA)
+    store = ImageStore(tmp_path / "data", PLACE)
     events = EventStore(store)
-    imp = AllskyImporter(home, store, events, VIENNA, "zwo-asi678mc", source_tz=BERLIN,
+    imp = AllskyImporter(home, store, events, PLACE, "zwo-asi678mc", source_tz=BERLIN,
                          copy=copy, progress=lambda _: None)  # fmt: skip
     return imp, store, events
 

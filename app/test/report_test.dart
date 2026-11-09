@@ -12,7 +12,7 @@ import 'package:http/testing.dart';
 class _Here implements LocationSource {
   @override
   Future<LocationResult> current() async =>
-      LocationResult.found(CameraLocation(48.1234, 14.4321));
+      LocationResult.found(CameraLocation(48.1234, 4.4321));
 
   @override
   Future<String?> timezone() async => 'Europe/Vienna';
@@ -106,7 +106,7 @@ void main() {
     await tester.pumpAndSettle();
     expect(sent.single, {
       'lat': 48.1,
-      'lon': 14.4,
+      'lon': 4.4,
       'constellation': 'Cyg',
       'limit_mag': 4.5,
       'clouds': false,

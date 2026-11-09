@@ -16,8 +16,8 @@ from allskyhub_server.models import Device, EventRecord, MeteorPair
 from tests.fake_device import FakeDevice
 from tests.helpers import claim, home_csrf, make_account
 
-LINZ = (48.30, 14.29)
-SALZBURG = (47.80, 13.04)
+NORDHEIM = (48.30, 4.29)
+SUEDTAL = (47.80, 3.04)
 
 
 def _sighting(cam: tuple[float, float], a: t.Vec, b: t.Vec, noise: float = 0.0) -> t.Sighting:
@@ -27,9 +27,9 @@ def _sighting(cam: tuple[float, float], a: t.Vec, b: t.Vec, noise: float = 0.0) 
 
 
 def test_heights_come_back() -> None:
-    """A meteor from 95 km down to 75 km over the Traunsee, seen from Linz and Salzburg."""
-    top, bottom = t.ecef(47.95, 13.80, 95.0), t.ecef(47.80, 13.95, 75.0)
-    trajectory = t.triangulate(_sighting(LINZ, top, bottom), _sighting(SALZBURG, bottom, top))
+    """A meteor from 95 km down to 75 km over the Traunsee, seen from Nordheim and Südtal."""
+    top, bottom = t.ecef(47.95, 3.80, 95.0), t.ecef(47.80, 3.95, 75.0)
+    trajectory = t.triangulate(_sighting(NORDHEIM, top, bottom), _sighting(SUEDTAL, bottom, top))
     assert trajectory is not None
     high, low = trajectory.points
     assert high.height_km == pytest.approx(95.0, abs=0.05)
@@ -43,9 +43,9 @@ def test_heights_come_back() -> None:
 
 def test_small_errors_stay_small() -> None:
     """0.1° error in the directions (a good plate solve) moves the heights by about 1 km."""
-    top, bottom = t.ecef(47.95, 13.80, 95.0), t.ecef(47.80, 13.95, 75.0)
+    top, bottom = t.ecef(47.95, 3.80, 95.0), t.ecef(47.80, 3.95, 75.0)
     trajectory = t.triangulate(
-        _sighting(LINZ, top, bottom, noise=0.1), _sighting(SALZBURG, top, bottom, noise=-0.1)
+        _sighting(NORDHEIM, top, bottom, noise=0.1), _sighting(SUEDTAL, top, bottom, noise=-0.1)
     )
     assert trajectory is not None
     assert trajectory.points[0].height_km == pytest.approx(95.0, abs=2.5)
@@ -54,8 +54,8 @@ def test_small_errors_stay_small() -> None:
 
 def test_not_the_same_meteor() -> None:
     """Two different meteors give no plausible height."""
-    a = _sighting(LINZ, t.ecef(47.95, 13.80, 95.0), t.ecef(47.80, 13.95, 75.0))
-    b = _sighting(SALZBURG, t.ecef(46.5, 16.0, 90.0), t.ecef(46.4, 16.2, 70.0))
+    a = _sighting(NORDHEIM, t.ecef(47.95, 3.80, 95.0), t.ecef(47.80, 3.95, 75.0))
+    b = _sighting(SUEDTAL, t.ecef(46.5, 6.0, 90.0), t.ecef(46.4, 16.2, 70.0))
     assert t.triangulate(a, b) is None
 
 
@@ -69,7 +69,7 @@ async def test_pairing_two_cameras(
 ) -> None:
     """The same meteor from two cameras of one owner: paired, shown on both event pages;
     a camera of someone else pairs only when both owners joined the network (audit L2)."""
-    top, bottom = t.ecef(47.95, 13.80, 95.0), t.ecef(47.80, 13.95, 75.0)
+    top, bottom = t.ecef(47.95, 3.80, 95.0), t.ecef(47.80, 3.95, 75.0)
     maker: async_sessionmaker[AsyncSession] = app.state.sessionmaker
     start = dt.datetime(2026, 10, 13, 22, 0, tzinfo=dt.UTC)
 
@@ -99,10 +99,10 @@ async def test_pairing_two_cameras(
         return dev.device_id
 
     await make_account(client)
-    linz = await camera(client, LINZ, 0)
-    salzburg = await camera(client, SALZBURG, 20)  # exposures overlap by 10 s
-    assert await meteor_pairs.pair_event(maker, linz, "meteor-20261013T220000Z") == 1
-    page = (await client.get(f"/cameras/{linz}/events/20261013/meteor-20261013T220000Z")).text
+    nordheim = await camera(client, NORDHEIM, 0)
+    salzburg = await camera(client, SUEDTAL, 20)  # exposures overlap by 10 s
+    assert await meteor_pairs.pair_event(maker, nordheim, "meteor-20261013T220000Z") == 1
+    page = (await client.get(f"/cameras/{nordheim}/events/20261013/meteor-20261013T220000Z")).text
     assert "Bahn des Meteors" in page
     assert "95 km → 75 km" in page
     assert f'href="/cameras/{salzburg}/events/20261013/meteor-20261013T220020Z"' in page
@@ -111,7 +111,7 @@ async def test_pairing_two_cameras(
 
     # Someone else's camera with an overlapping meteor: only when both owners joined.
     await make_account(new_client)
-    stranger = await camera(new_client, (47.6, 14.6), 5)
+    stranger = await camera(new_client, (47.6, 4.6), 5)
     async with maker() as db:
         assert len((await db.scalars(select(MeteorPair))).all()) == 1
     assert await meteor_pairs.pair_event(maker, stranger, "meteor-20261013T220005Z") == 0
@@ -122,7 +122,7 @@ async def test_pairing_two_cameras(
 
     await join(new_client, stranger, True)
     assert await meteor_pairs.pair_event(maker, stranger, "meteor-20261013T220005Z") == 0
-    for device_id in (linz, salzburg):
+    for device_id in (nordheim, salzburg):
         await join(client, device_id, True)
     assert await meteor_pairs.pair_event(maker, stranger, "meteor-20261013T220005Z") == 2
     page = (
@@ -133,7 +133,7 @@ async def test_pairing_two_cameras(
     assert "Aus allen Blickwinkeln" in page
 
     # Leaving the network takes the pairs off the other owner's pages.
-    for device_id in (linz, salzburg):
+    for device_id in (nordheim, salzburg):
         await join(client, device_id, False)
     page = (
         await new_client.get(f"/cameras/{stranger}/events/20261013/meteor-20261013T220005Z")
@@ -141,14 +141,14 @@ async def test_pairing_two_cameras(
     assert "Bahn des Meteors" not in page
 
 
-LIEZEN = (47.57, 14.24)
-TOP, BOTTOM = t.ecef(47.95, 13.80, 95.0), t.ecef(47.80, 13.95, 30.0)
+BERGDORF = (47.57, 4.24)
+TOP, BOTTOM = t.ecef(47.95, 3.80, 95.0), t.ecef(47.80, 3.95, 30.0)
 
 
 def test_solved_together_with_an_error() -> None:
     """All cameras at once give the same heights; the error comes from their plate solves
     and shrinks with a third camera."""
-    two = [_sighting(LINZ, TOP, BOTTOM), _sighting(SALZBURG, BOTTOM, TOP)]
+    two = [_sighting(NORDHEIM, TOP, BOTTOM), _sighting(SUEDTAL, BOTTOM, TOP)]
     solution = t.solve(two, seed="x")
     assert solution is not None
     high, low = solution.trajectory.points
@@ -159,7 +159,7 @@ def test_solved_together_with_an_error() -> None:
     assert 0.1 < solution.low_err_km < 5.0  # 0.3° at 50–100 km
     assert t.solve(two, seed="x") == solution  # repeatable
 
-    three = t.solve([*two, _sighting(LIEZEN, TOP, BOTTOM)], seed="x")
+    three = t.solve([*two, _sighting(BERGDORF, TOP, BOTTOM)], seed="x")
     assert three is not None
     assert three.cameras == 3
     assert three.low_err_km is not None
@@ -174,7 +174,7 @@ def test_solved_together_with_an_error() -> None:
 
 
 def test_one_camera_is_no_solution() -> None:
-    assert t.solve([_sighting(LINZ, TOP, BOTTOM)]) is None
+    assert t.solve([_sighting(NORDHEIM, TOP, BOTTOM)]) is None
 
 
 async def _camera(
@@ -218,20 +218,20 @@ async def test_three_cameras_one_fireball(app: FastAPI, client: httpx.AsyncClien
     and the fireball page names them and the error."""
     maker: async_sessionmaker[AsyncSession] = app.state.sessionmaker
     await make_account(client)
-    linz = await _camera(client, maker, LINZ, 0, 0.2)
-    salzburg = await _camera(client, maker, SALZBURG, 10, 0.4)
-    assert await meteor_pairs.pair_event(maker, linz, "meteor-0") == 1
+    nordheim = await _camera(client, maker, NORDHEIM, 0, 0.2)
+    salzburg = await _camera(client, maker, SUEDTAL, 10, 0.4)
+    assert await meteor_pairs.pair_event(maker, nordheim, "meteor-0") == 1
     async with maker() as db:
         first = (await db.scalars(select(MeteorPair))).one()
-        assert sorted(first.cameras) == sorted([linz, salzburg])
+        assert sorted(first.cameras) == sorted([nordheim, salzburg])
         assert first.low_err_km is not None
         two_err = first.low_err_km
-    liezen = await _camera(client, maker, LIEZEN, 5, 0.2)
+    liezen = await _camera(client, maker, BERGDORF, 5, 0.2)
     assert await meteor_pairs.pair_event(maker, liezen, "meteor-5") == 2
     async with maker() as db:
         pairs = (await db.scalars(select(MeteorPair))).all()
     assert len(pairs) == 3
-    assert all(sorted(p.cameras) == sorted([linz, salzburg, liezen]) for p in pairs)
+    assert all(sorted(p.cameras) == sorted([nordheim, salzburg, liezen]) for p in pairs)
     assert {round(p.low_km, 6) for p in pairs} == {round(pairs[0].low_km, 6)}  # one solution
     assert pairs[0].low_err_km is not None
     assert pairs[0].low_err_km < two_err
@@ -249,12 +249,12 @@ async def test_the_joint_end_decides_the_alarm(app: FastAPI, client: httpx.Async
     reads the pairs fresh, not the pairwise values the session may still hold)."""
     maker: async_sessionmaker[AsyncSession] = app.state.sessionmaker
     await make_account(client)
-    top, end = t.ecef(47.95, 13.80, 95.0), t.ecef(47.80, 13.95, 38.0)
+    top, end = t.ecef(47.95, 3.80, 95.0), t.ecef(47.80, 3.95, 38.0)
     deeper = t._add(top, t._mul(t._sub(end, top), 62 / 57))  # pyright: ignore[reportPrivateUsage]
     assert t.geodetic(deeper)[2] < 34.0
-    await _camera(client, maker, LINZ, 0, 0.2, (top, end))
-    await _camera(client, maker, SALZBURG, 10, 0.2, (top, end))
-    liezen = await _camera(client, maker, LIEZEN, 5, 0.5, (top, deeper))
+    await _camera(client, maker, NORDHEIM, 0, 0.2, (top, end))
+    await _camera(client, maker, SUEDTAL, 10, 0.2, (top, end))
+    liezen = await _camera(client, maker, BERGDORF, 5, 0.5, (top, deeper))
     alarms: list[object] = []
 
     async def alarm(pair_id: object) -> None:
@@ -270,7 +270,7 @@ async def test_the_joint_end_decides_the_alarm(app: FastAPI, client: httpx.Async
 
 def test_a_camera_reporting_nan_is_not_used() -> None:
     """``rms_deg`` and track ends come from the camera; JSON lets NaN through."""
-    device = Device(id="x", last_status={"settings": {"latitude": 48.3, "longitude": 14.29},
+    device = Device(id="x", last_status={"settings": {"latitude": 48.3, "longitude": 4.29},
                                           "orientation": {"rms_deg": float("nan")}})  # fmt: skip
     data = {"start_azimuth_deg": 10.0, "start_altitude_deg": 40.0,
             "end_azimuth_deg": 20.0, "end_altitude_deg": 30.0}  # fmt: skip
@@ -278,7 +278,7 @@ def test_a_camera_reporting_nan_is_not_used() -> None:
     seen = meteor_pairs.sighting(device, event)
     assert seen is not None
     assert seen.sigma_deg == t.DEFAULT_SIGMA_DEG
-    device.last_status = {"settings": {"latitude": 48.3, "longitude": 14.29},
+    device.last_status = {"settings": {"latitude": 48.3, "longitude": 4.29},
                           "orientation": {"rms_deg": 90.0}}  # fmt: skip
     seen = meteor_pairs.sighting(device, event)
     assert seen is not None

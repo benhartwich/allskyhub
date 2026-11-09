@@ -155,7 +155,7 @@ def test_runs() -> None:
 
 
 def test_trial_meteors_are_not_paired() -> None:
-    device = Device(id=DEV, last_status={"settings": {"latitude": 48.3, "longitude": 14.29}})
+    device = Device(id=DEV, last_status={"settings": {"latitude": 48.3, "longitude": 4.29}})
     data = {"start_azimuth_deg": 10.0, "start_altitude_deg": 40.0,
             "end_azimuth_deg": 20.0, "end_altitude_deg": 30.0}  # fmt: skip
     assert meteor_pairs.sighting(device, EventRecord(data=data)) is not None

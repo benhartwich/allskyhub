@@ -83,7 +83,7 @@ async def test_by_image_address_waits_for_the_admin(
     auth = await _token(client)
     data = {"software": "image-url", "name": "Allsky Gaisberg", "terms": "true",
             "url": "https://gaisberg.example.org/allsky/image.jpg",
-            "latitude": "47,8", "longitude": "13.11", "timezone": "Europe/Vienna"}  # fmt: skip
+            "latitude": "47,8", "longitude": "3.11", "timezone": "Europe/Vienna"}  # fmt: skip
     no_proof = await client.post("/api/v1/stations", headers=auth, data=data)
     assert no_proof.status_code == 400
     assert "Nachweis" in no_proof.json()["detail"]

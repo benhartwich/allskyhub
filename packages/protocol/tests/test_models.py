@@ -460,7 +460,7 @@ def test_aircraft_message() -> None:
         "body": {"at": "2026-10-13T21:00:00Z", "aircraft": [
             {"hex": "3c6444", "flight": "DLH4AB", "lat": 50.0, "lon": 11.5,
              "alt_m": 10668, "track_deg": 271.5, "speed_kn": 450, "seen_s": 0.4},
-            {"hex": "4b1805", "lat": 48.3, "lon": 11.2, "seen_s": 12},
+            {"hex": "4b1805", "lat": 48.3, "lon": 1.2, "seen_s": 12},
         ]},
     })  # fmt: skip
     assert env.body.TYPE == "aircraft"

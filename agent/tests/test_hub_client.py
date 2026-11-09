@@ -515,7 +515,7 @@ def test_set_settings_command(tmp_path: Path) -> None:
         Command(name=CommandName.SET_SETTINGS, args={"latitude": 48.0}),
         Command(
             name=CommandName.SET_SETTINGS,
-            args={"latitude": 48.0, "longitude": 14.0, "night_delay_s": 5},
+            args={"latitude": 48.0, "longitude": 4.0, "night_delay_s": 5},
         ),
     ]
     got: list[SetSettingsArgs] = []
@@ -544,7 +544,7 @@ def test_set_settings_command(tmp_path: Path) -> None:
     assert first.code == "invalid_args"
     assert isinstance(second, Ack)
     assert len(got) == 1
-    assert (got[0].latitude, got[0].longitude, got[0].night_delay_s) == (48.0, 14.0, 5)
+    assert (got[0].latitude, got[0].longitude, got[0].night_delay_s) == (48.0, 4.0, 5)
 
 
 class _Local:

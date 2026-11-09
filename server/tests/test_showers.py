@@ -29,7 +29,7 @@ def test_active_and_upcoming() -> None:
 
 
 def _pair_from(radiant: tuple[float, float], at: dt.datetime) -> MeteorPair:
-    """A meteor over Linz coming from ``radiant`` (RA, Dec) at ``at``."""
+    """A meteor over Nordheim coming from ``radiant`` (RA, Dec) at ``at``."""
     ra, dec = (math.radians(v) for v in radiant)
     gmst = math.radians(sidereal_deg(at, 0.0))
     xs, ys, z = math.cos(dec) * math.cos(ra), math.cos(dec) * math.sin(ra), math.sin(dec)

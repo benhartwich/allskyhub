@@ -43,8 +43,8 @@ from tests.helpers import PASSWORD, csrf_from, make_account
 from tests.test_station_solve import (
     AT,
     FLIP,
-    LINZ,
-    SALZBURG,
+    NORDHEIM,
+    SUEDTAL,
     TRUE,
     H,
     W,
@@ -52,7 +52,7 @@ from tests.test_station_solve import (
     _true,  # pyright: ignore[reportPrivateUsage]
 )
 
-TOP, BOTTOM = t.ecef(47.95, 13.80, 95.0), t.ecef(47.90, 13.95, 50.0)
+TOP, BOTTOM = t.ecef(47.95, 3.80, 95.0), t.ecef(47.90, 3.95, 50.0)
 
 
 def _track(place: tuple[float, float]) -> list[list[float]]:
@@ -161,13 +161,13 @@ async def test_a_fireball_sent_later_pairs(
     monkeypatch.setattr(late_fireballs, "sun_altitude", _sun(-30.0))
     maker: async_sessionmaker[AsyncSession] = app.state.sessionmaker
     email = await make_account(client)
-    linz = await _station(app, email, LINZ)
-    salzburg = await _station(app, email, SALZBURG)
+    nordheim = await _station(app, email, NORDHEIM)
+    salzburg = await _station(app, email, SUEDTAL)
 
-    r = await _send(client, linz, _with_fireball(LINZ), AT + dt.timedelta(minutes=10))
+    r = await _send(client, nordheim, _with_fireball(NORDHEIM), AT + dt.timedelta(minutes=10))
     assert r.status_code == 303
     url = r.headers["location"]
-    await _mark(client, url, _track(LINZ))
+    await _mark(client, url, _track(NORDHEIM))
     upload = await _upload(app, url)
     assert upload.state == "failed"
     assert upload.reason in ("turned", "no_match")
@@ -186,14 +186,14 @@ async def test_a_fireball_sent_later_pairs(
     assert upload.check["offset_deg"] <= late_fireballs.MAX_OFF_DEG
     assert upload.event_id is not None
 
-    r = await _send(client, salzburg, _with_fireball(SALZBURG), AT)
+    r = await _send(client, salzburg, _with_fireball(SUEDTAL), AT)
     second = r.headers["location"]
-    await _mark(client, second, _track(SALZBURG))
+    await _mark(client, second, _track(SUEDTAL))
     assert (await _upload(app, second)).state == "accepted"
     async with maker() as db:
         event = await db.scalar(
             select(EventRecord).where(
-                EventRecord.device_id == linz, EventRecord.event_id == upload.event_id
+                EventRecord.device_id == nordheim, EventRecord.event_id == upload.event_id
             )
         )
         assert event is not None
@@ -224,17 +224,19 @@ async def test_uploads_refused_at_once(
 ) -> None:
     """Another size, an old date, and another owner's camera."""
     email = await make_account(client)
-    linz = await _station(app, email, LINZ)
+    nordheim = await _station(app, email, NORDHEIM)
     small = io.BytesIO()
     Image.new("RGB", (640, 360)).save(small, "JPEG")
-    r = await _send(client, linz, small.getvalue(), AT)
+    r = await _send(client, nordheim, small.getvalue(), AT)
     assert r.status_code == 400
     assert "Größe" in r.text or "size" in r.text
-    r = await _send(client, linz, _render(*LINZ), dt.datetime.now(dt.UTC) - dt.timedelta(days=400))
+    r = await _send(
+        client, nordheim, _render(*NORDHEIM), dt.datetime.now(dt.UTC) - dt.timedelta(days=400)
+    )
     assert r.status_code == 400
 
     await make_account(client)  # signed in as someone else now
-    assert (await client.get(f"/nachreichen/{linz}")).status_code == 404
+    assert (await client.get(f"/nachreichen/{nordheim}")).status_code == 404
 
 
 async def test_a_faint_short_meteor_is_no_fireball(
@@ -242,10 +244,10 @@ async def test_a_faint_short_meteor_is_no_fireball(
 ) -> None:
     monkeypatch.setattr(late_fireballs, "sun_altitude", _sun(-30.0))
     email = await make_account(client)
-    linz = await _station(app, email, LINZ)
-    a, b = _track(LINZ)
+    nordheim = await _station(app, email, NORDHEIM)
+    a, b = _track(NORDHEIM)
     short = [a, [a[0] + (b[0] - a[0]) * 0.1, a[1] + (b[1] - a[1]) * 0.1]]
-    r = await _send(client, linz, _render(*LINZ), AT)
+    r = await _send(client, nordheim, _render(*NORDHEIM), AT)
     url = r.headers["location"]
     await _mark(client, url, short)
     upload = await _upload(app, url)
@@ -253,9 +255,9 @@ async def test_a_faint_short_meteor_is_no_fireball(
 
 
 async def _accepted(app: FastAPI, client: httpx.AsyncClient, device_id: str) -> LateFireball:
-    r = await _send(client, device_id, _with_fireball(LINZ), AT)
+    r = await _send(client, device_id, _with_fireball(NORDHEIM), AT)
     url = r.headers["location"]
-    await _mark(client, url, _track(LINZ))
+    await _mark(client, url, _track(NORDHEIM))
     upload = await _upload(app, url)
     assert upload.state == "accepted", upload.reason
     return upload
@@ -268,13 +270,13 @@ async def test_a_check_a_restart_ended_starts_again(
     that never ends goes with the failed ones."""
     monkeypatch.setattr(late_fireballs, "sun_altitude", _sun(-30.0))
     maker: async_sessionmaker[AsyncSession] = app.state.sessionmaker
-    linz = await _station(app, await make_account(client), LINZ)
-    r = await _send(client, linz, _with_fireball(LINZ), AT)
+    nordheim = await _station(app, await make_account(client), NORDHEIM)
+    r = await _send(client, nordheim, _with_fireball(NORDHEIM), AT)
     upload_id = r.headers["location"].rsplit("/", 1)[1]
     async with maker() as db:
         upload = await db.get(LateFireball, upload_id)
         assert upload is not None
-        upload.state, upload.track_px = "checking", _track(LINZ)  # as a restart left it
+        upload.state, upload.track_px = "checking", _track(NORDHEIM)  # as a restart left it
         await db.commit()
     assert await late_fireballs.resume(maker, app.state.images) == 1
     await _settle()
@@ -283,7 +285,7 @@ async def test_a_check_a_restart_ended_starts_again(
         assert upload is not None
         assert upload.state == "accepted"
         stuck = LateFireball(
-            device_id=linz, taken_at=AT, exposure_s=30.0, track_px=[], width=W, height=H,
+            device_id=nordheim, taken_at=AT, exposure_s=30.0, track_px=[], width=W, height=H,
             state="checking", created_at=AT,
         )  # fmt: skip
         db.add(stuck)
@@ -302,12 +304,12 @@ async def test_paired_later_still_sent_later(
     monkeypatch.setattr(late_fireballs, "sun_altitude", _sun(-30.0))
     maker: async_sessionmaker[AsyncSession] = app.state.sessionmaker
     email = await make_account(client)
-    linz = await _station(app, email, LINZ)
-    salzburg = await _station(app, email, SALZBURG)
-    upload = await _accepted(app, client, linz)
+    nordheim = await _station(app, email, NORDHEIM)
+    salzburg = await _station(app, email, SUEDTAL)
+    upload = await _accepted(app, client, nordheim)
     assert upload.event_id is not None
 
-    sky = station_solve.directions(_true(), _track(SALZBURG))
+    sky = station_solve.directions(_true(), _track(SUEDTAL))
     assert sky is not None
     async with maker() as db:
         device = await db.get(Device, salzburg)
@@ -316,7 +318,7 @@ async def test_paired_later_still_sent_later(
         db.add(EventRecord(
             device_id=salzburg, event_id=live, night_id="20261007", kind="meteor", has_image=False,
             start=AT - dt.timedelta(seconds=15), end=AT + dt.timedelta(seconds=15),
-            confidence=1.0, data={"track_px": _track(SALZBURG), "time_trusted": True,
+            confidence=1.0, data={"track_px": _track(SUEDTAL), "time_trusted": True,
                                   "peak": 0.95} | sky,
         ))  # fmt: skip
         await db.commit()
@@ -333,18 +335,18 @@ async def test_paired_later_still_sent_later(
         assert (pair.late, pair.alerted) == (True, True)
         event = await db.scalar(
             select(EventRecord).where(
-                EventRecord.device_id == linz, EventRecord.event_id == upload.event_id
+                EventRecord.device_id == nordheim, EventRecord.event_id == upload.event_id
             )
         )
         assert event is not None
         before = dict(event.data)
-        device = await db.get(Device, linz)
+        device = await db.get(Device, nordheim)
         assert device is not None
         turned = dataclasses.replace(_true(), rot=_true().rot + 2.0)
         orientation = station_solve.to_orientation(turned, AT)
         device.last_status = {**(device.last_status or {}), "orientation": orientation}
         await db.commit()
-    changed = await station_solve.apply(maker, linz, AT + dt.timedelta(hours=1))
+    changed = await station_solve.apply(maker, nordheim, AT + dt.timedelta(hours=1))
     assert upload.event_id not in changed
     async with maker() as db:
         row = await db.get(LateFireball, upload.id)
@@ -353,15 +355,15 @@ async def test_paired_later_still_sent_later(
         await db.commit()
         event = await db.scalar(
             select(EventRecord).where(
-                EventRecord.device_id == linz, EventRecord.event_id == upload.event_id
+                EventRecord.device_id == nordheim, EventRecord.event_id == upload.event_id
             )
         )
         assert event is not None
         assert {k: v for k, v in event.data.items() if k != "hidden"} == before
         assert (await db.scalars(select(MeteorPair))).all() == []
         with pytest.raises(HTTPException):
-            await labels.set_on_hub(db, linz, event.night_id, event.event_id, None)
-    assert await meteor_pairs.pair_event(maker, linz, upload.event_id) == 0
+            await labels.set_on_hub(db, nordheim, event.night_id, event.event_id, None)
+    assert await meteor_pairs.pair_event(maker, nordheim, upload.event_id) == 0
     assert await meteor_pairs.pair_event(maker, salzburg, live) == 0
 
 
@@ -370,13 +372,13 @@ async def test_deleting_frees_no_upload(
 ) -> None:
     """allsky's review: the day's uploads and checks are counted apart from the rows."""
     monkeypatch.setattr(late_fireballs, "UPLOADS_PER_DAY", (ratelimit.Limit(1, 86400),))
-    linz = await _station(app, await make_account(client), LINZ)
-    r = await _send(client, linz, _render(*LINZ), AT)
+    nordheim = await _station(app, await make_account(client), NORDHEIM)
+    r = await _send(client, nordheim, _render(*NORDHEIM), AT)
     url = r.headers["location"]
     page = await client.get(url)
     r = await client.post(f"{url}/loeschen", data={"csrf_token": csrf_from(page.text)})
     assert r.status_code == 303
-    r = await _send(client, linz, _render(*LINZ), AT)
+    r = await _send(client, nordheim, _render(*NORDHEIM), AT)
     assert r.status_code == 400
     assert "20" in r.text
 
@@ -417,7 +419,7 @@ async def test_a_fireball_from_before_the_camera_was_moved(
     longer; old ones go after a year, at most 20 are kept."""
     monkeypatch.setattr(late_fireballs, "sun_altitude", _sun(-30.0))
     maker: async_sessionmaker[AsyncSession] = app.state.sessionmaker
-    linz = await _station(app, await make_account(client), LINZ)
+    nordheim = await _station(app, await make_account(client), NORDHEIM)
     later = AT + dt.timedelta(days=30)
 
     def pose(turn: float, at: dt.datetime) -> dict[str, Any]:
@@ -426,22 +428,22 @@ async def test_a_fireball_from_before_the_camera_was_moved(
         )
 
     async with maker() as db:
-        device = await db.get(Device, linz)
+        device = await db.get(Device, nordheim)
         assert device is not None
         before = (device.last_status or {})["orientation"]
-        assert await past_orientations.keep(db, linz, before, pose(2.0, later), later)
+        assert await past_orientations.keep(db, nordheim, before, pose(2.0, later), later)
         device.last_status = {**(device.last_status or {}), "orientation": pose(2.0, later)}
         await db.commit()
         # The same pose solved again (0.5° off) is no new one: it holds longer.
-        assert await past_orientations.keep(db, linz, pose(0.5, AT), pose(2.0, later), later)
+        assert await past_orientations.keep(db, nordheim, pose(0.5, AT), pose(2.0, later), later)
         await db.commit()
         assert len((await db.scalars(select(PastOrientation))).all()) == 1
         known = await past_orientations.known(db, device)
         assert [w for _, w in known] == [(later, None), (None, later)]
         # Back to an older pose and away again (A, B, A, C): A twice, each in its time.
         t2, t3 = later + dt.timedelta(days=10), later + dt.timedelta(days=20)
-        assert await past_orientations.keep(db, linz, pose(2.0, later), pose(0.0, t2), t2)
-        assert await past_orientations.keep(db, linz, pose(0.0, t2), pose(5.0, t3), t3)
+        assert await past_orientations.keep(db, nordheim, pose(2.0, later), pose(0.0, t2), t2)
+        assert await past_orientations.keep(db, nordheim, pose(0.0, t2), pose(5.0, t3), t3)
         windows = [w for _, w in await past_orientations.known(db, device)]
         await db.rollback()
     assert windows[1:] == [(t2, t3), (later, t2), (None, later)]
@@ -450,17 +452,17 @@ async def test_a_fireball_from_before_the_camera_was_moved(
     # Taken while the camera stood turned: the old pose does not count then.
     assert late_fireballs.best_match(found, known, later + dt.timedelta(days=5))[0] == "turned"
 
-    upload = await _accepted(app, client, linz)
+    upload = await _accepted(app, client, nordheim)
     assert upload.check["orientation_until"] is not None
     assert upload.check["offset_deg"] <= late_fireballs.MAX_OFF_DEG
 
     async with maker() as db:
         for k in range(25):
             await past_orientations.keep(
-                db, linz, pose(3.0 + 2 * k, AT), pose(90.0, later), later + dt.timedelta(days=k)
+                db, nordheim, pose(3.0 + 2 * k, AT), pose(90.0, later), later + dt.timedelta(days=k)
             )
         await past_orientations.keep(
-            db, linz, pose(-30.0, AT), pose(90.0, later), later - dt.timedelta(days=400)
+            db, nordheim, pose(-30.0, AT), pose(90.0, later), later - dt.timedelta(days=400)
         )
         await db.commit()
         await past_orientations.purge(db, later + dt.timedelta(days=30))
@@ -473,9 +475,9 @@ async def test_a_new_frame_size_keeps_the_orientation(
     app: FastAPI, client: httpx.AsyncClient
 ) -> None:
     maker: async_sessionmaker[AsyncSession] = app.state.sessionmaker
-    linz = await _station(app, await make_account(client), LINZ)
+    nordheim = await _station(app, await make_account(client), NORDHEIM)
     async with maker() as db:
-        device = await db.get(Device, linz)
+        device = await db.get(Device, nordheim)
         assert device is not None
         past_orientations.dropped(device, AT)
         await db.commit()
@@ -494,7 +496,7 @@ def _disc(im: Image.Image, alt: float, az: float, across: float) -> None:
 
 
 def _moon_frame(*discs: tuple[float, float, float]) -> np.ndarray[Any, np.dtype[np.uint8]]:
-    im = Image.open(io.BytesIO(_render(*LINZ))).convert("L")
+    im = Image.open(io.BytesIO(_render(*NORDHEIM))).convert("L")
     for disc in discs:
         _disc(im, *disc)
     return np.asarray(im).copy()
@@ -504,7 +506,7 @@ def test_the_moon_checks_the_date() -> None:
     """SPEC §10.8 after allsky's review: the moon where it stood confirms the date, its glow
     however wide; a compact moon-sized patch elsewhere contradicts it; a missing moon, a
     small bright point, the fireball's own glow, a low or thin moon say nothing."""
-    sol, track = _true(), _track(LINZ)
+    sol, track = _true(), _track(NORDHEIM)
     here = (45.0, 100.0, 0.6)
 
     def check(
@@ -524,7 +526,7 @@ def test_the_moon_checks_the_date() -> None:
     assert check((50.0, 250.0, 3.0), moon=(5.0, 100.0, 0.9)) is None
     assert check((50.0, 250.0, 3.0), moon=(45.0, 100.0, 0.05)) is None
     # The real moon of that night is computed where it stood.
-    alt, az, lit = late_fireballs.moon_place(AT, *LINZ)
+    alt, az, lit = late_fireballs.moon_place(AT, *NORDHEIM)
     assert -90 <= alt <= 90
     assert 0 <= az < 360
     assert 0 <= lit <= 1
@@ -539,14 +541,14 @@ async def test_a_wrong_day_fails_on_the_moon(
         return 45.0, 100.0, 0.9  # where it stood on the given day
 
     monkeypatch.setattr(late_fireballs, "moon_place", moon_then)
-    linz = await _station(app, await make_account(client), LINZ)
-    im = Image.open(io.BytesIO(_with_fireball(LINZ)))
+    nordheim = await _station(app, await make_account(client), NORDHEIM)
+    im = Image.open(io.BytesIO(_with_fireball(NORDHEIM)))
     _disc(im, 50.0, 250.0, 3.0)  # the moon of another day
     out = io.BytesIO()
     im.save(out, "JPEG", quality=97)
-    r = await _send(client, linz, out.getvalue(), AT)
+    r = await _send(client, nordheim, out.getvalue(), AT)
     url = r.headers["location"]
-    await _mark(client, url, _track(LINZ))
+    await _mark(client, url, _track(NORDHEIM))
     upload = await _upload(app, url)
     assert (upload.state, upload.reason) == ("failed", "moon")
     assert "Mond" in (await client.get(url)).text
@@ -561,8 +563,8 @@ async def test_sent_later_from_the_app(
     email = await make_account(client)
     r = await client.post("/api/v1/auth/login", json={"email": email, "password": PASSWORD})
     auth = {"Authorization": f"Bearer {r.json()['access_token']}"}
-    linz = await _station(app, email, LINZ)
-    base = f"/api/v1/devices/{linz}/late"
+    nordheim = await _station(app, email, NORDHEIM)
+    base = f"/api/v1/devices/{nordheim}/late"
 
     listed = (await client.get(base, headers=auth)).json()
     assert listed["sizes"] == [[W, H]]
@@ -579,7 +581,7 @@ async def test_sent_later_from_the_app(
         base,
         headers=auth,
         data=form,
-        files={"image": ("a.jpg", _with_fireball(LINZ), "image/jpeg")},
+        files={"image": ("a.jpg", _with_fireball(NORDHEIM), "image/jpeg")},
     )
     assert r.status_code == 201
     item = r.json()
@@ -589,14 +591,14 @@ async def test_sent_later_from_the_app(
 
     r = await client.post(f"{url}/track", headers=auth, json={"track": [[1, 2]]})
     assert r.status_code == 400
-    r = await client.post(f"{url}/track", headers=auth, json={"track": _track(LINZ)})
+    r = await client.post(f"{url}/track", headers=auth, json={"track": _track(NORDHEIM)})
     assert r.json()["state"] == "checking"
     await _settle()
     item = (await client.get(url, headers=auth)).json()
     assert item["state"] == "accepted", item["reason_text"]
     assert item["offset_deg"] <= late_fireballs.MAX_OFF_DEG
     assert (
-        await client.post(f"{url}/track", headers=auth, json={"track": _track(LINZ)})
+        await client.post(f"{url}/track", headers=auth, json={"track": _track(NORDHEIM)})
     ).status_code == 409
 
     other = {"Authorization": auth["Authorization"] + "x"}

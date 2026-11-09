@@ -139,8 +139,8 @@ async def test_image_address_public_once_checked(
 ) -> None:
     await make_account(client)
     station_id = await _new(
-        client, "image-url", name="Allsky Linz", url="https://cam.example.org/image.jpg",
-        latitude="48.30", longitude="14.29", timezone="Europe/Vienna", proof_text="Meine.",
+        client, "image-url", name="Allsky Nordheim", url="https://cam.example.org/image.jpg",
+        latitude="48.30", longitude="4.29", timezone="Europe/Vienna", proof_text="Meine.",
     )  # fmt: skip
     device = await _device(app, station_id)
     assert device.public_slug

@@ -70,12 +70,12 @@ async def test_app_api_settings(app: FastAPI, client: httpx.AsyncClient, live_ap
         put = asyncio.create_task(
             client.put(
                 url,
-                json={"latitude": 47.8, "longitude": 13.05, "timezone": "Europe/Vienna"},
+                json={"latitude": 47.8, "longitude": 3.05, "timezone": "Europe/Vienna"},
                 headers=auth,
             )
         )
         args = await answer(ws)
-        assert (args.latitude, args.longitude, args.timezone) == (47.8, 13.05, "Europe/Vienna")
+        assert (args.latitude, args.longitude, args.timezone) == (47.8, 3.05, "Europe/Vienna")
         assert args.camera is None  # only the given keys are sent
         r = await put
         assert r.status_code == 200
@@ -125,7 +125,7 @@ async def test_web_settings_form(app: FastAPI, client: httpx.AsyncClient, live_a
         post = asyncio.create_task(
             client.post(
                 url,
-                data={"latitude": "47,8", "longitude": "13,05", "timezone": "Europe/Vienna",
+                data={"latitude": "47,8", "longitude": "3,05", "timezone": "Europe/Vienna",
                       "camera": "", "day_delay_s": "60", "night_delay_s": "",
                       "csrf_token": csrf_from(page)},
             )
@@ -134,7 +134,7 @@ async def test_web_settings_form(app: FastAPI, client: httpx.AsyncClient, live_a
         # Only what changed: the time zone stays as the camera reported it.
         assert args.model_dump(exclude_unset=True) == {
             "latitude": 47.8,
-            "longitude": 13.05,
+            "longitude": 3.05,
             "day_delay_s": 60.0,
         }
         r = await post

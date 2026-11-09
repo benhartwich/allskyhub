@@ -111,7 +111,7 @@ async def test_image_address_checked_by_an_admin(
 ) -> None:
     owner = await make_account(client)
     fields = {"name": "Allsky Musterberg", "url": "https://cam.example.org/allsky/image.jpg",
-              "latitude": "48,30", "longitude": "14.29", "elevation_m": "450",
+              "latitude": "48,30", "longitude": "4.29", "elevation_m": "450",
               "timezone": "Europe/Vienna"}  # fmt: skip
     missing = await _new(client, "image-url", **fields)
     assert "Bitte einen Nachweis angeben" in missing.text

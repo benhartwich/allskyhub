@@ -17,7 +17,7 @@ import 'package:http/testing.dart';
 class _Here implements LocationSource {
   @override
   Future<LocationResult> current() async =>
-      LocationResult.found(CameraLocation(47.80, 13.11));
+      LocationResult.found(CameraLocation(47.80, 3.11));
 
   @override
   Future<String?> timezone() async => 'Europe/Vienna';
@@ -198,7 +198,7 @@ void main() {
           software: 'image-url',
           location: _Here(),
           precise: () async =>
-              (lat: 47.80321, lon: 13.10987, elevation: 1287.4),
+              (lat: 47.80321, lon: 3.10987, elevation: 1287.4),
           pickPhoto: () async =>
               (Uint8List.fromList([0xff, 0xd8, 0xff, 0xd9]), 'beweis.jpg'),
         ),

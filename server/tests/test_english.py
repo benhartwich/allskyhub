@@ -150,7 +150,7 @@ async def test_wizard_and_stations_in_english(
     english(form, "Connect a camera", "Address of the latest image")
     data = {"csrf_token": csrf_from(form.text), "software": "image-url", "terms": "true",
             "name": "Hilltop", "url": "https://cam.example.org/allsky/image.jpg",
-            "latitude": "48.3", "longitude": "14.29"}  # fmt: skip
+            "latitude": "48.3", "longitude": "4.29"}  # fmt: skip
     missing = await client.post("/stationen/neu", data=data)
     assert "Please give a proof" in missing.text
     bad = await client.post("/stationen/neu", data=data | {"url": "http://x.example:8080/a.jpg",

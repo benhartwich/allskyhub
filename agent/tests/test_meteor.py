@@ -285,7 +285,7 @@ def test_radiant_distance() -> None:
 
 def test_shower_by_radiant() -> None:
     utc = datetime(2026, 8, 12, 23, 0, tzinfo=UTC)
-    lat, lon = 48.2, 16.4
+    lat, lon = 48.2, 6.4
     ra, dec = radiant("Perseids", utc.date())
     alt, az = alt_az(np.array([ra]), np.array([dec]), sidereal_deg(utc, lon), lat)
     rad = (float(az[0]), float(alt[0]))
@@ -346,7 +346,7 @@ def test_meteor_event_shower_by_radiant(tmp_path: Path) -> None:
 
 # --- Trail verdicts (SPEC §6.4, roadmap L25) ---
 
-TLAT, TLON = 48.0, 11.0
+TLAT, TLON = 48.0, 1.0
 SOL = Solution(
     cx=W / 2, cy=H / 2, a1=170.0, a3=0.0, rot=0.0, flip=1.0, tilt_east=0.0, tilt_north=0.0,
     stars=40, rms_px=0.5, rms_deg=0.2, width=W, height=H,

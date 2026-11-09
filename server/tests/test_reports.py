@@ -127,7 +127,7 @@ async def test_report_at_night_once_an_hour(
 ) -> None:
     token = await _reporter(client, signup_on, "b@example.org")
     auth = {"Authorization": f"Bearer {token}"}
-    where = {"lat": 48.1234, "lon": 14.4321}
+    where = {"lat": 48.1234, "lon": 4.4321}
 
     monkeypatch.setattr(app_reports, "_now", lambda: DAY)
     day = (await client.get("/api/v1/reports/chart", params=where, headers=auth)).json()
@@ -153,7 +153,7 @@ async def test_report_at_night_once_an_hour(
     assert mine["next_at"] is not None
 
     # On the light-pollution map only from three reports by two accounts, without names.
-    assert '"lat": 48.1, "lon": 14.4' not in (await client.get("/karte?layer=sqm")).text
+    assert '"lat": 48.1, "lon": 4.4' not in (await client.get("/karte?layer=sqm")).text
     maker: async_sessionmaker[AsyncSession] = app.state.sessionmaker
     async with maker() as db:
         owner = await db.scalar(select(User).where(User.email == "b@example.org"))
@@ -162,11 +162,11 @@ async def test_report_at_night_once_an_hour(
         db.add(other)
         await db.flush()
         for user in (owner, other):
-            db.add(SkyReport(user_id=user.id, at=NIGHT, lat=48.1, lon=14.4,
+            db.add(SkyReport(user_id=user.id, at=NIGHT, lat=48.1, lon=4.4,
                              constellation="Cyg", limit_mag=5, sqm=19.3, clouds=False))  # fmt: skip
         await db.commit()
     page = (await client.get("/karte?layer=sqm")).text
-    assert '"lat": 48.1, "lon": 14.4' in page
+    assert '"lat": 48.1, "lon": 4.4' in page
     assert "3 Meldungen" in page
     assert "b@example.org" not in page
 
@@ -177,7 +177,7 @@ async def test_reports_are_checked(
     token = await _reporter(client, signup_on, "c@example.org")
     auth = {"Authorization": f"Bearer {token}"}
     monkeypatch.setattr(app_reports, "_now", lambda: NIGHT)
-    base = {"lat": 48.1, "lon": 14.4, "clouds": False}
+    base = {"lat": 48.1, "lon": 4.4, "clouds": False}
     low = await client.post(
         "/api/v1/reports", json={**base, "constellation": "Cru", "limit_mag": 5}, headers=auth
     )
@@ -209,7 +209,7 @@ async def test_reports_and_unconfirmed_accounts_expire(
     async with maker() as db:
         user = await db.scalar(select(User).where(User.email == "d@example.org"))
         assert user
-        db.add(SkyReport(user_id=user.id, at=NIGHT, lat=48.1, lon=14.4, constellation="Cyg",
+        db.add(SkyReport(user_id=user.id, at=NIGHT, lat=48.1, lon=4.4, constellation="Cyg",
                          limit_mag=5, sqm=19.3, clouds=False))  # fmt: skip
         await db.commit()
         later = NIGHT + dt.timedelta(days=366)

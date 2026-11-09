@@ -60,7 +60,7 @@ async def test_fireball_matched_with_cameras_and_others(
         await db.execute(
             update(Device)
             .where(Device.id == device_id)
-            .values(last_status={"settings": {"latitude": 48.2, "longitude": 14.5}})
+            .values(last_status={"settings": {"latitude": 48.2, "longitude": 4.5}})
         )
         db.add(EventRecord(device_id=device_id, event_id="m1", night_id="20261028",
                            kind="meteor", start=seen + dt.timedelta(seconds=40),
@@ -70,20 +70,20 @@ async def test_fireball_matched_with_cameras_and_others(
 
     one = await _reporter(new_client, signup_on, "fb1@example.org")
     two = await _reporter(new_client, signup_on, "fb2@example.org")
-    body = {"seen_at": seen.isoformat(), "lat": 48.31, "lon": 14.29, "brightness": "venus",
+    body = {"seen_at": seen.isoformat(), "lat": 48.31, "lon": 4.29, "brightness": "venus",
             "start": [40, 315], "end": [12, 250], "details": ["green", "nonsense"]}  # fmt: skip
     first = await new_client.post("/api/v1/sightings/fireball", json=body, headers=_auth(one))
     assert first.status_code == 200, first.text
     second = await new_client.post(
         "/api/v1/sightings/fireball",
-        json={**body, "lat": 48.5, "lon": 13.4},
+        json={**body, "lat": 48.5, "lon": 3.4},
         headers=_auth(two),
     )
     out = second.json()
     [camera] = out["cameras"]
     assert camera["title"] == "Sternwarte"
     assert camera["image"] == f"/sky/{slug}/events/20261028/m1.jpg?v=1"
-    assert out["others_km"] == [100.0]  # Linz – Passau, about 70 km, in 50 km steps
+    assert out["others_km"] == [100.0]  # Nordheim – Passau, about 70 km, in 50 km steps
     again = await new_client.get(
         f"/api/v1/sightings/fireball/{first.json()['id']}", headers=_auth(two)
     )
@@ -119,7 +119,7 @@ async def test_aurora_photo_waits_for_approval(
     monkeypatch.setattr(settings, "admin_emails", admin)
     app.state.notifier.admins = settings.admins
     token = await _reporter(new_client, signup_on, "au@example.org")
-    form = {"lat": "48.31", "lon": "14.29", "naked_eye": "true", "details": "rays,green,x",
+    form = {"lat": "48.31", "lon": "4.29", "naked_eye": "true", "details": "rays,green,x",
             "author": "  Ben   H. "}  # fmt: skip
     photo = {"photo": ("a.jpg", _jpeg_with_gps(), "image/jpeg")}
     no_licence = await new_client.post(
@@ -142,9 +142,7 @@ async def test_aurora_photo_waits_for_approval(
     too_soon = await new_client.post("/api/v1/sightings/aurora", data=form, headers=_auth(token))
     assert too_soon.status_code == 429
 
-    listed = (
-        await new_client.get("/api/v1/sightings/aurora", params={"lat": 48, "lon": 14})
-    ).json()
+    listed = (await new_client.get("/api/v1/sightings/aurora", params={"lat": 48, "lon": 4})).json()
     assert listed[0]["details"] == ["rays", "green"]
     assert listed[0]["photo"] is None  # not yet approved
     photo_url = f"/api/v1/sightings/aurora/{report_id}/photo.jpg"
@@ -159,9 +157,7 @@ async def test_aurora_photo_waits_for_approval(
         data={"csrf_token": csrf_from(page.text), "action": "approve"},
     )
     assert "Foto freigegeben" in r.text
-    listed = (
-        await new_client.get("/api/v1/sightings/aurora", params={"lat": 48, "lon": 14})
-    ).json()
+    listed = (await new_client.get("/api/v1/sightings/aurora", params={"lat": 48, "lon": 4})).json()
     assert listed[0]["photo"] == photo_url
     assert listed[0]["author"] == "Ben H."
     assert (await new_client.get(photo_url)).headers["content-type"] == "image/jpeg"
@@ -189,10 +185,10 @@ async def test_alerts_and_aurora_push(
     watcher = await _reporter(new_client, signup_on, "watch@example.org")
     r = await new_client.put(
         "/api/v1/account/alerts",
-        json={"lat": 48.234, "lon": 14.567, "radius_km": 300, "aurora": True},
+        json={"lat": 48.234, "lon": 4.567, "radius_km": 300, "aurora": True},
         headers=_auth(watcher),
     )
-    assert r.json() == {"lat": 48.2, "lon": 14.6, "radius_km": 300, "aurora": True,
+    assert r.json() == {"lat": 48.2, "lon": 4.6, "radius_km": 300, "aurora": True,
                         "fireball": False, "clear_night": False, "tz": None}  # fmt: skip
     bad = await new_client.put(
         "/api/v1/account/alerts", json={"radius_km": 7}, headers=_auth(watcher)
@@ -212,7 +208,7 @@ async def test_alerts_and_aurora_push(
         await db.commit()
 
     seer = await _reporter(new_client, signup_on, "seer@example.org")
-    form = {"lat": "48.9", "lon": "15.1", "naked_eye": "true"}
+    form = {"lat": "48.9", "lon": "5.1", "naked_eye": "true"}
     report = await new_client.post("/api/v1/sightings/aurora", data=form, headers=_auth(seer))
     for _ in range(100):  # the hub tells the others in a task of its own
         if sender.sent:
@@ -247,7 +243,7 @@ async def test_clear_night_at_the_alert_place(
     token = await _reporter(new_client, signup_on, "clear@example.org")
     r = await new_client.put(
         "/api/v1/account/alerts",
-        json={"lat": 48.1, "lon": 14.4, "clear_night": True, "tz": "Europe/Vienna"},
+        json={"lat": 48.1, "lon": 4.4, "clear_night": True, "tz": "Europe/Vienna"},
         headers=_auth(token),
     )
     assert r.json()["tz"] == "Europe/Vienna"
@@ -266,7 +262,7 @@ async def test_clear_night_at_the_alert_place(
         return httpx.Response(200, json={"hourly": {"time": times, "cloud_cover": [5] * 72}})
 
     notifier.forecast = ForecastCache(httpx.AsyncClient(transport=httpx.MockTransport(clear)))
-    night = astro.night_after(today, 48.1, 14.4)
+    night = astro.night_after(today, 48.1, 4.4)
     assert night.sunset
     evening = night.sunset - dt.timedelta(minutes=20)
     await notifier.check_clear_here(evening)
@@ -288,7 +284,7 @@ async def test_sightings_expire_with_their_photos(
     token = await _reporter(new_client, signup_on, "old@example.org")
     r = await new_client.post(
         "/api/v1/sightings/aurora",
-        data={"lat": "48", "lon": "14", "naked_eye": "false", "licence": "true"},
+        data={"lat": "48", "lon": "4", "naked_eye": "false", "licence": "true"},
         files={"photo": ("a.png", _png(), "image/png")},
         headers=_auth(token),
     )
@@ -318,7 +314,7 @@ async def test_deleting_the_account_deletes_its_photos(
     token = await _reporter(new_client, signup_on, "gone@example.org")
     r = await new_client.post(
         "/api/v1/sightings/aurora",
-        data={"lat": "48", "lon": "14", "naked_eye": "true", "licence": "true"},
+        data={"lat": "48", "lon": "4", "naked_eye": "true", "licence": "true"},
         files={"photo": ("a.png", _png(), "image/png")},
         headers=_auth(token),
     )

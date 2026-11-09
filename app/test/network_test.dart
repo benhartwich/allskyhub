@@ -31,7 +31,7 @@ const _network = {
       'at': '2026-11-07T21:41:00Z',
       'high_km': 92.0,
       'low_km': 41.0,
-      'cameras': ['Lanzenberg', 'Sternwarte Musterberg'],
+      'cameras': ['Hügelfeld', 'Sternwarte Musterberg'],
     },
   ],
   'darkest': [

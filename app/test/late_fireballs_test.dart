@@ -112,7 +112,7 @@ class _Hub {
                 ? [
                     {
                       'id': 'p1',
-                      'other': 'Salzburg',
+                      'other': 'Südtal',
                       'high_km': 95.2,
                       'low_km': 49.8,
                     },
@@ -147,7 +147,7 @@ void main() {
         home: LateFireballsScreen(
           client: hub.client(),
           deviceId: _device,
-          name: 'Linz',
+          name: 'Nordheim',
         ),
       ),
     );
@@ -214,7 +214,7 @@ void main() {
 
     expect(find.text('angenommen'), findsOneWidget);
     expect(find.textContaining('Auch das Datum stimmt'), findsOneWidget);
-    expect(find.text('Bahn mit Salzburg'), findsOneWidget);
+    expect(find.text('Bahn mit Südtal'), findsOneWidget);
     expect(find.text('95 → 50 km'), findsOneWidget);
   });
 

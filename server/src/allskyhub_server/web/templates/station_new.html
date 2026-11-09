@@ -33,7 +33,7 @@
   <script type="application/json" id="map-config">{{ map_config | tojson }}</script>
   <div class="search-row">
     <label>{{ t('Breite', 'Latitude') }}<input name="latitude" id="latitude" value="{{ form.latitude or '' }}" inputmode="decimal" required placeholder="48.30"></label>
-    <label>{{ t('Länge', 'Longitude') }}<input name="longitude" id="longitude" value="{{ form.longitude or '' }}" inputmode="decimal" required placeholder="14.29"></label>
+    <label>{{ t('Länge', 'Longitude') }}<input name="longitude" id="longitude" value="{{ form.longitude or '' }}" inputmode="decimal" required placeholder="4.29"></label>
     <label class="narrow">{{ t('Höhe (m)', 'Elevation (m)') }}<input name="elevation_m" value="{{ form.elevation_m or '' }}" inputmode="decimal" placeholder="450"></label>
   </div>
   <p class="muted small">{{ t('Klick auf die Karte setzt den Ort. Er wird genau gebraucht, um Bahnen zu rechnen; öffentlich erscheint er nur gerundet.', 'A click on the map sets the location. The paths need it exactly; publicly it only appears rounded.') }}</p>

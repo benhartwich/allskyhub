@@ -18,7 +18,7 @@ from tests.helpers import claim, home_csrf, make_account
 
 # A GFS cut around the Traunsee from NOMADS (run 2026-11-05 00 UTC + 6 h), 22 levels.
 GRIB = (Path(__file__).parent / "data" / "gfs_traunsee.grb2").read_bytes()
-HIGH, LOW = (47.95, 13.80, 80.0), (47.80, 13.95, 25.0)
+HIGH, LOW = (47.95, 3.80, 80.0), (47.80, 3.95, 25.0)
 
 
 def test_standard_atmosphere() -> None:
@@ -49,7 +49,7 @@ def test_runs_before_the_meteor_that_are_out() -> None:
     assert soon[0] == (dt.datetime(2026, 11, 5, 12, tzinfo=dt.UTC), 10)  # 18 UTC not out yet
     later = winds.runs(at, at + dt.timedelta(hours=5))
     assert later[0] == (dt.datetime(2026, 11, 5, 18, tzinfo=dt.UTC), 4)
-    assert "gfs.20261105%2F18" in winds.url(*later[0], 47.8, 13.95)
+    assert "gfs.20261105%2F18" in winds.url(*later[0], 47.8, 3.95)
 
 
 def test_profile_from_gfs() -> None:
@@ -65,7 +65,7 @@ async def test_winds_for_a_fireball_and_its_page(app: FastAPI, client: httpx.Asy
     maker: async_sessionmaker[AsyncSession] = app.state.sessionmaker
     await make_account(client)
     ids: list[str] = []
-    for place in ("Linz", "Salzburg"):
+    for place in ("Nordheim", "Südtal"):
         dev = FakeDevice()
         reg = await dev.register(client)
         assert reg.pairing_code

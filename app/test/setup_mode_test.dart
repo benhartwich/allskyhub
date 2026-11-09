@@ -264,14 +264,14 @@ void main() {
       findsOneWidget,
     );
     await tester.enterText(find.byKey(const Key('latitude')), '47,8');
-    await tester.enterText(find.byKey(const Key('longitude')), '13.05');
+    await tester.enterText(find.byKey(const Key('longitude')), '3.05');
     await tester.pump();
     await tester.ensureVisible(send);
     await tester.tap(send);
     await tester.pumpAndSettle();
     expect(f.sent, containsPair('password', 'long enough'));
     expect(f.sent, containsPair('latitude', 47.8));
-    expect(f.sent, containsPair('longitude', 13.05));
+    expect(f.sent, containsPair('longitude', 3.05));
     expect(f.sent, containsPair('timezone', 'Europe/Vienna'));
     expect(
       find.text('Weiter suchen'),

@@ -6,7 +6,7 @@
 <div class="prose stack">
 {% if en %}
 <p>With this interface any all-sky camera can measure along in SharedSky, whatever software it runs: commercial programs, your own scripts or tinkering projects. The camera sends to the hub over HTTPS. No MQTT, no FTP, no port forwarding. The contract behind it is <a href="https://github.com/benhartwich/allskyhub/blob/main/docs/SPEC.md">SPEC §10</a>.</p>
-<p>For <strong>indi-allsky</strong> its configuration is enough, see below. <strong>Allsky</strong> and every camera that shows its latest image at a fixed address connect without any code of their own through that address ("Allsky / image address" under <a href="/stationen/neu">Connect a camera</a>).</p>
+<p>For <strong>indi-allsky</strong> its configuration is enough, see below. <strong>Allsky</strong> has a module for it, see below. Allsky and every other camera that shows its latest image at a fixed address can also connect without any code of their own through that address ("Allsky / image address" under <a href="/stationen/neu">Connect a camera</a>).</p>
 
 <h2>Signing in</h2>
 <p>Create a free account and choose <a href="/stationen/neu?software=other">Connect a camera</a>. The hub then shows you once the <strong>station ID</strong> (26 characters) and the <strong>secret</strong> (64 hex characters). You can make a new secret at any time; the old one stops working at once. Every request carries the header</p>
@@ -17,7 +17,7 @@
 <p>At start and whenever something changes:</p>
 {% else %}
 <p>Mit dieser Schnittstelle kann jede Allsky-Kamera bei SharedSky mitmessen, egal mit welcher Software sie läuft: gekaufte Programme, eigene Skripte oder Bastelprojekte. Die Kamera schickt über HTTPS an den Hub. MQTT, FTP und Portfreigaben braucht es nicht. Den Vertrag dazu beschreibt <a href="https://github.com/benhartwich/allskyhub/blob/main/docs/SPEC.md">SPEC §10</a>.</p>
-<p>Für <strong>indi-allsky</strong> reicht die Konfiguration, siehe unten. <strong>Allsky</strong> und alle Kameras, die ihr neuestes Bild unter einer festen Adresse zeigen, verbinden sich ohne eigenen Code über diese Adresse („Allsky / Bild-Adresse“ bei <a href="/stationen/neu">Kamera verbinden</a>).</p>
+<p>Für <strong>indi-allsky</strong> reicht die Konfiguration, siehe unten. <strong>Allsky</strong> hat dafür ein Modul, siehe unten. Allsky und alle anderen Kameras, die ihr neuestes Bild unter einer festen Adresse zeigen, können sich auch ohne eigenen Code über diese Adresse verbinden („Allsky / Bild-Adresse“ bei <a href="/stationen/neu">Kamera verbinden</a>).</p>
 
 <h2>Anmelden</h2>
 <p>Lege ein kostenloses Konto an und wähle <a href="/stationen/neu?software=other">Kamera verbinden</a>. Danach zeigt dir der Hub einmal die <strong>Station-ID</strong> (26 Zeichen) und das <strong>Geheimnis</strong> (64 Hex-Zeichen). Ein neues Geheimnis kannst du jederzeit erzeugen, das alte gilt dann sofort nicht mehr. Jede Anfrage trägt den Header</p>
@@ -41,6 +41,7 @@
   <li><code>clock_synced</code>: the clock runs on NTP or GPS. The hub also checks it on every image.</li>
 </ul>
 <p>Answer: <code>{"orientation": null, "want_full_frame": false}</code></p>
+<p><strong>The orientation.</strong> Once the hub has oriented the camera by the stars, <code>orientation</code> is <code>{north_deg, mirrored, solved_at, stars, rms_deg, lens: {cx, cy, a1, a3, tilt_east_deg, tilt_north_deg, width, height}}</code>. <code>north_deg</code> is the image direction of north at the horizon (0 = up, clockwise); <code>mirrored</code> means east lies counter-clockwise from north, the usual view of a camera looking up. A direction (altitude, azimuth) lands at t = (90° − altitude) / 90°, r = a1·t + a3·t³, angle = north_deg − azimuth (mirrored) or north_deg + azimuth, x = cx + r·sin(angle), y = cy − r·cos(angle), in pixels of a <code>width</code> × <code>height</code> image; a leaning camera first turns the direction by its tilt (<a href="https://github.com/benhartwich/allskyhub/blob/main/docs/SPEC.md">SPEC §4.8</a>). Ready-made in Python: <code>sky_to_pixel()</code> in the <a href="https://github.com/benhartwich/allskyhub/tree/main/integrations/allsky_sharedsky">Allsky module</a>, for constellations or the cardinal points in your own image.</p>
 
 <h2>2. Send an image: <code>POST /frames</code></h2>
 <p>About once a minute, multipart with two parts:</p>
@@ -57,6 +58,7 @@
   <li><code>clock_synced</code>: Die Uhr läuft per NTP oder GPS. Der Hub prüft das zusätzlich an jedem Bild.</li>
 </ul>
 <p>Antwort: <code>{"orientation": null, "want_full_frame": false}</code></p>
+<p><strong>Die Ausrichtung.</strong> Sobald der Hub die Kamera an den Sternen ausgerichtet hat, steht in <code>orientation</code>: <code>{north_deg, mirrored, solved_at, stars, rms_deg, lens: {cx, cy, a1, a3, tilt_east_deg, tilt_north_deg, width, height}}</code>. <code>north_deg</code> ist die Bildrichtung von Norden am Horizont (0 = oben, im Uhrzeigersinn); <code>mirrored</code> heißt: Osten liegt gegen den Uhrzeigersinn von Norden, der übliche Blick einer Kamera nach oben. Eine Richtung (Höhe, Azimut) liegt bei t = (90° − Höhe) / 90°, r = a1·t + a3·t³, Winkel = north_deg − Azimut (gespiegelt) oder north_deg + Azimut, x = cx + r·sin(Winkel), y = cy − r·cos(Winkel), in Pixeln eines Bildes von <code>width</code> × <code>height</code>; bei einer geneigten Kamera wird die Richtung vorher um die Neigung gedreht (<a href="https://github.com/benhartwich/allskyhub/blob/main/docs/SPEC.md">SPEC §4.8</a>). Fertig in Python: <code>sky_to_pixel()</code> im <a href="https://github.com/benhartwich/allskyhub/tree/main/integrations/allsky_sharedsky">Allsky-Modul</a>, etwa für Sternbilder oder Himmelsrichtungen im eigenen Bild.</p>
 
 <h2>2. Bild schicken: <code>POST /frames</code></h2>
 <p>Etwa einmal pro Minute, Multipart mit zwei Teilen:</p>
@@ -130,6 +132,13 @@ with open("thumb.jpg", "rb") as image:
         timeout=30,
     )
 print(r.json())  # {"want_full_frame": false}</code></pre>
+
+<h2>Allsky</h2>
+{% if en %}
+<p>The <a href="https://github.com/benhartwich/allskyhub/tree/main/integrations/allsky_sharedsky">SharedSky module</a> for Allsky's module system sends the station, a small image about once a minute, the full frame when the hub asks for it, and every meteor the Meteor Detection (temporal) module saved, with its track. Copy <code>allsky_sharedsky.py</code> into <code>~/allsky/config/myFiles/modules/</code>, add it to the day and night flows (at night after the meteor detection, before the overlay), enter the station ID and the secret, and press Test: the module then sends to the test mode above.</p>
+{% else %}
+<p>Das <a href="https://github.com/benhartwich/allskyhub/tree/main/integrations/allsky_sharedsky">SharedSky-Modul</a> für das Modulsystem von Allsky schickt die Station, etwa einmal pro Minute ein kleines Bild, das volle Bild, wenn der Hub darum bittet, und jeden Meteor, den das Modul „Meteor Detection (temporal)“ gespeichert hat, mit seiner Spur. Kopiere <code>allsky_sharedsky.py</code> nach <code>~/allsky/config/myFiles/modules/</code>, nimm es in den Tag- und Nacht-Ablauf auf (nachts nach der Meteorerkennung, vor dem Overlay), trage Station-ID und Geheimnis ein und drücke „Test“: Das Modul schickt dann an den Testmodus oben.</p>
+{% endif %}
 
 <h2>indi-allsky</h2>
 {% if en %}

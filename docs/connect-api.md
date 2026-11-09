@@ -2,7 +2,7 @@
 
 Mit dieser Schnittstelle kann jede Allsky-Kamera bei SharedSky mitmessen, egal mit welcher Software sie läuft: gekaufte Programme, eigene Skripte oder Bastelprojekte. Die Kamera schickt über HTTPS an den Hub. MQTT, FTP und Portfreigaben braucht es nicht. Den Vertrag dazu beschreibt `docs/SPEC.md` §10. Diese Seite ist die Kurzfassung für Entwicklerinnen und Entwickler.
 
-Für **indi-allsky** reicht die Konfiguration, siehe ganz unten. **Allsky** und alle Kameras, die ihr neuestes Bild unter einer festen Adresse zeigen, verbinden sich ohne eigenen Code über diese Adresse („Allsky / Bild-Adresse“ bei „Kamera verbinden“, SPEC §10.7); ein Admin prüft sie von Hand.
+Für **indi-allsky** reicht die Konfiguration, siehe ganz unten. Für **Allsky** gibt es ein Modul (`integrations/allsky_sharedsky`, SPEC §10.4), siehe unten. Allsky und alle anderen Kameras, die ihr neuestes Bild unter einer festen Adresse zeigen, können sich auch ohne eigenen Code über diese Adresse verbinden („Allsky / Bild-Adresse“ bei „Kamera verbinden“, SPEC §10.7); ein Admin prüft sie von Hand.
 
 ## Anmelden
 
@@ -45,6 +45,24 @@ Schick das beim Start und wenn sich etwas ändert:
 - `clock_synced` heißt: Die Uhr läuft per NTP oder GPS. Der Hub prüft das zusätzlich an jedem Bild.
 
 Antwort: `{"orientation": null, "want_full_frame": false}`
+
+**Die Ausrichtung.** Sobald der Hub die Kamera an den Sternen ausgerichtet hat (SPEC §4.8, §10.1), steht in `orientation`:
+
+```json
+{
+  "north_deg": 37.0, "mirrored": true, "solved_at": "2026-11-05T22:10:00Z",
+  "stars": 64, "rms_deg": 0.21,
+  "lens": {"cx": 1548.2, "cy": 1040.7, "a1": 1410.3, "a3": -88.1,
+           "tilt_east_deg": 1.2, "tilt_north_deg": -0.4, "width": 3096, "height": 2080}
+}
+```
+
+- `north_deg` ist die Bildrichtung von Norden am Horizont: 0 = oben, im Uhrzeigersinn.
+- `mirrored` heißt: Osten liegt gegen den Uhrzeigersinn von Norden. Das ist der übliche Blick einer Kamera nach oben.
+- Das Objektiv bildet eine Richtung (Höhe, Azimut) so ab: t = (90° − Höhe) / 90°, r = a1·t + a3·t³, Winkel = north_deg − Azimut (gespiegelt) oder north_deg + Azimut, x = cx + r·sin(Winkel), y = cy − r·cos(Winkel). Das sind Pixel eines Bildes von `width` × `height`; für ein verkleinertes Bild skalieren sie mit der Breite.
+- Bei einer geneigten Kamera wird die Richtung vorher um die Neigung `tilt_east_deg`/`tilt_north_deg` gedreht (SPEC §4.8).
+
+Fertig in Python ist das `sky_to_pixel()` im Allsky-Modul. Damit lassen sich zum Beispiel Sternbilder oder die Himmelsrichtungen ins eigene Bild zeichnen.
 
 ### 2. Bild schicken: `POST /frames`
 
@@ -130,6 +148,23 @@ with open("thumb.jpg", "rb") as image:
     )
 print(r.json())  # {"want_full_frame": false}
 ```
+
+## Allsky
+
+Das [SharedSky-Modul](https://github.com/benhartwich/allskyhub/tree/main/integrations/allsky_sharedsky) für das Modulsystem von Allsky verwendet genau diese drei Aufrufe:
+
+- die Station beim ersten Bild, bei Änderungen und alle 6 Stunden,
+- etwa einmal pro Minute ein kleines Bild, das volle Bild, wenn der Hub darum bittet,
+- jeden Meteor, den das Modul „Meteor Detection (temporal)“ gespeichert hat, mit den beiden Enden seiner Spur.
+
+So richtest du es ein:
+
+1. `allsky_sharedsky.py` nach `~/allsky/config/myFiles/modules/` kopieren.
+2. In den Tag- und den Nacht-Ablauf aufnehmen, nachts nach der Meteorerkennung und vor dem Overlay.
+3. Station-ID und Geheimnis eintragen.
+4. „Test“ drücken. Das Modul schickt dann an den Testmodus.
+
+Die Ausrichtung des Hubs legt es in `~/allsky/config/sharedsky/orientation.json` ab.
 
 ## indi-allsky
 

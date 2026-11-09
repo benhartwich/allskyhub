@@ -31,6 +31,8 @@ known-first-party = ["allskyhub_protocol", "allskyhub_sky", "allskyhub_solve", "
 
 [tool.ruff.lint.per-file-ignores]
 "**/tests/**" = ["S101", "S310", "S603", "S607"]
+# An Allsky module keeps its help texts and messages on one line, like the others.
+"integrations/allsky_sharedsky/allsky_sharedsky.py" = ["E501"]
 
 [tool.pyright]
 typeCheckingMode = "strict"

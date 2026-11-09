@@ -35,6 +35,12 @@ path = ["agent/**", "packages/solve/**", "packages/detect/**", "image/**"]
 SPDX-FileCopyrightText = "2026 Benjamin Hartwich"
 SPDX-License-Identifier = "GPL-3.0-or-later"
 
+# The Allsky module: MIT like Allsky and its module repository, which it is offered to.
+[[annotations]]
+path = "integrations/allsky_sharedsky/**"
+SPDX-FileCopyrightText = "2026 Benjamin Hartwich"
+SPDX-License-Identifier = "MIT"
+
 # Mobile app: permissive, because the GPL conflicts with the App Store terms.
 [[annotations]]
 path = "app/**"

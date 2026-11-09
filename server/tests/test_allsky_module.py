@@ -190,6 +190,24 @@ def test_sky_to_pixel_is_the_solvers_lens(
     assert module.sky_to_pixel({**found, "lens": None}, 45.0, 0.0) is None
 
 
+def test_meteor_in_the_hour_repeated_when_the_clocks_go_back(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """The file name's local time maps to two moments an hour apart; the module's own frame
+    of that exposure tells which (allsky's review of #427)."""
+    module = _load(monkeypatch, _Allsky(tmp_path))
+    stamp = "20261025023010"
+    guess = int(time.mktime(time.strptime(stamp, "%Y%m%d%H%M%S")))
+    entry = {"time": stamp, "file": f"meteors-{stamp}.jpg", "p1": [1, 2], "p2": [3, 4]}
+    (tmp_path / f"meteors-{stamp}.json").write_text(json.dumps([entry]))
+    seen = {guess - 3600: 20.0}
+    [(key, meta, image)] = list(module.meteors(tmp_path, 0.0, {}, seen.get, True))
+    assert key == f"{stamp}:0"
+    assert meta["start"] == module.iso(guess - 3600)
+    assert meta["end"] == module.iso(guess - 3600 + 20)
+    assert image == tmp_path / f"meteors-{stamp}.jpg"
+
+
 async def test_module_sends_station_images_and_meteors(
     app: FastAPI,
     client: httpx.AsyncClient,
@@ -230,12 +248,15 @@ async def test_module_sends_station_images_and_meteors(
         assert frames[0].captured_at == dt.datetime.fromtimestamp(start + 15, dt.UTC)
         assert (frames[0].exposure_us, frames[0].gain) == (30_000_000, 200)
 
-    # The meteor module saved two meteors: one at the frame's size, one smaller.
+    # The meteor module saved three meteors: one at the frame's size, one smaller, and one
+    # on an image this module did not see (no exposure known: it ends where it starts).
     folder = tmp_path / "html" / "allsky" / "meteors"
     folder.mkdir(parents=True)
     stamp = time.strftime("%Y%m%d%H%M%S", time.localtime(start))
     small = time.strftime("%Y%m%d%H%M%S", time.localtime(start - 60))
-    for name, image in ((stamp, _jpeg(streak=True)), (small, _jpeg(640, 480))):
+    unseen = time.strftime("%Y%m%d%H%M%S", time.localtime(start - 120))
+    saved = ((stamp, _jpeg(streak=True)), (small, _jpeg(640, 480)), (unseen, _jpeg(streak=True)))
+    for name, image in saved:
         (folder / f"meteors-{name}.jpg").write_bytes(image)
         sidecar = folder / f"meteors-{name}.json"
         entry = {"time": name, "file": f"meteors-{name}.jpg", "p1": [100, 100], "p2": [500, 300]}
@@ -243,17 +264,19 @@ async def test_module_sends_station_images_and_meteors(
         os.utime(sidecar, (time.time() + 1, time.time() + 1))
     (folder / "meteors.json").write_text("[]")  # the meteor module's rolling log
 
-    assert await asyncio.to_thread(module.sharedsky, params, "night") == "Sent meteor"
+    assert await asyncio.to_thread(module.sharedsky, params, "night") == "Sent meteor, meteor"
     assert any("skips the meteor" in m for _, m in allsky.logs)
     async with maker() as db:
         events = (
             await db.scalars(select(EventRecord).where(EventRecord.device_id == station_id))
         ).all()
-        assert len(events) == 1
-        assert events[0].data["track_px"] == [[100.0, 100.0], [500.0, 300.0]]
-        assert events[0].start == dt.datetime.fromtimestamp(start, dt.UTC)
-        assert events[0].end == dt.datetime.fromtimestamp(start + 30, dt.UTC)
-        assert events[0].has_original
+        assert len(events) == 2
+        first, last = sorted(events, key=lambda e: e.start)
+        assert first.start == first.end == dt.datetime.fromtimestamp(start - 120, dt.UTC)
+        assert last.data["track_px"] == [[100.0, 100.0], [500.0, 300.0]]
+        assert last.start == dt.datetime.fromtimestamp(start, dt.UTC)
+        assert last.end == dt.datetime.fromtimestamp(start + 30, dt.UTC)
+        assert last.has_original
 
     # Sent once only; the next image waits for the interval.
     assert await asyncio.to_thread(module.sharedsky, params, "night") == "Nothing to send"
@@ -265,4 +288,4 @@ async def test_module_sends_station_images_and_meteors(
         frames = (await db.scalars(select(Frame).where(Frame.device_id == station_id))).all()
         assert len(frames) == 1
     state = json.loads((tmp_path / "config" / "sharedsky" / "state.json").read_text())
-    assert sorted(state["sent"]) == [f"{small}:0", f"{stamp}:0"]
+    assert sorted(state["sent"]) == [f"{unseen}:0", f"{small}:0", f"{stamp}:0"]

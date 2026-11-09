@@ -28,7 +28,7 @@ async def _stations(
         "Sternwarte Musterberg": (49.89, 10.89),
         "Hochrhön": (50.45, 9.95),
         "Hügelfeld": (50.25, 10.96),
-        "Ohne Namen": (49.6, 1.0),
+        "Ohne Namen": (49.6, 11.0),
         "Weit weg": (53.55, 10.0),
     }
     ids: dict[str, str] = {}

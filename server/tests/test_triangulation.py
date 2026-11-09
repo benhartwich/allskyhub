@@ -27,7 +27,7 @@ def _sighting(cam: tuple[float, float], a: t.Vec, b: t.Vec, noise: float = 0.0) 
 
 
 def test_heights_come_back() -> None:
-    """A meteor from 95 km down to 75 km over the Traunsee, seen from Nordheim and Südtal."""
+    """A meteor from 95 km down to 75 km over a lake, seen from Nordheim and Südtal."""
     top, bottom = t.ecef(47.95, 3.80, 95.0), t.ecef(47.80, 3.95, 75.0)
     trajectory = t.triangulate(_sighting(NORDHEIM, top, bottom), _sighting(SUEDTAL, bottom, top))
     assert trajectory is not None
@@ -35,7 +35,7 @@ def test_heights_come_back() -> None:
     assert high.height_km == pytest.approx(95.0, abs=0.05)
     assert low.height_km == pytest.approx(75.0, abs=0.05)
     assert high.lat == pytest.approx(47.95, abs=0.001)
-    assert low.lon == pytest.approx(13.95, abs=0.001)
+    assert low.lon == pytest.approx(3.95, abs=0.001)
     expected = t._norm(t._sub(top, bottom))  # pyright: ignore[reportPrivateUsage]
     assert trajectory.length_km == pytest.approx(expected, abs=0.05)
     assert trajectory.convergence_deg > 10
@@ -55,7 +55,7 @@ def test_small_errors_stay_small() -> None:
 def test_not_the_same_meteor() -> None:
     """Two different meteors give no plausible height."""
     a = _sighting(NORDHEIM, t.ecef(47.95, 3.80, 95.0), t.ecef(47.80, 3.95, 75.0))
-    b = _sighting(SUEDTAL, t.ecef(46.5, 6.0, 90.0), t.ecef(46.4, 16.2, 70.0))
+    b = _sighting(SUEDTAL, t.ecef(46.5, 6.0, 90.0), t.ecef(46.4, 6.2, 70.0))
     assert t.triangulate(a, b) is None
 
 

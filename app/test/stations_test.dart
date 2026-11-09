@@ -197,8 +197,7 @@ void main() {
           client: hub.client(),
           software: 'image-url',
           location: _Here(),
-          precise: () async =>
-              (lat: 47.80321, lon: 3.10987, elevation: 1287.4),
+          precise: () async => (lat: 47.80321, lon: 3.10987, elevation: 1287.4),
           pickPhoto: () async =>
               (Uint8List.fromList([0xff, 0xd8, 0xff, 0xd9]), 'beweis.jpg'),
         ),

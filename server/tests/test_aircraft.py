@@ -42,12 +42,12 @@ def test_interpolation_and_dead_reckoning() -> None:
     tracks.add("adsb.lol", "3C6444", _fix(T0, 48.0, 4.0, track=90.0, speed=400.0))
     tracks.add("adsb.lol", "3c6444", _fix(T0 + dt.timedelta(seconds=10), 48.0, 4.1))
     mid = tracks.at(T0 + dt.timedelta(seconds=5))["3c6444"]
-    assert abs(mid.lon - 14.05) < 1e-9
+    assert abs(mid.lon - 4.05) < 1e-9
     assert tracks.at(T0 - dt.timedelta(seconds=1)) == {}
     # Past the newest: along the last track, at most 30 s.
     tracks.add("adsb.lol", "aaaaaa", _fix(T0, 48.0, 4.0, track=90.0, speed=400.0))
     ahead = tracks.at(T0 + dt.timedelta(seconds=20))["aaaaaa"]
-    assert ahead.lon > 14.0  # flew east
+    assert ahead.lon > 4.0  # flew east
     assert abs(ahead.lat - 48.0) < 0.01
     assert "aaaaaa" not in tracks.at(T0 + dt.timedelta(seconds=31))
 

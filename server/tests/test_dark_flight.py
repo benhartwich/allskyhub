@@ -16,8 +16,8 @@ from allskyhub_server.models import Device, MeteorPair
 from tests.fake_device import FakeDevice
 from tests.helpers import claim, home_csrf, make_account
 
-# A GFS cut around the Traunsee from NOMADS (run 2026-11-05 00 UTC + 6 h), 22 levels.
-GRIB = (Path(__file__).parent / "data" / "gfs_traunsee.grb2").read_bytes()
+# A GFS cut around the test place from NOMADS (run 2026-11-05 00 UTC + 6 h), 22 levels.
+GRIB = (Path(__file__).parent / "data" / "gfs_cut.grb2").read_bytes()
 HIGH, LOW = (47.95, 3.80, 80.0), (47.80, 3.95, 25.0)
 
 

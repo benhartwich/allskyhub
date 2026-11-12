@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import re
 import uuid
-from typing import cast
+from typing import Any, cast
 
 import httpx
 from fastapi import FastAPI
@@ -16,6 +16,17 @@ from allskyhub_server.models import Device, User
 
 PASSWORD = "correct horse battery"  # noqa: S105
 _CSRF_RE = re.compile(r'name="csrf_token" value="([^"]+)"')
+
+
+def app_state(app: FastAPI) -> dict[str, Any]:
+    """The dict behind ``app.state``, for ``monkeypatch.setitem``.
+
+    Since pytest 9.2, ``monkeypatch.setattr`` takes the old value from the instance
+    ``__dict__``. Starlette's ``State`` keeps its values in ``_state``, so the undo
+    deleted them, and the app's shutdown then missed ``app.state.paddle``.
+    """
+    state: dict[str, Any] = vars(app.state)["_state"]
+    return state
 
 
 def csrf_from(html: str) -> str:

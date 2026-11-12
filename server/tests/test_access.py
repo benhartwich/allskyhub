@@ -15,7 +15,7 @@ from allskyhub_server.auth import access_requests
 from allskyhub_server.mail.send import MemoryMailer
 from allskyhub_server.models import AccessRequest
 from allskyhub_server.settings import Settings
-from tests.helpers import PASSWORD, csrf_from, make_account
+from tests.helpers import PASSWORD, app_state, csrf_from, make_account
 from tests.test_admin import FakeGitHub
 
 
@@ -96,7 +96,7 @@ async def test_admin_invites_and_the_link_works(
     await _ask(client, email="no@example.org")
     admin = await make_account(client)
     monkeypatch.setattr(settings, "admin_emails", admin)
-    monkeypatch.setattr(app.state, "github", FakeGitHub())
+    monkeypatch.setitem(app_state(app), "github", FakeGitHub())
     page = await client.get("/admin")
     assert "new@example.org" in page.text
     assert "Ich baue gerade eine" in page.text

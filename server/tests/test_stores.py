@@ -21,7 +21,7 @@ from fastapi import FastAPI
 
 from allskyhub_server.admin import apps, appstore, stores
 from allskyhub_server.settings import Settings
-from tests.helpers import PASSWORD, csrf_from, make_account
+from tests.helpers import PASSWORD, app_state, csrf_from, make_account
 
 ISSUER = "69a6de70-03db-47e3-e053-5b8c7c11a4d1"
 
@@ -269,7 +269,7 @@ async def test_admin_uploads_keys_and_never_sees_them_again(
 ) -> None:
     email = await make_account(client)
     monkeypatch.setattr(settings, "admin_emails", email)
-    monkeypatch.setattr(app.state, "stores", stores.Stores(tmp_path, "benhartwich/allskyhub"))
+    monkeypatch.setitem(app_state(app), "stores", stores.Stores(tmp_path, "benhartwich/allskyhub"))
     page = await client.get("/admin")
     assert "Store-Zugänge" in page.text
     assert 'href="/admin/apps"' in page.text
@@ -416,7 +416,7 @@ async def test_android_release_through_the_spool(
     monkeypatch.setattr(settings, "admin_emails", email)
     out = tmp_path / "out"  # the root helper's own folder
     hub = stores.Stores(tmp_path / "store", "benhartwich/allskyhub", release_out=out)
-    monkeypatch.setattr(app.state, "stores", hub)
+    monkeypatch.setitem(app_state(app), "stores", hub)
     token = csrf_from((await client.get("/admin")).text)
     build = {"csrf_token": token, "platform": "android"}
 
@@ -586,7 +586,7 @@ async def test_listing_runs_in_the_background(
         httpx.AsyncClient(transport=httpx.MockTransport(answer)),
     )  # fmt: skip
     hub.vault.put("play", *stores.parse_play(_play_json()), by="a")
-    monkeypatch.setattr(app.state, "stores", hub)
+    monkeypatch.setitem(app_state(app), "stores", hub)
     token = csrf_from((await client.get("/admin")).text)
 
     r = await client.post(
@@ -967,7 +967,7 @@ async def test_admin_page_offers_the_further_app(
 ) -> None:
     email = await make_account(client)
     monkeypatch.setattr(settings, "admin_emails", email)
-    monkeypatch.setattr(app.state, "stores", stores.Stores(tmp_path, "benhartwich/allskyhub"))
+    monkeypatch.setitem(app_state(app), "stores", stores.Stores(tmp_path, "benhartwich/allskyhub"))
     page = await client.get("/admin/apps")
     assert 'id="app-bortle"' in page.text
     # Four apps, both stores: in the card and in "Was ist zu tun?".
@@ -1162,7 +1162,7 @@ async def test_admin_enters_push_and_turnstile(
 
     email = await make_account(client)
     monkeypatch.setattr(settings, "admin_emails", email)
-    monkeypatch.setattr(app.state, "stores", stores.Stores(tmp_path, "benhartwich/allskyhub"))
+    monkeypatch.setitem(app_state(app), "stores", stores.Stores(tmp_path, "benhartwich/allskyhub"))
     app.state.notifier = Notifier(app.state.sessionmaker, None)
     page = await client.get("/admin")
     assert "Push und Melder-Registrierung" in page.text
@@ -1413,7 +1413,7 @@ async def test_other_app_android_release(
     monkeypatch.setattr(settings, "admin_emails", email)
     out = tmp_path / "release"
     hub = stores.Stores(tmp_path / "store", "benhartwich/allskyhub", release_out=out)
-    monkeypatch.setattr(app.state, "stores", hub)
+    monkeypatch.setitem(app_state(app), "stores", hub)
     bortle = stores.OTHER_APPS["bortle"]
     token = csrf_from((await client.get("/admin")).text)
     form = {"csrf_token": token, "app": "bortle", "action": "android"}

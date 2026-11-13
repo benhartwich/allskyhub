@@ -152,6 +152,22 @@ def orientation_badge(device: Any) -> Any:
     return sky_now_module.orientation(device.last_status)
 
 
+def sky_layers(device: Any, satellites: bool = True) -> Any:
+    """Draft 1: stars, grid, moon and planets, satellites over the latest image; None
+    without a lens. Satellites only once their elements are loaded (live_fragment), and
+    never on public pages: a satellite's place in the sky moves about 1.4° per 10 km of
+    the observer's, so its marks and trails would give the exact place away."""
+    from allskyhub_server.devices import bright_satellites
+    from allskyhub_server.devices import sky_layers as layers
+
+    if device.latest_image_at is None:
+        return None
+    at = overlay.image_time(device.last_frame, device.latest_image_at)
+    current = bright_satellites.current
+    catalogue = current.loaded() if satellites and current else None
+    return layers.build(device.last_status, at, catalogue)
+
+
 # SPEC §7.11 status.heater reasons.
 HEATER_REASONS = {
     "off": "aus", "on": "an (dauernd)", "dew": "an: Taugefahr", "humidity": "an: hohe Luftfeuchte",
@@ -187,6 +203,7 @@ cast(dict[str, Any], templates.env.globals)["app_store_id"] = APP_STORE_ID
 cast(dict[str, Any], templates.env.globals)["heater_text"] = heater_text
 cast(dict[str, Any], templates.env.globals)["air_overlay"] = air_overlay
 cast(dict[str, Any], templates.env.globals)["sky_overlay"] = sky_overlay
+cast(dict[str, Any], templates.env.globals)["sky_layers"] = sky_layers
 cast(dict[str, Any], templates.env.globals)["sky_now"] = sky_now
 cast(dict[str, Any], templates.env.globals)["orientation_badge"] = orientation_badge
 _filters = cast(dict[str, Any], templates.env.filters)

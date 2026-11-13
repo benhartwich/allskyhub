@@ -178,3 +178,21 @@ async def test_a_meteor_that_is_the_iss_is_marked(app: FastAPI, client: httpx.As
         assert await labels.from_device(db, dev.device_id, owner)
     assert not await watch.check_new(dev.device_id, "meteor-20261013T060330Z-3")
     assert (await _event(app, dev.device_id, "meteor-20261013T060330Z-3")).label == "confirmed"
+
+
+async def test_failed_load_waits_before_the_next(tmp_path: Path) -> None:
+    """A page polling every few seconds must not ask CelesTrak every few seconds while it
+    fails: after a failed load the catalogue waits ``RETRY_S``."""
+    calls: list[str] = []
+
+    def fake(request: httpx.Request) -> httpx.Response:
+        calls.append(str(request.url))
+        return httpx.Response(503)
+
+    client = httpx.AsyncClient(transport=httpx.MockTransport(fake))
+    catalogue = sm.SatelliteCatalogue(tmp_path, client, groups=("visual",))
+    assert catalogue.loaded() is None
+    assert await catalogue.get() is None
+    assert await catalogue.get() is None
+    assert len(calls) == 1
+    await client.aclose()

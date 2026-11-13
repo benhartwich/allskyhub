@@ -290,14 +290,21 @@ class SatelliteCatalogue:
         self._client = client
         self._catalogue: Catalogue | None = None
         self._at = 0.0
+        self._tried = False  # after a failed load, wait RETRY_S before the next
         self._lock = asyncio.Lock()
 
+    def loaded(self) -> Catalogue | None:
+        """The catalogue loaded last, without waiting for a fetch (for pages that draw
+        while ``get`` loads elsewhere)."""
+        return self._catalogue
+
     async def get(self) -> Catalogue | None:
-        if self._catalogue is not None and time.monotonic() - self._at < MAX_AGE_S:
+        if self._fresh():
             return self._catalogue
         async with self._lock:
-            if self._catalogue is not None and time.monotonic() - self._at < MAX_AGE_S:
+            if self._fresh():
                 return self._catalogue
+            self._tried = True
             texts: list[str] = []
             for group in self._groups:
                 text = await self._group(group)
@@ -310,6 +317,10 @@ class SatelliteCatalogue:
             else:
                 self._at = time.monotonic() - MAX_AGE_S + RETRY_S  # try again in an hour
             return self._catalogue
+
+    def _fresh(self) -> bool:
+        tried = self._catalogue is not None or self._tried
+        return tried and time.monotonic() - self._at < MAX_AGE_S
 
     async def _group(self, group: str) -> str | None:
         path = self._root / f"{group}.tle"

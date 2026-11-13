@@ -1,8 +1,17 @@
-// Overlays on the live image: constellations (roadmap H1) and aircraft (H3), each with its
+// Overlays on the live image: constellations (roadmap H1), aircraft (H3) and the layers of
+// draft 1, each with its
 // own switch for the whole page, remembered per browser; survives the live image's htmx
 // refresh (state on <html>).
 (() => {
-  const KINDS = { "": ["ash-sky-overlay", "sky-on"], air: ["ash-air-overlay", "air-on"] };
+  const KINDS = {
+    "": ["ash-sky-overlay", "sky-on"],
+    air: ["ash-air-overlay", "air-on"],
+    // Draft 1: stars, grid, moon and planets, satellites (devices/sky_layers.py).
+    stars: ["ash-stars-overlay", "stars-on"],
+    grid: ["ash-grid-overlay", "grid-on"],
+    planets: ["ash-planets-overlay", "planets-on"],
+    sats: ["ash-sats-overlay", "sats-on"],
+  };
   const root = document.documentElement;
   const sync = () => {
     document.querySelectorAll("[data-overlay-toggle]").forEach((b) => {

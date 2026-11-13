@@ -249,12 +249,26 @@ async def live_fragment(
     device, _ = await _visible(db, session, device_id)
     registry = _registry(request)
     registry.touch_live(device.id)
+    _warm_satellites(request)
     return render(
         request,
         "_live.html",
         {"device": device, "online": registry.is_online(device.id)},
         session=session,
     )
+
+
+_warming: set[asyncio.Task[Any]] = set()
+
+
+def _warm_satellites(request: Request) -> None:
+    """Draft 1: load the bright satellites' elements once in the background, so the live
+    image can draw them; the page never waits for CelesTrak."""
+    catalogue = request.app.state.bright_satellites
+    if catalogue.loaded() is None and not _warming:
+        task = asyncio.create_task(catalogue.get())
+        _warming.add(task)
+        task.add_done_callback(_warming.discard)
 
 
 SatFilter = Literal["jetzt", "oben", "nacht"]

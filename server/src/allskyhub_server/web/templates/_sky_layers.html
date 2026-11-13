@@ -1,0 +1,18 @@
+{# Draft 1 (2026-11-13): stars, grid, moon and planets, satellites over the image
+   (devices/sky_layers.py); needs `lay`. Each group shows with its switch (overlay.js). #}
+<svg class="layer-overlay" viewBox="0 0 {{ lay.width }} {{ lay.height }}" preserveAspectRatio="xMidYMid meet" aria-hidden="true">
+  <g class="lay-grid">
+    {% for d in lay.grid %}<path d="{{ d }}"/>{% endfor %}
+    {% for m in lay.cardinals %}<text class="lay-cardinal" x="{{ '%.0f' | format(m.x) }}" y="{{ '%.0f' | format(m.y) }}" font-size="{{ lay.font * 1.5 }}">{{ m.text }}</text>{% endfor %}
+    {% for m in lay.grid_labels %}<text x="{{ '%.0f' | format(m.x + lay.font * 0.4) }}" y="{{ '%.0f' | format(m.y - lay.font * 0.3) }}" font-size="{{ lay.font }}">{{ m.text }}</text>{% endfor %}
+  </g>
+  <g class="lay-stars">
+    {% for m in lay.stars %}<circle cx="{{ '%.0f' | format(m.x) }}" cy="{{ '%.0f' | format(m.y) }}" r="{{ lay.font * 0.45 }}"/><text x="{{ '%.0f' | format(m.x + lay.font * 0.8) }}" y="{{ '%.0f' | format(m.y + lay.font * 0.35) }}" font-size="{{ lay.font }}">{{ m.text }}</text>{% endfor %}
+  </g>
+  <g class="lay-planets">
+    {% for m in lay.planets %}<circle cx="{{ '%.0f' | format(m.x) }}" cy="{{ '%.0f' | format(m.y) }}" r="{{ lay.font * 0.6 }}"/><text x="{{ '%.0f' | format(m.x + lay.font) }}" y="{{ '%.0f' | format(m.y + lay.font * 0.35) }}" font-size="{{ lay.font }}">{{ m.text }}</text>{% endfor %}
+  </g>
+  <g class="lay-sats">
+    {% for m in lay.satellites %}{% if m.trail %}<path d="{{ m.trail }}"/>{% endif %}<circle cx="{{ '%.0f' | format(m.x) }}" cy="{{ '%.0f' | format(m.y) }}" r="{{ lay.font * 0.4 }}"/><text x="{{ '%.0f' | format(m.x + lay.font * 0.8) }}" y="{{ '%.0f' | format(m.y - lay.font * 0.4) }}" font-size="{{ lay.font }}">{{ m.text }}</text>{% endfor %}
+  </g>
+</svg>

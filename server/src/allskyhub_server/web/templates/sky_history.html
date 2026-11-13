@@ -9,18 +9,19 @@
   {% if nights %}
   <form method="get" class="inline-form">
     <select id="nacht" name="nacht" data-autosubmit aria-label="Nacht">
-      {% for n in nights %}<option value="{{ n.night_id }}"{{ ' selected' if n.night_id == night_id }}>Nacht {{ n.night_id[6:8] }}.{{ n.night_id[4:6] }}.{{ n.night_id[:4] }} · {{ n.frames }} Bilder</option>{% endfor %}
+      {% for n in nights %}<option value="{{ n.night_id }}"{{ ' selected' if n.night_id == night_id }}>{{ 'Heute Nacht' if n.night_id == tonight_id else 'Nacht' }} {{ n.night_id[6:8] }}.{{ n.night_id[4:6] }}.{{ n.night_id[:4] }} · {{ n.frames ~ ' Bilder' if n.frames else 'Planetarium' }}</option>{% endfor %}
     </select>
     <noscript><button type="submit" class="secondary small">Zeigen</button></noscript>
   </form>
   {% endif %}
 </div>
-{% if not frames %}
-<p class="card muted">Für diese Nacht hat der Hub keine Bilder. Er bewahrt die Bilder auf, die er beim Zuschauen oder für Ereignisse angefordert hat.</p>
+{% if not frames and not times %}
+<p class="card muted">Für diese Nacht hat der Hub keine Bilder, und ohne Standort der Kamera kann er den Himmel nicht zeichnen. Er bewahrt die Bilder auf, die er beim Zuschauen oder für Ereignisse angefordert hat.</p>
 {% else %}
-<figure class="live sky-history" data-sky-history data-device="{{ device.id }}" data-night="{{ night_id }}">
+<figure class="live sky-history{{ '' if frames else ' planetarium' }}" data-sky-history data-device="{{ device.id }}" data-night="{{ night_id }}">
   <div class="sky-frame">
-    <img data-sky-image src="/cameras/{{ device.id }}/frames/{{ night_id }}/{{ frames[-1].name }}/{{ 'full' if frames[-1].full else 'thumb' }}.jpg" alt="Aufnahme der Nacht">
+    {% if frames %}<img data-sky-image src="/cameras/{{ device.id }}/frames/{{ night_id }}/{{ frames[-1].name }}/{{ 'full' if frames[-1].full else 'thumb' }}.jpg" alt="Aufnahme der Nacht">{% endif %}
+    <div class="sky-disc" data-sky-disc aria-hidden="true"></div>
     <div data-sky-drawing></div>
   </div>
   <div class="layer-chips" role="group" aria-label="Ebenen über dem Bild">
@@ -30,14 +31,16 @@
     <button type="button" class="layer-chip" data-overlay-toggle="planets" aria-pressed="false">Mond &amp; Planeten</button>
     <button type="button" class="layer-chip" data-overlay-toggle="sats" aria-pressed="false">Satelliten</button>
     <button type="button" class="layer-chip" data-overlay-toggle="events" aria-pressed="false">Ereignisse</button>
+    {% if frames and times %}<button type="button" class="layer-chip" data-sky-mode aria-pressed="false">Ohne Bild (Planetarium)</button>{% endif %}
   </div>
   <div class="sky-timebar">
     <button type="button" class="secondary small" data-sky-play aria-label="Abspielen">▶</button>
-    <input type="range" data-sky-time min="0" max="{{ frames | length - 1 }}" value="{{ frames | length - 1 }}" step="1" aria-label="Zeit in der Nacht">
-    <output data-sky-clock>{{ frames[-1].clock }}</output>
+    <input type="range" data-sky-time min="0" max="0" value="0" step="1" aria-label="Zeit in der Nacht">
+    <output data-sky-clock></output>
   </div>
-  <figcaption class="muted small">{{ frames | length }} Bilder dieser Nacht. Ereignisse zeigen Meteore und Überflüge bis 3 Minuten um die Aufnahme. Gezeichnet mit der Ausrichtung, die die Kamera zu der Zeit hatte. Satelliten nur, solange ihre Bahndaten höchstens acht Tage von der Aufnahme entfernt sind; für ältere Nächte wären sie zu ungenau.</figcaption>
+  <figcaption class="muted small">{% if frames %}{{ frames | length }} Bilder dieser Nacht. {% else %}Für diese Nacht gibt es noch keine Bilder: der Himmel von Sonnenuntergang bis Sonnenaufgang, alle 10 Minuten. {% endif %}Ereignisse zeigen Meteore und Überflüge bis 3 Minuten um den Zeitpunkt. Gezeichnet mit der Ausrichtung, die die Kamera zu der Zeit hatte. Satelliten nur, solange ihre Bahndaten höchstens acht Tage vom Zeitpunkt entfernt sind; für ältere Nächte wären sie zu ungenau.</figcaption>
 </figure>
 <script type="application/json" id="sky-frames">{{ frames | tojson }}</script>
+<script type="application/json" id="sky-times">{{ times | tojson }}</script>
 {% endif %}
 {% endblock %}

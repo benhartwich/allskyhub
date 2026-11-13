@@ -27,6 +27,36 @@ from allskyhub_sky import project
 
 # Meteors and overflights this close to the frame's time are drawn on it.
 NEAR = dt.timedelta(minutes=3)
+# The planetarium (step 2): from sunset to sunrise of the night, in this step.
+PLANETARIUM_STEP = dt.timedelta(minutes=10)
+
+
+def night_window(
+    night_id: str, lat: float, lon: float, zone: dt.tzinfo
+) -> tuple[dt.datetime, dt.datetime] | None:
+    """Sunset and sunrise of the night ``night_id`` (the evening's date, SPEC §4.5) at the
+    place; None where the sun does not set or rise."""
+    from allskyhub_server.devices import astro
+
+    evening = dt.date(int(night_id[:4]), int(night_id[4:6]), int(night_id[6:8]))
+    noon = dt.datetime.combine(evening, dt.time(12), zone).astimezone(dt.UTC)
+    night = astro.night_after(noon, lat, lon)
+    if night.sunset is None or night.sunrise is None:
+        return None
+    return night.sunset, night.sunrise
+
+
+def planetarium_times(window: tuple[dt.datetime, dt.datetime]) -> list[dt.datetime]:
+    """The slider's times from sunset to sunrise, on whole ``PLANETARIUM_STEP`` marks."""
+    start, end = window
+    step = PLANETARIUM_STEP.total_seconds()
+    first = dt.datetime.fromtimestamp(-(-start.timestamp() // step) * step, tz=dt.UTC)
+    out: list[dt.datetime] = []
+    t = first
+    while t <= end:
+        out.append(t)
+        t += PLANETARIUM_STEP
+    return out
 
 
 async def orientation_at(

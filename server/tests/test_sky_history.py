@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import datetime as dt
+import itertools
 from typing import Any
 
 import httpx
@@ -112,3 +113,51 @@ async def test_empty_and_closed(app: FastAPI, client: httpx.AsyncClient) -> None
     ) as other:
         answer = await other.get(f"/cameras/{dev.device_id}/himmel")
     assert answer.status_code in (303, 401, 404)
+
+
+def test_night_window_and_planetarium_times() -> None:
+    lat, lon = 50.04, 10.39
+    window = sky_history.night_window(NIGHT, lat, lon, dt.UTC)
+    assert window is not None
+    sunset, sunrise = window
+    assert sunset.date() == dt.date(2026, 10, 15)
+    assert sunrise.date() == dt.date(2026, 10, 16)
+    assert 15 <= sunset.hour <= 17
+    times = sky_history.planetarium_times(window)
+    assert times[0] >= sunset
+    assert times[-1] <= sunrise
+    assert times[0].minute % 10 == 0
+    assert all(b - a == sky_history.PLANETARIUM_STEP for a, b in itertools.pairwise(times))
+    # No sunset at all in the polar night or the midnight sun.
+    assert sky_history.night_window("20260621", 78.2, 15.6, dt.UTC) is None
+
+
+async def test_planetarium_json_only_inside_the_night(
+    app: FastAPI, client: httpx.AsyncClient
+) -> None:
+    device_id = await _setup(app, client)
+    url = f"/cameras/{device_id}/himmel/{NIGHT}/zeit"
+    inside = (await client.get(url, params={"at": "2026-10-15T23:00:00+00:00"})).json()
+    assert inside["lines"]
+    assert {c["text"] for c in inside["cardinals"]} == {"N", "O", "S", "W"}
+    noon = await client.get(url, params={"at": "2026-10-15T11:00:00+00:00"})
+    assert noon.status_code == 422
+    page = (await client.get(f"/cameras/{device_id}/himmel?nacht={NIGHT}")).text
+    assert "data-sky-mode" in page  # frames and the planetarium
+    assert 'id="sky-times"' in page
+
+
+async def test_tonight_without_frames_is_a_planetarium(
+    app: FastAPI, client: httpx.AsyncClient
+) -> None:
+    dev = FakeDevice()
+    await paired_token(client, dev)
+    async with app.state.sessionmaker() as db:
+        device = await db.get(Device, dev.device_id)
+        assert device
+        device.last_status = _status()
+        await db.commit()
+    page = (await client.get(f"/cameras/{dev.device_id}/himmel")).text
+    assert "sky-history planetarium" in page
+    assert "Heute Nacht" in page
+    assert "data-sky-mode" not in page  # no frames to switch to

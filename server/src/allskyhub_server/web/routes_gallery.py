@@ -141,8 +141,21 @@ async def sky_history_page(
     (devices/sky_history.py); the newest night with frames unless ``nacht`` says."""
     device = await _own(db, session, device_id)
     nights = [n for n in await archive.nights(db, device.id) if n.frames][:30]
-    night_id = nacht or (nights[0].night_id if nights else None)
+    where = sky_history_place(device)
+    tonight_id = _tonight_id(device, where)
+    if tonight_id and all(n.night_id != tonight_id for n in nights):
+        nights.insert(0, archive.NightSummary(tonight_id))  # step 2: no frames yet
+    with_frames = next((n.night_id for n in nights if n.frames), None)
+    night_id = nacht or with_frames or tonight_id
     frames = await archive.night_frames(db, device.id, night_id) if night_id else []
+    times: list[dict[str, str]] = []
+    if night_id and where:
+        window = sky_history.night_window(night_id, *where, _zone(device))
+        if window:
+            times = [
+                {"at": t.isoformat(), "clock": t.astimezone(UI_ZONE).strftime("%H:%M")}
+                for t in sky_history.planetarium_times(window)
+            ]
     return render(
         request,
         "sky_history.html",
@@ -150,6 +163,8 @@ async def sky_history_page(
             "device": device,
             "night_id": night_id,
             "nights": nights,
+            "tonight_id": tonight_id,
+            "times": times,
             "frames": [
                 {
                     "name": f.name,
@@ -185,6 +200,48 @@ async def sky_history_frame(
     satellites = request.app.state.bright_satellites.loaded()
     night_events = await events.events(db, device.id, night_id=night_id, limit=2000)
     drawn = await sky_history.frame_sky(db, device, frame.captured_at, satellites, night_events)
+    return JSONResponse(drawn or {}, headers={"Cache-Control": "private, max-age=300"})
+
+
+def sky_history_place(device: Device) -> tuple[float, float] | None:
+    from allskyhub_server.devices import bright_satellites
+
+    return bright_satellites.location(device.last_status)
+
+
+def _tonight_id(device: Device, where: tuple[float, float] | None) -> str | None:
+    """The night still ahead or running at the camera (its evening's date), for the
+    planetarium before any frame of it is stored."""
+    if where is None:
+        return None
+    zone = _zone(device)
+    night = tonight.night_now(dt.datetime.now(dt.UTC), *where, zone)
+    evening = night.sunset or night.dusk
+    return evening.astimezone(zone).strftime("%Y%m%d") if evening else None
+
+
+@router.get("/cameras/{device_id}/himmel/{night_id}/zeit")
+async def sky_history_time(
+    request: Request,
+    db: DbSession,
+    session: CurrentSession,
+    device_id: str,
+    night_id: NightId,
+    at: dt.datetime,
+) -> JSONResponse:
+    """Draft 6, step 2: the sky at any time of the night, without a frame (planetarium);
+    only between that night's sunset and sunrise."""
+    device = await _own(db, session, device_id)
+    where = sky_history_place(device)
+    window = sky_history.night_window(night_id, *where, _zone(device)) if where else None
+    if at.tzinfo is None:
+        at = at.replace(tzinfo=dt.UTC)
+    slack = sky_history.PLANETARIUM_STEP
+    if window is None or not window[0] - slack <= at <= window[1] + slack:
+        raise HTTPException(422, "Zeit außerhalb dieser Nacht")
+    satellites = request.app.state.bright_satellites.loaded()
+    night_events = await events.events(db, device.id, night_id=night_id, limit=2000)
+    drawn = await sky_history.frame_sky(db, device, at, satellites, night_events)
     return JSONResponse(drawn or {}, headers={"Cache-Control": "private, max-age=300"})
 
 

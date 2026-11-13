@@ -1,6 +1,7 @@
-// Draft 6: a night's saved frames with the sky over them (routes_gallery.sky_history_frame).
-// The slider picks a frame; its drawing comes from the hub as JSON and uses the same classes
-// as the live image, so the layer switches of overlay.js work here too.
+// Draft 6: a night's saved frames with the sky over them (routes_gallery.sky_history_frame),
+// or, step 2, the sky alone from sunset to sunrise (planetarium, sky_history_time). The
+// slider picks a frame or a time; the drawing comes from the hub as JSON and uses the same
+// classes as the live image, so the layer switches of overlay.js work here too.
 (() => {
   const root = document.querySelector("[data-sky-history]");
   const raw = document.getElementById("sky-frames");
@@ -9,6 +10,10 @@
   }
   if (!root || !raw) return;
   const frames = JSON.parse(raw.textContent);
+  const times = JSON.parse(document.getElementById("sky-times")?.textContent || "[]");
+  const disc = root.querySelector("[data-sky-disc]");
+  const modeButton = root.querySelector("[data-sky-mode]");
+  let planetarium = frames.length === 0;
   const image = root.querySelector("[data-sky-image]");
   const drawing = root.querySelector("[data-sky-drawing]");
   const slider = root.querySelector("[data-sky-time]");
@@ -31,6 +36,8 @@
   const draw = (d) => {
     drawing.replaceChildren();
     if (!d || !d.width) return;
+    // Without a picture the disc keeps the frame's shape and the lens's sky circle.
+    disc.style.aspectRatio = `${d.width} / ${d.height}`;
     const f = d.font;
     const lines = svg("sky-overlay", d);
     lines.append(el("path", { class: "sky-lines", d: d.lines }));
@@ -58,41 +65,67 @@
     drawing.append(lines, layers);
   };
 
-  const sky = (frame) => {
-    if (!cache.has(frame.name)) {
-      cache.set(frame.name, fetch(`${base}/himmel/${night}/${encodeURIComponent(frame.name)}.json`, { headers: { Accept: "application/json" } })
+  const url = (item) => item.name
+    ? `${base}/himmel/${night}/${encodeURIComponent(item.name)}.json`
+    : `${base}/himmel/${night}/zeit?at=${encodeURIComponent(item.at)}`;
+  const sky = (item) => {
+    const key = url(item);
+    if (!cache.has(key)) {
+      cache.set(key, fetch(key, { headers: { Accept: "application/json" } })
         .then((r) => (r.ok ? r.json() : null)).catch(() => null));
     }
-    return cache.get(frame.name);
+    return cache.get(key);
   };
   const src = (frame) => `${base}/frames/${night}/${encodeURIComponent(frame.name)}/${frame.full ? "full" : "thumb"}.jpg`;
+  const items = () => (planetarium ? times : frames);
 
   let shown = -1;
   const show = async (i) => {
-    const frame = frames[i];
+    const list = items();
+    const item = list[i];
+    if (!item) return;
     shown = i;
-    clock.textContent = frame.clock;
-    image.src = src(frame);
-    const d = await sky(frame);
+    clock.textContent = item.clock;
+    if (!planetarium) image.src = src(item);
+    const d = await sky(item);
     if (shown === i) draw(d);
-    if (frames[i + 1]) { new Image().src = src(frames[i + 1]); sky(frames[i + 1]); }
+    const next = list[i + 1];
+    if (next) { if (!planetarium) new Image().src = src(next); sky(next); }
   };
+  // The slider's range follows the mode; switching keeps about the same time of night.
+  const nearest = (list, t) => list.reduce((best, item, k) => (Math.abs(Date.parse(item.at) - t) < Math.abs(Date.parse(list[best].at) - t) ? k : best), 0);
+  // keep: switching keeps the time of night; else the newest frame, or in the planetarium
+  // the time nearest to now (the first one for a past night).
+  const setMode = (on, keep = true) => {
+    const at = keep ? items()[Number(slider.value)]?.at : undefined;
+    planetarium = on;
+    root.classList.toggle("planetarium", on);
+    modeButton?.setAttribute("aria-pressed", String(on));
+    const list = items();
+    slider.max = String(Math.max(0, list.length - 1));
+    let i = list.length - 1;
+    if (at) i = nearest(list, Date.parse(at));
+    else if (on && list.length) i = nearest(list, Date.now());
+    slider.value = String(i);
+    show(i);
+  };
+  modeButton?.addEventListener("click", () => { stop(); setMode(!planetarium); });
   slider.addEventListener("input", () => show(Number(slider.value)));
 
   let timer = null;
   const stop = () => { clearInterval(timer); timer = null; play.textContent = "▶"; play.setAttribute("aria-label", "Abspielen"); };
   play.addEventListener("click", () => {
     if (timer) return stop();
-    if (Number(slider.value) >= frames.length - 1) slider.value = "0";
+    if (Number(slider.value) >= items().length - 1) slider.value = "0";
     play.textContent = "❚❚";
     play.setAttribute("aria-label", "Anhalten");
     show(Number(slider.value));
     timer = setInterval(() => {
       const next = Number(slider.value) + 1;
-      if (next >= frames.length) return stop();
+      if (next >= items().length) return stop();
       slider.value = String(next);
       show(next);
     }, 600);
   });
-  show(frames.length - 1);
+  setMode(planetarium, false);
 })();

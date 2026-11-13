@@ -22,6 +22,7 @@ import 'package:sensors_plus/sensors_plus.dart';
 import '../api/hub_client.dart';
 import '../design.dart';
 import '../l10n.dart';
+import '../night_mode.dart';
 import 'sky_find.dart';
 
 typedef Vec = ({double x, double y, double z});
@@ -339,6 +340,7 @@ class _SkyViewScreenState extends State<SkyViewScreen>
       appBar: AppBar(
         title: Text(tr('Himmel', 'Sky')),
         actions: [
+          const NightButton(),
           if (catalogue)
             IconButton(
               key: const Key('sky-find'),

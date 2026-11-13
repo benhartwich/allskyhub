@@ -7,6 +7,7 @@ import 'package:flutter/material.dart';
 import '../api/hub_client.dart';
 import '../design.dart';
 import '../l10n.dart';
+import '../night_mode.dart';
 import 'camera_status.dart';
 import 'globe.dart';
 import 'network_screens.dart';
@@ -65,6 +66,7 @@ class _ExploreScreenState extends State<ExploreScreen> {
     appBar: AppBar(
       title: Text(tr('Entdecken', 'Explore')),
       actions: [
+        const NightButton(),
         if (widget.onSignIn case final signIn?)
           TextButton(
             key: const Key('sign-in'),

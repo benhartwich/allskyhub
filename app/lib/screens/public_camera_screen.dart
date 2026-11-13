@@ -12,6 +12,7 @@ import 'package:video_player/video_player.dart';
 import '../api/hub_client.dart';
 import '../design.dart';
 import '../l10n.dart';
+import '../night_mode.dart';
 import 'camera_status.dart';
 import 'join_screen.dart';
 import 'product_screens.dart' show productTitles;
@@ -94,6 +95,7 @@ class _PublicCameraScreenState extends State<PublicCameraScreen> {
         appBar: AppBar(
           title: Text(camera?.title ?? widget.title),
           actions: [
+            const NightButton(),
             if (camera != null)
               IconButton(
                 tooltip: tr('Teilen', 'Share'),

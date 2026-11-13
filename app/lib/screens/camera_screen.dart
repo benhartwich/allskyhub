@@ -6,6 +6,7 @@ import '../design.dart';
 
 import '../api/hub_client.dart';
 import '../l10n.dart';
+import '../night_mode.dart';
 import '../platform/location.dart';
 import '../platform/sky_widget.dart';
 import 'camera_settings_screen.dart';
@@ -216,6 +217,7 @@ class _CameraScreenState extends State<CameraScreen> {
       appBar: AppBar(
         title: Text(_camera.name),
         actions: [
+          const NightButton(),
           if (_camera.canChange)
             IconButton(
               tooltip: tr('Einstellungen', 'Settings'),

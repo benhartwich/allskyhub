@@ -13,24 +13,12 @@ import 'package:url_launcher/url_launcher.dart';
 import '../api/hub_client.dart';
 import '../design.dart';
 import '../l10n.dart';
+import '../night_mode.dart';
 import '../platform/location.dart';
 import 'join_screen.dart' show SignInScope;
 import 'sky_view_screen.dart';
 
-/// Night red: keeps the eyes adapted (bortle's red mode uses the same colour).
-const nightRed = Color(0xFFFF5A4E);
 const _adapt = Duration(minutes: 15);
-
-/// Everything in shades of red, like a red torch.
-Widget redNight(Widget child) => ColorFiltered(
-  colorFilter: const ColorFilter.matrix([
-    0.3, 0.6, 0.1, 0, 0, //
-    0, 0, 0, 0, 0,
-    0, 0, 0, 0, 0,
-    0, 0, 0, 1, 0,
-  ]),
-  child: child,
-);
 
 /// Without an account: what reporting is, and where to get an account.
 class ReportGateScreen extends StatelessWidget {
@@ -208,7 +196,8 @@ class _ReportScreenState extends State<ReportScreen> {
   }
 
   @override
-  Widget build(BuildContext context) => redNight(
+  Widget build(BuildContext context) => alwaysRed(
+    context,
     Scaffold(
       backgroundColor: Colors.black,
       appBar: AppBar(

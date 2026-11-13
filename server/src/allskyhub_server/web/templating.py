@@ -14,6 +14,7 @@ from fastapi.templating import Jinja2Templates
 from jinja2 import pass_context
 from jinja2.runtime import Context
 
+from allskyhub_server.devices import sky_now as sky_now_module
 from allskyhub_server.devices import sky_overlay as overlay
 from allskyhub_server.devices.event_text import compass
 
@@ -141,6 +142,16 @@ def air_overlay(device: Any) -> Any:
     return overlay.build_aircraft(device.last_status, at, aircraft.current.tracks, device.id)
 
 
+def sky_now(device: Any) -> Any:
+    """Drafts 2 and 4: the sky tiles of the camera page, None before the first measurement."""
+    return sky_now_module.sky_now(device.last_status)
+
+
+def orientation_badge(device: Any) -> Any:
+    """Draft 2: how well the camera knows its orientation, None before the first solve."""
+    return sky_now_module.orientation(device.last_status)
+
+
 # SPEC §7.11 status.heater reasons.
 HEATER_REASONS = {
     "off": "aus", "on": "an (dauernd)", "dew": "an: Taugefahr", "humidity": "an: hohe Luftfeuchte",
@@ -176,6 +187,8 @@ cast(dict[str, Any], templates.env.globals)["app_store_id"] = APP_STORE_ID
 cast(dict[str, Any], templates.env.globals)["heater_text"] = heater_text
 cast(dict[str, Any], templates.env.globals)["air_overlay"] = air_overlay
 cast(dict[str, Any], templates.env.globals)["sky_overlay"] = sky_overlay
+cast(dict[str, Any], templates.env.globals)["sky_now"] = sky_now
+cast(dict[str, Any], templates.env.globals)["orientation_badge"] = orientation_badge
 _filters = cast(dict[str, Any], templates.env.filters)
 _filters["age"] = age
 _filters["night_title"] = night_title

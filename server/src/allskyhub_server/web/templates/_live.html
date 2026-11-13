@@ -10,11 +10,15 @@
   {% if air %}{% include "_air_overlay.html" %}{% endif %}
   </div>
   <figcaption class="muted">Bild {{ device.latest_image_at | age }}{% if online %} · live{% endif %}{% if ov %} · <button type="button" class="link overlay-toggle" data-overlay-toggle aria-pressed="false">Sternbilder</button>{% endif %}{% if air %} · <button type="button" class="link overlay-toggle" data-overlay-toggle="air" aria-pressed="false">Flugzeuge</button><span class="air-credit"> · {{ air.credit }}</span>{% endif %}</figcaption>
+  {% set ob = orientation_badge(device) %}
+  {% if ob %}<p class="solve-line"><span class="pill {{ ob.level }}">{{ ob.text }}</span>{% if ob.stars is not none %}<span>{{ ob.stars }} Sterne</span>{% endif %}{% if ob.rms_deg is not none %}<span>Abweichung {{ '%.2f' | format(ob.rms_deg) | replace('.', ',') }}°</span>{% endif %}<span>Norden bei {{ ob.north_deg }}°</span>{% if ob.solved_at %}<span>{{ ob.solved_at | age }}</span>{% endif %}</p>{% endif %}
   {% else %}
   <div class="sky-ph" aria-hidden="true"></div>
   <figcaption class="muted">{% if online %}Warte auf das erste Bild …{% else %}Noch kein Bild.{% endif %}</figcaption>
   {% endif %}
 </figure>
+{% set sn = sky_now(device) %}
+{% if sn %}{% include "_sky_now.html" %}{% endif %}
 <div class="card">
   <div class="cam-meta">
     <h2>Status</h2>

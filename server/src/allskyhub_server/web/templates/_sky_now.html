@@ -1,0 +1,20 @@
+{# Drafts 2 and 4 (2026-11-13): the camera's own measurement of the sky, SPEC §6.3 status.sky
+   (devices/sky_now.py); needs `sn`. #}
+<section class="card sky-now" aria-labelledby="sky-now-h">
+  <div class="cam-meta"><h2 id="sky-now-h">Himmel jetzt</h2>{% if sn.at %}<span class="muted small">gemessen {{ sn.at | age }}</span>{% endif %}</div>
+  <div class="sky-tiles">
+    {% if sn.stars is not none %}<div class="sky-tile"><small>Sterne gesehen</small><strong>{{ sn.stars }}</strong><span>im neuesten Nachtbild</span></div>{% endif %}
+    {% if sn.cloud_pct is not none %}<div class="sky-tile"><small>Bewölkung</small><strong>{{ sn.cloud_pct }} %</strong><span>{{ 'aus den Sternen' if sn.stars is not none else 'aus der Himmelsfarbe' }}</span></div>{% endif %}
+    {% if sn.cells %}
+    <div class="sky-tile cloud-tile"><small>Wolken je Richtung</small>
+      <svg class="cloud-map" viewBox="-100 -100 200 200" role="img" aria-label="Wolken je Himmelsrichtung, Norden oben, Osten links">
+        {% for c in sn.cells %}<path class="{{ 'cm-na' if c.shade is none else 'cm-' ~ c.shade }}" d="{{ c.path }}"><title>{{ c.title }}</title></path>{% endfor %}
+        <text x="0" y="-86">N</text><text x="-91" y="5">O</text><text x="0" y="97">S</text><text x="91" y="5">W</text>
+      </svg>
+      <span>wie im Bild: Norden oben, Osten links; hell = Wolken</span>
+    </div>
+    {% endif %}
+    {% if sn.sqm is not none %}<div class="sky-tile"><small>Himmelshelligkeit</small><strong>{{ '%.1f' | format(sn.sqm) | replace('.', ',') }}</strong><span>mag/⁠″², ungefähr; höher ist dunkler</span></div>{% endif %}
+    {% if sn.transparency is not none %}<div class="sky-tile"><small>Transparenz</small><strong>{{ '%.2f' | format(sn.transparency) | replace('.', ',') }}</strong><span>mag gedämpft über 40°, 0 = klarste Nächte</span></div>{% endif %}
+  </div>
+</section>

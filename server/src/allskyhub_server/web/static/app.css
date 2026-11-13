@@ -601,3 +601,27 @@ h1.break { overflow-wrap: anywhere; }
 .late-line { fill: none; stroke: var(--accent, #f08a50); stroke-dasharray: 8 6; }
 .late-point { fill: none; stroke: var(--accent, #f08a50); }
 .late-thumb { width: 96px; border-radius: 6px; }
+
+/* Drafts 2 and 4 (devices/sky_now.py): how well the camera knows its orientation, and the
+   sky tiles of the camera page. */
+.pill { display: inline-block; font: 600 12px var(--display); border-radius: 999px; padding: 2px 9px; }
+.pill.good { background: rgb(79 227 176 / .14); color: var(--ok); }
+.pill.usable { background: rgb(242 192 107 / .14); color: var(--warn); }
+.pill.rough { background: rgb(255 122 147 / .14); color: var(--danger); }
+.solve-line { margin: 0; display: flex; flex-wrap: wrap; gap: 4px 12px; align-items: center; font-size: 13px; color: var(--text-2);
+              font-variant-numeric: tabular-nums; }
+.sky-tiles { display: grid; gap: 10px; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); }
+.sky-tile { display: grid; gap: 2px; align-content: start; min-width: 0; padding: 10px 12px; border-radius: 12px;
+            background: var(--surface-2); border: 1px solid var(--line); }
+.sky-tile small { color: var(--text-2); font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 1px; }
+.sky-tile strong { font-family: var(--display); font-size: 26px; font-variant-numeric: tabular-nums; }
+.sky-tile span { color: var(--text-2); font-size: 12px; }
+.cloud-tile { grid-row: span 2; }
+.cloud-map { width: 100%; max-width: 160px; justify-self: center; }
+.cloud-map path { stroke: var(--line); stroke-width: 1; fill: var(--text); }
+.cloud-map text { fill: var(--text-2); font: 700 13px var(--display); text-anchor: middle; }
+.cloud-map .cm-na { fill: none; }
+.cloud-map .cm-0 { fill-opacity: .04; } .cloud-map .cm-1 { fill-opacity: .1; } .cloud-map .cm-2 { fill-opacity: .16; }
+.cloud-map .cm-3 { fill-opacity: .23; } .cloud-map .cm-4 { fill-opacity: .3; } .cloud-map .cm-5 { fill-opacity: .37; }
+.cloud-map .cm-6 { fill-opacity: .44; } .cloud-map .cm-7 { fill-opacity: .52; } .cloud-map .cm-8 { fill-opacity: .6; }
+.cloud-map .cm-9 { fill-opacity: .68; } .cloud-map .cm-10 { fill-opacity: .76; }

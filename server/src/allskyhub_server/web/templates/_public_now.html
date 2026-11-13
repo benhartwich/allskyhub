@@ -19,6 +19,7 @@
     {% if sky.cloud_cover is number %}<span class="fact"><small>Bewölkung</small>{{ (sky.cloud_cover * 100) | round | int }} %</span>{% endif %}
     {% if sky.sqm_mag is number %}<span class="fact"><small>Himmelshelligkeit</small>{{ '%.2f' | format(sky.sqm_mag) | replace('.', ',') }} mag/⁠″²</span>{% endif %}
     {% if sky.stars is number %}<span class="fact"><small>Sterne</small>{{ sky.stars }}</span>{% endif %}
+    {% set ob = orientation_badge(device) %}{% if ob %}<span class="fact"><small>Ausrichtung</small><span class="pill {{ ob.level }}">{{ ob.text }}</span></span>{% endif %}
   </figcaption>
   {% else %}
   <div class="sky-ph" aria-hidden="true"></div>

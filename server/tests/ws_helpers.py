@@ -71,8 +71,10 @@ async def closed_with(ws: ClientConnection) -> int | None:
     return info.value.rcvd.code if info.value.rcvd else None
 
 
-async def until(check: Callable[[], Awaitable[bool]], within: float = 5.0) -> None:
-    """Wait until ``check`` holds; a fixed sleep raced on a loaded CI machine."""
+async def until(check: Callable[[], Awaitable[bool]], within: float = 15.0) -> None:
+    """Wait until ``check`` holds; a fixed sleep raced on a loaded CI machine. 15 s, not
+    5: test_sky.py ran out of 5 s once on a busy runner (#442, 2026-11-13); waiting longer
+    costs nothing while the check passes early."""
     loop = asyncio.get_running_loop()
     end = loop.time() + within
     while not await check():

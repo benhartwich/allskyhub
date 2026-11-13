@@ -7,6 +7,7 @@ import datetime as dt
 from typing import Any
 
 import httpx
+import pytest
 from fastapi import FastAPI
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
@@ -113,3 +114,28 @@ async def test_no_satellites_on_the_public_page(
         assert "<circle" not in public.split('class="lay-sats"')[1].split("</g>")[0]
     finally:
         bright_satellites.current = before
+
+
+def test_satellites_only_near_their_elements(monkeypatch: pytest.MonkeyPatch) -> None:
+    """SGP4 far from the element set's epoch draws passes that never were (allsky review):
+    the ISS set is for 12 Oct 03:27 UTC, ISS_TOP seven days later."""
+    [sat] = _iss().sats
+    assert satellite_match.epoch(sat) == dt.datetime(2026, 10, 12, 3, 27, 40, 741062, tzinfo=dt.UTC)
+    lay = sky_layers.build(_status(), ISS_TOP, _iss())
+    assert lay is not None
+    assert [m.text for m in lay.satellites] == ["Raumstation ISS"]
+    monkeypatch.setattr(sky_layers, "MAX_EPOCH_DAYS", 3.0)
+    lay = sky_layers.build(_status(), ISS_TOP, _iss())
+    assert lay is not None
+    assert lay.satellites == []
+
+
+def test_no_satellites_thirty_days_before_the_elements() -> None:
+    """A frame 30 days before the epoch: the ISS is left out at every moment of that night,
+    even where SGP4 would put it high and sunlit."""
+    cat = _iss()
+    start = dt.datetime(2026, 9, 12, 0, tzinfo=dt.UTC)
+    for minutes in range(0, 12 * 60, 2):
+        lay = sky_layers.build(_status(), start + dt.timedelta(minutes=minutes), cat)
+        assert lay is not None
+        assert lay.satellites == []

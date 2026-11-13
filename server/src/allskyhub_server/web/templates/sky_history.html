@@ -36,7 +36,7 @@
     <input type="range" data-sky-time min="0" max="{{ frames | length - 1 }}" value="{{ frames | length - 1 }}" step="1" aria-label="Zeit in der Nacht">
     <output data-sky-clock>{{ frames[-1].clock }}</output>
   </div>
-  <figcaption class="muted small">{{ frames | length }} Bilder dieser Nacht. Ereignisse zeigen Meteore und Überflüge bis 3 Minuten um die Aufnahme. Gezeichnet mit der Ausrichtung, die die Kamera zu der Zeit hatte.</figcaption>
+  <figcaption class="muted small">{{ frames | length }} Bilder dieser Nacht. Ereignisse zeigen Meteore und Überflüge bis 3 Minuten um die Aufnahme. Gezeichnet mit der Ausrichtung, die die Kamera zu der Zeit hatte. Satelliten nur, solange ihre Bahndaten höchstens acht Tage von der Aufnahme entfernt sind; für ältere Nächte wären sie zu ungenau.</figcaption>
 </figure>
 <script type="application/json" id="sky-frames">{{ frames | tojson }}</script>
 {% endif %}

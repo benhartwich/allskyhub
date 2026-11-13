@@ -97,6 +97,12 @@ def parse(text: str) -> list[tuple[str, int, str, str]]:
     return out
 
 
+def epoch(sat: Any) -> dt.datetime:
+    """The time an element set is for (``Satrec.jdsatepoch`` + ``jdsatepochF``, UTC)."""
+    jd = float(sat.jdsatepoch) + float(sat.jdsatepochF)
+    return dt.datetime(2000, 1, 1, 12, tzinfo=dt.UTC) + dt.timedelta(days=jd - 2451545.0)
+
+
 def build(entries: list[tuple[str, int, str, str]]) -> Catalogue:
     seen: set[int] = set()
     names: list[str] = []

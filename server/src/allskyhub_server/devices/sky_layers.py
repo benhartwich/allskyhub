@@ -16,7 +16,7 @@ from functools import cache
 from typing import Any, cast
 
 from allskyhub_server.devices import bright_satellites
-from allskyhub_server.devices.satellite_match import Catalogue, look_all
+from allskyhub_server.devices.satellite_match import Catalogue, epoch, look_all
 from allskyhub_server.devices.satellites import MIN_ALTITUDE
 from allskyhub_server.devices.sky_overlay import orientation
 from allskyhub_sky import alt_az, precess, project, sidereal_deg
@@ -32,6 +32,12 @@ GRID_STEP_DEG = 5.0
 CARDINAL_ALT = 6.0
 SAT_TRAIL = dt.timedelta(seconds=60)
 SAT_TRAIL_STEP = dt.timedelta(seconds=10)
+# Elements further than this from a frame's time are left out: SGP4 drifts by hundreds of
+# km for the ISS within weeks (drag, reboosts), which would draw passes that never were.
+# The live image is never more than a day off (fetched daily); eight days keep the frames
+# of the last week's nights (sky_history, allsky review 2026-11-13). The ISS pass checked
+# against Skyfield in test_satellites.py lies 7.0 days after its epoch and is right to 1°.
+MAX_EPOCH_DAYS = 8.0
 
 
 @dataclass(frozen=True)
@@ -137,6 +143,8 @@ def _satellites(
     for k in range(len(catalogue)):
         a, z = float(alt[k, -1]), float(az[k, -1])
         if not ok[k, -1] or not lit[k, -1] or a < MIN_ALTITUDE:
+            continue
+        if abs(at - epoch(catalogue.sats[k])) > dt.timedelta(days=MAX_EPOCH_DAYS):
             continue
         points = [
             cast(tuple[float, float], pixel(float(alt[k, j]), float(az[k, j])))

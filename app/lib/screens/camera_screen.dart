@@ -7,6 +7,7 @@ import '../design.dart';
 import '../api/hub_client.dart';
 import '../l10n.dart';
 import '../night_mode.dart';
+import 'camera_sky.dart';
 import '../platform/location.dart';
 import '../platform/sky_widget.dart';
 import 'camera_settings_screen.dart';
@@ -45,12 +46,40 @@ class _CameraScreenState extends State<CameraScreen> {
   Timer? _timer;
   int _tick = 0;
   Overview? _overview;
+  SkyOverlay? _overlay;
+  DateTime? _overlayFor;
+  DateTime? _overlayAsked;
 
   @override
   void initState() {
     super.initState();
     _timer = Timer.periodic(_interval, (_) => _refresh());
     _loadOverview();
+    _loadOverlay();
+  }
+
+  /// Draft 1: the layers for the latest picture; again for a newer picture, at most every
+  /// 30 s (aircraft and satellites move, the stars hardly).
+  Future<void> _loadOverlay() async {
+    final image = _camera.latestImageAt;
+    final asked = _overlayAsked;
+    if (image == null || image == _overlayFor) return;
+    if (asked != null &&
+        DateTime.now().difference(asked) < const Duration(seconds: 30)) {
+      return;
+    }
+    _overlayAsked = DateTime.now();
+    try {
+      final overlay = await widget.client.skyOverlay(_camera.id);
+      if (mounted) {
+        setState(() {
+          _overlay = overlay;
+          _overlayFor = image;
+        });
+      }
+    } on Object {
+      // Older hub without the overlay, or offline: no layers.
+    }
   }
 
   /// Health, "Heute Nacht" and last night; changes slowly, so once a minute.
@@ -78,6 +107,7 @@ class _CameraScreenState extends State<CameraScreen> {
           _tick++;
         });
         if (_tick % 12 == 0) _loadOverview();
+        _loadOverlay();
       }
     } on Exception {
       // Keep showing the last state; the next tick tries again.
@@ -261,22 +291,45 @@ class _CameraScreenState extends State<CameraScreen> {
                   : GestureDetector(
                       key: const Key('live-image'),
                       onTap: _openFullscreen,
-                      child: Image.network(
-                        widget.client
-                            .imageUrl(_camera.id, live: true, bust: _tick)
-                            .toString(),
-                        headers: widget.client.authHeaders,
-                        fit: BoxFit.contain,
-                        gaplessPlayback: true,
-                        errorBuilder: (_, _, _) => Center(
-                          child: Text(
-                            tr('Bild nicht verfügbar', 'Picture not available'),
+                      child: Stack(
+                        fit: StackFit.expand,
+                        children: [
+                          Image.network(
+                            widget.client
+                                .imageUrl(_camera.id, live: true, bust: _tick)
+                                .toString(),
+                            headers: widget.client.authHeaders,
+                            fit: BoxFit.contain,
+                            gaplessPlayback: true,
+                            errorBuilder: (_, _, _) => Center(
+                              child: Text(
+                                tr(
+                                  'Bild nicht verfügbar',
+                                  'Picture not available',
+                                ),
+                              ),
+                            ),
                           ),
-                        ),
+                          if (_overlay case final overlay?)
+                            IgnorePointer(
+                              child: ValueListenableBuilder<Set<SkyLayer>>(
+                                valueListenable: shownLayers,
+                                builder: (_, shown, _) => CustomPaint(
+                                  key: const Key('sky-layers'),
+                                  painter: SkyOverlayPainter(overlay, shown),
+                                ),
+                              ),
+                            ),
+                        ],
                       ),
                     ),
             ),
           ),
+          if (_overlay != null)
+            const Padding(
+              padding: EdgeInsets.fromLTRB(16, 10, 16, 0),
+              child: LayerChips(),
+            ),
           Padding(
             padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
             child: Row(
@@ -304,6 +357,8 @@ class _CameraScreenState extends State<CameraScreen> {
               ],
             ),
           ),
+          OrientationLine(status: _camera.status),
+          SkyNowCard(status: _camera.status),
           Card(
             margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
             child: Padding(
@@ -350,6 +405,7 @@ class _CameraScreenState extends State<CameraScreen> {
               ),
             ),
           ),
+          SatellitesCard(client: widget.client, cameraId: _camera.id),
           if (_overview case final overview?) ...[
             _HealthCard(health: overview.health),
             if (overview.nowcast case final nowcast?)

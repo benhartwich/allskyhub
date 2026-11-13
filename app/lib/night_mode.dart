@@ -113,6 +113,20 @@ class NightMode extends ChangeNotifier {
   NightSetting _setting = NightSetting.off;
   bool _dark = false;
   bool _placeKnown = false;
+  (double, double)? _placeCache;
+  DateTime? _placeAt;
+
+  /// The place changes rarely (a place chosen under "Himmel", or the phone's last known
+  /// one): read it at most every 30 minutes, not with every minute's look at the sun.
+  Future<(double, double)?> _cachedPlace() async {
+    final at = _placeAt;
+    final now = _clock();
+    if (at == null || now.difference(at).abs() >= const Duration(minutes: 30)) {
+      _placeCache = await _place();
+      _placeAt = now;
+    }
+    return _placeCache;
+  }
 
   NightSetting get setting => _setting;
 
@@ -132,6 +146,7 @@ class NightMode extends ChangeNotifier {
   }
 
   Future<void> choose(NightSetting setting) async {
+    _placeAt = null; // a new choice looks at the place again
     _setting = setting;
     notifyListeners();
     await _store.save(setting);
@@ -155,7 +170,7 @@ class NightMode extends ChangeNotifier {
   /// Looks at the sun again (every minute while "automatisch").
   Future<void> refresh() async {
     if (_setting != NightSetting.auto) return;
-    final where = await _place();
+    final where = await _cachedPlace();
     final dark =
         where != null &&
         sunAltitude(_clock(), where.$1, where.$2) < nightSunAltitude;

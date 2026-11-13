@@ -14,10 +14,11 @@ Each satellite gets three marks, all estimates without measured brightness:
 
 from __future__ import annotations
 
+import asyncio
 import datetime as dt
 import math
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Literal, cast
 
 from allskyhub_server.devices import astro
 from allskyhub_server.devices.satellite_match import Catalogue, look_all
@@ -169,3 +170,39 @@ def location(status: dict[str, Any] | None) -> tuple[float, float] | None:
     if not isinstance(lat, int | float) or not isinstance(lon, int | float):
         return None
     return float(lat), float(lon)
+
+
+Filter = Literal["jetzt", "oben", "nacht"]
+
+
+@dataclass(frozen=True)
+class View:
+    """What the satellites card (web) and the app show for one filter."""
+
+    where: tuple[float, float] | None
+    loaded: bool
+    now_list: list[SatNow]
+    passes: list[SatPass]
+
+
+async def view(
+    catalogue: Catalogue | None, status: dict[str, Any] | None, f: Filter, at: dt.datetime
+) -> View:
+    """``jetzt``: naked eye now; ``oben``: above the horizon now; ``nacht``: tonight's good
+    passes still ahead. Computed off the event loop."""
+    from allskyhub_server.devices import tonight
+
+    where = location(status)
+    if where is None or catalogue is None:
+        return View(where, catalogue is not None, [], [])
+    lat, lon = where
+    if f == "nacht":
+        reported = cast(dict[str, Any], (status or {}).get("settings") or {})
+        night = tonight.night_now(at, lat, lon, tonight.zone_for(reported.get("timezone")))
+        if not (night.sunset and night.sunrise):
+            return View(where, True, [], [])
+        start = max(night.sunset, at)
+        passes = await asyncio.to_thread(night_passes, catalogue, lat, lon, start, night.sunrise)
+        return View(where, True, [], passes)
+    found = await asyncio.to_thread(now, catalogue, lat, lon, at)
+    return View(where, True, [s for s in found if s.naked_eye] if f == "jetzt" else found, [])

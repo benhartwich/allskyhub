@@ -29,7 +29,9 @@ from allskyhub_server.auth import accounts, app_tokens, lockout, ratelimit
 from allskyhub_server.auth.passwords import verify_secret_async
 from allskyhub_server.auth.tokens import hash_token
 from allskyhub_server.devices import (
+    aircraft,
     archive,
+    bright_satellites,
     events,
     labels,
     lightning_li,
@@ -38,6 +40,8 @@ from allskyhub_server.devices import (
     queries,
     settings_form,
     sightings,
+    sky_history,
+    sky_overlay,
 )
 from allskyhub_server.devices import settings as settings_mod
 from allskyhub_server.devices.connections import ConnectionRegistry
@@ -393,6 +397,83 @@ async def remove(request: Request, db: DbSession, user: AppUser, device_id: str)
     store.delete_device(device.id)
     await _registry(request).close(device.id, CloseCode.UNPAIRED)
     return Response(status_code=204)
+
+
+@router.get("/cameras/{device_id}/sky-overlay")
+async def camera_sky_overlay(
+    request: Request, db: DbSession, user: AppUser, device_id: str
+) -> dict[str, Any]:
+    """Draft 1 for the app: everything the live image can show (constellations, star
+    names, grid, moon and planets, satellites, aircraft) at the latest image's time, in
+    pixels of the lens's frame; {} without a lens, a place or an image. Same JSON as the
+    web's sky view (devices/sky_history.frame_sky) plus ``aircraft``. Only for the
+    camera's own viewers: satellites would give the exact place away."""
+    found = await queries.visible_one(db, user.id, device_id)
+    if found is None:
+        raise HTTPException(404, "Not found")
+    device = found[0]
+    if device.latest_image_at is None:
+        return {}
+    at = sky_overlay.image_time(device.last_frame, device.latest_image_at)
+    satellites = request.app.state.bright_satellites
+    if satellites.loaded() is None:
+        await satellites.get()  # the app asks rarely; waits once for the elements
+    recent = await events.events(db, device.id, limit=50)
+    drawn = await sky_history.frame_sky(db, device, at, satellites.loaded(), recent)
+    if drawn is None:
+        return {}
+    watch = aircraft.current
+    planes = (
+        sky_overlay.build_aircraft(device.last_status, at, watch.tracks, device.id)
+        if watch is not None
+        else None
+    )
+    drawn["at"] = at.isoformat()
+    drawn["aircraft"] = (
+        [{"x": round(a.x, 1), "y": round(a.y, 1), "text": a.text, "trail": a.trail}
+         for a in planes.items]
+        if planes is not None
+        else []
+    )  # fmt: skip
+    drawn["aircraft_credit"] = aircraft.CREDIT if planes is not None else None
+    return drawn
+
+
+@router.get("/cameras/{device_id}/satellites")
+async def camera_satellites(
+    request: Request,
+    db: DbSession,
+    user: AppUser,
+    device_id: str,
+    f: bright_satellites.Filter = "jetzt",
+) -> dict[str, Any]:
+    """Draft 5 for the app: the bright satellites now (``jetzt``: naked eye, ``oben``:
+    above the horizon) or tonight's good passes (``nacht``). Angles in degrees, azimuth
+    from north over east, heights in km."""
+    found = await queries.visible_one(db, user.id, device_id)
+    if found is None:
+        raise HTTPException(404, "Not found")
+    device = found[0]
+    where = bright_satellites.location(device.last_status)
+    catalogue = await request.app.state.bright_satellites.get() if where else None
+    v = await bright_satellites.view(catalogue, device.last_status, f, dt.datetime.now(dt.UTC))
+    return {
+        "located": v.where is not None,
+        "loaded": v.loaded,
+        "now": [
+            {"norad": x.norad, "name": x.name, "altitude": round(x.altitude, 1),
+             "azimuth": round(x.azimuth, 1), "height_km": round(x.height_km),
+             "sunlit": x.sunlit, "naked_eye": x.naked_eye, "in_picture": x.in_picture}
+            for x in v.now_list[:50]
+        ],
+        "passes": [
+            {"norad": x.norad, "name": x.name, "start": x.start.isoformat(),
+             "end": x.end.isoformat(), "top_altitude": round(x.top_altitude, 1),
+             "top_azimuth": round(x.top_azimuth, 1), "start_azimuth": round(x.start_azimuth, 1),
+             "end_azimuth": round(x.end_azimuth, 1)}
+            for x in v.passes
+        ],
+    }  # fmt: skip
 
 
 @router.get("/cameras/{device_id}/nights")

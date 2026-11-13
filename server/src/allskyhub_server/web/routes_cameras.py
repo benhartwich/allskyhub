@@ -5,7 +5,7 @@ from __future__ import annotations
 import asyncio
 import datetime as dt
 import uuid
-from typing import Annotated, Any, Literal, cast
+from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, Form, HTTPException, Request
 from fastapi.responses import FileResponse, JSONResponse, RedirectResponse, Response
@@ -274,7 +274,7 @@ def _warm_satellites(request: Request) -> None:
         task.add_done_callback(_warming.discard)
 
 
-SatFilter = Literal["jetzt", "oben", "nacht"]
+SatFilter = bright_satellites.Filter
 
 
 @router.get("/cameras/{device_id}/satelliten")
@@ -289,31 +289,16 @@ async def satellites_fragment(
     horizon) or tonight's good passes (devices/bright_satellites.py)."""
     device, _ = await _visible(db, session, device_id)
     where = bright_satellites.location(device.last_status)
-    now = dt.datetime.now(dt.UTC)
+    catalogue = await request.app.state.bright_satellites.get() if where else None
+    found = await bright_satellites.view(catalogue, device.last_status, f, dt.datetime.now(dt.UTC))
     context: dict[str, Any] = {
         "device": device,
         "f": f,
-        "where": where,
-        "now_list": [],
-        "passes": [],
+        "where": found.where,
+        "loaded": found.loaded,
+        "now_list": found.now_list,
+        "passes": found.passes,
     }
-    catalogue = await request.app.state.bright_satellites.get() if where else None
-    context["loaded"] = catalogue is not None
-    if where and catalogue is not None:
-        lat, lon = where
-        if f == "nacht":
-            reported = cast(dict[str, Any], (device.last_status or {}).get("settings") or {})
-            zone = tonight.zone_for(reported.get("timezone"))
-            night = tonight.night_now(now, lat, lon, zone)
-            context["zone"] = zone
-            if night.sunset and night.sunrise:
-                start = max(night.sunset, now)
-                context["passes"] = await asyncio.to_thread(
-                    bright_satellites.night_passes, catalogue, lat, lon, start, night.sunrise
-                )
-        else:
-            found = await asyncio.to_thread(bright_satellites.now, catalogue, lat, lon, now)
-            context["now_list"] = [s for s in found if s.naked_eye] if f == "jetzt" else found
     return render(request, "_satellites.html", context, session=session)
 
 

@@ -16,7 +16,8 @@
 
 definitions:
   flutter: &flutter
-    flutter: stable
+    # The version CI checks (.github/workflows/ci.yml); 3.50.0 needs Gradle 9.3.1 and material_ui.
+    flutter: 3.47.9
   app_dir: &app_dir
     working_directory: app
   scripts:

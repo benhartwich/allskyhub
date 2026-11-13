@@ -14,7 +14,7 @@ from allskyhub_server.mail.send import MemoryMailer
 from allskyhub_server.models import Device
 from allskyhub_server.settings import Settings
 from tests.fake_device import FakeDevice
-from tests.helpers import PASSWORD, csrf_from, make_account, owner_email
+from tests.helpers import PASSWORD, app_state, csrf_from, make_account, owner_email
 from tests.ws_helpers import paired_token
 
 NEW = "b" * 40
@@ -72,7 +72,7 @@ async def test_only_admins_see_the_page(
     assert 'href="/admin"' not in (await client.get("/account")).text
 
     monkeypatch.setattr(settings, "admin_emails", f"other@example.org, {email.upper()}")
-    monkeypatch.setattr(app.state, "github", FakeGitHub())
+    monkeypatch.setitem(app_state(app), "github", FakeGitHub())
     page = await client.get("/admin")
     assert page.status_code == 200
     assert 'href="/admin"' in page.text
@@ -85,7 +85,7 @@ async def test_deploy_request(
 ) -> None:
     email = await make_account(client)
     monkeypatch.setattr(settings, "admin_emails", email)
-    monkeypatch.setattr(app.state, "github", FakeGitHub(ci="failure"))
+    monkeypatch.setitem(app_state(app), "github", FakeGitHub(ci="failure"))
     request_file = deploy.spool(settings.data_dir) / "request"
     request_file.unlink(missing_ok=True)
     csrf = csrf_from((await client.get("/admin")).text)
@@ -107,7 +107,7 @@ async def test_deploy_request(
     assert "nicht grün" in r.text
     assert not request_file.exists()
 
-    monkeypatch.setattr(app.state, "github", FakeGitHub())
+    monkeypatch.setitem(app_state(app), "github", FakeGitHub())
     stale = await client.post(
         follow_redirects=True,
         url="/admin/deploy",
@@ -139,7 +139,7 @@ async def test_mail_test(
 ) -> None:
     email = await make_account(client)
     monkeypatch.setattr(settings, "admin_emails", email)
-    monkeypatch.setattr(app.state, "github", FakeGitHub())
+    monkeypatch.setitem(app_state(app), "github", FakeGitHub())
     mailer: MemoryMailer = app.state.mailer
     csrf = csrf_from((await client.get("/admin")).text)
     r = await client.post(follow_redirects=True, url="/admin/mail-test", data={"csrf_token": csrf})
@@ -153,7 +153,7 @@ async def test_admin_gifts_plus(
     """Roadmap N7: an admin gives a camera Plus for good, and can take it back."""
     dev = FakeDevice()
     await paired_token(client, dev)
-    monkeypatch.setattr(app.state, "github", FakeGitHub())
+    monkeypatch.setitem(app_state(app), "github", FakeGitHub())
     csrf = csrf_from((await client.get("/account")).text)
     gift = {"device_id": dev.device_id, "gift": "true", "csrf_token": csrf}
     # Not an admin: as if the route did not exist.
@@ -191,7 +191,7 @@ async def test_admin_sees_all_cameras_without_pictures(
     """Every paired camera with account, profile, version and last contact, no pictures."""
     dev = FakeDevice()
     await paired_token(client, dev)
-    monkeypatch.setattr(app.state, "github", FakeGitHub())
+    monkeypatch.setitem(app_state(app), "github", FakeGitHub())
     email = await owner_email(app, dev.device_id)
     monkeypatch.setattr(settings, "admin_emails", email)
     maker: async_sessionmaker[AsyncSession] = app.state.sessionmaker
@@ -273,7 +273,7 @@ async def test_github_token_and_failures_kept(
     monkeypatch.setattr(
         app.state, "stores", stores.Stores(tmp_path / "store", "benhartwich/allskyhub")
     )
-    monkeypatch.setattr(app.state, "github", github)
+    monkeypatch.setitem(app_state(app), "github", github)
     token = csrf_from((await client.get("/admin")).text)
     secret = "github_pat_" + "A1b2" * 10
     r = await client.post(

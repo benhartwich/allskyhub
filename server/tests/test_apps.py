@@ -15,7 +15,7 @@ from allskyhub_server.admin import apps, appstore, stores
 from allskyhub_server.admin.stores import AndroidJob
 from allskyhub_server.auth import ratelimit
 from allskyhub_server.settings import Settings
-from tests.helpers import PASSWORD, csrf_from, make_account
+from tests.helpers import PASSWORD, app_state, csrf_from, make_account
 from tests.test_stores import ISSUER, _p8, _play_json  # pyright: ignore[reportPrivateUsage]
 
 
@@ -203,7 +203,7 @@ async def test_apps_page_and_actions(
     email = await make_account(client)
     out = tmp_path / "release"
     hub = stores.Stores(tmp_path / "store", "benhartwich/allskyhub", release_out=out)
-    monkeypatch.setattr(app.state, "stores", hub)
+    monkeypatch.setitem(app_state(app), "stores", hub)
     assert (await client.get("/admin/apps")).status_code == 404  # admins only
     monkeypatch.setattr(settings, "admin_emails", email)
     page = await client.get("/admin/apps")
@@ -286,7 +286,7 @@ async def test_public_apk_download(
     monkeypatch.setattr(ratelimit, "APK_PER_IP", (ratelimit.Limit(10, window),))
     out = tmp_path / "release"
     hub = stores.Stores(tmp_path / "store", "benhartwich/allskyhub", release_out=out)
-    monkeypatch.setattr(app.state, "stores", hub)
+    monkeypatch.setitem(app_state(app), "stores", hub)
     assert (await client.get("/download/vinventory.apk")).status_code == 404
     hub.apk_dir.mkdir()
     (hub.apk_dir / "vinventory.apk").write_bytes(b"PK\x03\x04apk")
@@ -332,7 +332,7 @@ async def test_vinventory_test_apk(
     """Benjamin, 2026-10-29: Google's APK sends to Play; a plain test APK from the server."""
     out = tmp_path / "release"
     hub = stores.Stores(tmp_path / "store", "benhartwich/allskyhub", release_out=out)
-    monkeypatch.setattr(app.state, "stores", hub)
+    monkeypatch.setitem(app_state(app), "stores", hub)
     email = await make_account(client)
     monkeypatch.setattr(settings, "admin_emails", email)
     page = await client.get("/admin/apps")
@@ -400,7 +400,7 @@ async def test_wichtl_only_a_test_apk(
     hub = stores.Stores(
         tmp_path / "store", "benhartwich/allskyhub", release_out=tmp_path / "release"
     )
-    monkeypatch.setattr(app.state, "stores", hub)
+    monkeypatch.setitem(app_state(app), "stores", hub)
     email = await make_account(client)
     monkeypatch.setattr(settings, "admin_emails", email)
     page = await client.get("/admin/apps")
@@ -590,7 +590,7 @@ async def test_demo_account_for_screenshots(
 ) -> None:
     email = await make_account(client)
     hub = stores.Stores(tmp_path / "store", "benhartwich/allskyhub")
-    monkeypatch.setattr(app.state, "stores", hub)
+    monkeypatch.setitem(app_state(app), "stores", hub)
     monkeypatch.setattr(settings, "admin_emails", email)
     page = await client.get("/admin/apps")
     assert "Demo-Konto für Screenshots · fehlt" in page.text

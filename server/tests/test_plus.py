@@ -18,7 +18,7 @@ from allskyhub_server.billing.paddle import PaddleError
 from allskyhub_server.models import Device, Subscription, User
 from allskyhub_server.settings import Settings
 from tests.fake_device import FakeDevice
-from tests.helpers import home_csrf
+from tests.helpers import app_state, home_csrf
 from tests.ws_helpers import paired_token
 
 SECRET = "whsec_test"  # noqa: S105
@@ -55,7 +55,7 @@ def billing(app: FastAPI, settings: Settings, monkeypatch: pytest.MonkeyPatch) -
         "paddle_price_year": "pri_year",
     }.items():
         monkeypatch.setattr(settings, name, value)
-    monkeypatch.setattr(app.state, "paddle", fake)
+    monkeypatch.setitem(app_state(app), "paddle", fake)
     return fake
 
 

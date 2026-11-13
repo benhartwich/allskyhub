@@ -685,3 +685,17 @@ h1.break { overflow-wrap: anywhere; }
 .flight-list li.muted { display: block; }
 .flight-list .where { color: var(--text-2); text-align: right; }
 .flight-list li.in b, .flight-list li.in .where { color: var(--warn); }
+
+/* Draft 6: a night's frames with the sky over them (sky_history.html, sky_history.js). */
+.sky-history [data-sky-drawing] { position: absolute; inset: 0; pointer-events: none; }
+.sky-timebar { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 10px; align-items: center; }
+.sky-timebar input { width: 100%; accent-color: var(--accent); }
+.sky-timebar output { font: 600 14px var(--display); font-variant-numeric: tabular-nums; min-width: 5ch; text-align: right; }
+.events-on .lay-events { display: inline; }
+.lay-events line { stroke-width: 2.5; vector-effect: non-scaling-stroke; stroke-linecap: round; }
+.lay-events line.meteor { stroke: rgb(255 122 147); }
+.lay-events line.overflight { stroke: rgb(200 210 240 / .7); stroke-dasharray: 4 4; }
+.lay-events text.meteor { fill: rgb(255 150 170); }
+.lay-events text.overflight { fill: rgb(200 210 240 / .85); }
+.inline-form { display: inline-flex; gap: 8px; align-items: center; }
+[data-theme="red"] .lay-events line.meteor { stroke: rgb(255 60 60); }

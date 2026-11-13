@@ -11,6 +11,8 @@
     grid: ["ash-grid-overlay", "grid-on"],
     planets: ["ash-planets-overlay", "planets-on"],
     sats: ["ash-sats-overlay", "sats-on"],
+    // Draft 6: meteors and overflights over a saved frame (sky_history.js).
+    events: ["ash-events-overlay", "events-on"],
   };
   const root = document.documentElement;
   const sync = () => {

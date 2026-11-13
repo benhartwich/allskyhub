@@ -1,0 +1,43 @@
+{% extends "base.html" %}
+{% block title %}Himmel · {{ device.name }} · allskyhub{% endblock %}
+{% block head %}<script src="{{ asset('sky_history.js') }}" defer></script>{% endblock %}
+{% block content %}
+{# Draft 6 (2026-11-13): a night's saved frames with the sky drawn over them
+   (routes_gallery.sky_history_page, devices/sky_history.py). #}
+<a class="back" href="/cameras/{{ device.id }}">← {{ device.name }}</a>
+<div class="page-head"><h1>Himmel</h1>
+  {% if nights %}
+  <form method="get" class="inline-form">
+    <select id="nacht" name="nacht" data-autosubmit aria-label="Nacht">
+      {% for n in nights %}<option value="{{ n.night_id }}"{{ ' selected' if n.night_id == night_id }}>Nacht {{ n.night_id[6:8] }}.{{ n.night_id[4:6] }}.{{ n.night_id[:4] }} · {{ n.frames }} Bilder</option>{% endfor %}
+    </select>
+    <noscript><button type="submit" class="secondary small">Zeigen</button></noscript>
+  </form>
+  {% endif %}
+</div>
+{% if not frames %}
+<p class="card muted">Für diese Nacht hat der Hub keine Bilder. Er bewahrt die Bilder auf, die er beim Zuschauen oder für Ereignisse angefordert hat.</p>
+{% else %}
+<figure class="live sky-history" data-sky-history data-device="{{ device.id }}" data-night="{{ night_id }}">
+  <div class="sky-frame">
+    <img data-sky-image src="/cameras/{{ device.id }}/frames/{{ night_id }}/{{ frames[-1].name }}/{{ 'full' if frames[-1].full else 'thumb' }}.jpg" alt="Aufnahme der Nacht">
+    <div data-sky-drawing></div>
+  </div>
+  <div class="layer-chips" role="group" aria-label="Ebenen über dem Bild">
+    <button type="button" class="layer-chip" data-overlay-toggle aria-pressed="false">Sternbilder</button>
+    <button type="button" class="layer-chip" data-overlay-toggle="stars" aria-pressed="false">Sternnamen</button>
+    <button type="button" class="layer-chip" data-overlay-toggle="grid" aria-pressed="false">Raster</button>
+    <button type="button" class="layer-chip" data-overlay-toggle="planets" aria-pressed="false">Mond &amp; Planeten</button>
+    <button type="button" class="layer-chip" data-overlay-toggle="sats" aria-pressed="false">Satelliten</button>
+    <button type="button" class="layer-chip" data-overlay-toggle="events" aria-pressed="false">Ereignisse</button>
+  </div>
+  <div class="sky-timebar">
+    <button type="button" class="secondary small" data-sky-play aria-label="Abspielen">▶</button>
+    <input type="range" data-sky-time min="0" max="{{ frames | length - 1 }}" value="{{ frames | length - 1 }}" step="1" aria-label="Zeit in der Nacht">
+    <output data-sky-clock>{{ frames[-1].clock }}</output>
+  </div>
+  <figcaption class="muted small">{{ frames | length }} Bilder dieser Nacht. Ereignisse zeigen Meteore und Überflüge bis 3 Minuten um die Aufnahme. Gezeichnet mit der Ausrichtung, die die Kamera zu der Zeit hatte.</figcaption>
+</figure>
+<script type="application/json" id="sky-frames">{{ frames | tojson }}</script>
+{% endif %}
+{% endblock %}

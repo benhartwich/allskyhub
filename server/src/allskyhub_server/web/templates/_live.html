@@ -4,12 +4,15 @@
   {% if device.latest_image_at %}
   {% set ov = sky_overlay(device) %}
   {% set air = air_overlay(device) %}
+  {% set lay = sky_layers(device) %}
   <div class="sky-frame">
   <a href="/cameras/{{ device.id }}/image/full.jpg?t={{ device.latest_image_at.timestamp() | int }}" data-lightbox data-caption="Aktuelles Himmelsbild · {{ device.latest_image_at | clock }} Uhr" title="Vollbild"><img src="/cameras/{{ device.id }}/image/full.jpg?t={{ device.latest_image_at.timestamp() | int }}" alt="Aktuelles Himmelsbild"></a>
   {% if ov %}{% include "_sky_overlay.html" %}{% endif %}
   {% if air %}{% include "_air_overlay.html" %}{% endif %}
+  {% if lay %}{% include "_sky_layers.html" %}{% endif %}
   </div>
-  <figcaption class="muted">Bild {{ device.latest_image_at | age }}{% if online %} · live{% endif %}{% if ov %} · <button type="button" class="link overlay-toggle" data-overlay-toggle aria-pressed="false">Sternbilder</button>{% endif %}{% if air %} · <button type="button" class="link overlay-toggle" data-overlay-toggle="air" aria-pressed="false">Flugzeuge</button><span class="air-credit"> · {{ air.credit }}</span>{% endif %}</figcaption>
+  {% if ov or air or lay %}{% include "_layer_chips.html" %}{% endif %}
+  <figcaption class="muted">Bild {{ device.latest_image_at | age }}{% if online %} · live{% endif %}{% if air %}<span class="air-credit"> · {{ air.credit }}</span>{% endif %}</figcaption>
   {% set ob = orientation_badge(device) %}
   {% if ob %}<p class="solve-line"><span class="pill {{ ob.level }}">{{ ob.text }}</span>{% if ob.stars is not none %}<span>{{ ob.stars }} Sterne</span>{% endif %}{% if ob.rms_deg is not none %}<span>Abweichung {{ '%.2f' | format(ob.rms_deg) | replace('.', ',') }}°</span>{% endif %}<span>Norden bei {{ ob.north_deg }}°</span>{% if ob.solved_at %}<span>{{ ob.solved_at | age }}</span>{% endif %}</p>{% endif %}
   {% else %}

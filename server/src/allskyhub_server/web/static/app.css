@@ -640,3 +640,36 @@ h1.break { overflow-wrap: anywhere; }
 .st.sun { background: rgb(242 192 107 / .15); color: var(--warn); }
 .st.shadow { background: rgb(167 176 204 / .14); color: var(--text-2); }
 .st.cam { background: rgb(79 227 176 / .14); color: var(--ok); }
+
+/* Draft 1: more layers over the live image (devices/sky_layers.py) and one switch each. */
+.layer-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.layer-chip { font: 600 13px var(--display); color: var(--text-2); background: transparent; border: 1px solid var(--line);
+  border-radius: 999px; padding: 4px 11px 4px 9px; cursor: pointer; display: inline-flex; gap: 6px; align-items: center; }
+.layer-chip::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: var(--text-2); opacity: .5; }
+.layer-chip[aria-pressed="true"] { color: var(--text); border-color: var(--accent); background: rgb(122 162 247 / .12); }
+.layer-chip[aria-pressed="true"]::before { background: var(--accent); opacity: 1; }
+.layer-chip:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.layer-overlay { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; font-family: var(--body); }
+.layer-overlay > g { display: none; }
+.stars-on .lay-stars, .grid-on .lay-grid, .planets-on .lay-planets, .sats-on .lay-sats { display: inline; }
+.layer-overlay text { paint-order: stroke; stroke: rgb(0 0 0 / .65); stroke-width: 3px; vector-effect: non-scaling-stroke;
+  dominant-baseline: middle; }
+.lay-grid path { fill: none; stroke: rgb(200 210 240 / .35); stroke-width: 1; stroke-dasharray: 5 6; vector-effect: non-scaling-stroke; }
+.lay-grid text { fill: rgb(200 210 240 / .8); }
+.lay-grid .lay-cardinal { fill: var(--accent); font-weight: 700; text-anchor: middle; }
+.lay-stars circle { fill: none; stroke: rgb(235 240 255 / .9); stroke-width: 1.2; vector-effect: non-scaling-stroke; }
+.lay-stars text { fill: rgb(235 240 255 / .92); }
+.lay-planets circle { fill: rgb(242 192 107); stroke: rgb(0 0 0 / .6); stroke-width: 1; vector-effect: non-scaling-stroke; }
+.lay-planets text { fill: rgb(250 214 150); }
+.lay-sats path { fill: none; stroke: rgb(140 230 200 / .7); stroke-width: 1.6; vector-effect: non-scaling-stroke; }
+.lay-sats circle { fill: rgb(140 230 200); stroke: rgb(0 0 0 / .6); stroke-width: 1; vector-effect: non-scaling-stroke; }
+.lay-sats text { fill: rgb(170 240 215); }
+/* With the grid on, its own letters are enough. */
+.grid-on .sky-cardinal { display: none; }
+[data-theme="red"] .layer-chip[aria-pressed="true"] { background: rgb(255 40 40 / .12); }
+[data-theme="red"] .lay-grid path { stroke: rgb(255 60 60 / .35); }
+[data-theme="red"] .lay-grid text, [data-theme="red"] .lay-stars text, [data-theme="red"] .lay-planets text,
+[data-theme="red"] .lay-sats text { fill: rgb(255 120 110 / .9); }
+[data-theme="red"] .lay-stars circle { stroke: rgb(255 110 110); }
+[data-theme="red"] .lay-planets circle, [data-theme="red"] .lay-sats circle { fill: rgb(255 80 80); }
+[data-theme="red"] .lay-sats path { stroke: rgb(255 60 60 / .6); }

@@ -17,13 +17,18 @@ from __future__ import annotations
 import datetime as dt
 import math
 from dataclasses import dataclass
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from allskyhub_server.devices import astro
 from allskyhub_server.devices.satellite_match import Catalogue, look_all
 from allskyhub_server.devices.satellites import EARTH_RADIUS_KM, MIN_ALTITUDE, SATELLITES, SKY_DARK
 
+if TYPE_CHECKING:
+    from allskyhub_server.devices.satellite_match import SatelliteCatalogue
+
 GROUP = "visual"
+# The hub's catalogue of this group (set by the app), for drawing on the live image.
+current: SatelliteCatalogue | None = None
 NIGHT_STEP = dt.timedelta(seconds=30)
 # Tonight lists the good passes only: at least this high at their top.
 NIGHT_MIN_TOP = 30.0

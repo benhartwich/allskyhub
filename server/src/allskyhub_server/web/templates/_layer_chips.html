@@ -1,0 +1,11 @@
+{# Draft 1: one switch per layer over the live image (overlay.js); needs `ov`, `air`, `lay`. #}
+<div class="layer-chips" role="group" aria-label="Ebenen über dem Bild">
+  {% if ov %}<button type="button" class="layer-chip" data-overlay-toggle aria-pressed="false">Sternbilder</button>{% endif %}
+  {% if lay %}
+  <button type="button" class="layer-chip" data-overlay-toggle="stars" aria-pressed="false">Sternnamen</button>
+  <button type="button" class="layer-chip" data-overlay-toggle="grid" aria-pressed="false">Raster</button>
+  <button type="button" class="layer-chip" data-overlay-toggle="planets" aria-pressed="false">Mond &amp; Planeten</button>
+  {% endif %}
+  {% if air %}<button type="button" class="layer-chip" data-overlay-toggle="air" aria-pressed="false">Flugzeuge</button>{% endif %}
+  {% if lay %}<button type="button" class="layer-chip" data-overlay-toggle="sats" aria-pressed="false">Satelliten</button>{% endif %}
+</div>

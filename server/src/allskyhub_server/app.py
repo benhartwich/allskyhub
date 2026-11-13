@@ -377,6 +377,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         else None,
         groups=(bright_satellites.GROUP,),
     )
+    bright_satellites.current = app.state.bright_satellites
     app.state.paddle = Paddle(settings)
     app.state.github = GitHub(settings.deploy_repo, checks=settings.deploy_check_names)
     app.state.latest_image = LatestImage(settings.deploy_repo)

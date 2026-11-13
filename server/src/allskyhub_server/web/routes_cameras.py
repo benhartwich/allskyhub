@@ -2,9 +2,10 @@
 
 from __future__ import annotations
 
+import asyncio
 import datetime as dt
 import uuid
-from typing import Annotated, Any
+from typing import Annotated, Any, Literal, cast
 
 from fastapi import APIRouter, Depends, Form, HTTPException, Request
 from fastapi.responses import FileResponse, RedirectResponse, Response
@@ -17,6 +18,7 @@ from allskyhub_server.auth.sessions import SessionInfo
 from allskyhub_server.billing import plus
 from allskyhub_server.devices import (
     archive,
+    bright_satellites,
     camera_map,
     discord,
     domains,
@@ -253,6 +255,49 @@ async def live_fragment(
         {"device": device, "online": registry.is_online(device.id)},
         session=session,
     )
+
+
+SatFilter = Literal["jetzt", "oben", "nacht"]
+
+
+@router.get("/cameras/{device_id}/satelliten")
+async def satellites_fragment(
+    request: Request,
+    db: DbSession,
+    session: CurrentSession,
+    device_id: str,
+    f: SatFilter = "jetzt",
+) -> Response:
+    """Draft 5: the bright satellites over the camera, now (naked eye or above the
+    horizon) or tonight's good passes (devices/bright_satellites.py)."""
+    device, _ = await _visible(db, session, device_id)
+    where = bright_satellites.location(device.last_status)
+    now = dt.datetime.now(dt.UTC)
+    context: dict[str, Any] = {
+        "device": device,
+        "f": f,
+        "where": where,
+        "now_list": [],
+        "passes": [],
+    }
+    catalogue = await request.app.state.bright_satellites.get() if where else None
+    context["loaded"] = catalogue is not None
+    if where and catalogue is not None:
+        lat, lon = where
+        if f == "nacht":
+            reported = cast(dict[str, Any], (device.last_status or {}).get("settings") or {})
+            zone = tonight.zone_for(reported.get("timezone"))
+            night = tonight.night_now(now, lat, lon, zone)
+            context["zone"] = zone
+            if night.sunset and night.sunrise:
+                start = max(night.sunset, now)
+                context["passes"] = await asyncio.to_thread(
+                    bright_satellites.night_passes, catalogue, lat, lon, start, night.sunrise
+                )
+        else:
+            found = await asyncio.to_thread(bright_satellites.now, catalogue, lat, lon, now)
+            context["now_list"] = [s for s in found if s.naked_eye] if f == "jetzt" else found
+    return render(request, "_satellites.html", context, session=session)
 
 
 @router.get("/cameras/{device_id}/image/{variant}.jpg")

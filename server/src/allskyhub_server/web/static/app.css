@@ -625,3 +625,18 @@ h1.break { overflow-wrap: anywhere; }
 .cloud-map .cm-3 { fill-opacity: .23; } .cloud-map .cm-4 { fill-opacity: .3; } .cloud-map .cm-5 { fill-opacity: .37; }
 .cloud-map .cm-6 { fill-opacity: .44; } .cloud-map .cm-7 { fill-opacity: .52; } .cloud-map .cm-8 { fill-opacity: .6; }
 .cloud-map .cm-9 { fill-opacity: .68; } .cloud-map .cm-10 { fill-opacity: .76; }
+
+/* Draft 5: bright satellites over the camera (_satellites.html). */
+.sat-box .seg { display: flex; flex-wrap: wrap; gap: 6px; }
+.sat-box .seg [aria-pressed="true"] { background: var(--accent); color: var(--accent-ink); border-color: transparent; }
+.sat-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+.sat-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 2px 10px; padding: 8px 10px; border-radius: 10px;
+           background: var(--surface-2); border: 1px solid var(--line); font-size: 14px; }
+.sat-row b { font-family: var(--display); overflow-wrap: anywhere; }
+.sat-row .when { text-align: right; font-variant-numeric: tabular-nums; color: var(--text-2); }
+.sat-row .tags { grid-column: 1 / -1; display: flex; gap: 5px; flex-wrap: wrap; align-items: center; }
+.st { font-size: 11px; font-weight: 600; border-radius: 5px; padding: 1px 6px; }
+.st.eye { background: rgb(122 162 247 / .16); color: var(--accent); }
+.st.sun { background: rgb(242 192 107 / .15); color: var(--warn); }
+.st.shadow { background: rgb(167 176 204 / .14); color: var(--text-2); }
+.st.cam { background: rgb(79 227 176 / .14); color: var(--ok); }

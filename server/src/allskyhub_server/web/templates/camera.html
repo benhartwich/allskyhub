@@ -51,6 +51,10 @@
 {% if observatory %}{% include "_observatory.html" %}{% endif %}
 {% if nowcast %}{% include "_nowcast.html" %}{% endif %}
 {% if tonight %}{% include "_tonight.html" %}{% endif %}
+<section class="card stack sats" id="satelliten" aria-labelledby="satelliten-h">
+  <h2 id="satelliten-h">Satelliten</h2>
+  <div class="sat-box" hx-get="/cameras/{{ device.id }}/satelliten" hx-trigger="load" hx-swap="outerHTML"><p class="muted">Lade …</p></div>
+</section>
 {% if last_night %}{% include "_last_night.html" %}{% endif %}
 {% if events %}
 <section class="card">

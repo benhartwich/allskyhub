@@ -1,0 +1,40 @@
+{# Draft 5 (2026-11-13): bright satellites over the camera (routes_cameras.satellites_fragment,
+   devices/bright_satellites.py). Replaces itself; "jetzt" and "oben" refresh every minute. #}
+<div class="sat-box stack" {% if f != 'nacht' %}hx-get="/cameras/{{ device.id }}/satelliten?f={{ f }}" hx-trigger="every 60s" hx-swap="outerHTML"{% endif %}>
+  <div class="seg" role="group" aria-label="Auswahl">
+    {% for key, title in [('jetzt', 'Jetzt sichtbar'), ('oben', 'Über dem Horizont'), ('nacht', 'Heute Nacht')] %}
+    <button type="button" class="secondary small" aria-pressed="{{ 'true' if f == key else 'false' }}" hx-get="/cameras/{{ device.id }}/satelliten?f={{ key }}" hx-target="closest .sat-box" hx-swap="outerHTML">{{ title }}</button>
+    {% endfor %}
+  </div>
+  {% if not where %}
+  <p class="muted">Die Kamera hat ihren Standort noch nicht gemeldet.</p>
+  {% elif not loaded %}
+  <p class="muted">Die Bahndaten der Satelliten sind gerade nicht geladen. Versuch es später noch einmal.</p>
+  {% elif f == 'nacht' %}
+    {% if passes %}
+    <ul class="sat-list">
+      {% for p in passes %}
+      <li class="sat-row"><b>{{ p.name }}</b><span class="when">{{ p.start | clock }}–{{ p.end | clock }} · {{ p.top_altitude | round | int }}° {{ p.top_azimuth | compass }}</span>
+        <span class="tags"><span class="st eye">mit bloßem Auge</span><span class="st sun">sonnenbeschienen</span><span class="st cam">im Bild</span><span class="muted small">von {{ p.start_azimuth | compass }} nach {{ p.end_azimuth | compass }}</span></span></li>
+      {% endfor %}
+    </ul>
+    {% else %}
+    <p class="muted">Heute Nacht kommt kein heller Satellit höher als 30°.</p>
+    {% endif %}
+  {% else %}
+    {% if now_list %}
+    <ul class="sat-list">
+      {% for s in now_list[:25] %}
+      <li class="sat-row"><b>{{ s.name }}</b><span class="when">{{ s.altitude | round | int }}° {{ s.azimuth | compass }} · {{ s.height_km | round | int }} km hoch</span>
+        <span class="tags">{% if s.naked_eye %}<span class="st eye">mit bloßem Auge</span>{% endif %}{% if s.sunlit %}<span class="st sun">sonnenbeschienen</span>{% else %}<span class="st shadow">im Erdschatten</span>{% endif %}{% if s.in_picture %}<span class="st cam">im Bild</span>{% endif %}</span></li>
+      {% endfor %}
+    </ul>
+    {% if now_list | length > 25 %}<p class="muted small">und {{ now_list | length - 25 }} weitere tiefer am Himmel</p>{% endif %}
+    {% elif f == 'jetzt' %}
+    <p class="muted">Gerade ist kein heller Satellit mit bloßem Auge zu sehen. Das geht nur, wenn es dunkel ist und die Sonne den Satelliten noch beleuchtet, meist in den Stunden nach Sonnenuntergang und vor Sonnenaufgang.</p>
+    {% else %}
+    <p class="muted">Gerade ist kein heller Satellit über dem Horizont.</p>
+    {% endif %}
+  {% endif %}
+  <p class="muted small">Die etwa 150 hellsten Objekte (CelesTrak, Gruppe „visual“). „Mit bloßem Auge“ ist eine Schätzung: beleuchtet, mindestens 10° hoch und der Himmel dunkel genug. „Im Bild“ heißt mindestens 10° hoch.</p>
+</div>

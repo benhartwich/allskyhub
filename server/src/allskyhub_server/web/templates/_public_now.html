@@ -4,7 +4,9 @@
   {% if device.latest_image_at %}
   {% set ov = sky_overlay(device) %}
   {% set air = air_overlay(device) if profile.sections.aircraft else none %}
-  {% set lay = sky_layers(device) %}
+  {# No satellites in public: they would give the camera's exact place away. #}
+  {% set lay = sky_layers(device, false) %}
+  {% set no_satellites = true %}
   <div class="sky-frame">
   <a href="/sky/{{ slug }}/latest.jpg?t={{ device.latest_image_at.timestamp() | int }}" title="Vollbild" data-lightbox data-caption="Aktuelles Himmelsbild · {{ device.latest_image_at | clock }} Uhr"><img src="/sky/{{ slug }}/latest.jpg?t={{ device.latest_image_at.timestamp() | int }}" alt="Aktuelles Himmelsbild"></a>
   {% if ov %}{% include "_sky_overlay.html" %}{% endif %}

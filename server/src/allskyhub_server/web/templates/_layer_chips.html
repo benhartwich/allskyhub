@@ -7,5 +7,5 @@
   <button type="button" class="layer-chip" data-overlay-toggle="planets" aria-pressed="false">Mond &amp; Planeten</button>
   {% endif %}
   {% if air %}<button type="button" class="layer-chip" data-overlay-toggle="air" aria-pressed="false">Flugzeuge</button>{% endif %}
-  {% if lay %}<button type="button" class="layer-chip" data-overlay-toggle="sats" aria-pressed="false">Satelliten</button>{% endif %}
+  {% if lay and not no_satellites %}<button type="button" class="layer-chip" data-overlay-toggle="sats" aria-pressed="false">Satelliten</button>{% endif %}
 </div>

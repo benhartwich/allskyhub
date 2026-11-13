@@ -152,16 +152,19 @@ def orientation_badge(device: Any) -> Any:
     return sky_now_module.orientation(device.last_status)
 
 
-def sky_layers(device: Any) -> Any:
+def sky_layers(device: Any, satellites: bool = True) -> Any:
     """Draft 1: stars, grid, moon and planets, satellites over the latest image; None
-    without a lens. Satellites only once their elements are loaded (live_fragment)."""
+    without a lens. Satellites only once their elements are loaded (live_fragment), and
+    never on public pages: a satellite's place in the sky moves about 1.4° per 10 km of
+    the observer's, so its marks and trails would give the exact place away."""
     from allskyhub_server.devices import bright_satellites
     from allskyhub_server.devices import sky_layers as layers
 
     if device.latest_image_at is None:
         return None
     at = overlay.image_time(device.last_frame, device.latest_image_at)
-    catalogue = bright_satellites.current.loaded() if bright_satellites.current else None
+    current = bright_satellites.current
+    catalogue = current.loaded() if satellites and current else None
     return layers.build(device.last_status, at, catalogue)
 
 

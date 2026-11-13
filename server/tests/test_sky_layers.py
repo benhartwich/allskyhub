@@ -10,10 +10,11 @@ import httpx
 from fastapi import FastAPI
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
-from allskyhub_server.devices import satellite_match, sky_layers
+from allskyhub_server.devices import bright_satellites, satellite_match, sky_layers
 from allskyhub_server.models import Device
 from tests.conftest import ISS_TLE
 from tests.fake_device import FakeDevice
+from tests.test_public_page import _public  # pyright: ignore[reportPrivateUsage]
 from tests.test_sky_overlay import AT, LENS, _status  # pyright: ignore[reportPrivateUsage]
 from tests.ws_helpers import paired_token
 
@@ -78,3 +79,37 @@ async def test_live_and_public_pages_have_the_switches(
         assert f'data-overlay-toggle="{kind}"' in live
     assert ">Vega<" in live
     assert ">Saturn<" in live
+
+
+async def test_no_satellites_on_the_public_page(
+    app: FastAPI, client: httpx.AsyncClient, new_client: httpx.AsyncClient
+) -> None:
+    """A satellite moves about 1.4° in the sky per 10 km of the observer's place; its marks
+    and trails would give a public camera's exact place away (public places are rounded)."""
+    device_id, slug = await _public(app, client, new_client)
+    maker: async_sessionmaker[AsyncSession] = app.state.sessionmaker
+    async with maker() as db:
+        device = await db.get(Device, device_id)
+        assert device
+        device.last_status = _status()
+        device.last_frame = {"captured_at": ISS_TOP.isoformat()}
+        device.latest_image_at = ISS_TOP
+        await db.commit()
+
+    class Loaded:
+        def loaded(self) -> satellite_match.Catalogue:
+            return _iss()
+
+    before = bright_satellites.current
+    bright_satellites.current = Loaded()  # pyright: ignore[reportAttributeAccessIssue]
+    try:
+        own = (await client.get(f"/cameras/{device_id}/live")).text
+        assert "Raumstation ISS" in own
+        assert 'data-overlay-toggle="sats"' in own
+        public = (await new_client.get(f"/sky/{slug}/now")).text
+        assert 'class="layer-overlay"' in public  # stars, grid, planets stay
+        assert "Raumstation ISS" not in public
+        assert 'data-overlay-toggle="sats"' not in public
+        assert "<circle" not in public.split('class="lay-sats"')[1].split("</g>")[0]
+    finally:
+        bright_satellites.current = before

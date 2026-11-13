@@ -1,4 +1,5 @@
-Neu: Das Netz und Feuerkugeln nachreichen.
-• „Das Netz heute Nacht“ unter Entdecken: alle Kameras und Stationen auf dem Globus, die Feuerkugeln und Meteorströme der Nacht, der dunkelste Himmel.
-• Deine Station: „Im Netz“ und dein Himmel im Vergleich mit den Nachbarn. Du wählst, was sie öffentlich zeigt.
-• Feuerkugel nachreichen: Eine ältere Aufnahme wird an den Sternen geprüft und mit anderen Kameras vermessen.
+Neu: Der Himmel über deiner Kamera und Rotlicht für die Nacht.
+• Auf der Kameraseite: Sternbilder, hellste Sterne, Gitter, Planeten und Satelliten zum Einblenden über dem Livebild.
+• Himmel jetzt: Sterne, Bewölkung mit Wolkenkarte, Himmelshelligkeit und wie gut die Kamera eingemessen ist.
+• Satelliten: was gerade über dir fliegt und die hellen Überflüge dieser Nacht.
+• Rotlicht: die ganze App in Rot, damit die Augen dunkeladaptiert bleiben – von Hand oder automatisch nachts.

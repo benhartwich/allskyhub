@@ -109,3 +109,25 @@ async def test_live_shows_tiles_and_orientation(app: FastAPI, client: httpx.Asyn
     assert "gut eingemessen" in live
     assert "Abweichung 0,08°" in live
     assert "Norden bei 78°" in live
+
+
+def test_cloud_map_turns_like_the_image() -> None:
+    """SPEC §6.3: image direction of azimuth A is north - A when mirrored, else north + A."""
+    usual = sky_now.sky_now({"sky": SKY, "orientation": {**ORIENTATION, "north_deg": 0.0}})
+    assert usual is not None
+    assert {c[0]: c[1:] for c in usual.compass} == {
+        "N": (0.0, -91.0), "O": (-91.0, 0.0), "S": (0.0, 91.0), "W": (91.0, 0.0),
+    }  # fmt: skip
+    turned = sky_now.sky_now(
+        {"sky": SKY, "orientation": {**ORIENTATION, "north_deg": 90.0, "mirrored": False}}
+    )
+    assert turned is not None
+    assert {c[0]: c[1:] for c in turned.compass} == {
+        "N": (91.0, 0.0), "O": (0.0, 91.0), "S": (-91.0, 0.0), "W": (0.0, -91.0),
+    }  # fmt: skip
+    # Not mirrored: the arcs run clockwise (sweep 1) outside, back counter-clockwise inside.
+    assert " 0 0 1 " in turned.cells[0].path
+    assert " 0 0 0 " in turned.cells[0].path
+    # The north cell of the lowest band starts right of the centre (north at 90° in the image).
+    x, _ = turned.cells[0].path[1:].split(" ")[:2]
+    assert float(x) > 70

@@ -8,7 +8,7 @@ import uuid
 from typing import Annotated, Any, Literal, cast
 
 from fastapi import APIRouter, Depends, Form, HTTPException, Request
-from fastapi.responses import FileResponse, RedirectResponse, Response
+from fastapi.responses import FileResponse, JSONResponse, RedirectResponse, Response
 from pydantic import ValidationError
 from sqlalchemy import select
 
@@ -17,13 +17,16 @@ from allskyhub_server.auth import ratelimit
 from allskyhub_server.auth.sessions import SessionInfo
 from allskyhub_server.billing import plus
 from allskyhub_server.devices import (
+    aircraft,
     archive,
     bright_satellites,
     camera_map,
     discord,
     domains,
     events,
+    flight_map,
     health,
+    map_tiles,
     night_summary,
     nowcast,
     pairing,
@@ -312,6 +315,74 @@ async def satellites_fragment(
             found = await asyncio.to_thread(bright_satellites.now, catalogue, lat, lon, now)
             context["now_list"] = [s for s in found if s.naked_eye] if f == "jetzt" else found
     return render(request, "_satellites.html", context, session=session)
+
+
+@router.get("/cameras/{device_id}/flugzeuge")
+async def flight_map_page(
+    request: Request, db: DbSession, session: CurrentSession, device_id: str
+) -> Response:
+    """Draft 7: the aircraft around the camera on a map, with the area where they show in
+    the picture (devices/flight_map.py). Owners and shared viewers only: it shows the
+    camera's exact place."""
+    device, _ = await _visible(db, session, device_id)
+    where = bright_satellites.location(device.last_status)
+    rings = flight_map.rings(*where) if where else []
+    return render(
+        request,
+        "flight_map.html",
+        {
+            "device": device,
+            "where": where,
+            "rings": rings,
+            "map_config": {
+                "maxZoom": map_tiles.MAX_ZOOM,
+                "layers": {
+                    key: {"maxZoom": t.max_zoom, "credit": t.credit}
+                    for key, t in map_tiles.LAYERS.items()
+                },
+                "camera": where,
+                "rings": [{"elevation": r.elevation, "km": r.km} for r in rings],
+            },
+            "adsb": aircraft.current is not None,
+        },
+        session=session,
+    )
+
+
+@router.get("/cameras/{device_id}/flugzeuge.json")
+async def flight_map_data(
+    request: Request, db: DbSession, session: CurrentSession, device_id: str
+) -> JSONResponse:
+    """Polled by the map every 10 s; keeps the camera's aircraft coming (SPEC §7.8)."""
+    device, _ = await _visible(db, session, device_id)
+    where = bright_satellites.location(device.last_status)
+    watch = aircraft.current
+    if where is None or watch is None:
+        return JSONResponse({"planes": [], "credit": aircraft.CREDIT})
+    watch.watched(device.id)
+    now = dt.datetime.now(dt.UTC)
+    found = flight_map.planes(watch.tracks, *where, now, device.id)
+    return JSONResponse(
+        {
+            "credit": aircraft.CREDIT,
+            "planes": [
+                {
+                    "hex": p.hex,
+                    "name": p.name,
+                    "type": p.type_code,
+                    "alt_km": round(p.alt_m / 1000, 1),
+                    "lat": round(p.lat, 4),
+                    "lon": round(p.lon, 4),
+                    "track": p.track_deg,
+                    "elevation": round(p.elevation, 1),
+                    "distance_km": round(p.distance_km, 1),
+                    "in_picture": p.in_picture,
+                    "trail": [[round(a, 4), round(b, 4)] for a, b in p.trail],
+                }
+                for p in found
+            ],
+        }
+    )
 
 
 @router.get("/cameras/{device_id}/image/{variant}.jpg")

@@ -457,8 +457,8 @@ async def test_a_flash_only_for_its_session(
     tmp_path: Path,
 ) -> None:
     out = tmp_path / "release"
-    monkeypatch.setattr(
-        app.state, "stores", stores.Stores(tmp_path / "store", "x/y", release_out=out)
+    monkeypatch.setitem(
+        app_state(app), "stores", stores.Stores(tmp_path / "store", "x/y", release_out=out)
     )
     email = await make_account(client)
     monkeypatch.setattr(settings, "admin_emails", email)

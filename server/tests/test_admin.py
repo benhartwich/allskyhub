@@ -270,8 +270,8 @@ async def test_github_token_and_failures_kept(
 
     email = await make_account(client)
     monkeypatch.setattr(settings, "admin_emails", email)
-    monkeypatch.setattr(
-        app.state, "stores", stores.Stores(tmp_path / "store", "benhartwich/allskyhub")
+    monkeypatch.setitem(
+        app_state(app), "stores", stores.Stores(tmp_path / "store", "benhartwich/allskyhub")
     )
     monkeypatch.setitem(app_state(app), "github", github)
     token = csrf_from((await client.get("/admin")).text)

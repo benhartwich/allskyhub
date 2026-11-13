@@ -1,0 +1,32 @@
+{% extends "base.html" %}
+{% block title %}Flugzeuge · {{ device.name }} · allskyhub{% endblock %}
+{% block head %}<link rel="stylesheet" href="{{ asset('leaflet/leaflet.css') }}">
+<script src="{{ asset('leaflet/leaflet.js') }}" defer></script>
+<script src="{{ asset('flight_map.js') }}" defer></script>{% endblock %}
+{% block content %}
+{# Draft 7 (2026-11-13): the aircraft around the camera and where they show in the picture
+   (web/routes_cameras.flight_map_page, devices/flight_map.py). Only for the camera's own
+   viewers: the map shows its exact place. #}
+<a class="back" href="/cameras/{{ device.id }}">← {{ device.name }}</a>
+<div class="page-head"><h1>Flugzeuge</h1></div>
+{% if not where %}
+<p class="card muted">Die Kamera hat ihren Standort noch nicht gemeldet.</p>
+{% elif not adsb %}
+<p class="card muted">Flugzeugdaten sind auf diesem Hub ausgeschaltet.</p>
+{% else %}
+<div class="flight-page">
+  <div class="card flight-map-card">
+    <div id="flight-map" class="flight-map" data-url="/cameras/{{ device.id }}/flugzeuge.json" role="region" aria-label="Karte der Flugzeuge um die Kamera"></div>
+    <p class="muted small">Fläche: Wo ein Flugzeug in 10 km Höhe im Bild der Kamera steht.
+      {% for r in rings %}Innerhalb von {{ r.km | round | int }} km ist es mindestens {{ r.elevation | int }}° hoch{{ '; ' if not loop.last else '.' }}{% endfor %}
+      Hervorgehoben: Flugzeuge gerade im Bild (ab 10° Höhe). Die Spur zeigt die letzten zwei Minuten.</p>
+  </div>
+  <section class="card stack" aria-labelledby="flight-list-h">
+    <div class="cam-meta"><h2 id="flight-list-h">In der Nähe</h2><span class="muted small" data-flight-count></span></div>
+    <ul class="flight-list" data-flight-list><li class="muted">Lade …</li></ul>
+    <p class="muted small" data-flight-credit></p>
+  </section>
+</div>
+<script type="application/json" id="map-config">{{ map_config | tojson }}</script>
+{% endif %}
+{% endblock %}

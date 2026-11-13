@@ -673,3 +673,15 @@ h1.break { overflow-wrap: anywhere; }
 [data-theme="red"] .lay-stars circle { stroke: rgb(255 110 110); }
 [data-theme="red"] .lay-planets circle, [data-theme="red"] .lay-sats circle { fill: rgb(255 80 80); }
 [data-theme="red"] .lay-sats path { stroke: rgb(255 60 60 / .6); }
+
+/* Draft 7: aircraft around the camera on a map (flight_map.html, flight_map.js). */
+.flight-page { display: grid; gap: 20px; }
+@media (min-width: 60rem) { .flight-page { grid-template-columns: minmax(0, 1.6fr) minmax(0, 1fr); align-items: start; } }
+.flight-map { height: min(70vh, 560px); border-radius: 14px; }
+.flight-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; font-size: 13px;
+  font-variant-numeric: tabular-nums; max-height: 60vh; overflow: auto; }
+.flight-list li { display: grid; grid-template-columns: 9ch minmax(0, 1fr) auto; gap: 8px; padding: 5px 8px;
+  border-radius: 8px; background: var(--surface-2); }
+.flight-list li.muted { display: block; }
+.flight-list .where { color: var(--text-2); text-align: right; }
+.flight-list li.in b, .flight-list li.in .where { color: var(--warn); }

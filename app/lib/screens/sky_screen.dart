@@ -9,6 +9,7 @@ import '../api/hub_client.dart';
 import '../api/place_store.dart';
 import '../design.dart';
 import '../l10n.dart';
+import '../night_mode.dart';
 import '../platform/location.dart';
 import '../platform/reminders.dart';
 import 'gallery_screens.dart' show clock;
@@ -112,6 +113,7 @@ class _SkyScreenState extends State<SkyScreen> {
     appBar: AppBar(
       title: Text(tr('Himmel', 'Sky')),
       actions: [
+        const NightButton(),
         if (_place != null)
           IconButton(
             key: const Key('sky-place'),

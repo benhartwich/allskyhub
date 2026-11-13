@@ -5,6 +5,7 @@ import 'package:flutter_localizations/flutter_localizations.dart';
 
 import 'design.dart';
 import 'l10n.dart';
+import 'night_mode.dart';
 import 'api/hub_client.dart';
 import 'api/place_store.dart';
 import 'api/session_store.dart';
@@ -36,6 +37,8 @@ class AllskyApp extends StatefulWidget {
     this.places,
     this.location,
     this.reminders,
+    this.nightStore,
+    this.nightPlace,
   });
 
   final SessionStore store;
@@ -45,6 +48,10 @@ class AllskyApp extends StatefulWidget {
   final PlaceStore? places;
   final LocationSource? location;
   final Reminders? reminders;
+
+  /// The red light (draft 3): its setting and where "automatisch" looks at the sun.
+  final NightStore? nightStore;
+  final NightPlace? nightPlace;
 
   @override
   State<AllskyApp> createState() => _AllskyAppState();
@@ -58,10 +65,31 @@ class _AllskyAppState extends State<AllskyApp> {
   /// Public calls for guests go to the default hub.
   late final HubClient _guest = widget.clientFor(defaultHubUrl, null);
 
+  late final PlaceStore _places = widget.places ?? SecurePlaceStore();
+  late final NightMode _night = NightMode(
+    store: widget.nightStore ?? SecureNightStore(),
+    place: widget.nightPlace ?? _nightPlace,
+  );
+
+  /// "Automatisch": the place chosen under "Himmel", else the phone's last known one.
+  Future<(double, double)?> _nightPlace() async {
+    final chosen = (await _places.load())?.place;
+    if (chosen != null) return (chosen.lat, chosen.lon);
+    final here = await lastKnownLocation();
+    return here == null ? null : (here.latitude, here.longitude);
+  }
+
   @override
   void initState() {
     super.initState();
     _restore();
+    unawaited(_night.load());
+  }
+
+  @override
+  void dispose() {
+    _night.dispose();
+    super.dispose();
   }
 
   Future<void> _restore() async {
@@ -105,30 +133,35 @@ class _AllskyAppState extends State<AllskyApp> {
   @override
   Widget build(BuildContext context) {
     final client = _client;
-    return MaterialApp(
-      navigatorKey: _navigator,
-      title: 'allskyhub',
-      debugShowCheckedModeBanner: false,
-      theme: skyTheme(),
-      locale: appLocale,
-      supportedLocales: const [Locale('de'), Locale('en')],
-      localizationsDelegates: GlobalMaterialLocalizations.delegates,
-      builder: (context, child) => client == null
-          ? SignInScope(onSignIn: _signIn, child: child!)
-          : child!,
-      home: _loading
-          ? const Scaffold(body: Center(child: CircularProgressIndicator()))
-          : HomeShell(
-              key: ValueKey(client),
-              client: client ?? _guest,
-              places: widget.places ?? SecurePlaceStore(),
-              location: widget.location ?? PlatformLocationSource(),
-              reminders: widget.reminders ?? LocalReminders(),
-              mine: client == null
-                  ? null
-                  : CamerasScreen(client: client, onSignOut: _signOut),
-              onSignIn: client == null ? _signIn : null,
-            ),
+    return NightScope(
+      mode: _night,
+      child: MaterialApp(
+        navigatorKey: _navigator,
+        title: 'allskyhub',
+        debugShowCheckedModeBanner: false,
+        theme: skyTheme(),
+        locale: appLocale,
+        supportedLocales: const [Locale('de'), Locale('en')],
+        localizationsDelegates: GlobalMaterialLocalizations.delegates,
+        builder: (context, child) => NightFilter(
+          child: client == null
+              ? SignInScope(onSignIn: _signIn, child: child!)
+              : child!,
+        ),
+        home: _loading
+            ? const Scaffold(body: Center(child: CircularProgressIndicator()))
+            : HomeShell(
+                key: ValueKey(client),
+                client: client ?? _guest,
+                places: _places,
+                location: widget.location ?? PlatformLocationSource(),
+                reminders: widget.reminders ?? LocalReminders(),
+                mine: client == null
+                    ? null
+                    : CamerasScreen(client: client, onSignOut: _signOut),
+                onSignIn: client == null ? _signIn : null,
+              ),
+      ),
     );
   }
 }

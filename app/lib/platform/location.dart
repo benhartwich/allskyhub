@@ -96,6 +96,24 @@ class PlatformLocationSource implements LocationSource {
   }
 }
 
+/// The phone's last known place, without asking for permission (for the red light's
+/// "automatisch"); null when unknown or not allowed.
+Future<CameraLocation?> lastKnownLocation() async {
+  try {
+    final permission = await Geolocator.checkPermission();
+    if (permission != LocationPermission.always &&
+        permission != LocationPermission.whileInUse) {
+      return null;
+    }
+    final position = await Geolocator.getLastKnownPosition();
+    return position == null
+        ? null
+        : CameraLocation(position.latitude, position.longitude);
+  } on Exception {
+    return null;
+  }
+}
+
 String describeLocationProblem(LocationProblem problem) => switch (problem) {
   LocationProblem.serviceOff => tr(
     'Die Standortdienste des Handys sind aus. Schalte sie ein oder gib die Koordinaten ein.',

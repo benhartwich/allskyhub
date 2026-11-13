@@ -6,6 +6,7 @@ import '../api/hub_client.dart';
 import '../api/setup_mode.dart';
 import '../api/test_update.dart';
 import '../l10n.dart';
+import '../night_mode.dart';
 import '../platform/location.dart';
 import '../platform/wifi_binding.dart';
 import 'account_screen.dart';
@@ -92,6 +93,7 @@ class _CamerasScreenState extends State<CamerasScreen> {
       appBar: AppBar(
         title: Text(tr('Meine Kameras', 'My cameras')),
         actions: [
+          const NightButton(),
           IconButton(
             tooltip: tr('Konto', 'Account'),
             icon: const Icon(Icons.person_outline),

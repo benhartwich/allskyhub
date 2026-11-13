@@ -110,6 +110,8 @@ async def test_live_state_from_both_stores(tmp_path: Path) -> None:
                 {"name": "17", "status": "completed", "versionCodes": ["17"]}]}]})  # fmt: skip
         if path.endswith("/edits/E1") and request.method == "DELETE":
             return httpx.Response(204)
+        if request.url.host == "play.google.com":
+            return httpx.Response(200, text='x"141":[[["17.0.1"]],[[[36]],[[[24,"7.0"]]]]]')
         if path == "/v1/apps":
             return httpx.Response(200, json={"data": [{"id": "A1"}]})
         if path == "/v1/apps/A1/appStoreVersions":
@@ -133,6 +135,7 @@ async def test_live_state_from_both_stores(tmp_path: Path) -> None:
     live = apps.live_of(hub, "bortle")
     assert live["play"]["production"] == [{"name": "17", "status": "completed", "codes": ["17"]}]
     assert live["apple"] == [{"version": "0.3.0", "state": "IN_REVIEW"}]
+    assert live["play_public"] == "17.0.1"
 
     # Never a Play edit while an App Bundle goes up: it would expire the upload's edit.
     answers = tmp_path / "release-bortle"
@@ -707,6 +710,12 @@ def test_android_steps_as_a_way() -> None:
     live = {"production": [{"status": "completed", "codes": ["323"]}]}
     way = apps.android_steps("1.1.0", True, _job(), None, "", live)
     assert way.steps[-1].state == "store"
+    # The public Play page has that version: live (Benjamin, 2026-11-13).
+    way = apps.android_steps("1.1.0", True, _job(), None, "", live, public="1.1.0")
+    assert (way.steps[-1].state, way.row.tone) == ("done", "done")
+    assert way.row.status == "Build 323 (1.1.0) ist bei Google Play live."
+    way = apps.android_steps("1.1.0", True, _job(), None, "", live, public="1.0.0")
+    assert way.steps[-1].state == "store"
     failed = apps.android_steps("1.1.0", True, _job("failed"), None, "")
     assert (failed.steps[0].state, failed.steps[0].label) == ("fail", "Neu bauen")
 
@@ -735,3 +744,18 @@ def test_the_card_shows_the_ways(tmp_path: Path) -> None:
     assert 'value="appstore"' in html
     assert 'value="review-play"' in html
     assert "Codemagic ↗" in html
+
+
+async def test_play_public_version() -> None:
+    """The version on the public Play page; None without a page or a version on it."""
+    pages = {"a.app": (200, 'x"141":[[["1.3.0"]],[[[36]],[[[24,"7.0"]]]]]'),
+             "b.app": (404, ""), "c.app": (200, "<html>no version</html>")}  # fmt: skip
+
+    def answer(request: httpx.Request) -> httpx.Response:
+        code, text = pages[request.url.params["id"]]
+        return httpx.Response(code, text=text)
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(answer)) as client:
+        assert await apps.play_public_version(client, "a.app") == "1.3.0"
+        assert await apps.play_public_version(client, "b.app") is None
+        assert await apps.play_public_version(client, "c.app") is None

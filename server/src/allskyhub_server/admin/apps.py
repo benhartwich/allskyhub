@@ -55,6 +55,11 @@ ACTIONS = (
 # What the stores say, kept this long before the page asks again.
 LIVE_MAX_AGE = dt.timedelta(minutes=10)
 LIVE_JOB = "live"
+# The public store page: the version people get now. The Play API only tells that a
+# release was sent to production, not whether Google still reviews it or it is live
+# (Benjamin, 2026-11-13: 1.3.0 live, the page still waiting).
+PLAY_PAGE = "https://play.google.com/store/apps/details"
+_PLAY_VERSION = re.compile(r'\[\[\["(\d+(?:\.\d+){1,3})"\]\]')
 # Apple's states of a version on its way and in the store.
 APPLE_REVIEW = {
     "WAITING_FOR_REVIEW": "wartet bei Apple auf die Prüfung",
@@ -172,6 +177,23 @@ def _stale(stores: Stores) -> bool:
     return False
 
 
+def _sent(play: dict[str, Any] | None) -> bool:
+    """Whether Google has a release sent to production (not only a draft)."""
+    releases: list[dict[str, Any]] = (play or {}).get("production") or []
+    return any(r.get("status") in ("completed", "inProgress") for r in releases)
+
+
+async def play_public_version(client: httpx.AsyncClient, package: str) -> str | None:
+    """The version on the app's public Play page, None where there is none (not yet
+    published, or Google changed the page)."""
+    r = await client.get(PLAY_PAGE, params={"id": package, "hl": "en"},
+                         headers={"User-Agent": "Mozilla/5.0"}, follow_redirects=True)  # fmt: skip
+    if r.status_code != 200:
+        return None
+    found = _PLAY_VERSION.search(r.text)
+    return found.group(1) if found else None
+
+
 async def refresh_live(stores: Stores) -> None:
     """Ask Apple and Google where each app stands; what one of them cannot answer is
     left out (the rows then go by the hub's own records)."""
@@ -210,6 +232,13 @@ async def refresh_live(stores: Stores) -> None:
                     found["play"] = await stores.play_tracks(app.package if app else PACKAGE)
                 except (StoreError, httpx.HTTPError, KeyError, ValueError) as exc:
                     log.info("live state %s at Google: %s", key, exc)
+            if _sent(cast(dict[str, Any] | None, found.get("play"))):
+                try:
+                    found["play_public"] = await play_public_version(
+                        client, app.package if app else PACKAGE
+                    )
+                except httpx.HTTPError as exc:
+                    log.info("public Play page of %s: %s", key, exc)
             try:
                 found["ios_built"] = await stores.last_ios_build(app)
             except (StoreError, httpx.HTTPError, KeyError, ValueError) as exc:
@@ -400,6 +429,7 @@ def android_steps(
     aab: str,
     play: dict[str, Any] | None = None,
     further: bool = False,
+    public: str | None = None,
 ) -> Steps:
     latest = job.latest or {}
 
@@ -426,6 +456,9 @@ def android_steps(
         if status == "halted":
             return way(*earlier, Step("Google", "fail", f"Build {number} ({built}): die "
                        "Einführung ist angehalten (Play Console)."))  # fmt: skip
+        if public == built:
+            return way(*earlier, Step("Google", "done", f"Build {number} ({built}) ist bei "
+                       "Google Play live."))  # fmt: skip
         return way(*earlier, Step("Google", "store", f"Build {number} ({built}) ist in der "
                    "Produktion: bei Google in Prüfung oder schon live."))  # fmt: skip
     if job.state == "failed":
@@ -487,8 +520,9 @@ def android_row(
     aab: str,
     play: dict[str, Any] | None = None,
     further: bool = False,
+    public: str | None = None,
 ) -> Row:
-    return android_steps(version, has_key, job, review, aab, play, further).row
+    return android_steps(version, has_key, job, review, aab, play, further, public).row
 
 
 IOS = ("Gebaut", "Übertragen", "Bei Apple", "Eingereicht", "Apple")
@@ -673,6 +707,7 @@ async def cards(stores: Stores, only: str | None = None) -> list[Card]:
                 f"/admin/stores-android/{latest_file}" if latest_file else "",
                 live.get("play"),
                 further=app is not None,
+                public=cast(str | None, live.get("play_public")),
             )
         )
         codemagic = (

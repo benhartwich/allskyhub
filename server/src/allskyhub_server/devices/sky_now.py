@@ -63,7 +63,7 @@ def orientation(status: dict[str, Any] | None) -> Orientation | None:
 
 @dataclass(frozen=True)
 class Cell:
-    path: str  # SVG path in a -100..100 box, north up, east left (like the image)
+    path: str  # SVG path in a -100..100 box, turned and mirrored like the image
     shade: int | None  # cloud cover in tenths 0..10, None: not judgeable
     title: str
 
@@ -76,6 +76,10 @@ class SkyNow:
     sqm: float | None
     transparency: float | None
     cells: list[Cell] = field(default_factory=lambda: list[Cell]())
+    # Compass letters for the map: (letter, x, y), placed like the image.
+    compass: list[tuple[str, float, float]] = field(
+        default_factory=lambda: list[tuple[str, float, float]]()
+    )
 
     @property
     def empty(self) -> bool:
@@ -102,21 +106,51 @@ def sky_now(status: dict[str, Any] | None) -> SkyNow | None:
     sky = cast(dict[str, Any], sky)
     cover = _number(sky.get("cloud_cover"))
     stars = sky.get("stars")
+    view = _view(status)
+    cells = _cells(sky.get("cloud_map"), view)
     now = SkyNow(
         at=_time(sky.get("at")),
         stars=stars if isinstance(stars, int) and not isinstance(stars, bool) else None,
         cloud_pct=None if cover is None else round(min(max(cover, 0.0), 1.0) * 100),
         sqm=_number(sky.get("sqm_mag")),
         transparency=_number(sky.get("transparency")),
-        cells=_cells(sky.get("cloud_map")),
+        cells=cells,
+        compass=[(letter, *_xy(91.0, view.angle(az))) for letter, az in COMPASS] if cells else [],
     )
     return None if now.empty else now
 
 
-def _cells(raw: Any) -> list[Cell]:
+COMPASS = (("N", 0.0), ("O", 90.0), ("S", 180.0), ("W", 270.0))
+
+
+@dataclass(frozen=True)
+class _View:
+    """How azimuths lie in the image (SPEC §6.3 ``orientation``): image direction d of
+    azimuth A is north - A when mirrored, else north + A (clockwise from up)."""
+
+    north: float
+    mirrored: bool
+
+    def angle(self, azimuth: float) -> float:
+        return self.north - azimuth if self.mirrored else self.north + azimuth
+
+
+def _view(status: dict[str, Any] | None) -> _View:
+    """The image's orientation; north up and mirrored (the usual camera looking up)
+    while unknown, though ``cloud_map`` needs an orientation anyway."""
+    o = (status or {}).get("orientation")
+    if isinstance(o, dict):
+        o = cast(dict[str, Any], o)
+        north = _number(o.get("north_deg"))
+        if north is not None:
+            return _View(north, o.get("mirrored") is not False)
+    return _View(0.0, True)
+
+
+def _cells(raw: Any, view: _View) -> list[Cell]:
     """The 24 cells of ``cloud_map`` (index = 8·band + sector, sector 0 north, 2 east),
-    drawn as seen from below like the image: east is left. Empty without a valid map or
-    when no cell has a value."""
+    turned and mirrored like the camera's image. Empty without a valid map or when no
+    cell has a value."""
     if not isinstance(raw, list):
         return []
     values = cast(list[Any], raw)
@@ -128,27 +162,34 @@ def _cells(raw: Any) -> list[Cell]:
         value = _number(v)
         shade = None if value is None else round(min(max(value, 0.0), 1.0) * 10)
         outer, inner = RADII[band]
-        # Image angle, clockwise from up: azimuth mirrored (east to the left).
-        a0, a1 = -(sector * 45.0 - 22.5), -(sector * 45.0 + 22.5)
+        a0, a1 = view.angle(sector * 45.0 - 22.5), view.angle(sector * 45.0 + 22.5)
         where = f"{SECTORS[sector]}, {BANDS[band]}"
         what = "nicht beurteilbar" if shade is None else f"{shade * 10} % bewölkt"
         cells.append(Cell(_sector_path(outer, inner, a0, a1), shade, f"{where}: {what}"))
     return cells if any(c.shade is not None for c in cells) else []
 
 
-def _point(r: float, angle: float) -> str:
+def _xy(r: float, angle: float) -> tuple[float, float]:
+    """Image angle clockwise from up → SVG x, y (y down), rounded to 0.1."""
     a = math.radians(angle)
-    return f"{r * math.sin(a):.1f} {-r * math.cos(a):.1f}"
+    return round(r * math.sin(a), 1), round(-r * math.cos(a), 1)
+
+
+def _point(r: float, angle: float) -> str:
+    x, y = _xy(r, angle)
+    return f"{x:.1f} {y:.1f}"
 
 
 def _sector_path(outer: float, inner: float, a0: float, a1: float) -> str:
-    """A ring sector from image angle a0 to a1 (a1 < a0: drawn counter-clockwise)."""
+    """A ring sector from image angle a0 to a1, 45° apart either way: clockwise when
+    a1 > a0 (SVG sweep 1), else counter-clockwise."""
+    out, back = (1, 0) if a1 > a0 else (0, 1)
     start, end = _point(outer, a0), _point(outer, a1)
     if inner <= 0:
-        return f"M{start} A{outer:g} {outer:g} 0 0 0 {end} L0 0 Z"
+        return f"M{start} A{outer:g} {outer:g} 0 0 {out} {end} L0 0 Z"
     return (
-        f"M{start} A{outer:g} {outer:g} 0 0 0 {end} "
-        f"L{_point(inner, a1)} A{inner:g} {inner:g} 0 0 1 {_point(inner, a0)} Z"
+        f"M{start} A{outer:g} {outer:g} 0 0 {out} {end} "
+        f"L{_point(inner, a1)} A{inner:g} {inner:g} 0 0 {back} {_point(inner, a0)} Z"
     )
 
 

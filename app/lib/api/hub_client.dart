@@ -662,6 +662,25 @@ class HubClient {
     await _send('GET', '/cameras/$cameraId/sky-view') as Map<String, dynamic>,
   );
 
+  /// Drafts 1 and 5: what the live image can show, at the latest image's time, in pixels
+  /// of the camera's frame (empty without a lens, a place or an image; older hubs 404).
+  Future<SkyOverlay?> skyOverlay(String cameraId) async {
+    final json =
+        await _send('GET', '/cameras/$cameraId/sky-overlay')
+            as Map<String, dynamic>;
+    return json.isEmpty ? null : SkyOverlay.fromJson(json);
+  }
+
+  /// Draft 5: the bright satellites now (`jetzt`, `oben`) or tonight (`nacht`).
+  Future<SatelliteView> satellites(String cameraId, String filter) async =>
+      SatelliteView.fromJson(
+        await _sendUri(
+              'GET',
+              _uri('/cameras/$cameraId/satellites', {'f': filter}),
+            )
+            as Map<String, dynamic>,
+      );
+
   Future<Overview> overview(String cameraId) async => Overview.fromJson(
     await _send('GET', '/cameras/$cameraId/overview') as Map<String, dynamic>,
   );
@@ -2380,4 +2399,134 @@ class NetworkView {
   final List<({String name, String? slug, String kind, double sqm})> darkest;
   final List<NetworkMember> members;
   final List<NetworkPoint> points;
+}
+
+/// A mark over the picture (star, planet, satellite, aircraft), in frame pixels.
+class SkyMark {
+  const SkyMark(this.x, this.y, this.text, [this.trail = const []]);
+
+  factory SkyMark.fromJson(Map<String, dynamic> json) => SkyMark(
+    (json['x'] as num).toDouble(),
+    (json['y'] as num).toDouble(),
+    json['text'] as String? ?? '',
+    parseSvgPath(json['trail'] as String? ?? '').expand((l) => l).toList(),
+  );
+
+  final double x;
+  final double y;
+  final String text;
+  final List<(double, double)> trail;
+}
+
+/// Polylines of an SVG path made of M and L commands only (what the hub draws).
+List<List<(double, double)>> parseSvgPath(String d) {
+  final out = <List<(double, double)>>[];
+  final re = RegExp(r'([ML])\s*(-?[\d.]+)[ ,]+(-?[\d.]+)');
+  for (final m in re.allMatches(d)) {
+    final point = (double.parse(m.group(2)!), double.parse(m.group(3)!));
+    if (m.group(1) == 'M' || out.isEmpty) {
+      out.add([point]);
+    } else {
+      out.last.add(point);
+    }
+  }
+  return out;
+}
+
+/// The hub's drawing for the live image (GET /cameras/{id}/sky-overlay).
+class SkyOverlay {
+  SkyOverlay.fromJson(Map<String, dynamic> json)
+    : width = (json['width'] as num).toDouble(),
+      height = (json['height'] as num).toDouble(),
+      lines = parseSvgPath(json['lines'] as String? ?? ''),
+      names = _marks(json['names']),
+      cardinals = _marks(json['cardinals']),
+      stars = _marks(json['stars']),
+      grid = [
+        for (final d in (json['grid'] as List<dynamic>? ?? const []))
+          ...parseSvgPath(d as String),
+      ],
+      gridLabels = [
+        ..._marks(json['grid_labels']),
+        ..._marks(json['grid_cardinals']),
+      ],
+      planets = _marks(json['planets']),
+      satellites = _marks(json['satellites']),
+      aircraft = _marks(json['aircraft']),
+      aircraftCredit = json['aircraft_credit'] as String?;
+
+  static List<SkyMark> _marks(Object? raw) => [
+    for (final m in (raw as List<dynamic>? ?? const []))
+      SkyMark.fromJson(m as Map<String, dynamic>),
+  ];
+
+  final double width;
+  final double height;
+  final List<List<(double, double)>> lines;
+  final List<SkyMark> names;
+  final List<SkyMark> cardinals;
+  final List<SkyMark> stars;
+  final List<List<(double, double)>> grid;
+  final List<SkyMark> gridLabels;
+  final List<SkyMark> planets;
+  final List<SkyMark> satellites;
+  final List<SkyMark> aircraft;
+  final String? aircraftCredit;
+}
+
+class SatelliteNow {
+  SatelliteNow.fromJson(Map<String, dynamic> json)
+    : name = json['name'] as String,
+      altitude = (json['altitude'] as num).toDouble(),
+      azimuth = (json['azimuth'] as num).toDouble(),
+      heightKm = (json['height_km'] as num).toDouble(),
+      sunlit = json['sunlit'] as bool,
+      nakedEye = json['naked_eye'] as bool,
+      inPicture = json['in_picture'] as bool;
+
+  final String name;
+  final double altitude;
+  final double azimuth;
+  final double heightKm;
+  final bool sunlit;
+  final bool nakedEye;
+  final bool inPicture;
+}
+
+class SatellitePass {
+  SatellitePass.fromJson(Map<String, dynamic> json)
+    : name = json['name'] as String,
+      start = DateTime.parse(json['start'] as String),
+      end = DateTime.parse(json['end'] as String),
+      topAltitude = (json['top_altitude'] as num).toDouble(),
+      topAzimuth = (json['top_azimuth'] as num).toDouble(),
+      startAzimuth = (json['start_azimuth'] as num).toDouble(),
+      endAzimuth = (json['end_azimuth'] as num).toDouble();
+
+  final String name;
+  final DateTime start;
+  final DateTime end;
+  final double topAltitude;
+  final double topAzimuth;
+  final double startAzimuth;
+  final double endAzimuth;
+}
+
+class SatelliteView {
+  SatelliteView.fromJson(Map<String, dynamic> json)
+    : located = json['located'] as bool? ?? false,
+      loaded = json['loaded'] as bool? ?? false,
+      now = [
+        for (final s in (json['now'] as List<dynamic>? ?? const []))
+          SatelliteNow.fromJson(s as Map<String, dynamic>),
+      ],
+      passes = [
+        for (final s in (json['passes'] as List<dynamic>? ?? const []))
+          SatellitePass.fromJson(s as Map<String, dynamic>),
+      ];
+
+  final bool located;
+  final bool loaded;
+  final List<SatelliteNow> now;
+  final List<SatellitePass> passes;
 }

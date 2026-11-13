@@ -73,7 +73,11 @@ void main() {
       await mode.refresh();
       expect(mode.active, isTrue);
       expect(mode.placeKnown, isTrue);
+      // The place is read again only after 30 minutes.
       place = null;
+      await mode.refresh();
+      expect(mode.placeKnown, isTrue);
+      now = now.add(const Duration(minutes: 31));
       await mode.refresh();
       expect(mode.active, isFalse);
       expect(mode.placeKnown, isFalse);

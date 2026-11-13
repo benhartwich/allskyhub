@@ -186,6 +186,11 @@ def _evening_noon(now: dt.datetime, zone: ZoneInfo, lat: float, lon: float) -> d
     return today.astimezone(dt.UTC)
 
 
+def night_now(now: dt.datetime, lat: float, lon: float, zone: ZoneInfo) -> astro.Night:
+    """The night still ahead or running (sunset, sunrise, …)."""
+    return astro.night_after(_evening_noon(now, zone, lat, lon), lat, lon)
+
+
 def _clock(t: dt.datetime, zone: ZoneInfo) -> str:
     return t.astimezone(zone).strftime("%H:%M")
 

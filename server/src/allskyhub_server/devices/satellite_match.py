@@ -188,28 +188,23 @@ def match(
     )  # fmt: skip
 
 
-def _followed(
-    array: Any,
-    names: list[str],
-    norads: list[int],
-    lat: float,
-    lon: float,
-    start: dt.datetime,
-    end: dt.datetime,
-    track_ends: tuple[tuple[float, float], tuple[float, float]],
-) -> SatMatch | None:
-    """``match`` for the satellites near the streak: every second from start to end."""
-    seconds = (end - start).total_seconds()
-    steps = max(2, math.ceil(seconds / STEP_S) + 1)
-    times = [start + dt.timedelta(seconds=seconds * i / (steps - 1)) for i in range(steps)]
+Array = np.ndarray[Any, np.dtype[Any]]
+
+
+def look_all(
+    array: Any, count: int, lat: float, lon: float, times: list[dt.datetime]
+) -> tuple[Array, Array, Array, Array, Array]:
+    """Every satellite of ``array`` (an ``sgp4`` SatrecArray of ``count``) at every time:
+    (ok, azimuth, altitude, distance in km, sunlit), each of shape (count, len(times))."""
+    steps = len(times)
     jd = np.empty(steps)
     fr = np.empty(steps)
     for i, t in enumerate(times):
         a, b = _SGP4.jday(t.year, t.month, t.day, t.hour, t.minute, t.second + t.microsecond / 1e6)
         jd[i], fr[i] = a, b
     # (n, steps), (n, steps, 3) TEME km; a call per ``CHUNK`` steps, so the GIL comes free.
-    r = np.empty((len(names), steps, 3))
-    ok = np.empty((len(names), steps), dtype=bool)
+    r = np.empty((count, steps, 3))
+    ok = np.empty((count, steps), dtype=bool)
     for i in range(0, steps, CHUNK):
         err, part, _ = array.sgp4(jd[i : i + CHUNK], fr[i : i + CHUNK])
         r[:, i : i + CHUNK, :] = np.asarray(part, dtype=np.float64)
@@ -239,6 +234,24 @@ def _followed(
         along = r[:, j, 0] * sun[0] + r[:, j, 1] * sun[1] + r[:, j, 2] * sun[2]
         perp2 = np.sum(r[:, j, :] ** 2, axis=1) - along * along
         lit[:, j] = (along > 0) | (perp2 > EARTH_RADIUS_KM**2)
+    return ok, az, alt, dist, lit
+
+
+def _followed(
+    array: Any,
+    names: list[str],
+    norads: list[int],
+    lat: float,
+    lon: float,
+    start: dt.datetime,
+    end: dt.datetime,
+    track_ends: tuple[tuple[float, float], tuple[float, float]],
+) -> SatMatch | None:
+    """``match`` for the satellites near the streak: every second from start to end."""
+    seconds = (end - start).total_seconds()
+    steps = max(2, math.ceil(seconds / STEP_S) + 1)
+    times = [start + dt.timedelta(seconds=seconds * i / (steps - 1)) for i in range(steps)]
+    ok, az, alt, dist, lit = look_all(array, len(names), lat, lon, times)
 
     visible = ok & (alt >= MIN_ALTITUDE) & lit
     candidates = np.nonzero(visible.any(axis=1))[0]
@@ -269,8 +282,11 @@ def _followed(
 class SatelliteCatalogue:
     """CelesTrak's ``active`` and ``visual`` groups, fetched once a day, kept on disk."""
 
-    def __init__(self, root: Path, client: httpx.AsyncClient | None) -> None:
+    def __init__(
+        self, root: Path, client: httpx.AsyncClient | None, groups: tuple[str, ...] = GROUPS
+    ) -> None:
         self._root = root
+        self._groups = groups
         self._client = client
         self._catalogue: Catalogue | None = None
         self._at = 0.0
@@ -283,7 +299,7 @@ class SatelliteCatalogue:
             if self._catalogue is not None and time.monotonic() - self._at < MAX_AGE_S:
                 return self._catalogue
             texts: list[str] = []
-            for group in GROUPS:
+            for group in self._groups:
                 text = await self._group(group)
                 if text:
                     texts.append(text)
@@ -319,7 +335,7 @@ class SatelliteCatalogue:
             except OSError:
                 return None
         path.parent.mkdir(parents=True, exist_ok=True)
-        tmp = path.with_suffix(".tmp")
+        tmp = path.with_suffix(f".{id(self)}.tmp")  # two catalogues share the files
         tmp.write_text(text)
         tmp.replace(path)
         return text

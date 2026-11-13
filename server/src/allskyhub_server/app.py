@@ -45,6 +45,7 @@ from allskyhub_server.billing.paddle import Paddle
 from allskyhub_server.db import create_engine, create_sessionmaker
 from allskyhub_server.devices import (
     aircraft,
+    bright_satellites,
     domains,
     gmn,
     image_url,
@@ -368,6 +369,14 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.state.hub_keys = HubKeys(settings.key_dir)
     app.state.forecast = ForecastCache()
     app.state.tles = TleCache()
+    # Draft 5: the bright satellites over a camera (devices/bright_satellites.py).
+    app.state.bright_satellites = SatelliteCatalogue(
+        settings.data_dir / "gp",
+        httpx.AsyncClient(headers={"User-Agent": f"allskyhub ({settings.base_url})"})
+        if settings.satellites
+        else None,
+        groups=(bright_satellites.GROUP,),
+    )
     app.state.paddle = Paddle(settings)
     app.state.github = GitHub(settings.deploy_repo, checks=settings.deploy_check_names)
     app.state.latest_image = LatestImage(settings.deploy_repo)

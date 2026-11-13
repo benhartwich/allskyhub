@@ -699,3 +699,10 @@ h1.break { overflow-wrap: anywhere; }
 .lay-events text.overflight { fill: rgb(200 210 240 / .85); }
 .inline-form { display: inline-flex; gap: 8px; align-items: center; }
 [data-theme="red"] .lay-events line.meteor { stroke: rgb(255 60 60); }
+
+/* Draft 6, step 2: the planetarium without a picture. */
+.sky-history .sky-disc { display: none; }
+.sky-history.planetarium [data-sky-image] { display: none; }
+.sky-history.planetarium .sky-disc { display: block; width: 100%; aspect-ratio: 1; border-radius: 20px;
+  background: radial-gradient(circle at 50% 50%, #16224a 0%, #070b1c 46%, #000 47.5%); }
+[data-theme="red"] .sky-history.planetarium .sky-disc { background: radial-gradient(circle at 50% 50%, #200000 0%, #0a0000 46%, #000 47.5%); }

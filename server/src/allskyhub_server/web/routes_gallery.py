@@ -30,6 +30,7 @@ from allskyhub_server.devices import (
     science,
     series,
     sky_chart,
+    sky_history,
     sky_overlay,
     sqm_trend,
     stats,
@@ -41,9 +42,10 @@ from allskyhub_server.devices.event_text import EVENT_TITLES, event_rows, meteor
 from allskyhub_server.devices.images import ImageStore
 from allskyhub_server.devices.queries import Role
 from allskyhub_server.devices.tonight import ForecastCache
-from allskyhub_server.models import AircraftPass, Device, EventRecord, RenderJob
+from allskyhub_server.models import AircraftPass, Device, EventRecord, Frame, RenderJob
 from allskyhub_server.web.deps import CurrentSession, DbSession, csrf_protect
 from allskyhub_server.web.render import render
+from allskyhub_server.web.templating import UI_ZONE
 from allskyhub_sky.objects import catalogue
 
 router = APIRouter(dependencies=[Depends(csrf_protect)])
@@ -125,6 +127,65 @@ async def night(
         },
         session=session,
     )
+
+
+@router.get("/cameras/{device_id}/himmel")
+async def sky_history_page(
+    request: Request,
+    db: DbSession,
+    session: CurrentSession,
+    device_id: str,
+    nacht: Annotated[str | None, Query(pattern=archive.NIGHT_ID)] = None,
+) -> Response:
+    """Draft 6: a night's saved frames one after the other with the sky drawn over them
+    (devices/sky_history.py); the newest night with frames unless ``nacht`` says."""
+    device = await _own(db, session, device_id)
+    nights = [n for n in await archive.nights(db, device.id) if n.frames][:30]
+    night_id = nacht or (nights[0].night_id if nights else None)
+    frames = await archive.night_frames(db, device.id, night_id) if night_id else []
+    return render(
+        request,
+        "sky_history.html",
+        {
+            "device": device,
+            "night_id": night_id,
+            "nights": nights,
+            "frames": [
+                {
+                    "name": f.name,
+                    "at": f.captured_at.isoformat(),
+                    "clock": f.captured_at.astimezone(UI_ZONE).strftime("%H:%M"),
+                    "full": f.has_full,
+                }
+                for f in frames
+            ],
+        },
+        session=session,
+    )
+
+
+@router.get("/cameras/{device_id}/himmel/{night_id}/{name}.json")
+async def sky_history_frame(
+    request: Request,
+    db: DbSession,
+    session: CurrentSession,
+    device_id: str,
+    night_id: NightId,
+    name: Annotated[str, Path(pattern=archive.FRAME_NAME)],
+) -> JSONResponse:
+    """The sky over one saved frame at its time (draft 6)."""
+    device = await _own(db, session, device_id)
+    frame = await db.scalar(
+        select(Frame).where(
+            Frame.device_id == device.id, Frame.night_id == night_id, Frame.name == name
+        )
+    )
+    if frame is None:
+        raise HTTPException(404)
+    satellites = request.app.state.bright_satellites.loaded()
+    night_events = await events.events(db, device.id, night_id=night_id, limit=2000)
+    drawn = await sky_history.frame_sky(db, device, frame.captured_at, satellites, night_events)
+    return JSONResponse(drawn or {}, headers={"Cache-Control": "private, max-age=300"})
 
 
 @router.get("/cameras/{device_id}/frames/{night_id}/{name}/{variant}.jpg")

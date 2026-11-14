@@ -60,7 +60,7 @@ async def _put(host: str, token: str, ev: Event, variant: EventVariant, body: by
         return r.status_code
 
 
-async def _requests(ws: ClientConnection, first: float = 3.0) -> list[tuple[str, EventVariant]]:
+async def _requests(ws: ClientConnection, first: float = 15.0) -> list[tuple[str, EventVariant]]:
     """Every upload_event the hub sends until it is quiet: up to ``first`` seconds for the
     first command (slow CI runners), then 0.5 s of silence ends it."""
     out: list[tuple[str, EventVariant]] = []

@@ -28,9 +28,17 @@
 #
 # Flutter and Gradle run in a container (ghcr.io/cirruslabs/flutter; for the Expo app
 # reactnativecommunity/react-native-android), limited in CPU and memory so the hub keeps
-# its share. dl.google.com does not answer HTTP/1.1 from here, so
+# its share. The Flutter SDK itself is FLUTTER_VERSION from Google's release archive,
+# mounted over the image's: the image only gives JDK and Android SDK. dl.google.com does not answer HTTP/1.1 from here, so
 # Google's Maven repository goes through maven-google-proxy.py.
 set -euo pipefail
+
+# The same Flutter as CI (.github/workflows/ci.yml) and Codemagic (codemagic.yaml), pinned
+# by the archive's SHA-256 (releases_linux.json) like the images by digest. The image's
+# own is 3.44.0 with Dart 3.12; bortle 0.7.0 needs Dart 3.13 (Benjamin, 2026-11-14).
+FLUTTER_VERSION=3.47.9
+FLUTTER_SHA256=25ed8c3c29d51a7353f2a944310b478af8214920639524b19c50a19e6c044c5a
+FLUTTER_URL=https://storage.googleapis.com/flutter_infra_release/releases/stable/linux
 
 main() {
     local BASE=${ALLSKYHUB_ANDROID_BASE:-/var/lib/allskyhub-android}
@@ -179,6 +187,8 @@ main() {
     PROXY_PID=$!  # global: the EXIT trap runs after main() has returned
     trap 'kill "$PROXY_PID" 2>/dev/null || true; rm -rf "${KEY_TMP:-/nonexistent}"' EXIT
 
+    [[ $KIND == flutter ]] && flutter_sdk "$BASE" "$app"
+
     if [[ $force == --release ]]; then
         release_build
         return
@@ -193,6 +203,7 @@ main() {
         -v "$HERE/maven-google.init.gradle:/root/.gradle/init.d/maven-google.gradle:ro" \
         -v "$HERE/gradle.properties:/root/.gradle/gradle.properties:ro" \
         -v "$KEYS/test.keystore:/keys/test.keystore:ro" \
+        -v "$FLUTTER_SDK:/sdks/flutter" \
         --env-file "$KEYS/keystore.env" \
         -e ALLSKYHUB_KEYSTORE=/keys/test.keystore \
         -e ALLSKYHUB_CHANNEL=test \
@@ -223,6 +234,32 @@ main() {
 # The store build: an App Bundle signed with the hub's upload key (admin/stores.py keeps
 # it as JSON with the PKCS#12 file in base64), handed to the hub for the upload to Play.
 # Uses the variables of main(); the app's Gradle file reads <PREFIX>_KEYSTORE and the rest.
+# FLUTTER_SDK: FLUTTER_VERSION for the app, unpacked from the checked archive once. One
+# copy per app: a build writes into the SDK's cache (bin/cache), and one app's build must
+# not plant code in another's (its upload key), like the per-app caches.
+flutter_sdk() {  # flutter_sdk <base> <app>
+    local top=$1/flutter
+    local archive=$top/flutter_linux_$FLUTTER_VERSION-stable.tar.xz
+    local dir=$top/$FLUTTER_VERSION-$2
+    FLUTTER_SDK=$dir/flutter
+    [[ -x $FLUTTER_SDK/bin/flutter ]] && return
+    install -d -m 755 "$top"
+    if [[ ! -f $archive ]]; then
+        curl -fsSL --retry 3 -o "$archive.part" "$FLUTTER_URL/flutter_linux_$FLUTTER_VERSION-stable.tar.xz"
+        mv "$archive.part" "$archive"
+    fi
+    if ! echo "$FLUTTER_SHA256  $archive" | sha256sum -c --quiet -; then
+        rm -f "$archive"
+        echo "Flutter $FLUTTER_VERSION: Prüfsumme stimmt nicht." >&2
+        return 1
+    fi
+    rm -rf "$dir.part"
+    install -d -m 755 "$dir.part"
+    tar -xJf "$archive" -C "$dir.part" --no-same-owner
+    rm -rf "$dir"
+    mv "$dir.part" "$dir"
+}
+
 release_build() {
     KEY_TMP=$(mktemp -d)  # global for the EXIT trap
     chmod 700 "$KEY_TMP"
@@ -339,12 +376,14 @@ signed_build() {
         # A Flutter test APK, like allskyhub's: arm64, the build number and the channel
         # for the app's own update notice (<PREFIX>_BUILD, <PREFIX>_CHANNEL).
         "${run[@]}" -v "allskyhub-android-pub-cache-$app:/root/.pub-cache" \
+            -v "$FLUTTER_SDK:/sdks/flutter" \
             -e "${PREFIX}_VARIANT=$VARIANT" -w "/work/$APP_DIR" "$IMAGE" \
             sh -c "flutter pub get && flutter build apk --release --target-platform android-arm64 \
                 --build-number=$build --dart-define=${PREFIX}_BUILD=$build \
                 --dart-define=${PREFIX}_CHANNEL=$VARIANT"
     else
         "${run[@]}" -v "allskyhub-android-pub-cache-$app:/root/.pub-cache" \
+            -v "$FLUTTER_SDK:/sdks/flutter" \
             -w "/work/$APP_DIR" "$IMAGE" \
             sh -c "flutter pub get && flutter build appbundle --release --build-number=$build$DEFINES"
         aab=$SRC/$APP_DIR/build/app/outputs/bundle/release/app-release.aab

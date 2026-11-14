@@ -8,6 +8,9 @@ Signed release APKs of the app for testing, built on the hub's server instead of
 - `allskyhub-android-build.timer` runs `allskyhub-android-build.sh` every ten minutes. When
   `app/` changed on `origin/main` (its own clone in `/var/lib/allskyhub-android/src`), it
   builds a release APK for arm64 in the container `ghcr.io/cirruslabs/flutter` (pinned by digest in the script), with
+  the Flutter SDK `FLUTTER_VERSION` mounted over the image's (Google's archive, checked by
+  its SHA-256, unpacked once per app under `/var/lib/allskyhub-android/flutter/`; the same
+  version as CI and Codemagic, so raise all three together), with
   at most 6 CPUs and 8 GB so the hub keeps its share. The first build takes a while (Gradle
   and Maven caches); later builds take minutes.
 - Build number: the commit count of `main`. It is the APK's `versionCode` and goes into the

@@ -109,6 +109,54 @@ async def test_live_shows_tiles_and_orientation(app: FastAPI, client: httpx.Asyn
     assert "gut eingemessen" in live
     assert "Abweichung 0,08°" in live
     assert "Norden bei 78°" in live
+    assert "data-flat" not in live  # older agents send no flat
+
+
+def test_flat_line() -> None:
+    """SPEC §4.10, §6.3 status.flat (draft approved 2026-11-14)."""
+    assert sky_now.flat({}) is None
+    assert sky_now.flat({"flat": "x"}) is None
+    measured = sky_now.flat({"flat": {"source": "twilight", "at": "2026-11-12T16:20:00Z",
+                                      "max_gain": 1.42, "reason": None}})  # fmt: skip
+    assert measured is not None
+    assert (measured.level, measured.text, measured.detail) == (
+        "good",
+        "Flat gemessen",
+        "Dämmerung",
+    )
+    assert (measured.max_gain, measured.at) == (
+        1.42,
+        dt.datetime(2026, 11, 12, 16, 20, tzinfo=dt.UTC),
+    )
+    night = sky_now.flat({"flat": {"source": "night", "max_gain": 1.31}})
+    assert night is not None
+    assert (night.level, night.text) == ("usable", "Flat geschätzt")
+    none = sky_now.flat({"flat": {"source": None, "reason": "Objektiv korrigiert schon selbst"}})
+    assert none is not None
+    assert (none.level, none.text, none.detail, none.max_gain) == (
+        "off", "kein Flat", "Objektiv korrigiert schon selbst", None)  # fmt: skip
+    off = sky_now.flat({"settings": {"flat_correction": "off"}, "flat": {"source": "night"}})
+    assert off is not None
+    assert (off.level, off.text) == ("off", "Flat aus")
+
+
+async def test_live_shows_the_flat(app: FastAPI, client: httpx.AsyncClient) -> None:
+    dev = FakeDevice()
+    await paired_token(client, dev)
+    flat = {"source": "twilight", "at": dt.datetime.now(dt.UTC).isoformat(), "max_gain": 1.42}
+    async with app.state.sessionmaker() as db:
+        await db.execute(
+            update(Device)
+            .where(Device.id == dev.device_id)
+            .values(last_status={"orientation": ORIENTATION, "flat": flat},
+                    latest_image_at=dt.datetime.now(dt.UTC))
+        )  # fmt: skip
+        await db.commit()
+    live = (await client.get(f"/cameras/{dev.device_id}/live")).text
+    assert "data-flat" in live
+    assert "Flat gemessen" in live
+    assert "Dämmerung" in live
+    assert "Rand bis \u00d71,42" in live
 
 
 def test_cloud_map_turns_like_the_image() -> None:

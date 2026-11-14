@@ -152,6 +152,11 @@ def orientation_badge(device: Any) -> Any:
     return sky_now_module.orientation(device.last_status)
 
 
+def flat_line(device: Any) -> Any:
+    """SPEC §4.10: the flat in use, under the orientation line; None from older agents."""
+    return sky_now_module.flat(device.last_status)
+
+
 def sky_layers(device: Any, satellites: bool = True) -> Any:
     """Draft 1: stars, grid, moon and planets, satellites over the latest image; None
     without a lens. Satellites only once their elements are loaded (live_fragment), and
@@ -206,6 +211,7 @@ cast(dict[str, Any], templates.env.globals)["sky_overlay"] = sky_overlay
 cast(dict[str, Any], templates.env.globals)["sky_layers"] = sky_layers
 cast(dict[str, Any], templates.env.globals)["sky_now"] = sky_now
 cast(dict[str, Any], templates.env.globals)["orientation_badge"] = orientation_badge
+cast(dict[str, Any], templates.env.globals)["flat_line"] = flat_line
 _filters = cast(dict[str, Any], templates.env.filters)
 _filters["age"] = age
 _filters["night_title"] = night_title

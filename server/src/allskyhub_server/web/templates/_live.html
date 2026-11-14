@@ -15,6 +15,8 @@
   <figcaption class="muted">Bild {{ device.latest_image_at | age }}{% if online %} · live{% endif %}{% if air %}<span class="air-credit"> · {{ air.credit }}</span>{% endif %}</figcaption>
   {% set ob = orientation_badge(device) %}
   {% if ob %}<p class="solve-line"><span class="pill {{ ob.level }}">{{ ob.text }}</span>{% if ob.stars is not none %}<span>{{ ob.stars }} Sterne</span>{% endif %}{% if ob.rms_deg is not none %}<span>Abweichung {{ '%.2f' | format(ob.rms_deg) | replace('.', ',') }}°</span>{% endif %}<span>Norden bei {{ ob.north_deg }}°</span>{% if ob.solved_at %}<span>{{ ob.solved_at | age }}</span>{% endif %}</p>{% endif %}
+  {% set fl = flat_line(device) %}
+  {% if fl %}<p class="solve-line" data-flat><span class="pill {{ fl.level }}">{{ fl.text }}</span>{% if fl.detail %}<span>{{ fl.detail }}</span>{% endif %}{% if fl.max_gain is not none %}<span>Rand bis ×{{ '%.2f' | format(fl.max_gain) | replace('.', ',') }}</span>{% endif %}{% if fl.at %}<span>{{ fl.at | age }}</span>{% endif %}</p>{% endif %}
   {% else %}
   <div class="sky-ph" aria-hidden="true"></div>
   <figcaption class="muted">{% if online %}Warte auf das erste Bild …{% else %}Noch kein Bild.{% endif %}</figcaption>

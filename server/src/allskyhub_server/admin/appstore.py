@@ -52,17 +52,25 @@ def app_version(pubspec: Path = LISTING.parents[1] / "pubspec.yaml", default: st
     in an Expo app's app.json), for the App Store version: Apple ties it to the build's
     CFBundleShortVersionString, and each update needs a new one."""
     try:
-        if pubspec.suffix == ".json":
-            found = str(_dict(_dict(json.loads(pubspec.read_text())).get("expo")).get("version"))
-            return found if re.fullmatch(r"\d+(\.\d+){0,2}", found) else default
-        for line in pubspec.read_text().splitlines():
-            if line.startswith("version:"):
-                found = line.split(":", 1)[1].strip().split("+", 1)[0]
-                if re.fullmatch(r"\d+(\.\d+){0,2}", found):
-                    return found
-    except (OSError, ValueError):
-        pass
-    return default
+        return version_in(pubspec.name, pubspec.read_text()) or default
+    except OSError:
+        return default
+
+
+def version_in(name: str, text: str) -> str | None:
+    """The version in a pubspec.yaml's or an Expo app.json's text (``name`` tells which)."""
+    try:
+        if name.endswith(".json"):
+            found = str(_dict(_dict(json.loads(text)).get("expo")).get("version"))
+            return found if re.fullmatch(r"\d+(\.\d+){0,2}", found) else None
+    except ValueError:
+        return None
+    for line in text.splitlines():
+        if line.startswith("version:"):
+            found = line.split(":", 1)[1].strip().split("+", 1)[0]
+            if re.fullmatch(r"\d+(\.\d+){0,2}", found):
+                return found
+    return None
 
 
 def listing_version(stores: Stores, app: OtherApp) -> str:

@@ -247,6 +247,11 @@ async def refresh_live(stores: Stores) -> None:
                 found["commits"] = await main_commits(client, stores, app, _since(stores, app))
             except (StoreError, httpx.HTTPError, KeyError, ValueError) as exc:
                 log.info("main's commits of %s: %s", key, exc)
+            if app is not None:
+                try:
+                    found["main_version"] = await main_version(client, stores, app)
+                except httpx.HTTPError as exc:
+                    log.info("main's version of %s: %s", key, exc)
             stores.vault.write_json(live_file(key), found)
     finally:
         if client is not stores.client:
@@ -294,6 +299,19 @@ def _since(stores: Stores, app: OtherApp | None) -> str:
         else dt.datetime.now(dt.UTC) - dt.timedelta(days=COMMITS_DEFAULT_DAYS)
     )
     return start.isoformat(timespec="seconds")
+
+
+async def main_version(client: httpx.AsyncClient, stores: Stores, app: OtherApp) -> str | None:
+    """A further app's version on main. The hub otherwise knows only its copy from the
+    last listing fetch (Benjamin, 2026-11-14: bortle 0.7.0 on main, the hub still at
+    0.4.0 and no way to build)."""
+    headers = {**github_headers(github_token(stores.vault)),
+               "Accept": "application/vnd.github.raw+json"}  # fmt: skip
+    r = await client.get(f"{GITHUB}/repos/{app.repo}/contents/{app.version_file}",
+                         params={"ref": "main"}, headers=headers)  # fmt: skip
+    if r.status_code != 200:
+        return None
+    return appstore.version_in(app.version_file, r.text)
 
 
 async def main_commits(
@@ -430,6 +448,7 @@ def android_steps(
     play: dict[str, Any] | None = None,
     further: bool = False,
     public: str | None = None,
+    main: str | None = None,
 ) -> Steps:
     latest = job.latest or {}
 
@@ -441,6 +460,11 @@ def android_steps(
                         label="Einrichten"))  # fmt: skip
     if job.busy:
         return way(Step("Gebaut", "wait", "Der Server baut gerade das App Bundle …"))
+    if further and main and _newer(main, version):
+        newer = (f"main ist Version {main}; der Hub kennt noch {version}. „Store-Eintrag "
+                 "übertragen“ holt den neuen Stand, danach lässt er sich bauen.")  # fmt: skip
+        return way(Step("Gebaut", "current", newer, action="play-listing",
+                        label="Store-Eintrag übertragen"))  # fmt: skip
     number, built = latest.get("build"), str(latest.get("version", ""))
     at = str(latest.get("built_at", ""))
     made = Step("Gebaut", "done", f"Build {number} (Version {built})", at, aab or None,
@@ -521,8 +545,9 @@ def android_row(
     play: dict[str, Any] | None = None,
     further: bool = False,
     public: str | None = None,
+    main: str | None = None,
 ) -> Row:
-    return android_steps(version, has_key, job, review, aab, play, further, public).row
+    return android_steps(version, has_key, job, review, aab, play, further, public, main).row
 
 
 IOS = ("Gebaut", "Übertragen", "Bei Apple", "Eingereicht", "Apple")
@@ -708,6 +733,7 @@ async def cards(stores: Stores, only: str | None = None) -> list[Card]:
                 live.get("play"),
                 further=app is not None,
                 public=cast(str | None, live.get("play_public")),
+                main=cast(str | None, live.get("main_version")),
             )
         )
         codemagic = (

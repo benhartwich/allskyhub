@@ -223,6 +223,68 @@ not a bad frame; the startrails leave such flash frames out by themselves (§5.2
 L32). Blur and dew are not judged per frame here: dew and dirt are
 recognised over many frames on the hub (roadmap C12).
 
+### 4.10 Flat field
+
+Lenses darken toward the edge of the image circle (vignetting), and dust on the dome
+leaves soft spots. The agent corrects both with a flat: a smooth gain map, kept in
+`<data>/calibration/flat.npz`, by which every frame is divided right after the hot
+pixels (§4.6), so stored frames, products, detections and the live image all use it.
+The division happens on linear values: ZWO frames are linear, libcamera frames are
+linearised with the sRGB curve first and encoded again afterwards. The gain is clamped
+to at most 2.0, so the noisy edge is never amplified more than that.
+
+**Twilight flat (measured).** In evening or morning twilight (sun 0° to −8°) the agent
+collects 25 frames whose measured mean lies between 15 % and 35 %, the auto exposure
+(§4.3) aiming at 25 % with gain held at its lowest, each normalised to its mean. Their median is
+fitted as radial(r) · plane(x, y): a smooth curve of the distance from the lens centre
+(the orientation's `cx, cy`, §4.8, else the profile's image circle) times a tilted plane.
+The plane is the twilight sky's gradient toward the sun and is thrown away; the radial
+part is the flat. It is checked in 24 zones (3 rings × 8 directions, the outer ring at
+85 % of the image-circle radius): a zone is valid when it has no clipped pixels and
+its value differs by at most 3 % between the first and last 12 frames. The flat is
+accepted with at least 20 valid zones and a fit residual of at most 3 %. A flat is taken
+again every 30 days, or after a change of `image_flip`, `image_rotate` or the
+orientation's centre by more than 2 % of the radius.
+
+**Night flat (estimated).** Until there is a twilight flat, the agent estimates the
+radial part from the median frame it already builds for the sky mask (§4.7), using only
+pixels inside the mask, without stars (a 15 px median filter) and above 20° altitude.
+The night sky brightens toward the horizon by itself (airglow, light pollution), so this
+flat is not used for measuring: it is used for the stored and live image and for the
+detections, but `sky.sqm_mag` and the cloud maps (§6.3) are measured without it.
+It is used only after two nights whose curves differ by at most 5 %, and never when the
+twilight flat exists.
+
+A flat whose largest gain exceeds 2.0 or whose curve is not monotonic within 5 % is not
+used (no correction then), and the reason goes into `status`. libcamera already corrects
+lens shading in its ISP; on such cameras the measured flat is usually near 1 and is then
+not applied (largest gain below 1.03).
+
+`flat_correction` (§6.9): `auto` (default) as above, `off` none. `status` (§6.3) gains
+an optional `flat`: `{source: "twilight" | "night" | null, at, max_gain, reason}`.
+
+### 4.11 Night white balance
+
+At night the camera's own white balance drifts (ZWO has none worth using, libcamera's
+AWB follows the noise). With `night_wb` set to `auto` (default when `wb_r` and `wb_b` are
+not set by the owner), the agent sets the camera's white balance itself: every 10
+minutes it takes the median R/G and B/G of the sky pixels in the mask (§4.7) above 20°
+altitude, without stars, of the newest good frame (§4.9), and moves the gains toward
+grey with an exponential mean over 1 hour. The gains stay within ±40 % of the profile's
+default and change by at most 5 % per step. It holds the last values (does not learn)
+while the moon is up and at least half lit, while cloud cover is above 0.5 (clouds
+reflect street lights), and while an aurora is detected (§5.3), so a green sky stays
+green. By day and with `night_wb: fixed` the owner's or profile's values are used.
+
+### 4.12 Live stacking
+
+For a calmer live image the agent can average the last N frames (a rolling mean
+without star alignment): N is chosen so that N · exposure ≤ 15 s, at most
+8, and 1 above that, so stars do not trail visibly. The stack only feeds the live image
+and the latest image sent to the hub (§6.3); stored frames, detections, products and
+the sky values stay single frames. `live_stack` (§6.9): `auto` (default) or `off`.
+Timelapses are built from the stored single frames as before.
+
 ## 5. Products (M4)
 
 ### 5.1 Frame index
@@ -458,6 +520,9 @@ base64url-encoded without padding.
   tilt_north_deg, width, height}`, the fitted lens of §4.8 for drawing the sky onto the
   image (constellations on the public page); `width`/`height` 0 means the frame size is
   unknown and the lens must not be used.
+  `flat` (optional, may be missing from older agents): `{source, at, max_gain, reason}` of
+  §4.10, `source` `twilight`, `night` or null (no flat in use), `reason` the German text
+  why none is used, else null.
   `observatory` (null unless observatory software is configured, §7.5): what the
   telescope next to the camera is doing, relayed from N.I.N.A.'s Advanced API (roadmap
   C15): `{source: "nina", at, connected, target, sequence, last_image, safe}`. `at` is

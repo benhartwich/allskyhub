@@ -1,4 +1,5 @@
-New: the network and fireballs sent later.
-• "The network tonight" under Explore: all cameras and stations on the globe, the night's fireballs and meteor showers, the darkest sky.
-• Your station: "In the network" and your sky compared with its neighbours. You choose what it shows publicly.
-• Send a fireball later: an older recording is checked against the stars and measured with other cameras.
+New: the sky over your camera and red light for the night.
+• On the camera page: constellations, the brightest stars, a grid, planets and satellites to lay over the live image.
+• Sky now: stars, cloud cover with a cloud map, sky brightness and how well the camera is calibrated.
+• Satellites: what is passing over you right now and tonight's bright passes.
+• Red light: the whole app in red to keep your eyes dark-adapted, by hand or automatically at night.

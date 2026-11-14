@@ -759,3 +759,37 @@ async def test_play_public_version() -> None:
         assert await apps.play_public_version(client, "a.app") == "1.3.0"
         assert await apps.play_public_version(client, "b.app") is None
         assert await apps.play_public_version(client, "c.app") is None
+
+
+def test_a_newer_version_on_main_asks_for_the_listing() -> None:
+    """Benjamin, 2026-11-14: bortle 0.7.0 on main, the hub still at 0.4.0 (its listing
+    copy) and live at Google, so the card looked done and offered no build."""
+    play = {"production": [{"name": "0.4.0", "status": "completed", "codes": ["323"]}]}
+    job = _job(version="0.4.0")
+    row = apps.android_row("0.4.0", True, job, None, "", play, True, "0.4.0", "0.7.0")
+    assert (row.action, row.tone) == ("play-listing", "todo")
+    assert row.status.startswith("main ist Version 0.7.0; der Hub kennt noch 0.4.0.")
+    # Same version on main, or allskyhub itself: as before.
+    assert (
+        apps.android_row("0.4.0", True, job, None, "", play, True, "0.4.0", "0.4.0").tone == "done"
+    )
+    assert (
+        apps.android_row("0.4.0", True, job, None, "", play, False, "0.4.0", "0.7.0").tone == "done"
+    )
+
+
+async def test_main_version(tmp_path: Path) -> None:
+    files = {"/repos/benhartwich/bortle-app/contents/pubspec.yaml": "name: x\nversion: 0.7.0+13\n",
+             "/repos/benhartwich/vinventory/contents/apps/mobile/app.json":
+                 '{"expo": {"version": "0.2.1"}}'}  # fmt: skip
+
+    def answer(request: httpx.Request) -> httpx.Response:
+        assert request.url.params["ref"] == "main"
+        text = files.get(request.url.path)
+        return httpx.Response(200, text=text) if text else httpx.Response(404)
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(answer)) as client:
+        hub = stores.Stores(tmp_path / "store", "benhartwich/allskyhub", client)
+        assert await apps.main_version(client, hub, stores.OTHER_APPS["bortle"]) == "0.7.0"
+        assert await apps.main_version(client, hub, stores.OTHER_APPS["vinventory"]) == "0.2.1"
+        assert await apps.main_version(client, hub, stores.OTHER_APPS["wichtl"]) is None

@@ -255,6 +255,17 @@ class Orientation(BaseModel):
     lens: Lens | None = None  # optional, for drawing the sky onto the image
 
 
+class Flat(BaseModel):
+    """The flat field in use, reported in `status` (SPEC §6.3, §4.10)."""
+
+    model_config = ConfigDict(extra="ignore", frozen=True)
+
+    source: Literal["twilight", "night"] | None = None  # null: no flat in use
+    at: AwareDatetime | None = None
+    max_gain: float | None = Field(default=None, ge=0)
+    reason: str | None = Field(default=None, max_length=300)  # German: why none is used
+
+
 class ObservatorySequence(BaseModel):
     model_config = ConfigDict(extra="ignore", frozen=True)
 
@@ -388,6 +399,8 @@ class Status(_Body):
     settings: DeviceSettings | None = None
     sky: SkyMetrics | None = None
     orientation: Orientation | None = None
+    # SPEC §4.10: the flat field in use; missing from older agents.
+    flat: Flat | None = None
     update: UpdateStatus | None = None
     # SPEC §6.3: N.I.N.A.'s state (roadmap C15), null unless configured.
     observatory: Observatory | None = None

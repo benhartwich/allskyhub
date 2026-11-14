@@ -608,6 +608,7 @@ h1.break { overflow-wrap: anywhere; }
 .pill.good { background: rgb(79 227 176 / .14); color: var(--ok); }
 .pill.usable { background: rgb(242 192 107 / .14); color: var(--warn); }
 .pill.rough { background: rgb(255 122 147 / .14); color: var(--danger); }
+.pill.off { background: var(--surface-2); color: var(--text-2); }
 .solve-line { margin: 0; display: flex; flex-wrap: wrap; gap: 4px 12px; align-items: center; font-size: 13px; color: var(--text-2);
               font-variant-numeric: tabular-nums; }
 .sky-tiles { display: grid; gap: 10px; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); }

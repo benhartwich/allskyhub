@@ -3,7 +3,8 @@ orientation (drafts 2 and 4, 2026-11-13).
 
 Only what the camera already reports in ``status`` (SPEC §6.3): ``sky`` (stars, cloud
 cover, sky brightness, transparency, the 24-cell ``cloud_map``) and ``orientation``
-(stars, RMS, north, solve time, §4.8). Nothing here is computed from pixels.
+(stars, RMS, north, solve time, §4.8), and ``flat`` (§4.10, the line under it, approved
+2026-11-14). Nothing here is computed from pixels.
 """
 
 from __future__ import annotations
@@ -59,6 +60,42 @@ def orientation(status: dict[str, Any] | None) -> Orientation | None:
     else:
         level = "rough"
     return Orientation(level, stars, rms, round(north) % 360, _time(o.get("solved_at")))
+
+
+@dataclass(frozen=True)
+class FlatLine:
+    """The flat in use (SPEC §4.10): measured in twilight, estimated from the night, or
+    none with the agent's reason."""
+
+    level: Literal["good", "usable", "off"]
+    text: str
+    detail: str  # where it comes from, or why there is none
+    max_gain: float | None
+    at: dt.datetime | None
+
+
+def flat(status: dict[str, Any] | None) -> FlatLine | None:
+    """SPEC §6.3 ``status.flat``; None from agents that do not send it."""
+    settings = (status or {}).get("settings")
+    if (
+        isinstance(settings, dict)
+        and cast(dict[str, Any], settings).get("flat_correction") == "off"
+    ):
+        return FlatLine("off", "Flat aus", "", None, None)
+    f = (status or {}).get("flat")
+    if not isinstance(f, dict):
+        return None
+    f = cast(dict[str, Any], f)
+    gain = f.get("max_gain")
+    gain = float(gain) if isinstance(gain, int | float) and math.isfinite(gain) else None
+    at = _time(f.get("at"))
+    if f.get("source") == "twilight":
+        return FlatLine("good", "Flat gemessen", "Dämmerung", gain, at)
+    if f.get("source") == "night":
+        return FlatLine("usable", "Flat geschätzt", "aus den Nachtbildern, nur fürs Bild",
+                        gain, at)  # fmt: skip
+    reason = f.get("reason")
+    return FlatLine("off", "kein Flat", reason if isinstance(reason, str) else "", None, None)
 
 
 @dataclass(frozen=True)

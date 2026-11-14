@@ -409,6 +409,24 @@ def test_orientation_lens_is_optional() -> None:
                                tilt_north_deg=-0.2, width=1920, height=1080)  # fmt: skip
 
 
+def test_status_flat_is_optional() -> None:
+    """SPEC §6.3, §4.10: older agents send no flat; source null means none in use."""
+    from allskyhub_protocol import Flat, Status
+
+    base: dict[str, Any] = {"mode": "night", "exposure_us": 1, "gain": 1.0, "mean": 0.2,
+                            "uptime_s": 1, "time_trusted": True}  # fmt: skip
+    assert Status.model_validate(base).flat is None
+    flat = {"source": "twilight", "at": "2026-11-14T16:20:00Z", "max_gain": 1.42,
+            "reason": None, "zones": 23}  # fmt: skip
+    parsed = Status.model_validate({**base, "flat": flat}).flat
+    assert parsed == Flat(source="twilight", at=datetime(2026, 11, 14, 16, 20, tzinfo=UTC),
+                          max_gain=1.42)  # fmt: skip
+    none = Flat.model_validate({"source": None, "reason": "Flat ungleichmäßig"})
+    assert (none.source, none.at, none.max_gain) == (None, None, None)
+    with pytest.raises(ValidationError):
+        Flat.model_validate({"source": "dome"})
+
+
 def test_event_label_and_night_deleted() -> None:
     """SPEC §6.3, §6.4 Labels, §6.5 label_event."""
     from allskyhub_protocol import EventLabel, NightDeleted

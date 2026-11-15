@@ -16,11 +16,12 @@ from tests.fake_device import FakeDevice
 from tests.ws_helpers import paired_token
 
 NOW = dt.datetime(2026, 10, 13, 23, 30, tzinfo=dt.UTC)
+CAMERA = {"camera": "zwo:ASI678MC"}
 CLEAR = {dt.datetime(2026, 10, 13, h, tzinfo=dt.UTC): 5 for h in range(20, 24)}
 
 
 def _blurred(
-    hfr: float = 3.0, cloud: float | None = 0.1, n: int = 8
+    hfr: float = 3.0, cloud: float | None = 0.1, n: int = 10
 ) -> list[tuple[dt.datetime, float | None, float | None]]:
     return [(NOW - dt.timedelta(minutes=5 * i), cloud, hfr) for i in range(n)]
 
@@ -36,6 +37,10 @@ def test_blur_hint() -> None:
     assert health.blur_hint(_blurred(2.0), 1.8, CLEAR, NOW) is None
     assert health.blur_hint([*_blurred(), (NOW, 0.1, 1.9)], 1.8, CLEAR, NOW) is None
     assert health.blur_hint(_blurred(cloud=0.9), 1.8, CLEAR, NOW) is None
+    # Thin cirrus or haze (0.3..0.8) also blurs the stars and is no clear night (review).
+    assert health.blur_hint(_blurred(cloud=0.5), 1.8, CLEAR, NOW) is None
+    # Right after dusk: six or more sizes, but only from the last 35 minutes (review).
+    assert health.blur_hint(_blurred(n=8), 1.8, CLEAR, NOW) is None
     assert health.blur_hint(_blurred(), 1.8, dict.fromkeys(CLEAR, 60), NOW) is None
     assert health.blur_hint(_blurred(), None, CLEAR, NOW) is None
     assert health.blur_hint(_blurred(n=5), 1.8, CLEAR, NOW) is None
@@ -43,6 +48,15 @@ def test_blur_hint() -> None:
     old = [(t - dt.timedelta(hours=1), c, h) for t, c, h in _blurred()]
     assert health.blur_hint(old, 1.8, CLEAR, NOW) is None
     assert health.blur_hint([*_blurred(), (NOW, None, None)], 1.8, CLEAR, NOW) is not None
+
+
+def test_blur_hint_does_not_flap() -> None:
+    """Once given, the hint stays down to RELEASE times the usual size (review of #467)."""
+    assert health.blur_hint(_blurred(2.5), 1.8, CLEAR, NOW) is None  # 1.39x: not yet
+    assert health.blur_hint(_blurred(2.5), 1.8, CLEAR, NOW, active=True) is not None
+    assert health.blur_hint(_blurred(2.2), 1.8, CLEAR, NOW, active=True) is None  # 1.22x
+    assert health.blur_hint(_blurred(n=2), 1.8, CLEAR, NOW, active=True) is not None
+    assert health.blur_hint(_blurred(cloud=0.5), 1.8, CLEAR, NOW, active=True) is None
 
 
 def test_blur_hint_names_the_dew() -> None:
@@ -80,6 +94,11 @@ async def test_nights_live_tile_and_stats(app: FastAPI, client: httpx.AsyncClien
     await paired_token(client, dev)
     maker: async_sessionmaker[AsyncSession] = app.state.sessionmaker
     async with maker() as db:
+        await db.execute(
+            update(Device)
+            .where(Device.id == dev.device_id)
+            .values(last_status={"settings": CAMERA})
+        )
         for day in range(1, 5):  # four clear nights in October, stars of 1.8 px
             night = f"202610{day:02d}"
             start = dt.datetime(2026, 10, day, 20, tzinfo=dt.UTC)
@@ -95,19 +114,22 @@ async def test_nights_live_tile_and_stats(app: FastAPI, client: httpx.AsyncClien
         await stats.refresh(db, dt.datetime(2026, 10, 13, 8, tzinfo=dt.UTC))
         sizes = [n.median_hfr for n in await db.scalars(select(NightStat))]
         assert sizes == [1.8] * 4
-        assert await star_size.usual(db, dev.device_id, "20261005") == 1.8
-        assert await star_size.usual(db, dev.device_id, "20261003") is None  # two before
+        device = await db.get(Device, dev.device_id)
+        assert device is not None
+        assert await star_size.usual(db, device, "20261005") == 1.8
+        assert await star_size.usual(db, device, "20261003") is None  # two before
         await db.execute(
             update(Device)
             .where(Device.id == dev.device_id)
             .values(
                 last_status={
+                    "settings": CAMERA,
                     "sky": {
                         "at": "2026-10-05T21:00:00+00:00",
                         "night_id": "20261005",
                         "stars": 150,
                         "hfr": 2.94,
-                    }
+                    },
                 },
                 latest_image_at=dt.datetime.now(dt.UTC),
             )
@@ -120,6 +142,46 @@ async def test_nights_live_tile_and_stats(app: FastAPI, client: httpx.AsyncClien
     page = (await client.get(f"/cameras/{dev.device_id}/stats?year=2026")).text
     assert "Sternschärfe" in page
     assert "1,8 px" in page
+
+
+async def test_another_camera_starts_a_new_usual_value(
+    app: FastAPI, client: httpx.AsyncClient
+) -> None:
+    """Sizes are in the frame's pixels: after a sensor change the old nights do not count,
+    and nights still recomputed keep the camera of their first pass (review of #467)."""
+    dev = FakeDevice()
+    await paired_token(client, dev)
+    maker: async_sessionmaker[AsyncSession] = app.state.sessionmaker
+    async with maker() as db:
+        device = await db.get(Device, dev.device_id)
+        assert device is not None
+        device.last_status = {"settings": CAMERA}
+        old = star_size.camera_key(device)
+        assert old is not None
+        assert old.endswith("|zwo:ASI678MC")
+        start = dt.datetime(2026, 10, 12, 20, tzinfo=dt.UTC)
+        for i in range(8):
+            db.add(SkySample(device_id=dev.device_id, night_id="20261012",
+                             at=start + dt.timedelta(minutes=10 * i), cloud_cover=0.1,
+                             hfr=1.8))  # fmt: skip
+        await db.commit()
+        await stats.refresh(db, dt.datetime(2026, 10, 13, 8, tzinfo=dt.UTC))
+        device.last_status = {"settings": {"camera": "zwo:ASI585MC"}}
+        await db.commit()
+        await stats.refresh(db, dt.datetime(2026, 10, 13, 9, tzinfo=dt.UTC))  # recomputed
+        [night] = list(await db.scalars(select(NightStat)))
+        assert night.hfr_camera == old
+        for day in range(1, 4):
+            db.add(NightStat(device_id=dev.device_id, night_id=f"202610{day:02d}",
+                             median_hfr=1.8, hfr_camera=old))  # fmt: skip
+        await db.commit()
+        assert await star_size.usual(db, device, "20261013") is None  # the new camera
+        assert star_size.camera_key(device) != old
+        device.last_status = {"settings": CAMERA}
+        assert await star_size.usual(db, device, "20261013") == 1.8
+        device.last_status = {}
+        assert star_size.camera_key(device) is None
+        assert await star_size.usual(db, device, "20261013") is None
 
 
 async def test_statistics_without_star_sizes_have_no_column(
@@ -155,7 +217,8 @@ async def test_full_check_blur_and_focus(app: FastAPI, client: httpx.AsyncClient
         # stars grow to 3 px within the last 45 minutes: the dome hint.
         for day in range(1, 18):
             db.add(NightStat(device_id=dev.device_id, night_id=f"202609{day:02d}",
-                             median_hfr=1.8 if day <= 10 else 2.9))  # fmt: skip
+                             median_hfr=1.8 if day <= 10 else 2.9,
+                             hfr_camera=f"{dev.profile}|zwo:ASI678MC"))  # fmt: skip
         for at, cloud, hfr in _blurred():
             db.add(SkySample(device_id=dev.device_id, night_id="20261013", at=at,
                              cloud_cover=cloud, hfr=hfr))  # fmt: skip
@@ -163,7 +226,7 @@ async def test_full_check_blur_and_focus(app: FastAPI, client: httpx.AsyncClient
             update(Device)
             .where(Device.id == dev.device_id)
             .values(
-                last_status={"settings": {"latitude": 50.04, "longitude": 10.39}},
+                last_status={"settings": {"latitude": 50.04, "longitude": 10.39, **CAMERA}},
                 last_frame={"captured_at": NOW.isoformat(), "mode": "night"},
                 last_seen_at=NOW,
             )

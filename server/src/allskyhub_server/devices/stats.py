@@ -10,10 +10,11 @@ import datetime as dt
 import statistics
 from dataclasses import dataclass, field
 
-from sqlalchemy import select, union
+from sqlalchemy import func, select, union
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from allskyhub_server.devices import star_size
 from allskyhub_server.devices.event_text import shower_name
 from allskyhub_server.devices.night_summary import summarize
 from allskyhub_server.i18n import english
@@ -54,7 +55,8 @@ async def refresh_night(db: AsyncSession, device_id: str, night_id: str) -> None
     """One night in numbers, again (also after a label changed, SPEC §6.4: a false
     positive counts nowhere). The caller commits."""
     s = await summarize(db, device_id, night_id)
-    values = {
+    device = await db.get(Device, device_id)
+    values: dict[str, object] = {
         "clear_hours": s.clear_hours,
         "best_sqm": s.best_sqm,
         "median_hfr": s.median_hfr,
@@ -63,10 +65,19 @@ async def refresh_night(db: AsyncSession, device_id: str, night_id: str) -> None
         "aurora": s.aurora,
         "storms": s.storms,
     }
+    insert = pg_insert(NightStat).values(
+        device_id=device_id,
+        night_id=night_id,
+        hfr_camera=star_size.camera_key(device) if device else None,
+        **values,
+    )
+    # The camera of the night's first pass stays (a later camera change must not relabel
+    # the nights still recomputed).
+    camera = func.coalesce(NightStat.hfr_camera, insert.excluded.hfr_camera)
     await db.execute(
-        pg_insert(NightStat)
-        .values(device_id=device_id, night_id=night_id, **values)
-        .on_conflict_do_update(index_elements=["device_id", "night_id"], set_=values)
+        insert.on_conflict_do_update(
+            index_elements=["device_id", "night_id"], set_={**values, "hfr_camera": camera}
+        )
     )
 
 

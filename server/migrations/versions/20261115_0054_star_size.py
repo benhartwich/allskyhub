@@ -19,8 +19,10 @@ depends_on: str | Sequence[str] | None = None
 def upgrade() -> None:
     op.add_column('sky_sample', sa.Column('hfr', sa.Float(), nullable=True))
     op.add_column('night_stat', sa.Column('median_hfr', sa.Float(), nullable=True))
+    op.add_column('night_stat', sa.Column('hfr_camera', sa.String(length=160), nullable=True))
 
 
 def downgrade() -> None:
+    op.drop_column('night_stat', 'hfr_camera')
     op.drop_column('night_stat', 'median_hfr')
     op.drop_column('sky_sample', 'hfr')

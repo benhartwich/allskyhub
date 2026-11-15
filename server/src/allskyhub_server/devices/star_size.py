@@ -23,14 +23,34 @@ DRIFT_RECENT = 7
 DRIFT_BEFORE = 30
 DRIFT_MIN_BEFORE = 5
 FACTOR = 1.5  # this much larger counts as blurred (to be checked on real data)
+RELEASE = 1.3  # a hint already given goes only below this (no flapping around FACTOR)
+
+
+def camera_key(device: Device) -> str | None:
+    """What the star size depends on besides the sky: the profile and the camera the
+    status names (sensor and resolution). Another camera starts a new usual value."""
+    settings = (device.last_status or {}).get("settings")
+    camera = cast(dict[str, Any], settings).get("camera") if isinstance(settings, dict) else None
+    if not isinstance(camera, str) or not camera:
+        return None
+    return f"{device.profile}|{camera}"[:160]
 
 
 async def medians(
-    db: AsyncSession, device_id: str, limit: int, before_night: str | None = None
+    db: AsyncSession,
+    device_id: str,
+    camera: str | None,
+    limit: int,
+    before_night: str | None = None,
 ) -> list[float]:
-    """The clear nights' star sizes, newest first, optionally only before a night."""
+    """The clear nights' star sizes measured by ``camera``, newest first, optionally only
+    before a night; none without a camera."""
+    if camera is None:
+        return []
     query = select(NightStat.median_hfr).where(
-        NightStat.device_id == device_id, NightStat.median_hfr.is_not(None)
+        NightStat.device_id == device_id,
+        NightStat.hfr_camera == camera,
+        NightStat.median_hfr.is_not(None),
     )
     if before_night is not None:
         query = query.where(NightStat.night_id < before_night)
@@ -42,10 +62,10 @@ def usual_of(values: list[float]) -> float | None:
     return round(statistics.median(values), 2) if len(values) >= USUAL_MIN else None
 
 
-async def usual(db: AsyncSession, device_id: str, before_night: str | None) -> float | None:
-    """The median of the last ``USUAL_NIGHTS`` clear nights before ``before_night`` (the
-    night going on is left out: it may be the blurred one)."""
-    return usual_of(await medians(db, device_id, USUAL_NIGHTS, before_night))
+async def usual(db: AsyncSession, device: Device, before_night: str | None) -> float | None:
+    """The median of the camera's last ``USUAL_NIGHTS`` clear nights before
+    ``before_night`` (the night going on is left out: it may be the blurred one)."""
+    return usual_of(await medians(db, device.id, camera_key(device), USUAL_NIGHTS, before_night))
 
 
 async def usual_now(db: AsyncSession, device: Device) -> float | None:
@@ -58,7 +78,7 @@ async def usual_now(db: AsyncSession, device: Device) -> float | None:
     if sky.get("hfr") is None:
         return None
     night = sky.get("night_id")
-    return await usual(db, device.id, night if isinstance(night, str) else None)
+    return await usual(db, device, night if isinstance(night, str) else None)
 
 
 def drift(newest_first: list[float]) -> tuple[float, float] | None:

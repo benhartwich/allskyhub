@@ -625,6 +625,9 @@ class NightStat(Base):
     best_sqm: Mapped[float | None] = mapped_column(Float)
     # Draft E: the median star size (SPEC §6.3 `hfr`) of the night's clear measurements.
     median_hfr: Mapped[float | None] = mapped_column(Float)
+    # ...and the camera that measured it (star_size.camera_key): sizes are in the frame's
+    # pixels, so only nights of the same camera are compared. Kept from the first pass.
+    hfr_camera: Mapped[str | None] = mapped_column(String(160))
     meteors: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
     # Radiant-matched meteors per shower (German names), plus "sporadisch".
     showers: Mapped[dict[str, int]] = mapped_column(JSONB, default=dict, server_default="{}")

@@ -17,6 +17,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from allskyhub_server.devices import star_size
+from allskyhub_server.devices.night_summary import CLEAR_BELOW
 from allskyhub_server.devices.tonight import ForecastCache
 from allskyhub_server.i18n import tr
 from allskyhub_server.models import Device, SkySample
@@ -300,6 +301,8 @@ def dome_hint(
 # the camera still sees stars, but they are FACTOR times their usual size.
 BLUR_WINDOW = dt.timedelta(minutes=45)
 BLUR_MIN_SAMPLES = 6
+# The sizes must reach back this far: not the first frames after dusk (HFR from sun -12 deg).
+BLUR_SPAN = dt.timedelta(minutes=40)
 DEW_GAP_C = 2.0  # air temperature this close to the dew point: name the dew
 
 
@@ -313,24 +316,31 @@ def blur_hint(
     forecast: Mapping[dt.datetime, int],
     now: dt.datetime,
     env: Mapping[str, Any] | None = None,
+    active: bool = False,
 ) -> Problem | None:
-    """Dew or frost starting on the dome: in the last ``BLUR_WINDOW`` the camera saw stars
-    (no measurement overcast) and every star size (time, cloud cover, hfr) was at least
-    ``star_size.FACTOR`` times the usual one, while the forecast said clear."""
+    """Dew or frost starting on the dome: in the last ``BLUR_WINDOW`` the sky was clear in
+    every measurement (as for a clear night, ``CLEAR_BELOW``), the star sizes (time, cloud
+    cover, hfr) reach back ``BLUR_SPAN`` and each was at least ``star_size.FACTOR`` times
+    the usual one, while the forecast said clear. ``active``: the hint was already given;
+    it stays while their median is at least ``star_size.RELEASE`` times the usual one."""
     if usual is None or usual <= 0:
         return None
     recent = [(t, c, h) for t, c, h in samples if now - t <= BLUR_WINDOW]
-    sized = [h for _, _, h in recent if h is not None]
-    if len(sized) < BLUR_MIN_SAMPLES:
+    sized = [(t, h) for t, _, h in recent if h is not None]
+    if any(c is not None and c >= CLEAR_BELOW for _, c, _ in recent):
         return None
-    if any(c is not None and c >= DOME_CAMERA_CLOUDY for _, c, _ in recent):
-        return None
-    if any(h < star_size.FACTOR * usual for h in sized):
-        return None
+    if active:
+        if not sized or statistics.median(h for _, h in sized) < star_size.RELEASE * usual:
+            return None
+    else:
+        if len(sized) < BLUR_MIN_SAMPLES or now - min(t for t, _ in sized) < BLUR_SPAN:
+            return None
+        if any(h < star_size.FACTOR * usual for _, h in sized):
+            return None
     hours = {t.replace(minute=0, second=0, microsecond=0) for t, _, _ in recent}
     if any(forecast.get(h, 100) > DOME_FORECAST_CLEAR for h in hours):
         return None
-    now_px, usual_px = _px(statistics.median(sized)), _px(usual)
+    now_px, usual_px = _px(statistics.median(h for _, h in sized)), _px(usual)
     text = tr(
         f"Die Sterne sind seit 45 Minuten deutlich unschärfer als sonst ({now_px} statt "
         f"{usual_px} px), obwohl klarer Himmel vorhergesagt ist. Beginnt die Kuppel zu "
@@ -381,8 +391,11 @@ async def full_check(
     """``check`` plus the dome and star size hints, which need the sky samples, the
     camera's clear nights and the forecast."""
     problems = check(device, online, now)
+    camera = star_size.camera_key(device)
     focus = focus_hint(
-        await star_size.medians(db, device.id, star_size.DRIFT_RECENT + star_size.DRIFT_BEFORE)
+        await star_size.medians(
+            db, device.id, camera, star_size.DRIFT_RECENT + star_size.DRIFT_BEFORE
+        )
     )
     if focus:
         problems.append(focus)
@@ -406,9 +419,14 @@ async def full_check(
     sized = [(at, cloud, hfr) for at, cloud, hfr, _ in rows]
     if not any(h is not None for _, _, h in sized):
         return problems
-    usual = await star_size.usual(db, device.id, rows[-1][3])
+    usual = await star_size.usual(db, device, rows[-1][3])
     env = (device.last_status or {}).get("env")
     blur = blur_hint(
-        sized, usual, hours, now, cast(dict[str, Any], env) if isinstance(env, dict) else None
+        sized,
+        usual,
+        hours,
+        now,
+        cast(dict[str, Any], env) if isinstance(env, dict) else None,
+        active="dome_blur" in (device.health_notified or []),
     )
     return [*problems, blur] if blur else problems

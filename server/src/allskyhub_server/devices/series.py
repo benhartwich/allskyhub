@@ -224,7 +224,7 @@ async def load(
         ),
     }
     if not public:
-        result["hfr_usual"] = await star_size.usual(db, device.id, rng.night_id)
+        result["hfr_usual"] = await star_size.usual(db, device, rng.night_id)
     if with_status:
         status_rows = await db.scalars(
             select(StatusSample)

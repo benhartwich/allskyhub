@@ -6,6 +6,7 @@ import dataclasses
 import datetime as dt
 import io
 import re
+from pathlib import Path
 
 import httpx
 from fastapi import FastAPI
@@ -242,3 +243,16 @@ async def test_app_gets_the_sync_target(client: httpx.AsyncClient) -> None:
     )
     new = renewed.json()
     assert new["base_url"] == f"http://testserver/zenivo/{sid}.{new['secret']}"
+
+
+def test_waiting_frames_from_before_a_restart_go(tmp_path: Path) -> None:
+    """A frame left from before a restart never gets its telemetry; one of a removed
+    station goes also when the memory does not know it (allsky review of #460)."""
+    left = tmp_path / "01JAOLD-1.jpg"
+    left.write_bytes(b"x")
+    pending = zenivo.Pending(tmp_path)
+    assert not left.exists()
+    stray = tmp_path / "01JAGONE-2.jpg"
+    stray.write_bytes(b"x")
+    pending.drop("01JAGONE")
+    assert not stray.exists()

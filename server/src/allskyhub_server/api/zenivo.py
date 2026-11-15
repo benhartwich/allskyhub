@@ -19,6 +19,7 @@ import asyncio
 import datetime as dt
 import json
 import math
+import time
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -68,13 +69,18 @@ class _Kept:
 
 class Pending:
     """The last frame of each station until its telemetry comes, on disk under ``root``
-    (up to 8 MB each; only its facts stay in memory), like the detector's buffer."""
+    (up to 8 MB each; only its facts stay in memory), like the detector's buffer. What lay
+    there from before a restart can never get its telemetry: it goes at the start."""
 
     def __init__(self, root: Path) -> None:
         self.root = root
         self._frames: dict[str, _Kept] = {}
+        found: list[Path] = list(root.glob("*.jpg")) if root.is_dir() else []
+        for old in found:
+            old.unlink(missing_ok=True)
 
-    def _read(self, kept: _Kept | None) -> Waiting | None:
+    @staticmethod
+    def _read(kept: _Kept | None) -> Waiting | None:
         if kept is None:
             return None
         try:
@@ -85,22 +91,29 @@ class Pending:
             kept.path.unlink(missing_ok=True)
         return Waiting(data, kept.exposure_s, kept.gain, kept.arrived)
 
-    def put(self, device_id: str, frame: Waiting) -> Waiting | None:
-        """Keep ``frame``; the one it replaces, which got no telemetry."""
-        old = self._read(self._frames.pop(device_id, None))
+    def _write(self, device_id: str, jpeg: bytes) -> Path:
         self.root.mkdir(parents=True, exist_ok=True)
-        path = self.root / f"{device_id}.jpg"
-        path.write_bytes(frame.jpeg)
-        self._frames[device_id] = _Kept(path, frame.exposure_s, frame.gain, frame.arrived)
-        return old
+        path = self.root / f"{device_id}-{time.time_ns()}.jpg"
+        path.write_bytes(jpeg)
+        return path
 
-    def take(self, device_id: str) -> Waiting | None:
-        return self._read(self._frames.pop(device_id, None))
+    async def put(self, device_id: str, frame: Waiting) -> Waiting | None:
+        """Keep ``frame``; the one it replaces, which got no telemetry. Files are read and
+        written off the event loop."""
+        old = self._frames.pop(device_id, None)
+        path = await asyncio.to_thread(self._write, device_id, frame.jpeg)
+        self._frames[device_id] = _Kept(path, frame.exposure_s, frame.gain, frame.arrived)
+        return await asyncio.to_thread(self._read, old)
+
+    async def take(self, device_id: str) -> Waiting | None:
+        return await asyncio.to_thread(self._read, self._frames.pop(device_id, None))
 
     def drop(self, device_id: str) -> None:
-        kept = self._frames.pop(device_id, None)
-        if kept is not None:
-            kept.path.unlink(missing_ok=True)
+        """A removed station: every file of it, also one the memory does not know."""
+        self._frames.pop(device_id, None)
+        found: list[Path] = list(self.root.glob(f"{device_id}-*.jpg")) if self.root.is_dir() else []
+        for path in found:
+            path.unlink(missing_ok=True)
 
 
 def split_token(token: str) -> tuple[str, str]:
@@ -224,7 +237,7 @@ async def frame(request: Request, db: DbSession, token: str) -> JSONResponse:
             arrived=dt.datetime.now(dt.UTC),
         )
         pending: Pending = request.app.state.zenivo
-        old = pending.put(device.id, waiting)
+        old = await pending.put(device.id, waiting)
         if old is not None:
             await _process(request, db, device, old, None)
     except StationError as exc:
@@ -252,7 +265,7 @@ async def telemetry(request: Request, db: DbSession, token: str) -> JSONResponse
             raise StationError(400, "bad_request", "telemetry")
         facts: dict[str, Any] = body  # pyright: ignore[reportUnknownVariableType]
         pending: Pending = request.app.state.zenivo
-        waiting = pending.take(device.id)
+        waiting = await pending.take(device.id)
         if waiting is not None:
             fresh = dt.datetime.now(dt.UTC) - waiting.arrived <= TELEMETRY_WAIT
             await _process(request, db, device, waiting, facts if fresh else None)

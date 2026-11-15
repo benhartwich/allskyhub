@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import dataclasses
 import datetime as dt
 import io
 import re
@@ -12,10 +13,11 @@ from PIL import Image
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
-from allskyhub_server.devices import stations
+from allskyhub_server.api import zenivo
+from allskyhub_server.devices import station_flow, stations
 from allskyhub_server.devices.stations import SecretKey
 from allskyhub_server.models import Device, User
-from tests.helpers import csrf_from, make_account
+from tests.helpers import PASSWORD, csrf_from, make_account
 
 W, H = 1600, 1200
 LAT, LON = 50.04, 10.39  # the usual made-up test place
@@ -160,3 +162,75 @@ async def test_connect_a_zenivo_camera(app: FastAPI, client: httpx.AsyncClient) 
     assert (device.last_status or {})["settings"]["latitude"] == LAT
     # The address works.
     assert (await _send_frame(client, _base(station_id, found[1]))).status_code == 200
+
+
+async def test_late_telemetry_and_bad_values(app: FastAPI, client: httpx.AsyncClient) -> None:
+    """Telemetry later than 30 s, an absurd exposure and a year-1 time do not break
+    anything (allsky review of #460)."""
+    station_id, secret = await _station(app, client)
+    base = _base(station_id, secret)
+    assert (await _send_frame(client, base, exposure="1e14")).status_code == 200
+    pending: zenivo.Pending = app.state.zenivo
+    kept = pending._frames[station_id]  # pyright: ignore[reportPrivateUsage]
+    assert kept.exposure_s == zenivo.EXPOSURE_MAX_S
+    assert kept.path.is_file()  # waits on disk, not in memory
+    pending._frames[station_id] = dataclasses.replace(  # pyright: ignore[reportPrivateUsage]
+        kept, arrived=kept.arrived - dt.timedelta(seconds=31), exposure_s=4.0
+    )
+    r = await client.post(f"{base}/telemetry", json={"capture_time": "0001-01-01T00:00:00+00:00"})
+    assert r.status_code == 200
+    device = await _device(app, station_id)
+    assert (device.last_frame or {})["time_source"] == "fetch"  # too late for its telemetry
+    assert not kept.path.exists()
+    # A year-1 capture_time in time is no time either.
+    assert (await _send_frame(client, base)).status_code == 200
+    r = await client.post(f"{base}/telemetry", json={"capture_time": "0001-01-01T00:00:00+00:00"})
+    assert r.status_code == 200
+    assert ((await _device(app, station_id)).last_frame or {})["time_source"] == "fetch"
+    assert (await client.get(f"{base}/frame")).status_code == 404
+
+
+async def test_size_limits(app: FastAPI, client: httpx.AsyncClient) -> None:
+    station_id, secret = await _station(app, client)
+    base = _base(station_id, secret)
+    big = await client.post(
+        f"{base}/frame", files={"image": ("f.jpg", b"\xff" * (8 * 1024 * 1024 + 1), "image/jpeg")}
+    )
+    assert big.status_code == 413
+    long = await client.post(f"{base}/telemetry", content=b"[" + b"1," * 200_000 + b"1]")
+    assert long.status_code == 413
+
+
+async def test_removing_the_station_drops_its_waiting_frame(
+    app: FastAPI, client: httpx.AsyncClient
+) -> None:
+    station_id, secret = await _station(app, client)
+    assert (await _send_frame(client, _base(station_id, secret))).status_code == 200
+    pending: zenivo.Pending = app.state.zenivo
+    path = pending._frames[station_id].path  # pyright: ignore[reportPrivateUsage]
+    async with app.state.sessionmaker() as db:
+        device = await db.get(Device, station_id)
+        assert device
+        await station_flow.remove(db, device, app.state, app.state.settings)
+    assert station_id not in pending._frames  # pyright: ignore[reportPrivateUsage]
+    assert not path.exists()
+
+
+async def test_app_gets_the_sync_target(client: httpx.AsyncClient) -> None:
+    email = await make_account(client)
+    r = await client.post("/api/v1/auth/login", json={"email": email, "password": PASSWORD})
+    auth = {"Authorization": f"Bearer {r.json()['access_token']}"}
+    made = await client.post(
+        "/api/v1/stations", headers=auth,
+        data={"software": "zenivo", "name": "Garten", "terms": "true",
+              "latitude": str(LAT), "longitude": str(LON)},
+    )  # fmt: skip
+    assert made.status_code == 200
+    body = made.json()
+    sid = body["station"]["id"]
+    assert body["base_url"] == f"http://testserver/zenivo/{sid}.{body['secret']}"
+    renewed = await client.post(
+        f"/api/v1/stations/{sid}/secret", headers=auth, json={"password": PASSWORD}
+    )
+    new = renewed.json()
+    assert new["base_url"] == f"http://testserver/zenivo/{sid}.{new['secret']}"

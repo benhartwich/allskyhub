@@ -20,6 +20,7 @@ import datetime as dt
 import json
 import math
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Any
 
 from fastapi import APIRouter, Request
@@ -41,6 +42,10 @@ SOURCE = "zenivo"  # events' data["source"]
 TELEMETRY_WAIT = dt.timedelta(seconds=30)
 TELEMETRY_MAX = 256 * 1024  # with its 256-bin histogram a few kB
 INTERVAL_S = 60.0  # Zenivo's default --sync-interval
+EXPOSURE_MAX_S = 3600.0  # as connect.FrameIn
+# A capture_time further off than this is not a time at all (a camera without a clock):
+# the frame takes its arrival instead.
+TIME_SLACK = dt.timedelta(days=1)
 
 
 @dataclass(frozen=True)
@@ -53,24 +58,49 @@ class Waiting:
     arrived: dt.datetime
 
 
-class Pending:
-    """The last frame of each station until its telemetry comes (one process, like the
-    station detector's buffer)."""
+@dataclass(frozen=True)
+class _Kept:
+    path: Path
+    exposure_s: float
+    gain: float | None
+    arrived: dt.datetime
 
-    def __init__(self) -> None:
-        self._frames: dict[str, Waiting] = {}
+
+class Pending:
+    """The last frame of each station until its telemetry comes, on disk under ``root``
+    (up to 8 MB each; only its facts stay in memory), like the detector's buffer."""
+
+    def __init__(self, root: Path) -> None:
+        self.root = root
+        self._frames: dict[str, _Kept] = {}
+
+    def _read(self, kept: _Kept | None) -> Waiting | None:
+        if kept is None:
+            return None
+        try:
+            data = kept.path.read_bytes()
+        except OSError:
+            return None
+        finally:
+            kept.path.unlink(missing_ok=True)
+        return Waiting(data, kept.exposure_s, kept.gain, kept.arrived)
 
     def put(self, device_id: str, frame: Waiting) -> Waiting | None:
         """Keep ``frame``; the one it replaces, which got no telemetry."""
-        old = self._frames.pop(device_id, None)
-        self._frames[device_id] = frame
+        old = self._read(self._frames.pop(device_id, None))
+        self.root.mkdir(parents=True, exist_ok=True)
+        path = self.root / f"{device_id}.jpg"
+        path.write_bytes(frame.jpeg)
+        self._frames[device_id] = _Kept(path, frame.exposure_s, frame.gain, frame.arrived)
         return old
 
     def take(self, device_id: str) -> Waiting | None:
-        return self._frames.pop(device_id, None)
+        return self._read(self._frames.pop(device_id, None))
 
     def drop(self, device_id: str) -> None:
-        self._frames.pop(device_id, None)
+        kept = self._frames.pop(device_id, None)
+        if kept is not None:
+            kept.path.unlink(missing_ok=True)
 
 
 def split_token(token: str) -> tuple[str, str]:
@@ -95,17 +125,20 @@ def _number(value: object) -> float | None:
     return float(value) if isinstance(value, int | float) and math.isfinite(value) else None
 
 
-def capture_time(telemetry: dict[str, Any]) -> dt.datetime | None:
+def capture_time(telemetry: dict[str, Any], now: dt.datetime) -> dt.datetime | None:
     """Zenivo's ``capture_time``: the end of the capture on the camera's clock, ISO 8601
-    with its offset."""
+    with its offset; None when missing or more than ``TIME_SLACK`` from ``now``."""
     raw = telemetry.get("capture_time")
     if not isinstance(raw, str):
         return None
     try:
         at = dt.datetime.fromisoformat(raw)
-    except ValueError:
+        if at.tzinfo is None:
+            return None
+        at = at.astimezone(dt.UTC)
+    except (ValueError, OverflowError):
         return None
-    return at.astimezone(dt.UTC) if at.tzinfo is not None else None
+    return at if abs(at - now) <= TIME_SLACK else None
 
 
 async def _process(
@@ -118,7 +151,7 @@ async def _process(
     """A frame of §10.2 with its time (§10.9), then the overlay mask and the meteor
     detection of §10.7."""
     state = request.app.state
-    end = capture_time(telemetry) if telemetry is not None else None
+    end = capture_time(telemetry, frame.arrived) if telemetry is not None else None
     half = dt.timedelta(seconds=frame.exposure_s / 2)
     taken = (end or frame.arrived) - half
     origin = "station" if end is not None else "fetch"
@@ -134,7 +167,7 @@ async def _process(
     stars = _number((telemetry or {}).get("star_count"))
     meta = connect.FrameIn(
         time=taken,
-        exposure_s=min(max(frame.exposure_s, 0.0), 3600.0),
+        exposure_s=frame.exposure_s,
         gain=frame.gain if frame.gain is not None and 0 <= frame.gain <= 100000 else None,
         night=sun <= -6.0,
         clock_synced=end is not None,
@@ -146,7 +179,10 @@ async def _process(
     device.last_frame = dict(device.last_frame or {}) | {"time_source": origin}
     if end is None:
         clock = dict(device.clock or {})
-        clock["trusted"] = False  # SPEC §10.9: like §10.7's fetch time, never for pairing
+        # SPEC §10.9: a frame without the camera's time does not count for the clock, and
+        # the station is untrusted until its clock check passes again on timed frames.
+        clock["trusted"] = False
+        clock["good"] = 0
         device.clock = clock
     masks = image_url.OverlayMask(station_flow.masks_dir(state.settings))
     await asyncio.to_thread(masks.update, device.id, frame.jpeg)
@@ -183,7 +219,7 @@ async def frame(request: Request, db: DbSession, token: str) -> JSONResponse:
         exposure = _number(request.headers.get("x-exposure-sec")) or 0.0
         waiting = Waiting(
             jpeg=data,
-            exposure_s=max(exposure, 0.0),
+            exposure_s=min(max(exposure, 0.0), EXPOSURE_MAX_S),
             gain=_number(request.headers.get("x-gain-db")),
             arrived=dt.datetime.now(dt.UTC),
         )
@@ -225,6 +261,12 @@ async def telemetry(request: Request, db: DbSession, token: str) -> JSONResponse
     device.last_seen_at = dt.datetime.now(dt.UTC)
     await db.commit()
     return _ok()
+
+
+@router.get("/{kind}")
+async def not_here(kind: str) -> JSONResponse:
+    """Only POST is understood (§10.9): other requests answer 404, as unknown paths."""
+    return JSONResponse({"error": "not_found"}, status_code=404)
 
 
 @router.post("/{kind}")

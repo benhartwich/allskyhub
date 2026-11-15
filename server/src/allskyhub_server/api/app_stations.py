@@ -77,6 +77,7 @@ class StationCreated(BaseModel):
 
 class SecretAnswer(BaseModel):
     secret: str
+    base_url: str | None = None  # Zenivo's new --sync-target (SPEC §10.9)
 
 
 class PasswordBody(BaseModel):
@@ -249,7 +250,11 @@ async def renew_secret(
     await _password(request, user, body.password)
     secret = stations.rotate_secret(device, _key(request))
     await db.commit()
-    return SecretAnswer(secret=secret)
+    base = request.app.state.settings.base_url.rstrip("/")
+    return SecretAnswer(
+        secret=secret,
+        base_url=f"{base}/zenivo/{device.id}.{secret}" if device.software == "zenivo" else None,
+    )
 
 
 @router.post("/stations/{device_id}/delete", status_code=204)

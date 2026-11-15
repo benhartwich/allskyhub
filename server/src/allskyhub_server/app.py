@@ -420,7 +420,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.state.image_fetcher = image_url.Fetcher(own=image_url.own_addresses(settings.base_url))
     # Stations' meteors (SPEC §10.3, §10.7): the last two frames each on disk, anew at start.
     app.state.station_detector = station_detect.Detector(settings.data_dir / "tmp" / "detect")
-    app.state.zenivo = zenivo_api.Pending()  # SPEC §10.9
+    app.state.zenivo = zenivo_api.Pending(settings.data_dir / "tmp" / "zenivo")  # SPEC §10.9
     app.state.station_detector.buffer.clean(everything=True)
     app.state.github.token = app.state.latest_image.token = github_token(app.state.stores.vault)
     app.add_middleware(CustomDomainMiddleware, hosts=app.state.hosts)

@@ -1,0 +1,24 @@
+{% extends "base.html" %}
+{% block title %}Satelliten 3D · {{ device.name }} · allskyhub{% endblock %}
+{% block head %}<script type="module" src="{{ asset('sat_globe.js') }}"></script>{% endblock %}
+{% block content %}
+<div class="page-head"><h1>Satelliten 3D</h1><p class="muted"><a href="/cameras/{{ device.id }}">{{ device.name }}</a> › Satelliten 3D</p></div>
+{% if not where %}
+<p class="msg">Die Kamera kennt ihren Standort noch nicht. Sobald sie ihn meldet, erscheinen hier die Satelliten um sie herum.</p>
+{% else %}
+<div class="globe-page">
+  <div class="globe-wrap card">
+    <div id="globe" class="globe" data-src="/cameras/{{ device.id }}/satelliten/3d.json"
+         data-day="{{ asset('globe/earth-day.jpg') }}" data-night="{{ asset('globe/earth-night.jpg') }}"
+         data-name="{{ device.name }}" role="img" aria-label="Erdkugel mit der Kamera und den hellen Satelliten"></div>
+    <p class="globe-legend small"><span class="dot eye"></span>mit bloßem Auge <span class="dot sun"></span>sonnenbeschienen <span class="dot shadow"></span>im Erdschatten <span class="dot cam"></span>{{ device.name }}</p>
+    <p class="muted small" id="globe-status">Lädt …</p>
+  </div>
+  <section class="card stack globe-side">
+    <h2>Über dem Horizont <span class="muted" id="globe-count"></span></h2>
+    <ul class="sat-list" id="globe-list"></ul>
+    <p class="muted small">Ziehen dreht die Erde, Mausrad oder zwei Finger zoomen. Ein Tipp auf einen Satelliten hebt seine Bahn hervor (±45 Minuten). Der Kreis um die Kamera zeigt, wo ein Satellit in 500 km Höhe mindestens 10° hoch steht. Bahnen: CelesTrak; Erde: NASA Blue Marble und Earth at Night.</p>
+  </section>
+</div>
+{% endif %}
+{% endblock %}

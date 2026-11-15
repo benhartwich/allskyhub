@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import datetime as dt
+import time
 
 import httpx
 from fastapi import FastAPI
@@ -138,7 +139,10 @@ async def test_asks_for_the_last_minutes_and_backs_off() -> None:
     await asyncio.gather(*cache._tasks)  # pyright: ignore[reportPrivateUsage]
     assert asked[0].url.params["last"] == "600"
     assert asked[0].url.params["lat"] == "50.0"
-    cache.warm(LAT, LON)  # Retry-After: not again yet
+    # Retry-After (300 s), not the first backoff step (120 s), sets the wait.
+    wait = cache._not_before[radiosondes.cell(LAT, LON)] - time.monotonic()  # pyright: ignore[reportPrivateUsage]
+    assert 200 < wait <= 300
+    cache.warm(LAT, LON)  # not again yet
     assert not cache._tasks  # pyright: ignore[reportPrivateUsage]
     assert len(asked) == 1
     await cache.close()

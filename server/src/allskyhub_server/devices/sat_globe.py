@@ -17,6 +17,7 @@ import numpy as np
 import sgp4.api  # pyright: ignore[reportMissingTypeStubs]
 
 from allskyhub_server.devices import astro, bright_satellites
+from allskyhub_server.devices.bright_satellites import height
 from allskyhub_server.devices.satellite_match import CHUNK, Catalogue, look_all
 from allskyhub_server.devices.satellites import EARTH_RADIUS_KM, MIN_ALTITUDE, SKY_DARK, sun_unit
 
@@ -60,14 +61,6 @@ def ecef(
 
 def _point(v: Any) -> list[float]:
     return [round(float(c) / EARTH_RADIUS_KM, 4) for c in v]
-
-
-def _height(range_km: float, altitude: float) -> float:
-    """Height above the ground from the slant range and the altitude angle, as
-    bright_satellites (spherical Earth, observer at sea level)."""
-    r = EARTH_RADIUS_KM
-    e = math.radians(altitude)
-    return math.sqrt(r * r + range_km * range_km + 2 * r * range_km * math.sin(e)) - r
 
 
 def sun_ecef(at: dt.datetime) -> list[float]:
@@ -125,7 +118,7 @@ def globe(catalogue: Catalogue | None, lat: float, lon: float, at: dt.datetime) 
             "up": up,
             "altitude": round(a, 1) if up else None,
             "azimuth": round(float(az[k, now_index])) if up else None,
-            "height_km": round(_height(float(dist[k, now_index]), a)) if up else None,
+            "height_km": round(height(float(dist[k, now_index]), a)) if up else None,
             "sunlit": sunlit,
             "naked_eye": up and sunlit and dark and a >= MIN_ALTITUDE,
         })  # fmt: skip

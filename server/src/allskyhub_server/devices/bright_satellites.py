@@ -82,7 +82,7 @@ def now(catalogue: Catalogue | None, lat: float, lon: float, t: dt.datetime) -> 
                 azimuth=float(az[k, 0]),
                 altitude=a,
                 range_km=d,
-                height_km=_height(d, a),
+                height_km=height(d, a),
                 sunlit=sunlit,
                 naked_eye=sunlit and dark and a >= MIN_ALTITUDE,
             )
@@ -90,7 +90,7 @@ def now(catalogue: Catalogue | None, lat: float, lon: float, t: dt.datetime) -> 
     return sorted(out, key=lambda s: -s.altitude)
 
 
-def _height(range_km: float, altitude: float) -> float:
+def height(range_km: float, altitude: float) -> float:
     """Height above the ground from the slant range and the altitude angle (spherical
     Earth, observer at sea level)."""
     r = EARTH_RADIUS_KM

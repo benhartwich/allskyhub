@@ -110,3 +110,12 @@ def test_no_correction_when_the_lens_hardly_darkens(tmp_path: Path) -> None:
     assert st["source"] is None
     assert "keine Korrektur" in str(st["reason"])
     assert flat.apply(even) is even
+
+
+def test_sqm_is_measured_without_any_flat(tmp_path: Path) -> None:
+    """Benjamin, 2026-11-15: the SQM zero point was calibrated without a flat."""
+    flat = _flat(tmp_path)
+    _feed_twilight(flat)
+    frame = _twilight(7)
+    back = flat.remove(flat.apply(frame)).astype(np.int64)
+    assert int(np.abs(back - frame.astype(np.int64))[INSIDE].max()) <= 2

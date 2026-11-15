@@ -448,6 +448,16 @@ class FlatField:
             g = self._gain_map(image.shape[0], image.shape[1], active[1])
         return self._scale(image, g, divide=True)
 
+    def remove(self, image: Image) -> Image:
+        """Benjamin, 2026-11-15: `sqm_mag` is measured without any flat, as its zero
+        point was calibrated."""
+        with self._lock:
+            active = self._active()
+            if active is None:
+                return image
+            g = self._gain_map(image.shape[0], image.shape[1], active[1])
+        return self._scale(image, g, divide=True)
+
     def _scale(self, image: Image, g: npt.NDArray[np.uint16], divide: bool) -> Image:
         gain = g[:, :, None] if image.ndim == 3 else g
         if self._srgb:

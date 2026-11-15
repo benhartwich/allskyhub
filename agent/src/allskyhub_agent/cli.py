@@ -1192,6 +1192,7 @@ def main(argv: list[str] | None = None) -> int:
         )
         sky_mask.on_median = flat.observe_night
         sky_meter.undo = flat.undo_for_measuring
+        sky_meter.unflat = flat.remove
     flat_box[0] = flat
 
     def map_clouds(

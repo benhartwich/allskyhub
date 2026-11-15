@@ -111,13 +111,15 @@ class ReportScreen extends StatefulWidget {
   State<ReportScreen> createState() => _ReportScreenState();
 }
 
-class _ReportScreenState extends State<ReportScreen> {
+class _ReportScreenState extends State<ReportScreen>
+    with WidgetsBindingObserver {
   late final DateTime _started = widget.started ?? DateTime.now();
   Timer? _tick;
   _Step _step = _Step.prepare;
   ({double lat, double lon})? _place;
   ReportChart? _chart;
   String? _error;
+  LocationProblem? _problem;
   double? _limit;
   bool _clouds = false;
   bool _sending = false;
@@ -126,6 +128,7 @@ class _ReportScreenState extends State<ReportScreen> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _load();
     _tick = Timer.periodic(const Duration(seconds: 5), (_) {
       if (mounted) setState(() {});
@@ -135,21 +138,27 @@ class _ReportScreenState extends State<ReportScreen> {
   @override
   void dispose() {
     _tick?.cancel();
+    WidgetsBinding.instance.removeObserver(this);
     super.dispose();
   }
 
+  /// Back from the phone's settings: try the place again.
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed && _problem != null) _load();
+  }
+
   Future<void> _load() async {
+    if (_error != null || _problem != null) {
+      setState(() {
+        _error = null;
+        _problem = null;
+      });
+    }
     final found = await widget.location.current();
     final at = found.location;
     if (at == null) {
-      if (mounted) {
-        setState(
-          () => _error = tr(
-            'Zum Melden braucht die App deinen ungefähren Standort: Die Meldung gilt für den Himmel dort, wo du stehst.',
-            'To report, the app needs your rough location: a report is about the sky where you stand.',
-          ),
-        );
-      }
+      if (mounted) setState(() => _problem = found.problem);
       return;
     }
     _place = (lat: at.latitude, lon: at.longitude);
@@ -219,6 +228,8 @@ class _ReportScreenState extends State<ReportScreen> {
   Widget _body(BuildContext context) {
     final error = _error;
     final chart = _chart;
+    final problem = _problem;
+    if (problem != null) return _noPlace(context, problem);
     if (error != null) {
       return ListView(
         padding: const EdgeInsets.all(24),
@@ -231,6 +242,69 @@ class _ReportScreenState extends State<ReportScreen> {
       _Step.compare => _compare(context, chart),
       _Step.sent => _sent(context),
     };
+  }
+
+  /// Without the phone's place: why, and a way on (try again, open the settings).
+  Widget _noPlace(BuildContext context, LocationProblem problem) {
+    final why = switch (problem) {
+      LocationProblem.serviceOff => tr(
+        'Die Standortdienste des Handys sind aus. Schalte sie ein und versuche es noch einmal.',
+        'The phone\'s location services are off. Turn them on and try again.',
+      ),
+      LocationProblem.denied => tr(
+        'Du hast den Standortzugriff nicht erlaubt. Tippe auf „Erneut versuchen“ und erlaube ihn.',
+        'You did not allow location access. Tap "Try again" and allow it.',
+      ),
+      LocationProblem.deniedForever => tr(
+        'Der Standortzugriff ist für die App in den Einstellungen gesperrt. Erlaube dort „Standort“ und komm zurück.',
+        'Location access is blocked for the app in the settings. Allow "Location" there and come back.',
+      ),
+      LocationProblem.failed => tr(
+        'Der Standort konnte gerade nicht bestimmt werden. Versuche es noch einmal, am besten unter freiem Himmel.',
+        'Could not determine the location just now. Try again, ideally out in the open.',
+      ),
+    };
+    final settings =
+        problem == LocationProblem.serviceOff ||
+        problem == LocationProblem.deniedForever;
+    return ListView(
+      key: const Key('report-no-place'),
+      padding: const EdgeInsets.all(24),
+      children: [
+        Text(
+          tr(
+            'Zum Melden braucht die App deinen ungefähren Standort: Die Meldung gilt für den Himmel dort, wo du stehst.',
+            'To report, the app needs your rough location: a report is about the sky where you stand.',
+          ),
+        ),
+        const SizedBox(height: 12),
+        Text(why),
+        const SizedBox(height: 20),
+        if (settings) ...[
+          FilledButton.icon(
+            key: const Key('report-open-settings'),
+            icon: const Icon(Icons.settings),
+            label: Text(tr('Einstellungen öffnen', 'Open settings')),
+            onPressed: () => openLocationFix(problem),
+          ),
+          const SizedBox(height: 8),
+        ],
+        if (settings)
+          OutlinedButton.icon(
+            key: const Key('report-retry'),
+            icon: const Icon(Icons.refresh),
+            label: Text(tr('Erneut versuchen', 'Try again')),
+            onPressed: _load,
+          )
+        else
+          FilledButton.icon(
+            key: const Key('report-retry'),
+            icon: const Icon(Icons.refresh),
+            label: Text(tr('Erneut versuchen', 'Try again')),
+            onPressed: _load,
+          ),
+      ],
+    );
   }
 
   Widget _prepare(BuildContext context, ReportChart chart) {

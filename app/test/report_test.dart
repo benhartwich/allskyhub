@@ -18,6 +18,22 @@ class _Here implements LocationSource {
   Future<String?> timezone() async => 'Europe/Vienna';
 }
 
+/// Says no first, then the place (the user allowed it on "Erneut versuchen").
+class _LaterHere implements LocationSource {
+  _LaterHere(this.first);
+
+  final LocationProblem first;
+  int asked = 0;
+
+  @override
+  Future<LocationResult> current() async => asked++ == 0
+      ? LocationResult.missing(first)
+      : LocationResult.found(CameraLocation(48.1234, 4.4321));
+
+  @override
+  Future<String?> timezone() async => 'Europe/Vienna';
+}
+
 Map<String, Object?> _chart({bool ready = true}) => {
   'ready': ready,
   'reason': ready ? null : 'Es ist noch nicht dunkel genug.',
@@ -113,6 +129,40 @@ void main() {
     });
     expect(find.text('4,5 mag'), findsOneWidget);
     expect(find.textContaining('Stadthimmel'), findsOneWidget);
+  });
+
+  testWidgets('without permission: why, and try again', (tester) async {
+    final location = _LaterHere(LocationProblem.denied);
+    await tester.pumpWidget(
+      MaterialApp(
+        home: ReportScreen(client: _hub([]), location: location),
+      ),
+    );
+    await tester.pump();
+    expect(find.byKey(const Key('report-no-place')), findsOneWidget);
+    expect(find.textContaining('nicht erlaubt'), findsOneWidget);
+    expect(find.byKey(const Key('report-open-settings')), findsNothing);
+    await tester.tap(find.byKey(const Key('report-retry')));
+    await tester.pump();
+    await tester.pump();
+    expect(find.byKey(const Key('report-no-place')), findsNothing);
+    expect(location.asked, 2);
+    await tester.pumpWidget(const SizedBox());
+  });
+
+  testWidgets('blocked in the settings: a way there', (tester) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        home: ReportScreen(
+          client: _hub([]),
+          location: _LaterHere(LocationProblem.deniedForever),
+        ),
+      ),
+    );
+    await tester.pump();
+    expect(find.byKey(const Key('report-open-settings')), findsOneWidget);
+    expect(find.byKey(const Key('report-retry')), findsOneWidget);
+    await tester.pumpWidget(const SizedBox());
   });
 
   testWidgets('by day it says why not', (tester) async {

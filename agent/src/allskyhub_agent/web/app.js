@@ -123,6 +123,11 @@ const T = {
     "live.best": "Bestwert",
     "live.focusHelp": "Den Fokusring in kleinen Schritten drehen: höher ist schärfer. Sinkt die Zahl, bist du zu weit, also zurück. Dann die Feststellschraube anziehen und die Zahl noch einmal prüfen.",
     "live.crop": "Bildmitte in voller Auflösung",
+    "live.hfr": "Sterngröße (HFR) in Pixeln",
+    "live.hfrHelp": "Nachts zählt die Sterngröße: kleiner ist schärfer. Den Fokusring in kleinen Schritten drehen und jeweils einige Bilder abwarten. Wird die Zahl wieder größer, bist du zu weit, also zurück. Dann die Feststellschraube anziehen und die Zahl noch einmal prüfen.",
+    "live.hfrEdge": "Rand",
+    "live.hfrStars": "Sterne",
+    "live.hfrTrend": "Verlauf der Sterngröße",
     "live.taken": "Aufgenommen",
     "live.mode": "Modus",
     "live.brightness": "Helligkeit",
@@ -569,6 +574,11 @@ const T = {
     "live.best": "Best value",
     "live.focusHelp": "Turn the focus ring in small steps: higher is sharper. If the number drops, you have gone too far, so turn back. Then tighten the locking screw and check the number once more.",
     "live.crop": "Image centre at full resolution",
+    "live.hfr": "Star size (HFR) in pixels",
+    "live.hfrHelp": "At night the star size counts: smaller is sharper. Turn the focus ring in small steps and wait a few frames each time. If the number grows again, you have gone too far, so turn back. Then tighten the locking screw and check the number once more.",
+    "live.hfrEdge": "Edge",
+    "live.hfrStars": "Stars",
+    "live.hfrTrend": "Star size over time",
     "live.taken": "Taken",
     "live.mode": "Mode",
     "live.brightness": "Brightness",
@@ -943,6 +953,13 @@ let TEMP_UNIT = "c";
 const fmtTemp = (c) => (TEMP_UNIT === "f" ? `${(c * 9 / 5 + 32).toFixed(1)} °F` : `${c.toFixed(1)} °C`);
 const camHour = (iso) => Number(new Date(iso).toLocaleString("en-GB", { hour: "2-digit", hourCycle: "h23", ...tzOpt() }));
 const fmtNight = (id) => [id.slice(6, 8), id.slice(4, 6), id.slice(0, 4)].join(LANG === "en" ? "/" : ".");
+// The last star sizes as a line, smallest at the bottom of the range shown (SPEC §7).
+const hfrTrend = (values) => {
+  if (values.length < 2) return "";
+  const lo = Math.min(...values), hi = Math.max(...values), span = Math.max(hi - lo, 0.1);
+  const pts = values.map((v, i) => `${(300 * i / (values.length - 1)).toFixed(1)},${(55 - 50 * (v - lo) / span).toFixed(1)}`);
+  return `<polyline points="${pts.join(" ")}" fill="none" stroke="currentColor" stroke-width="2" vector-effect="non-scaling-stroke"/>`;
+};
 const fmtExposure = (us) => (us >= 1e6 ? (us / 1e6).toFixed(1) + " s" : (us / 1000).toFixed(2) + " ms");
 const fileUrl = (night, name, thumb) => `files/${night}/${encodeURIComponent(name)}${thumb ? "?thumb=1" : ""}`;
 
@@ -1186,6 +1203,12 @@ function viewLive() {
       <div id="focusPanel" hidden>
         <div class="row"><span class="score" id="score">–</span><div class="bar"><div id="bar"></div></div></div>
         <p class="muted">${t("live.best")} <b id="best">–</b>. ${t("live.focusHelp")}</p>
+        <div id="hfrPanel" hidden>
+          <p><span class="score" id="hfr">–</span> ${t("live.hfr")}</p>
+          <p class="muted">${t("live.best")} <b id="hfrBest">–</b> · ${t("live.hfrEdge")} <b id="hfrEdge">–</b> · ${t("live.hfrStars")} <b id="hfrStars">–</b></p>
+          <svg id="hfrTrend" viewBox="0 0 300 60" preserveAspectRatio="none" role="img" aria-label="${t("live.hfrTrend")}" style="width:100%;height:60px"></svg>
+          <p class="muted">${t("live.hfrHelp")}</p>
+        </div>
         <img class="live-img" id="crop" alt="${t("live.crop")}">
       </div>
     </section>`;
@@ -1249,6 +1272,15 @@ function viewLive() {
       $("score").textContent = Math.round(s.sharpness);
       $("best").textContent = s.sharpness_max != null ? Math.round(s.sharpness_max) : "–";
       $("bar").style.width = (s.sharpness_max ? Math.min(100, 100 * s.sharpness / s.sharpness_max) : 0) + "%";
+    }
+    // SPEC §7: at night the star size (HFR) leads, lower is sharper.
+    $("hfrPanel").hidden = !(focus && s.hfr != null);
+    if (focus && s.hfr != null) {
+      $("hfr").textContent = s.hfr.toFixed(2);
+      $("hfrBest").textContent = s.hfr_best != null ? s.hfr_best.toFixed(2) : "–";
+      $("hfrEdge").textContent = s.hfr_edge != null ? s.hfr_edge.toFixed(2) : "–";
+      $("hfrStars").textContent = s.hfr_stars ?? "–";
+      $("hfrTrend").innerHTML = hfrTrend(s.hfr_history || []);
     }
     $("pausedMsg").hidden = !s.paused;
     if (s.frames !== lastFrames) {

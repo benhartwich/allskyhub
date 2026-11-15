@@ -454,7 +454,7 @@ base64url-encoded without padding.
   at least `{latitude, longitude, timezone, camera, day_delay_s, night_delay_s}`,
   location null until known), and
   `sky` (null until the first frame is measured): `{at, night_id, cloud_cover, sqm_mag,
-  stars}` measured on the newest frame. `at` is that frame's `captured_at` and
+  stars, hfr}` measured on the newest frame. `at` is that frame's `captured_at` and
   `night_id` its night (§4.5); status repeats the last `sky` until a new frame is
   measured, so the hub keeps one sample per `at`. `cloud_cover` (0..1) comes from the
   stars visible in the upper sky at night (sun ≤ −12°), by day (sun ≥ 3°) from the sky's
@@ -473,7 +473,11 @@ base64url-encoded without padding.
   Known errors: glare and ghost rings read as cloud, thin cirrus as clear, snow, dew or
   drops on the dome as cloud, fog as cloud. `sqm_mag` (mag/arcsec², approximate until calibrated) is the
   sky background normalised by exposure and gain, only at astronomical night (sun ≤
-  −18°), else null. `stars` is the number of stars detected at night, else null.
+  −18°), else null. `stars` is the number of stars detected at night, else null. `hfr` (optional) is the
+  star size at night (sun ≤ −12°), else null: the median half-flux radius in pixels of
+  up to 25 unsaturated stars in the central 40 % of the short side (the zenith), measured
+  on the full frame; null with fewer than 3 such stars. Lower is sharper; it grows when the
+  focus shifts or the dome fogs up before the stars disappear.
   `cloud_map` (optional, roadmap H4; null or missing unless all of: sun ≤ −12°, a trusted
   clock and an orientation, §4.8): cloud cover per sky cell, a list of 24 values, each
   0..1 or null (not judgeable). Cells are 8 azimuth sectors × 3 altitude bands, listed band
@@ -949,7 +953,14 @@ also works without any hub.
 
 **Focus mode.** Shows a sharpness score (variance of the Laplacian on the central crop,
 higher is sharper), the best value since focus mode started, and a 1:1 crop of the
-centre. Frames are not stored, follow each other without delay, and exposure is capped
+centre. When there are stars it also shows, and leads with, the star size: the median
+half-flux radius (HFR, px, lower is sharper) of up to 25 unsaturated stars in the
+central quarter of the short side, smoothed over the last 5 frames (from 5 on without
+the smallest and largest), the best value since focus mode started, the number of stars,
+the HFR toward the edge (median of four crops at 62 % of the radius, so a tilted lens or
+a soft edge shows) and its course over the last 60 frames. With fewer than 3 stars (day,
+clouds) the HFR is empty and the sharpness score remains. The idea comes from Zenivo
+(MIT); motor focus is not offered, the curated lenses are focused by hand. Frames are not stored, follow each other without delay, and exposure is capped
 at 2 s with the rest moved into gain (§4.3), so feedback comes every few seconds even at
 night. The hub switches it with the `focus_mode` command, args `{on: bool}` (§6.5).
 

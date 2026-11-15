@@ -27,6 +27,7 @@ import numpy as np
 import numpy.typing as npt
 
 from allskyhub_agent.core.metering import circle_mask
+from allskyhub_agent.detect.hfr import centre_crop, star_hfr
 from allskyhub_protocol import FrameInfo, SkyMetrics
 
 Mask = npt.NDArray[np.bool_]
@@ -49,6 +50,7 @@ class SkyConfig:
     night_sun_deg: float = -12.0  # star based values at or below this sun elevation
     day_sun_deg: float = 3.0  # colour based cloud cover at or above this sun elevation
     sqm_sun_deg: float = -18.0  # SQM only at astronomical night
+    hfr_crop: float = 0.4  # star size in this central part of the short side (zenith)
 
 
 _template: npt.NDArray[np.uint8] | None = None
@@ -173,9 +175,13 @@ class SkyMeter:
         stars: int | None = None
         mag: float | None = None
         cloud_map: list[float | None] | None = None
+        hfr: float | None = None
         if sun <= cfg.night_sun_deg:
             xs, ys = star_points(gray, mask, cfg.star_threshold)
             stars = count_stars(xs, ys)
+            # SPEC §6.3 `hfr`: on the full frame, a smaller one would make stars look sharp.
+            sizes = star_hfr(centre_crop(gray, cfg.hfr_crop))
+            hfr = sizes.hfr if sizes is not None else None
             up = inner[ys, xs]
             cloud = night_cloud_cover((h, w), inner, xs[up], ys[up], cfg.cells_across)
             if self._mapper is not None:
@@ -197,6 +203,7 @@ class SkyMeter:
             cloud_cover=cloud,
             sqm_mag=mag,
             stars=stars,
+            hfr=hfr,
             cloud_map=cloud_map,
         )
         with self._lock:

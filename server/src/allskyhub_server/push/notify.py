@@ -274,7 +274,7 @@ class Notifier:
                 if not online:
                     continue  # nothing new can be known; keep what was reported
                 found = await health.full_check(db, device, online, now, self.forecast)
-                problems = {p.key: p for p in found}
+                problems = {p.key: p for p in found if p.push}  # draft E: focus stays quiet
                 before = set(device.health_notified or [])
                 new = [p for k, p in problems.items() if k not in before]
                 gone = before - problems.keys()

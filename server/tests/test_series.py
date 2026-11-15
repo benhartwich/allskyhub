@@ -91,7 +91,7 @@ async def _camera(app: FastAPI, client: httpx.AsyncClient, new_client: httpx.Asy
         for i in range(30):
             at = now - dt.timedelta(minutes=i)
             db.add(SkySample(device_id=dev.device_id, night_id="20261008", at=at,
-                             cloud_cover=0.1, sqm_mag=21.2, stars=300))  # fmt: skip
+                             cloud_cover=0.1, sqm_mag=21.2, stars=300, hfr=1.9))  # fmt: skip
             db.add(StatusSample(device_id=dev.device_id, at=at, exposure_us=20_000_000,
                                 gain=250, cpu_temp_c=45.0))  # fmt: skip
         db.add(NightStat(device_id=dev.device_id, night_id="20261008", clear_hours=5.5,
@@ -116,6 +116,7 @@ async def test_owner_sees_sky_and_camera_state(
     assert data["tz_assumed"] is False  # the camera named it
     assert "locale_guard.js" in page.text  # before uPlot: odd browser languages break it
     assert len(data["sky"]["t"]) == 30
+    assert data["sky"]["hfr"][0] == 1.9  # draft E: the star size, for the camera's own viewers
     assert data["status"]["exposure"][0] == 20.0
     assert "ephemeris" in data
 
@@ -149,6 +150,8 @@ async def test_public_viewer_has_no_camera_internals(
     data = (await new_client.get(f"/sky/{slug}/charts/data", params={"hours": 24})).json()
     assert "status" not in data
     assert len(data["sky"]["sqm"]) == 30
+    assert "hfr" not in data["sky"]  # about the camera, not the sky
+    assert "hfr_usual" not in data
 
     # The owner can hide the sky values; then the viewer is gone too.
     maker: async_sessionmaker[AsyncSession] = app.state.sessionmaker

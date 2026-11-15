@@ -35,6 +35,7 @@ from allskyhub_server.devices import (
     sat_globe,
     settings_form,
     sharing,
+    star_size,
     tonight,
     youtube,
 )
@@ -188,6 +189,7 @@ async def _camera_context(
         "nowcast": await nowcast.for_device(db, forecast, device, now),
         "last_night": await _last_night(db, device),
         "health": await health.full_check(db, device, online, now, forecast),
+        "hfr_usual": await star_size.usual_now(db, device),
         "paused": health.paused(device),
         "setup_steps": health.setup_steps(device) if online else [],
         "reboot_required": health.reboot_required(device),
@@ -261,7 +263,11 @@ async def live_fragment(
     return render(
         request,
         "_live.html",
-        {"device": device, "online": registry.is_online(device.id)},
+        {
+            "device": device,
+            "online": registry.is_online(device.id),
+            "hfr_usual": await star_size.usual_now(db, device),
+        },
         session=session,
     )
 

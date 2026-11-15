@@ -19,7 +19,7 @@ from zoneinfo import ZoneInfo
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from allskyhub_server.devices import astro, tonight
+from allskyhub_server.devices import astro, star_size, tonight
 from allskyhub_server.models import Device, NightStat, SkySample, StatusSample
 
 GAP_S = 15 * 60
@@ -41,6 +41,9 @@ SKY_FIELDS = (
     Field("sqm", lambda s: s.sqm_mag),
     Field("stars", lambda s: None if s.stars is None else float(s.stars)),
 )
+# Draft E: the star size, only for the camera's own viewers (it is about the camera, not
+# the sky).
+HFR_FIELD = Field("hfr", lambda s: s.hfr)
 STATUS_FIELDS = (
     Field("exposure", lambda s: None if not s.exposure_us else s.exposure_us / 1e6),
     Field("gain", lambda s: s.gain),
@@ -216,8 +219,12 @@ async def load(
         "night": rng.night_id,
         "hours": rng.hours,
         "bucket_s": bucket_s,
-        "sky": columns(list(sky_rows), SKY_FIELDS, bucket_s),
+        "sky": columns(
+            list(sky_rows), SKY_FIELDS if public else (*SKY_FIELDS, HFR_FIELD), bucket_s
+        ),
     }
+    if not public:
+        result["hfr_usual"] = await star_size.usual(db, device, rng.night_id)
     if with_status:
         status_rows = await db.scalars(
             select(StatusSample)

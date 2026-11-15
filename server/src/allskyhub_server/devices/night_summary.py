@@ -24,6 +24,7 @@ from allskyhub_server.models import EventRecord, SkySample
 SQM_UNIT = "\u00a0mag/\u2060″²"
 
 CLEAR_BELOW = 0.3  # cloud cover
+MIN_CLEAR_SIZES = 6  # star sizes (SPEC §6.3 `hfr`) for a night's median
 # Pictures worth showing as "the night's best", rarest first.
 _BEST_ORDER = ("aurora", "nlc", "meteor", "lightning")
 
@@ -41,6 +42,7 @@ class NightSummary:
     overflights: str | None = None
     clear_hours: float | None = None
     best_sqm: float | None = None
+    median_hfr: float | None = None  # draft E: star size of the clear measurements, px
     best: EventRecord | None = None
 
     @property
@@ -163,6 +165,13 @@ async def summarize(db: AsyncSession, device_id: str, night_id: str) -> NightSum
     sqms = [s.sqm_mag for s in samples if s.sqm_mag is not None]
     if sqms:
         summary.best_sqm = max(sqms)
+    sizes = [
+        s.hfr
+        for s in samples
+        if s.hfr is not None and s.cloud_cover is not None and s.cloud_cover < CLEAR_BELOW
+    ]
+    if len(sizes) >= MIN_CLEAR_SIZES:
+        summary.median_hfr = round(statistics.median(sizes), 2)
     return summary
 
 

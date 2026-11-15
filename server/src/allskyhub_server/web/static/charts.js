@@ -37,6 +37,14 @@
       axes: [{ scale: "pct", label: "Bewölkung %" }, { scale: "n", label: "Sterne", side: 1 }],
     },
     {
+      // Draft E: the star size, only in the camera's own data (devices/series.py) and left
+      // out where there is none. Upside down, so sharper is up like a darker sky; the
+      // dashed line is the camera's usual value (`hfr_usual`).
+      id: "hfr", title: "Sternschärfe", source: "sky", height: 200, optional: true, usual: "hfr_usual",
+      series: [{ key: "hfr", label: "Sternschärfe", unit: "px", color: "--chart-hfr", scale: "hfr", digits: 1 }],
+      axes: [{ scale: "hfr", label: "px (↑ schärfer)" }],
+    },
+    {
       id: "exposure", title: "Belichtung und Gain", source: "status", height: 200, status: true,
       series: [
         { key: "exposure", label: "Belichtung", unit: "s", color: "--chart-exposure", scale: "s", digits: 3 },
@@ -74,6 +82,14 @@
     c: { auto: true, range: (u, min, max) => padRange(min, max, 0.1, 2) },
     deg: { auto: false, range: [-30, 90] },
     onoff: { auto: false, range: [0, 4] },
+    hfr: {
+      auto: true, dir: -1,
+      range: (u, min, max) => {
+        const usual = data?.hfr_usual;
+        if (usual == null || min == null || max == null) return padRange(min, max, 0.15, 0.5);
+        return padRange(Math.min(min, usual), Math.max(max, usual), 0.15, 0.5);
+      },
+    },
   };
   const BANDS = [
     [0, "--chart-day"],
@@ -190,6 +206,32 @@
     ctx.restore();
   };
 
+  // The camera's usual value as a dashed line with its number (panel.usual names it).
+  const drawUsual = (panel) => (u) => {
+    const value = panel.usual ? data[panel.usual] : null;
+    if (value == null) return;
+    const s = panel.series[0];
+    const { ctx } = u;
+    const { left, top, width, height } = u.bbox;
+    const y = u.valToPos(value, s.scale, true);
+    if (y < top || y > top + height) return;
+    const ratio = window.devicePixelRatio || 1;
+    ctx.save();
+    ctx.strokeStyle = css("--ok");
+    ctx.fillStyle = css("--ok");
+    ctx.globalAlpha = 0.8;
+    ctx.lineWidth = ratio;
+    ctx.setLineDash([5 * ratio, 5 * ratio]);
+    ctx.beginPath();
+    ctx.moveTo(left, y);
+    ctx.lineTo(left + width, y);
+    ctx.stroke();
+    ctx.font = `${11 * ratio}px ${getComputedStyle(document.body).fontFamily}`;
+    ctx.textAlign = "right";
+    ctx.fillText(`üblich ${num(value, s.digits)} ${s.unit}`, left + width - 4 * ratio, y - 4 * ratio);
+    ctx.restore();
+  };
+
   const build = (panel, width) => {
     const t = tableFor(panel);
     const box = document.createElement("figure");
@@ -248,6 +290,7 @@
       legend: { live: true },
       hooks: {
         drawClear: [drawBands],
+        draw: [drawUsual(panel)],
         setScale: [(u, key) => key === "x" && follow(u)],
       },
     };
@@ -275,6 +318,7 @@
     const width = Math.max(280, panelsBox.clientWidth);
     for (const panel of PANELS) {
       if (panel.status && !withStatus) continue;
+      if (panel.optional && !tableFor(panel)) continue;
       const plot = build(panel, width);
       if (plot) plots.push(plot);
     }
@@ -378,6 +422,7 @@
     for (const panel of PANELS) {
       if (panel.status && !withStatus) continue;
       for (const s of panel.series) {
+        if (!data[panel.source]?.[s.key]) continue; // the star size is not in every answer
         if (!cols.some((c) => c.key === s.key)) cols.push({ ...s, source: panel.source });
       }
     }

@@ -7,12 +7,14 @@ exist; the statistics then outlive them.
 from __future__ import annotations
 
 import datetime as dt
+import statistics
 from dataclasses import dataclass, field
 
-from sqlalchemy import select, union
+from sqlalchemy import func, select, union
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from allskyhub_server.devices import star_size
 from allskyhub_server.devices.event_text import shower_name
 from allskyhub_server.devices.night_summary import summarize
 from allskyhub_server.i18n import english
@@ -53,18 +55,29 @@ async def refresh_night(db: AsyncSession, device_id: str, night_id: str) -> None
     """One night in numbers, again (also after a label changed, SPEC §6.4: a false
     positive counts nowhere). The caller commits."""
     s = await summarize(db, device_id, night_id)
-    values = {
+    device = await db.get(Device, device_id)
+    values: dict[str, object] = {
         "clear_hours": s.clear_hours,
         "best_sqm": s.best_sqm,
+        "median_hfr": s.median_hfr,
         "meteors": s.meteor_count,
         "showers": s.showers,
         "aurora": s.aurora,
         "storms": s.storms,
     }
+    insert = pg_insert(NightStat).values(
+        device_id=device_id,
+        night_id=night_id,
+        hfr_camera=star_size.camera_key(device) if device else None,
+        **values,
+    )
+    # The camera of the night's first pass stays (a later camera change must not relabel
+    # the nights still recomputed).
+    camera = func.coalesce(NightStat.hfr_camera, insert.excluded.hfr_camera)
     await db.execute(
-        pg_insert(NightStat)
-        .values(device_id=device_id, night_id=night_id, **values)
-        .on_conflict_do_update(index_elements=["device_id", "night_id"], set_=values)
+        insert.on_conflict_do_update(
+            index_elements=["device_id", "night_id"], set_={**values, "hfr_camera": camera}
+        )
     )
 
 
@@ -75,6 +88,7 @@ class Period:
     clear_nights: int = 0  # at least CLEAR_NIGHT_HOURS clear
     clear_hours: float = 0.0
     best_sqm: float | None = None
+    sizes: list[float] = field(default_factory=list[float])  # draft E: clear nights' HFR
     meteors: int = 0
     aurora: int = 0
     storms: int = 0
@@ -86,9 +100,16 @@ class Period:
             self.clear_nights += n.clear_hours >= CLEAR_NIGHT_HOURS
         if n.best_sqm is not None:
             self.best_sqm = max(self.best_sqm or n.best_sqm, n.best_sqm)
+        if n.median_hfr is not None:
+            self.sizes.append(n.median_hfr)
         self.meteors += n.meteors
         self.aurora += n.aurora
         self.storms += n.storms
+
+    @property
+    def hfr(self) -> float | None:
+        """The median star size of the period's clear nights, px."""
+        return round(statistics.median(self.sizes), 2) if self.sizes else None
 
 
 @dataclass
@@ -98,6 +119,10 @@ class Year:
     total: Period
     showers: dict[str, int] = field(default_factory=dict[str, int])
     years: list[int] = field(default_factory=list[int])  # years with data, newest first
+
+    @property
+    def has_hfr(self) -> bool:
+        return any(m.sizes for m in self.months)
 
     @property
     def max_clear_hours(self) -> float:

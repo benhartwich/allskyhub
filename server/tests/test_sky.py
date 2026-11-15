@@ -22,12 +22,18 @@ NIGHT = "20261008"
 T0 = dt.datetime(2026, 10, 8, 19, 0, tzinfo=dt.UTC)
 
 
-def status(minute: int, clouds: float | None, sqm: float | None, stars: int | None) -> Status:
+def status(
+    minute: int,
+    clouds: float | None,
+    sqm: float | None,
+    stars: int | None,
+    hfr: float | None = None,
+) -> Status:
     return Status(
         mode=Mode.NIGHT, exposure_us=20_000_000, gain=100, mean=0.2, uptime_s=60,
         time_trusted=True,
         sky=SkyMetrics(at=T0 + dt.timedelta(minutes=minute), night_id=NIGHT,
-                       cloud_cover=clouds, sqm_mag=sqm, stars=stars),
+                       cloud_cover=clouds, sqm_mag=sqm, stars=stars, hfr=hfr),
     )  # fmt: skip
 
 
@@ -40,7 +46,7 @@ async def test_sky_samples_stored_charted_and_purged(
         await send(ws, status(0, None, None, None))  # dusk: nothing to judge
         await send(ws, status(30, 0.9, 18.8, 40))
         await send(ws, status(30, 0.9, 18.8, 40))  # repeated until the next frame
-        await send(ws, status(60, 0.05, 20.8, 900))
+        await send(ws, status(60, 0.05, 20.8, 900, hfr=1.84))
 
         async def stored() -> bool:
             async with app.state.sessionmaker() as db:
@@ -56,6 +62,7 @@ async def test_sky_samples_stored_charted_and_purged(
     api = f"/api/v1/cameras/{dev.device_id}"
     sky = (await client.get(f"{api}/nights/{NIGHT}/sky", headers=auth)).json()
     assert [s["cloud_cover"] for s in sky] == [None, 0.9, 0.05]
+    assert [s["hfr"] for s in sky] == [None, None, 1.84]  # draft E
     nights = (await client.get(f"{api}/nights", headers=auth)).json()
     assert nights[0]["sky"] == 3
 
@@ -65,6 +72,8 @@ async def test_sky_samples_stored_charted_and_purged(
     charts = await client.get(f"/cameras/{dev.device_id}/charts/data", params={"night": NIGHT})
     data = charts.json()
     assert data["sky"]["sqm"][-1] == 20.8
+    assert data["sky"]["hfr"][-1] == 1.84
+    assert data["hfr_usual"] is None  # no clear nights before this one yet
     assert "Himmelsdaten" in (await client.get(f"/cameras/{dev.device_id}/gallery")).text
 
     async with app.state.sessionmaker() as db:

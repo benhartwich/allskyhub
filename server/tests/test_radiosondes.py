@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import datetime as dt
 
 import httpx
@@ -108,3 +109,36 @@ async def test_no_balloons_without_an_answer(app: FastAPI, client: httpx.AsyncCl
     live = (await client.get(f"/cameras/{dev.device_id}/live")).text
     assert "Wetterballon ·" not in live
     assert "SondeHub" not in live
+
+
+def test_trail_ends_at_the_marker_of_an_older_balloon() -> None:
+    """Heard 8 minutes ago: the marker is carried on 90 s only, and the trail with it
+    (allsky review of #462)."""
+    old = radiosondes.Sonde(
+        serial="Y1", kind="RS41", at=AT - dt.timedelta(minutes=8), lat=LAT + 0.9, lon=LON,
+        alt_m=25000.0, vel_h=20.0, vel_v=5.0, heading=0.0,
+    )  # fmt: skip
+    lay = sky_layers.build(_status(), AT, None, [old])
+    assert lay is not None
+    [balloon] = lay.balloons
+    start = balloon.trail[1:].split("L")[0].split()
+    assert (round(float(start[0])), round(float(start[1]))) == (round(balloon.x), round(balloon.y))
+    assert radiosondes.ahead(old, AT) == 90.0
+
+
+async def test_asks_for_the_last_minutes_and_backs_off() -> None:
+    asked: list[httpx.Request] = []
+
+    def answer(request: httpx.Request) -> httpx.Response:
+        asked.append(request)
+        return httpx.Response(429, headers={"Retry-After": "300"})
+
+    cache = radiosondes.Radiosondes(httpx.AsyncClient(transport=httpx.MockTransport(answer)))
+    cache.warm(LAT, LON)
+    await asyncio.gather(*cache._tasks)  # pyright: ignore[reportPrivateUsage]
+    assert asked[0].url.params["last"] == "600"
+    assert asked[0].url.params["lat"] == "50.0"
+    cache.warm(LAT, LON)  # Retry-After: not again yet
+    assert not cache._tasks  # pyright: ignore[reportPrivateUsage]
+    assert len(asked) == 1
+    await cache.close()

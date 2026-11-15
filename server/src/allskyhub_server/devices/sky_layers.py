@@ -156,7 +156,7 @@ def _balloons(
         x, y = cast(tuple[float, float], pixel(alt, az))
         if not (math.isfinite(x) and math.isfinite(y)):
             continue
-        ahead = (at - sonde.at).total_seconds()
+        ahead = radiosondes.ahead(sonde, at)  # where the marker is, as now_at
         points: list[tuple[float, float]] = []
         for k in range(6):
             back = ahead - radiosondes.TRAIL.total_seconds() * k / 5

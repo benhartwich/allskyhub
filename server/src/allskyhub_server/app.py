@@ -341,6 +341,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             if li_store is not None:
                 await li_store.client.aclose()
             await app.state.paddle.client.aclose()
+            await app.state.radiosondes.close()
             await engine.dispose()
 
     app = FastAPI(

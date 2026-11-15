@@ -12,6 +12,7 @@ gone silent and is left out. Its direction from the camera is exact: like the sa
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import datetime as dt
 import logging
 import math
@@ -28,6 +29,7 @@ CREDIT = "Wetterballons: SondeHub (CC BY-SA 2.0)"
 CELL_DEG = 0.5
 RADIUS_M = 350_000
 REFRESH = 60.0  # seconds between two questions for one cell
+BACKOFF_MAX = 1800.0  # after errors, doubling from REFRESH up to this
 MAX_AGE = dt.timedelta(minutes=10)
 MAX_EXTRAPOLATE = dt.timedelta(seconds=90)
 TRAIL = dt.timedelta(minutes=5)  # drawn back along its speed: where it came from
@@ -105,13 +107,17 @@ def moved(sonde: Sonde, seconds: float) -> tuple[float, float, float]:
     return lat, lon, max(sonde.alt_m + sonde.vel_v * seconds, 0.0)
 
 
+def ahead(sonde: Sonde, at: dt.datetime) -> float:
+    """How far (seconds) ``sonde`` is carried on from when it was heard to ``at``: at most
+    ``MAX_EXTRAPOLATE``, where the guess along a straight line ends."""
+    return min(max((at - sonde.at).total_seconds(), 0.0), MAX_EXTRAPOLATE.total_seconds())
+
+
 def now_at(sonde: Sonde, at: dt.datetime) -> tuple[float, float, float] | None:
     """Its place at ``at``; None when it has not been heard for ``MAX_AGE``."""
-    age = at - sonde.at
-    if age > MAX_AGE:
+    if at - sonde.at > MAX_AGE:
         return None
-    ahead = min(max(age.total_seconds(), 0.0), MAX_EXTRAPOLATE.total_seconds())
-    return moved(sonde, ahead)
+    return moved(sonde, ahead(sonde, at))
 
 
 def _ecef(lat: float, lon: float, h: float) -> tuple[float, float, float]:
@@ -151,6 +157,8 @@ class Radiosondes:
         self._cells: dict[tuple[float, float], tuple[float, list[Sonde]]] = {}
         self._busy: set[tuple[float, float]] = set()
         self._tasks: set[asyncio.Task[None]] = set()
+        self._errors: dict[tuple[float, float], int] = {}
+        self._not_before: dict[tuple[float, float], float] = {}
 
     def near(self, lat: float, lon: float) -> list[Sonde] | None:
         """The balloons of the camera's cell; None before the first answer."""
@@ -167,7 +175,8 @@ class Radiosondes:
         kept = self._cells.get(key)
         if self._client is None or key in self._busy:
             return
-        if kept is not None and time.monotonic() - kept[0] < REFRESH:
+        now = time.monotonic()
+        if (kept is not None and now - kept[0] < REFRESH) or now < self._not_before.get(key, 0.0):
             return
         self._busy.add(key)
         task = asyncio.create_task(self._fetch(key))
@@ -181,15 +190,36 @@ class Radiosondes:
         try:
             answer = await client.get(
                 URL,
-                params={"lat": f"{key[0]:.1f}", "lon": f"{key[1]:.1f}", "distance": RADIUS_M},
+                params={
+                    "lat": f"{key[0]:.1f}", "lon": f"{key[1]:.1f}", "distance": RADIUS_M,
+                    # Only those heard lately; SondeHub's default is the last day.
+                    "last": int(MAX_AGE.total_seconds()),
+                },
                 timeout=15.0,
-            )
+            )  # fmt: skip
             answer.raise_for_status()
             self._cells[key] = (time.monotonic(), parse(answer.json()))
+            self._errors.pop(key, None)
+            self._not_before.pop(key, None)
         except (httpx.HTTPError, ValueError) as exc:
             log.info("radiosondes not loaded: %s", exc)
-            kept = self._cells.get(key)
-            # Keep the last list, and wait a full interval before asking again.
-            self._cells[key] = (time.monotonic(), kept[1] if kept else [])
+            errors = self._errors.get(key, 0) + 1
+            self._errors[key] = errors
+            wait = min(REFRESH * 2**errors, BACKOFF_MAX)
+            if isinstance(exc, httpx.HTTPStatusError):
+                retry = _num(exc.response.headers.get("retry-after"))
+                if retry is not None:
+                    wait = min(max(wait, retry), 3600.0)
+            self._not_before[key] = time.monotonic() + wait
         finally:
             self._busy.discard(key)
+
+    async def close(self) -> None:
+        """At shutdown: the questions still open and the client."""
+        for task in list(self._tasks):
+            task.cancel()
+        for task in list(self._tasks):
+            with contextlib.suppress(asyncio.CancelledError):
+                await task
+        if self._client is not None:
+            await self._client.aclose()

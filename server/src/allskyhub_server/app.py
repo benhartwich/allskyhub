@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import logging
+import re
 import time
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
@@ -182,12 +183,17 @@ def _wants_html(request: Request) -> bool:
     return not request.url.path.startswith(("/api/", "/device/"))
 
 
+_VERSIONED_DIR = re.compile(r"^[a-z0-9_]+-\d+\.\d+\.\d+/")
+
+
 class CachedStaticFiles(StaticFiles):
-    """Pages link static files with ``?v=<content hash>``: those never change."""
+    """Pages link static files with ``?v=<content hash>``: those never change. Neither do
+    files in a folder named with its version (``three-0.186.1/``), which load each other
+    by relative imports without a query."""
 
     async def get_response(self, path: str, scope: Scope) -> Response:
         response = await super().get_response(path, scope)
-        versioned = b"v=" in scope.get("query_string", b"")
+        versioned = b"v=" in scope.get("query_string", b"") or bool(_VERSIONED_DIR.match(path))
         response.headers["Cache-Control"] = (
             "public, max-age=31536000, immutable" if versioned else "no-cache"
         )

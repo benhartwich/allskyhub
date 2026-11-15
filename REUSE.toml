@@ -74,7 +74,7 @@ SPDX-FileCopyrightText = "2010-2023 Volodymyr Agafonkin, 2010-2011 CloudMade"
 SPDX-License-Identifier = "BSD-2-Clause"
 
 [[annotations]]
-path = "server/src/allskyhub_server/web/static/three/**"
+path = "server/src/allskyhub_server/web/static/three-0.186.1/**"
 SPDX-FileCopyrightText = "2010-2026 three.js authors"
 SPDX-License-Identifier = "MIT"
 

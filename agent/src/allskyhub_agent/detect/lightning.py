@@ -15,6 +15,7 @@ lamp-coloured flash of the storm; colour alone or place alone also hits real sto
 
 from __future__ import annotations
 
+import math
 from collections import deque
 from dataclasses import dataclass
 from datetime import datetime
@@ -48,6 +49,12 @@ class LightningConfig:
     lamp_blue_min: float = 0.37
     lamp_iou: float = 0.3  # lit areas on the GRID
     lamp_near_frac: float = 0.04  # centroids this close, as a share of the frame width
+    # SPEC §6.4 Clear sky check: lightning lights clouds or the horizon, not a small patch
+    # of clear sky (Benjamin, 2026-11-15: 233 such "flashes" in a week, none real).
+    clear_cloud_max: float = 0.1
+    clear_min_area_frac: float = 0.05
+    # Only high in the sky: a storm below the horizon lights a strip just above it.
+    clear_high_frac: float = 0.78  # of the image circle's radius, about 20° altitude
 
 
 GRID = (135, 240)  # rows, columns: the lit areas compared for the light source check
@@ -93,6 +100,7 @@ class _Pending:
     gray: Gray
     before: Gray
     lamp_coloured: bool = False
+    cloud: float | None = None  # cloud cover of the flash's frame
 
 
 def _same_exposure(a: FrameInfo, b: FrameInfo, tol: float) -> bool:
@@ -194,9 +202,15 @@ class LightningDetector:
         return flash, lit
 
     def feed(
-        self, frame: FrameInfo, gray: Gray, image_path: Path, rgb: Rgb | None = None
+        self,
+        frame: FrameInfo,
+        gray: Gray,
+        image_path: Path,
+        rgb: Rgb | None = None,
+        cloud: float | None = None,
     ) -> list[LightningHit]:
-        """`rgb` (the same frame in colour) enables the light source check."""
+        """`rgb` (the same frame in colour) enables the light source check, `cloud` (its
+        cloud cover, SPEC §6.3) the clear sky check."""
         cfg = self._cfg
         if frame.mode is not Mode.NIGHT or frame.sun_elevation > cfg.max_sun_deg:
             self.reset()
@@ -232,11 +246,18 @@ class LightningDetector:
             small = self._small
             coloured = self._lamp_coloured(small, small_before, found[1])
             self._pending = _Pending(frame, image_path, found[0], found[1], gray, prev[1],
-                                     coloured)  # fmt: skip
+                                     coloured, cloud)  # fmt: skip
         return hits
 
     def _confirmed(self, p: _Pending) -> LightningHit | None:
         cfg = self._cfg
+        if (
+            p.cloud is not None
+            and p.cloud <= cfg.clear_cloud_max
+            and p.flash.area_frac < cfg.clear_min_area_frac
+            and self._high(p)
+        ):
+            return None  # SPEC §6.4 Clear sky check: no event, no storm
         at = p.frame.captured_at
         t = at.timestamp()
         new_storm = self._storm_start is None or t - self._flashes[-1] > cfg.storm_window_s
@@ -255,6 +276,13 @@ class LightningDetector:
         storm = sum(1 for f in self._flashes if t - f <= cfg.storm_window_s)
         return LightningHit(p.frame, p.image_path, p.flash, storm, start, self._seq, lamp,
                             also)  # fmt: skip
+
+    def _high(self, p: _Pending) -> bool:
+        """The lit area's centre is above about 20° (inside 0.78 of the image circle)."""
+        h, w = p.gray.shape[:2]
+        radius = min(h, w) * (self._mask_frac or 0.48)
+        dist = math.hypot(p.flash.x - (w - 1) / 2, p.flash.y - (h - 1) / 2)
+        return dist <= self._cfg.clear_high_frac * radius
 
     def flush(self) -> list[LightningHit]:
         """End of the night: the last candidate can't be confirmed."""

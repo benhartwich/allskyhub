@@ -672,6 +672,14 @@ neither starts nor extends a storm; `off` does not check. On the test camera's n
 caught 72 of 249 lamp flashes and none of 213 real ones; the rest of the false storms were
 drifting cloud edges lit by sky glow, which this check does not address.
 
+**Clear sky check** (Benjamin, 2026-11-15). Lightning lights up clouds or the horizon, not
+a small patch of clear sky: a flash whose frame has a `cloud_cover` (§6.3) of at most 0.1,
+whose lit area is below 5 % of the sky and whose centre is above about 20° (within 0.78 of
+the image circle's radius; a storm below the horizon lights a strip just above it) is no
+event at all and neither starts nor
+extends a storm (233 such flashes in a week on his camera, all at 0 % cloud, none confirmed
+by the satellite, §7.10). Without a cloud cover the flash counts as before.
+
 Events are sent when detected and, after every (re)connect, again for the current
 night (§6.7).
 

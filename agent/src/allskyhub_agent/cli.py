@@ -74,6 +74,7 @@ from allskyhub_agent.mqtt import MqttConfig, MqttPublisher
 from allskyhub_agent.process.hotpixels import HotPixels
 from allskyhub_agent.process.livestack import LiveStack
 from allskyhub_agent.process.skymask import SkyMask, parse_edits
+from allskyhub_agent.process.whitebalance import NightWhiteBalance
 from allskyhub_agent.products.build import (
     NightProducts,
     ProductConfig,
@@ -131,6 +132,7 @@ from allskyhub_protocol import (
     Observatory,
     SetSettingsArgs,
     SettingSpec,
+    SkyMetrics,
     Status,
     UpdateState,
 )
@@ -424,6 +426,11 @@ def forget_pixel_maps(calibration: Path) -> None:
         except OSError as exc:
             log.warning("cannot remove %s: %s", name, exc)
     log.info("flip or rotation changed: hot pixels, sky mask and orientation are learned again")
+
+
+def _cloudy(sky: SkyMetrics | None) -> bool:
+    """SPEC §4.11: clouds reflect street lights, so the white balance holds above 0.5."""
+    return sky is not None and sky.cloud_cover is not None and sky.cloud_cover > 0.5
 
 
 def _exists(path: Path) -> bool:
@@ -1407,6 +1414,10 @@ def main(argv: list[str] | None = None) -> int:
         flip=tuned.image_flip,
         rotate=int(tuned.image_rotate),
         live_stack=LiveStack(LIVE_WIDTH) if tuned.live_stack == "auto" else None,
+        white_balance=NightWhiteBalance(Path(args.data) / "calibration" / "whitebalance.json")
+        if tuned.night_wb == "auto"
+        else None,
+        wb_hold=lambda: detect.aurora_ongoing or _cloudy(sky_meter.latest),
     )
 
     def announce_products(night: str) -> None:

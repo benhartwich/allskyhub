@@ -21,12 +21,20 @@ from allskyhub_agent.live import LiveState
 from allskyhub_agent.process.hotpixels import HotPixels
 from allskyhub_agent.process.livestack import LiveStack
 from allskyhub_agent.process.skymask import SkyMask
+from allskyhub_agent.process.whitebalance import (
+    Gains,
+    NightWhiteBalance,
+    WhiteBalanceCamera,
+    inner_sky,
+)
 from allskyhub_agent.store.images import ImageStore, night_id
 from allskyhub_protocol import FrameInfo, Mode
 from allskyhub_sky.astro import bright_moon_up
 
 log = logging.getLogger(__name__)
 
+# SPEC §4.11: the sky above about 20°, as a share of the image circle's radius.
+WB_SKY_FRAC = 0.78
 # Name reported for focus-mode frames, which are not stored (SPEC §7).
 FOCUS_FRAME_NAME = "focus.jpg"
 PAUSE_POLL_S = 2.0
@@ -68,6 +76,8 @@ class Runner:
         flip: str = "none",
         rotate: int = 0,
         live_stack: LiveStack | None = None,
+        white_balance: NightWhiteBalance | None = None,
+        wb_hold: Callable[[], bool] | None = None,
     ) -> None:
         self._cam = camera
         self._ae = auto_exposure
@@ -96,6 +106,9 @@ class Runner:
         self._flip = flip
         self._rotate = rotate
         self._stack = live_stack  # SPEC §4.12: only the live image
+        # SPEC §4.11: only cameras whose white balance the agent can set.
+        self._wb = white_balance if isinstance(camera, WhiteBalanceCamera) else None
+        self._wb_hold = wb_hold or (lambda: False)
 
     @property
     def mode(self) -> Mode | None:
@@ -123,6 +136,10 @@ class Runner:
 
         focus = self.focus_mode
         settings = self._ae.current(mode, focus)
+        if self._wb is not None and isinstance(self._cam, WhiteBalanceCamera):
+            # SPEC §4.11: the learned gains at night, the normal ones by day.
+            g = self._wb.gains if mode is Mode.NIGHT else Gains()
+            self._cam.set_white_balance(g.red, g.blue)
         frame = self._cam.capture(CaptureRequest(settings.exposure_us, settings.gain))
         # SPEC §4.1: turned before anything else sees the frame.
         image = turn(frame.image, self._flip, self._rotate)
@@ -168,6 +185,12 @@ class Runner:
         )
         if not focus and keep:
             self._store.append_index(info)
+        learn = not focus and mode is Mode.NIGHT and info.bad is None
+        if self._wb is not None and learn and self._wb.due(start):
+            mask = self._mask_for(image.shape[0], image.shape[1])
+            if mask is not None:
+                hold = self._moon or self._wb_hold()
+                self._wb.observe(start, image, inner_sky(mask, WB_SKY_FRAC), hold)
         if self._live is not None:
             shown = image
             if self._stack is not None:

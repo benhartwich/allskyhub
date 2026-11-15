@@ -275,6 +275,10 @@ default and change by at most 5 % per step. It holds the last values (does not l
 while the moon is up and at least half lit, while cloud cover is above 0.5 (clouds
 reflect street lights), and while an aurora is detected (§5.3), so a green sky stays
 green. By day and with `night_wb: fixed` the owner's or profile's values are used.
+Without an orientation, "above 20°" is the sky mask within 0.78 of the image circle's
+radius around the frame centre. The gains are kept in `<data>/calibration/whitebalance.json`
+as factors on the normal values. Only cameras whose white balance the agent sets (ZWO)
+do this; libcamera cameras keep their own AWB until their profile has fixed gains.
 
 ### 4.12 Live stacking
 

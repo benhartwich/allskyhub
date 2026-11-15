@@ -801,6 +801,29 @@ def build_schema(profile: Profile) -> list[SettingSpec]:
                     "help": {"de": "Leer: Wert der Kamera.", "en": "Empty: the camera's value."},
                 }
             )
+        entries.append(
+            {
+                "key": "night_wb",
+                "type": "choice",
+                "label": {"de": "Weißabgleich nachts", "en": "White balance at night"},
+                "group": {"de": "Farbe", "en": "Colour"},
+                "choices": [
+                    {
+                        "value": "auto",
+                        "label": {"de": "Am Himmel ausrichten", "en": "From the sky"},
+                    },
+                    {"value": "fixed", "label": {"de": "Fest", "en": "Fixed"}},
+                ],
+                "help": {
+                    "de": "„Am Himmel ausrichten“ stellt Rot und Blau nachts langsam so nach, "
+                    "dass der klare Himmel grau ist (höchstens ±40 %). Bei Mond, Wolken und "
+                    "Polarlicht bleibt es, wie es ist.",
+                    "en": '"From the sky" slowly adjusts red and blue at night so that the '
+                    "clear sky is grey (at most ±40 %). With the moon, clouds or an aurora "
+                    "it stays as it is.",
+                },
+            }
+        )
     entries.append(
         {
             "key": "jpeg_quality",

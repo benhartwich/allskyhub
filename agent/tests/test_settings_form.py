@@ -53,6 +53,7 @@ def test_values_report_every_key_and_fit_device_settings() -> None:
         "image_rotate": "0",
         "wb_r": 52,
         "wb_b": None,
+        "night_wb": "auto",
         "jpeg_quality": 90,
         "bad_frames": True,
         "bad_dark_pct": 2,

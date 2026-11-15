@@ -177,3 +177,41 @@ def test_live_stack_feeds_only_the_live_image(tmp_path: Path) -> None:
     live.set_focus_mode(True)
     runner.step()
     assert stack.size == 0
+
+
+class _WbCamera(SimCamera):
+    """A simulated camera whose white balance can be set (like ZWO)."""
+
+    def __init__(self, *args: object, **kwargs: object) -> None:
+        super().__init__(*args, **kwargs)  # type: ignore[arg-type]
+        self.wb: list[tuple[float, float]] = []
+
+    def set_white_balance(self, red: float, blue: float) -> None:
+        self.wb.append((red, blue))
+
+
+def test_night_white_balance_only_at_night(tmp_path: Path) -> None:
+    """SPEC §4.11: the learned gains at night, the normal ones by day."""
+    from allskyhub_agent.process.whitebalance import Gains, NightWhiteBalance
+
+    start = datetime(2026, 10, 6, 10, 0, tzinfo=UTC)
+    clock = SimClock(start)
+    profile = get_profile("sim")
+    cam = _WbCamera(lambda: 1.0, width=160, height=90, clock=clock)
+    wb = NightWhiteBalance(tmp_path / "wb.json")
+    wb._gains = Gains(0.8, 1.2)  # pyright: ignore[reportPrivateUsage]
+    runner = Runner(
+        camera=cam,
+        auto_exposure=AutoExposure(profile.exposure),
+        store=ImageStore(tmp_path, ZoneInfo("Europe/Vienna")),
+        clock=clock,
+        location=LOC,
+        profile=profile.id,
+        mask_radius_frac=profile.image_circle_frac,
+        white_balance=wb,
+    )
+    runner.step()
+    assert cam.wb[-1] == (1.0, 1.0)
+    clock.sleep(12 * 3600.0)  # 22:00 UTC: night
+    runner.step()
+    assert cam.wb[-1][0] < 1.0

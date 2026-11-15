@@ -218,3 +218,30 @@ def test_worker_reports_the_lamp_before_and_after(tmp_path: Path) -> None:
     first, second = "lightning-20260715T210100Z", "lightning-20260715T210400Z"
     assert order == [f"event {first}", f"lamp {second} False", f"event {second}",
                      f"lamp {first} True"]  # fmt: skip
+
+
+def test_a_small_patch_of_clear_sky_is_no_lightning() -> None:
+    """SPEC §6.4 Clear sky check (Benjamin, 2026-11-15)."""
+
+    def feed(cloud: float | None, y1: int) -> list[LightningHit]:
+        det = LightningDetector()
+        hits: list[LightningHit] = []
+        for i, img in enumerate([sky(1), flash(sky(2), y0=200, y1=y1), sky(3)]):
+            hits += det.feed(frame(i), img, Path(f"/x/{i}.jpg"), cloud=cloud)
+        return hits
+
+    small = 210  # 10 rows: about 2 % of the sky
+    assert feed(0.0, small) == []
+    assert len(feed(0.5, small)) == 1  # clouds: as before
+    assert len(feed(None, small)) == 1  # no cloud cover known: as before
+    assert len(feed(0.0, 300)) == 1  # a large lit area also on a clear sky
+
+
+def test_a_strip_above_the_horizon_stays_lightning_on_a_clear_sky() -> None:
+    """A storm below the horizon lights only the low sky (SPEC §6.4 Clear sky check)."""
+    det = LightningDetector(mask_radius_frac=0.48)
+    hits: list[LightningHit] = []
+    low = flash(sky(2), y0=325, y1=335)  # near the edge of the image circle
+    for i, img in enumerate([sky(1), low, sky(3)]):
+        hits += det.feed(frame(i), img, Path(f"/x/{i}.jpg"), cloud=0.0)
+    assert len(hits) == 1

@@ -774,7 +774,7 @@ class DetectionWorker:
         if self._on["meteor"]:
             self._emit(self._meteor.feed(job.frame, gray, job.path))
         if self._on["lightning"]:
-            self._emit_lightning(self._lightning.feed(job.frame, gray, job.path, rgb))
+            self._emit_lightning(self._lightning.feed(job.frame, gray, job.path, rgb, cloud))
         if self._on["aurora"]:
             self._emit_aurora(self._aurora.feed(job.frame, rgb, job.path, cloud))
         if self._nlc is not None:

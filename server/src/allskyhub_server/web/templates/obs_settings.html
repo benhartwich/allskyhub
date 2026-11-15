@@ -1,0 +1,45 @@
+{% extends "base.html" %}
+{% block title %}Für Streams · {{ device.name }} · allskyhub{% endblock %}
+{% block head %}<script src="{{ asset('copy.js') }}" defer></script>
+<script src="{{ asset('obs_settings.js') }}" defer></script>{% endblock %}
+{% block content %}
+{% set names = {'sternbilder': 'Sternbilder', 'namen': 'Sternnamen', 'raster': 'Raster', 'planeten': 'Mond & Planeten', 'satelliten': 'Satelliten', 'ballons': 'Wetterballons'} %}
+<div class="page-head"><h1>Für Streams (OBS)</h1><p class="muted"><a href="/cameras/{{ device.id }}">{{ device.name }}</a> › Für Streams</p></div>
+<p class="muted">Eine Seite nur mit dem Himmelsbild, zum Einbinden in OBS als „Browserquelle“, zum Beispiel für einen YouTube-Livestream. Sie funktioniert auch, wenn deine Kamera nicht öffentlich ist. Wer die Adresse kennt, sieht das Bild; du kannst sie jederzeit widerrufen.</p>
+
+{% if token %}
+{% set address = base ~ '/obs/' ~ token %}
+<section class="card stack" data-obs-builder data-base="{{ address }}">
+  <h2>Deine Adresse</h2>
+  <p class="msg warn">Die Adresse wird nur jetzt angezeigt. Kopier sie dir; sonst erzeugst du unten eine neue.</p>
+  <fieldset class="stack">
+    <legend>Ebenen</legend>
+    {% for key in layers %}
+    <label class="check"><input type="checkbox" name="ebene" value="{{ key }}" {% if key in defaults %}checked{% endif %}> <span>{{ names[key] }}{% if key in tells_place %} <span class="muted small">– verrät den genauen Ort deiner Kamera</span>{% endif %}</span></label>
+    {% endfor %}
+    <label class="check"><input type="checkbox" name="text" value="aus"> <span>Ohne Textzeile (Name, Uhrzeit, Belichtung)</span></label>
+    <label class="check"><input type="checkbox" name="rotlicht" value="1"> <span>Rotlicht</span></label>
+  </fieldset>
+  <label>Adresse für OBS<input class="embed-code" data-obs-address readonly value="{{ address }}?ebenen=sternbilder"></label>
+  <p><button type="button" class="secondary small" data-copy="{{ address }}?ebenen=sternbilder" data-obs-copy>Kopieren</button></p>
+  <p class="muted small">In OBS: Quelle hinzufügen → Browser → diese Adresse, Breite 1920, Höhe 1080. Das Bild wechselt von selbst, sobald die Kamera ein neues schickt. Der Ort deiner Kamera wird nie eingeblendet.</p>
+</section>
+{% endif %}
+
+<section class="card stack">
+  {% if key %}
+  <h2>Aktive Adresse</h2>
+  <p>Eine Adresse für Streams ist aktiv, erzeugt {{ key.created_at | when }}.{% if not token %} Hast du sie nicht mehr, erzeuge eine neue: Die alte hört dann sofort auf zu funktionieren.{% endif %}</p>
+  <form method="post" action="/cameras/{{ device.id }}/stream/loeschen">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <button type="submit" class="secondary">Adresse widerrufen</button>
+  </form>
+  {% else %}
+  <h2>Noch keine Adresse</h2>
+  {% endif %}
+  <form method="post" action="/cameras/{{ device.id }}/stream">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <button type="submit">{{ 'Neue Adresse erzeugen' if key else 'Adresse erzeugen' }}</button>
+  </form>
+</section>
+{% endblock %}

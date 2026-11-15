@@ -366,6 +366,20 @@ class WidgetToken(Base):
     created_at: Mapped[dt.datetime] = mapped_column(_tz(), server_default=func.now())
 
 
+class ObsToken(Base):
+    """Draft C (2026-11-15): the key of a camera's stream view ``/obs/<key>``, stored as
+    SHA-256; one per camera, made and revoked by its owner. It shows the latest image and
+    its layers, nothing else, and only while its user still owns the camera."""
+
+    __tablename__ = "obs_token"
+    __table_args__ = (UniqueConstraint("device_id", name="uq_obs_token_device_id"),)
+
+    token_hash: Mapped[bytes] = mapped_column(LargeBinary(32), primary_key=True)
+    user_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("user_account.id", ondelete="CASCADE"))
+    device_id: Mapped[str] = mapped_column(ForeignKey("device.id", ondelete="CASCADE"))
+    created_at: Mapped[dt.datetime] = mapped_column(_tz(), server_default=func.now())
+
+
 class AppToken(Base):
     """Bearer token of a signed-in app (M3), stored as SHA-256."""
 

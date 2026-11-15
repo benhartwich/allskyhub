@@ -90,6 +90,7 @@ from allskyhub_server.web import (
     routes_legal,
     routes_local,
     routes_network,
+    routes_obs,
     routes_plus,
     routes_public,
     routes_report,
@@ -409,6 +410,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(lang.router)
     app.include_router(routes_account.router)
     app.include_router(routes_cameras.router)
+    app.include_router(routes_obs.router)  # draft C
     app.include_router(routes_stations.router)  # SPEC §10
     app.include_router(routes_late.router)  # SPEC §10.8
     app.include_router(routes_gallery.router)

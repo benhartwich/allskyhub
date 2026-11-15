@@ -179,10 +179,10 @@ async def _process(
     device.last_frame = dict(device.last_frame or {}) | {"time_source": origin}
     if end is None:
         clock = dict(device.clock or {})
-        # SPEC §10.9: a frame without the camera's time does not count for the clock, and
-        # the station is untrusted until its clock check passes again on timed frames.
+        # SPEC §10.9: like §10.7's fetch time, such a station is never trusted for pairing
+        # (stations.check_clock keeps "never").
         clock["trusted"] = False
-        clock["good"] = 0
+        clock["never"] = True
         device.clock = clock
     masks = image_url.OverlayMask(station_flow.masks_dir(state.settings))
     await asyncio.to_thread(masks.update, device.id, frame.jpeg)

@@ -192,6 +192,8 @@ def check_clock(device: Device, taken: dt.datetime, exposure_s: float, now: dt.d
         state["bad"] = 0
         if state["good"] >= CLOCK_GOOD_IN_A_ROW:
             state["trusted"] = True
+    if state.get("never"):
+        state["trusted"] = False  # SPEC §10.9: a Zenivo station that sent frames untimed
     state.setdefault("trusted", False)
     device.clock = state
 

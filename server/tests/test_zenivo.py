@@ -112,6 +112,14 @@ async def test_frame_without_telemetry_is_never_trusted(
     assert before - dt.timedelta(seconds=3) <= taken <= dt.datetime.now(dt.UTC)
     assert frame["time_source"] == "fetch"
     assert (device.clock or {}).get("trusted") is False
+    # Never again, however many timed frames follow (SPEC §10.9).
+    for _ in range(12):
+        await _send_frame(client, base)
+        end = dt.datetime.now(dt.UTC) - dt.timedelta(seconds=1)
+        await client.post(f"{base}/telemetry", json={"capture_time": end.isoformat()})
+    device = await _device(app, station_id)
+    assert (device.last_frame or {})["time_source"] == "station"
+    assert (device.clock or {}).get("trusted") is False
 
 
 async def test_logins_and_other_paths(

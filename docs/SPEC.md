@@ -1848,15 +1848,13 @@ client sends no token; the hub and its web server log this path without it.
 - `POST <base>/api/allsky/ingest/telemetry` — JSON; read: `capture_time` (ISO 8601 with
   offset, the end of the capture), `star_count`. It belongs to the frame received just
   before it (at most 30 s earlier); that frame's time is `capture_time` minus half the
-  exposure. A frame without telemetry (or with a `capture_time` more than a day off) has
-  the time of its arrival minus half the exposure and makes the station untrusted for
-  pairing until the clock check (§10.1) passes again on frames with their own time.
+  exposure. A frame without telemetry has the time of its arrival minus half the
+  exposure, and such a station is never trusted for pairing.
 - `POST <base>/api/allsky/ingest/event` and `…/summary` answer 200 and are dropped.
   Other paths answer 404.
 
 Answers are `{"ok": true}`; errors as §10.2 (401 for an unknown station or secret, or one
-that is not a Zenivo station). Limits as §10.2; `X-Exposure-Sec` counts up to 3600 s. A
-frame waiting for its telemetry is kept on disk, one per station. The frames carry Zenivo's text stamp and
+that is not a Zenivo station). Limits as §10.2. The frames carry Zenivo's text stamp and
 come once a minute with gaps between exposures: they are processed as images of §10.7
 (overlay mask, meteors only in runs of at least 3 frames at least 1280 px wide, source
 `zenivo`, counted for showers and the night but not paired until a trial has shown their

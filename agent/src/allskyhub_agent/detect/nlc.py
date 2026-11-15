@@ -9,6 +9,10 @@ A pixel counts if it is brighter than the smooth twilight background, blue above
 and part of an extended blob. The frame counts only if the band's interior is dark
 (`bg_ceil`): twilight haze and low cloud are lit broadly and were all of the module's
 false alarms in July 2026. Candidates form episodes like aurora (SPEC §6.4).
+
+NLC only occur around the summer solstice: from 15 May to 20 August in the north, from
+15 November to 20 February in the south. Outside that season the blue twilight just above
+the sunrise point looked like NLC (Benjamin's camera, 14 and 15 November 2026).
 """
 
 # OpenCV's type stubs leave many return types unknown; the numbers are checked here.
@@ -19,7 +23,7 @@ from __future__ import annotations
 import math
 from collections.abc import Callable
 from dataclasses import dataclass
-from datetime import timedelta
+from datetime import datetime, timedelta
 from pathlib import Path
 
 import cv2
@@ -54,6 +58,9 @@ class NlcConfig:
     confirm_frames: int = 2
     gap_s: float = 1200.0
     resend_s: float = 300.0
+    # The NLC season in the north as (month, day); the south is six months later.
+    season_start: tuple[int, int] = (5, 15)
+    season_end: tuple[int, int] = (8, 20)
 
 
 @dataclass(frozen=True)
@@ -68,6 +75,17 @@ class NlcScore:
 
 
 NlcUpdate = EpisodeUpdate[NlcScore]
+
+
+def in_season(at: datetime, latitude: float, cfg: NlcConfig) -> bool:
+    """15 May to 20 August in the north, 15 November to 20 February in the south."""
+    (m0, d0), (m1, d1) = cfg.season_start, cfg.season_end
+    if latitude < 0:
+        m0, m1 = (m0 + 5) % 12 + 1, (m1 + 5) % 12 + 1
+    day = (at.month, at.day)
+    if (m0, d0) <= (m1, d1):
+        return (m0, d0) <= day <= (m1, d1)
+    return day >= (m0, d0) or day <= (m1, d1)
 
 
 def band_mask(sol: Solution, sun_az: float, h: int, w: int, cfg: NlcConfig) -> Mask:
@@ -158,6 +176,8 @@ class NlcDetector:
         if not cfg.sun_lo_deg <= sun <= cfg.sun_hi_deg or rgb.ndim != 3:
             return out + self._episodes.close()
         sol, loc = self._orientation(), self._location()
+        if loc is not None and not in_season(frame.captured_at, loc[0], cfg):
+            return out + self._episodes.close()
         h, w = rgb.shape[:2]
         if sol is None or loc is None or (sol.width and (w, h) != (sol.width, sol.height)):
             return out

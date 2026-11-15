@@ -84,3 +84,26 @@ def test_detector_needs_orientation_and_forms_an_episode() -> None:
     assert ups[0].episode.best.direction_deg is not None
     closed = det.feed(frame(5, sun=-20), twilight(5, False), Path("/5.jpg"))
     assert [u.episode.ongoing for u in closed] == [False]
+
+
+def test_only_in_the_nlc_season() -> None:
+    """Benjamin, 2026-11-15: blue twilight in November is no NLC."""
+    from allskyhub_agent.detect.nlc import in_season
+
+    def at(m: int, d: int) -> datetime:
+        return datetime(2026, m, d, 3, 0, tzinfo=UTC)
+
+    assert in_season(at(5, 15), 50.0, CFG)
+    assert in_season(at(8, 20), 50.0, CFG)
+    assert not in_season(at(5, 14), 50.0, CFG)
+    assert not in_season(at(11, 15), 50.0, CFG)
+    assert in_season(at(12, 30), -45.0, CFG)
+    assert in_season(at(2, 20), -45.0, CFG)
+    assert not in_season(at(6, 21), -45.0, CFG)
+    det = NlcDetector(orientation=lambda: SOL, location=lambda: (LAT, LON))
+    november = [
+        frame(i).model_copy(update={"captured_at": frame(i).captured_at.replace(month=11)})
+        for i in range(4)
+    ]
+    ups = [u for i, f in enumerate(november) for u in det.feed(f, twilight(i, True), Path("x"))]
+    assert ups == []

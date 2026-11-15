@@ -322,21 +322,23 @@ def blur_hint(
     every measurement (as for a clear night, ``CLEAR_BELOW``), the star sizes (time, cloud
     cover, hfr) reach back ``BLUR_SPAN`` and each was at least ``star_size.FACTOR`` times
     the usual one, while the forecast said clear. ``active``: the hint was already given;
-    it stays while their median is at least ``star_size.RELEASE`` times the usual one."""
+    with the same window it stays while their median is at least ``star_size.RELEASE``
+    times the usual one."""
     if usual is None or usual <= 0:
         return None
     recent = [(t, c, h) for t, c, h in samples if now - t <= BLUR_WINDOW]
     sized = [(t, h) for t, _, h in recent if h is not None]
     if any(c is not None and c >= CLEAR_BELOW for _, c, _ in recent):
         return None
+    # Always a full window of sizes, also for a hint already given: after an outage or the
+    # next dusk, one large star is not enough to bring it back (review of #467).
+    if len(sized) < BLUR_MIN_SAMPLES or now - min(t for t, _ in sized) < BLUR_SPAN:
+        return None
     if active:
-        if not sized or statistics.median(h for _, h in sized) < star_size.RELEASE * usual:
+        if statistics.median(h for _, h in sized) < star_size.RELEASE * usual:
             return None
-    else:
-        if len(sized) < BLUR_MIN_SAMPLES or now - min(t for t, _ in sized) < BLUR_SPAN:
-            return None
-        if any(h < star_size.FACTOR * usual for _, h in sized):
-            return None
+    elif any(h < star_size.FACTOR * usual for _, h in sized):
+        return None
     hours = {t.replace(minute=0, second=0, microsecond=0) for t, _, _ in recent}
     if any(forecast.get(h, 100) > DOME_FORECAST_CLEAR for h in hours):
         return None

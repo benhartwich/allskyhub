@@ -55,7 +55,9 @@ def test_blur_hint_does_not_flap() -> None:
     assert health.blur_hint(_blurred(2.5), 1.8, CLEAR, NOW) is None  # 1.39x: not yet
     assert health.blur_hint(_blurred(2.5), 1.8, CLEAR, NOW, active=True) is not None
     assert health.blur_hint(_blurred(2.2), 1.8, CLEAR, NOW, active=True) is None  # 1.22x
-    assert health.blur_hint(_blurred(n=2), 1.8, CLEAR, NOW, active=True) is not None
+    # Back after an outage or at the next dusk: a few sizes do not keep it (review).
+    assert health.blur_hint(_blurred(n=2), 1.8, CLEAR, NOW, active=True) is None
+    assert health.blur_hint(_blurred(n=8), 1.8, CLEAR, NOW, active=True) is None
     assert health.blur_hint(_blurred(cloud=0.5), 1.8, CLEAR, NOW, active=True) is None
 
 

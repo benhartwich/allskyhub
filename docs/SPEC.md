@@ -278,12 +278,15 @@ green. By day and with `night_wb: fixed` the owner's or profile's values are use
 
 ### 4.12 Live stacking
 
-For a calmer live image the agent can average the last N frames (a rolling mean
-without star alignment): N is chosen so that N · exposure ≤ 15 s, at most
-8, and 1 above that, so stars do not trail visibly. The stack only feeds the live image
-and the latest image sent to the hub (§6.3); stored frames, detections, products and
-the sky values stay single frames. `live_stack` (§6.9): `auto` (default) or `off`.
-Timelapses are built from the stored single frames as before.
+For a calmer live image the agent can average the newest frames (a rolling mean
+without star alignment): at most 8 frames that span at most 15 s from the start of the
+oldest to the end of the newest, so stars do not trail visibly. Long exposures and frames
+taken far apart (the day delay) therefore stay single; a change of mode, a new frame size
+and focus mode start anew. The frames are kept at the live image's width. The stack
+only feeds the local live image (§7); the hub's latest image is the stored frame, and
+stored frames, detections, products and the sky values stay single frames.
+`live_stack` (§6.9): `auto` (default) or `off`. Timelapses are built from the stored
+single frames as before.
 
 ## 5. Products (M4)
 

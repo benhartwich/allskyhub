@@ -69,9 +69,10 @@ from allskyhub_agent.lightning_sensor import (
     StormCheck,
     Strike,
 )
-from allskyhub_agent.live import LiveState
+from allskyhub_agent.live import LIVE_WIDTH, LiveState
 from allskyhub_agent.mqtt import MqttConfig, MqttPublisher
 from allskyhub_agent.process.hotpixels import HotPixels
+from allskyhub_agent.process.livestack import LiveStack
 from allskyhub_agent.process.skymask import SkyMask, parse_edits
 from allskyhub_agent.products.build import (
     NightProducts,
@@ -1405,6 +1406,7 @@ def main(argv: list[str] | None = None) -> int:
         day_capture=tuned.day_capture,
         flip=tuned.image_flip,
         rotate=int(tuned.image_rotate),
+        live_stack=LiveStack(LIVE_WIDTH) if tuned.live_stack == "auto" else None,
     )
 
     def announce_products(night: str) -> None:

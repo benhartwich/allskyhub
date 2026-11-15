@@ -13,6 +13,8 @@ from allskyhub_agent.core.clock import SimClock
 from allskyhub_agent.core.exposure import AutoExposure
 from allskyhub_agent.core.quality import FrameQuality
 from allskyhub_agent.core.sun import sun_elevation
+from allskyhub_agent.live import LiveState
+from allskyhub_agent.process.livestack import LiveStack
 from allskyhub_agent.profiles import get_profile
 from allskyhub_agent.runner import Location, LoopConfig, Runner
 from allskyhub_agent.store.images import ImageStore
@@ -156,3 +158,22 @@ def test_day_capture_live_and_off(tmp_path: Path) -> None:
     off.run(on_frame=taken.append)
     assert taken == []
     assert set(sleeps) == {60.0}
+
+
+def test_live_stack_feeds_only_the_live_image(tmp_path: Path) -> None:
+    """SPEC §4.12: short frames close together are averaged for the live image; focus
+    mode shows each frame as it is."""
+    runner, clock = make_runner(tmp_path, datetime(2026, 10, 6, 10, 0, tzinfo=UTC))
+    live = LiveState()
+    stack = LiveStack(width=1280)
+    runner._live = live  # pyright: ignore[reportPrivateUsage]
+    runner._stack = stack  # pyright: ignore[reportPrivateUsage]
+    first = runner.step()
+    clock.sleep(2.0)
+    runner.step()
+    assert stack.size == 2
+    store = ImageStore(tmp_path, ZoneInfo("Europe/Vienna"))
+    assert len(store.read_index(first.night_id)) == 2  # stored frames stay single
+    live.set_focus_mode(True)
+    runner.step()
+    assert stack.size == 0

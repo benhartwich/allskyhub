@@ -764,6 +764,23 @@ def build_schema(profile: Profile) -> list[SettingSpec]:
                 "storage and the SD card.",
             },
         },
+        {
+            "key": "live_stack",
+            "type": "choice",
+            "label": {"de": "Ruhiges Livebild", "en": "Calm live picture"},
+            "group": CAPTURE,
+            "choices": [
+                {"value": "auto", "label": {"de": "Automatisch", "en": "Automatic"}},
+                {"value": "off", "label": {"de": "Aus", "en": "Off"}},
+            ],
+            "help": {
+                "de": "Mittelt bei kurzen Belichtungen die Bilder der letzten 15 s fürs "
+                "Livebild, das rauscht dann weniger. Gespeicherte Bilder und Erkennung "
+                "bleiben Einzelbilder.",
+                "en": "With short exposures the live picture is the mean of the last 15 s "
+                "of frames, so it is less noisy. Stored frames and detection stay single.",
+            },
+        },
     ]
     entries.extend(_orientation_entries())
     if profile.camera == "zwo":

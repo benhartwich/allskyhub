@@ -24,6 +24,8 @@ DEFAULT_KEEP_DAYS = 14
 DEFAULT_KEEP_PRODUCT_DAYS = 90  # SPEC §4.5: about 50 MB a night instead of 1–2 GB
 # Choices (SPEC §4.1, §7).
 DAY_CAPTURE_CHOICES = ("save", "live", "off")
+# SPEC §4.12: the mean of the newest frames for the live image.
+LIVE_STACK_CHOICES = ("auto", "off")
 FLIP_CHOICES = ("none", "horizontal", "vertical")
 ROTATE_CHOICES = ("0", "90", "180", "270")
 LANGUAGE_CHOICES = ("de", "en")
@@ -41,6 +43,7 @@ LIGHTNING_ADDRESS_CHOICES = ("0x01", "0x02", "0x03")
 LIGHT_SOURCE_CHOICES = ("label", "drop", "off")
 _CHOICES = {
     "day_capture": DAY_CAPTURE_CHOICES,
+    "live_stack": LIVE_STACK_CHOICES,
     "image_flip": FLIP_CHOICES,
     "image_rotate": ROTATE_CHOICES,
     "language": LANGUAGE_CHOICES,
@@ -173,6 +176,7 @@ class AgentSettings:
     day_target_pct: int = 35
     night_target_pct: int = 20
     day_capture: str = "save"
+    live_stack: str = "auto"  # SPEC §4.12
     image_flip: str = "none"
     image_rotate: str = "0"
     # How the local UI shows texts and temperatures (SPEC §7).

@@ -24,7 +24,7 @@ from allskyhub_server.settings import Settings
 
 log = logging.getLogger(__name__)
 
-SOFTWARE = ("indi-allsky", "image-url", "other")
+SOFTWARE = ("indi-allsky", "image-url", "zenivo", "other")
 
 
 class StationInputError(Exception):
@@ -115,6 +115,15 @@ async def create(
         raise StationInputError(
             tr("Bitte den Teilnahmebedingungen zustimmen.", "Please agree to the terms.")
         )
+    if ask.software == "zenivo":
+        # SPEC §10.9: Zenivo sends no place or lens, the owner gives them here.
+        where = place(ask.latitude, ask.longitude, ask.elevation_m)
+        device, secret = await stations.create(db, user, ask.name, ask.software, key)
+        public.set_visibility(device, ask.visibility)
+        device.last_status = _given_place(where, ask, "zenivo")
+        await db.commit()
+        log.info("station created", extra={"device_id": device.id, "software": ask.software})
+        return device, secret
     if ask.software != "image-url":
         device, secret = await stations.create(db, user, ask.name, ask.software, key)
         public.set_visibility(device, ask.visibility)  # SPEC §10.6 Visibility
@@ -147,13 +156,7 @@ async def create(
             raise StationInputError(
                 tr("Das Nachweis-Bild: ", "The proof image: ") + exc.text
             ) from None
-    focal = ask.focal_mm.replace(",", ".")
-    lens = {"focal_mm": float(focal)} if number(ask.focal_mm) else None
-    device.last_status = {
-        "settings": {"latitude": where.lat, "longitude": where.lon,
-                     "elevation_m": where.elevation_m, "timezone": ask.timezone.strip() or None},
-        "station": {"software": "image-url", "lens": lens},
-    }  # fmt: skip
+    device.last_status = _given_place(where, ask, "image-url")
     db.add(StationSource(
         device_id=device.id, url=ask.url.strip(), proof_text=ask.proof_text.strip(),
         proof_image=bool(ask.proof),
@@ -162,6 +165,17 @@ async def create(
     log.info("station asked by image address", extra={"device_id": device.id})
     await tell_admins(settings, mailer, device, user)
     return device, None
+
+
+def _given_place(where: Place, ask: Ask, software: str) -> dict[str, Any]:
+    """The station data its owner gave (§10.7, §10.9): place, time zone and lens."""
+    focal = ask.focal_mm.replace(",", ".")
+    lens = {"focal_mm": float(focal)} if number(ask.focal_mm) else None
+    return {
+        "settings": {"latitude": where.lat, "longitude": where.lon,
+                     "elevation_m": where.elevation_m, "timezone": ask.timezone.strip() or None},
+        "station": {"software": software, "lens": lens},
+    }  # fmt: skip
 
 
 async def tell_admins(settings: Settings, mailer: Mailer, device: Device, user: User) -> None:
@@ -209,4 +223,5 @@ async def remove(db: AsyncSession, device: Device, state: Any, settings: Setting
     image_url.proof_path(proofs_dir(settings), device.id).unlink(missing_ok=True)
     image_url.OverlayMask(masks_dir(settings)).forget(device.id)
     state.station_detector.buffer.drop(device.id)
+    state.zenivo.drop(device.id)
     log.info("station removed", extra={"device_id": device.id})

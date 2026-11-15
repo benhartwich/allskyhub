@@ -10,13 +10,19 @@
 
 {% if secret %}
 <section class="card stack">
-  <h2>{% if device.software == 'indi-allsky' %}{{ t('In indi-allsky eintragen', 'Enter in indi-allsky') }}{% else %}{{ t('Zugangsdaten', 'Credentials') }}{% endif %}</h2>
+  <h2>{% if device.software == 'indi-allsky' %}{{ t('In indi-allsky eintragen', 'Enter in indi-allsky') }}{% elif device.software == 'zenivo' %}{{ t('Zenivo damit starten', 'Start Zenivo with this') }}{% else %}{{ t('Zugangsdaten', 'Credentials') }}{% endif %}</h2>
   {% if device.software == 'indi-allsky' %}
   <p class="muted small">{{ t('In indi-allsky unter Konfiguration → SyncAPI: einschalten, Bilder auf „jedes Bild“ stellen und diese drei Werte eintragen.', 'In indi-allsky under Config → SyncAPI: turn it on, set images to "every image" and enter these three values.') }}</p>
   <dl class="facts">
     <dt>Base URL</dt><dd><code class="copy-value">{{ base }}/indi-allsky</code> <button type="button" class="secondary small" data-copy="{{ base }}/indi-allsky">{{ copy }}</button></dd>
     <dt>Username</dt><dd><code class="copy-value">{{ device.id }}</code> <button type="button" class="secondary small" data-copy="{{ device.id }}">{{ copy }}</button></dd>
     <dt>API Key</dt><dd><code class="copy-value">{{ secret }}</code> <button type="button" class="secondary small" data-copy="{{ secret }}">{{ copy }}</button></dd>
+  </dl>
+  {% elif device.software == 'zenivo' %}
+  {% set target = base ~ '/zenivo/' ~ device.id ~ '.' ~ secret %}
+  <p class="muted small">{{ t('Starte Zenivo mit dieser Option, zum Beispiel in seiner systemd-Unit (ExecStart) hinter run_allsky.py. Zenivo schickt dann jede Minute ein Bild und seine Messwerte. Die Adresse enthält das Geheimnis: Gib sie nicht weiter.', 'Start Zenivo with this option, for example in its systemd unit (ExecStart) after run_allsky.py. Zenivo then sends an image and its readings every minute. The address contains the secret: do not share it.') }}</p>
+  <dl class="facts">
+    <dt>{{ t('Option', 'Option') }}</dt><dd><code class="copy-value">--sync-target {{ target }}</code> <button type="button" class="secondary small" data-copy="--sync-target {{ target }}">{{ copy }}</button></dd>
   </dl>
   {% else %}
   <dl class="facts">

@@ -71,7 +71,7 @@ class StationCreated(BaseModel):
     station: StationItem
     # Once, for indi-allsky and other software; an image address has none.
     secret: str | None = None
-    base_url: str | None = None  # indi-allsky's "Base URL"
+    base_url: str | None = None  # indi-allsky's "Base URL"; Zenivo's --sync-target
     docs_url: str
 
 
@@ -162,7 +162,7 @@ async def create_station(
     db: DbSession,
     settings: SettingsDep,
     user: AppUser,
-    software: Annotated[Literal["indi-allsky", "image-url", "other"], Form()],
+    software: Annotated[Literal["indi-allsky", "image-url", "zenivo", "other"], Form()],
     name: Annotated[str, Form(max_length=100)],
     terms: Annotated[bool, Form()] = False,
     url: Annotated[str, Form(max_length=2048)] = "",
@@ -199,7 +199,13 @@ async def create_station(
     return StationCreated(
         station=await _item(db, device, await db.get(StationSource, device.id), base),
         secret=secret,
-        base_url=f"{base}/indi-allsky" if software == "indi-allsky" else None,
+        base_url=(
+            f"{base}/indi-allsky"
+            if software == "indi-allsky"
+            else f"{base}/zenivo/{device.id}.{secret}"  # Zenivo's --sync-target (§10.9)
+            if software == "zenivo" and secret
+            else None
+        ),
         docs_url=f"{base}{DOCS}",
     )
 

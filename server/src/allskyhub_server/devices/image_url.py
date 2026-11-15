@@ -620,7 +620,7 @@ async def _process(
     source.content_hash = digest
     source.changes = [*list(source.changes or [])[-(CHANGES_KEPT - 1) :], now.timestamp()]
     source.interval_s = next_interval(source.changes)
-    _apply_size(device, prepared.width, prepared.height)
+    apply_size(device, prepared.width, prepared.height)
     settings: dict[str, Any] = (device.last_status or {}).get("settings") or {}
     taken, origin = frame_time(prepared, settings.get("timezone"), found.last_modified, now)
     lat, lon = settings.get("latitude"), settings.get("longitude")
@@ -656,7 +656,7 @@ async def _process(
         await station_detect.store_found(db, ctx.store, device, meteors, "image_url")
 
 
-def _apply_size(device: Device, width: int, height: int) -> None:
+def apply_size(device: Device, width: int, height: int) -> None:
     """The frame size from the image itself; a new size drops the orientation (§10.2)."""
     status: dict[str, Any] = dict(device.last_status or {})
     info: dict[str, Any] = dict(status.get("station") or {})

@@ -44,7 +44,7 @@ from allskyhub_server.models import (
 log = logging.getLogger(__name__)
 
 # "image-url": by its image address, checked by hand, fetched by the hub (SPEC §10.7).
-SOFTWARE = ("indi-allsky", "allsky", "other", "image-url")
+SOFTWARE = ("indi-allsky", "allsky", "other", "image-url", "zenivo")
 KEY_KIND = "station_key"  # in the vault (admin/stores.py), made at the hub's start
 # SPEC §10.1 Clock.
 CLOCK_EARLY_S = 120.0  # plus the exposure: a frame this much older than its arrival

@@ -1831,3 +1831,31 @@ meteor in that window refuses it. One that fails stays visible to its owner only
 checked again with another time, and goes after 30 days. The owner can delete one at any
 time, and with it every pair it made; an admin can hide an accepted one, which then counts
 nowhere and loses its pairs.
+
+
+### 10.9 Zenivo without installing anything
+
+Benjamin, 2026-11-15. Zenivo's sync (its `--sync-target`, a push to a remote ingestion
+server) is understood as is. The owner creates a station with the software "Zenivo"
+(place, elevation, time zone and optionally the lens as in §10.7) and starts Zenivo with
+`--sync-target https://<hub>/zenivo/<station id>.<secret>`; Zenivo appends
+`/api/allsky/ingest/<kind>` itself. The secret is in the path because Zenivo's running
+client sends no token; the hub and its web server log this path without it.
+`X-Device-Id` (it carries the camera computer's host name) is neither stored nor shown.
+
+- `POST <base>/api/allsky/ingest/frame` — multipart `image` (JPEG, ≤ 8 MB), headers
+  `X-Exposure-Sec`, `X-Gain-Db`. A frame of §10.2.
+- `POST <base>/api/allsky/ingest/telemetry` — JSON; read: `capture_time` (ISO 8601 with
+  offset, the end of the capture), `star_count`. It belongs to the frame received just
+  before it (at most 30 s earlier); that frame's time is `capture_time` minus half the
+  exposure. A frame without telemetry has the time of its arrival minus half the
+  exposure, and such a station is never trusted for pairing.
+- `POST <base>/api/allsky/ingest/event` and `…/summary` answer 200 and are dropped.
+  Other paths answer 404.
+
+Answers are `{"ok": true}`; errors as §10.2 (401 for an unknown station or secret, or one
+that is not a Zenivo station). Limits as §10.2. The frames carry Zenivo's text stamp and
+come once a minute with gaps between exposures: they are processed as images of §10.7
+(overlay mask, meteors only in runs of at least 3 frames at least 1280 px wide, source
+`zenivo`, counted for showers and the night but not paired until a trial has shown their
+quality). No admin check as in §10.7: the camera itself sends, with its secret.

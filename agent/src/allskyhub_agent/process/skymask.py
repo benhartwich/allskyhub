@@ -25,6 +25,7 @@ import json
 import logging
 import os
 import threading
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
@@ -127,6 +128,8 @@ class SkyMask:
         self._first: float | None = None
         self._last: float | None = None
         self._built_for: str | None = None
+        # SPEC §4.10: the night flat is estimated from the same median frame.
+        self.on_median: Callable[[str, npt.NDArray[np.uint8], Mask], None] | None = None
         self._load()
 
     def _load(self) -> None:
@@ -255,8 +258,8 @@ class SkyMask:
 
     def _build(self, night_id: str) -> None:
         cfg = self._cfg
-        med = np.asarray(np.median(np.asarray(self._frames), axis=0), dtype=np.uint8)
-        med = np.asarray(cv2.GaussianBlur(med, (5, 5), 0), dtype=np.uint8)
+        raw = np.asarray(np.median(np.asarray(self._frames), axis=0), dtype=np.uint8)
+        med = np.asarray(cv2.GaussianBlur(raw, (5, 5), 0), dtype=np.uint8)
         _, bw = cv2.threshold(med, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
         bw = cv2.morphologyEx(bw, cv2.MORPH_OPEN, np.ones((7, 7), np.uint8))
         n, labels, stats, _ = cv2.connectedComponentsWithStats(bw, connectivity=8)
@@ -285,4 +288,6 @@ class SkyMask:
         cv2.imwrite(str(tmp), mask * 255)
         tmp.replace(self._path)
         self._set(mask > 0)
+        if self.on_median is not None:
+            self.on_median(night_id, raw, mask > 0)
         log.info("sky mask for night %s: %.0f %% of the frame", night_id, 100 * share)

@@ -28,6 +28,8 @@ DAY_CAPTURE_CHOICES = ("save", "live", "off")
 LIVE_STACK_CHOICES = ("auto", "off")
 # SPEC §4.11: white balance at night from the sky, or the fixed values.
 NIGHT_WB_CHOICES = ("auto", "fixed")
+# SPEC §4.10: the flat field.
+FLAT_CHOICES = ("auto", "off")
 FLIP_CHOICES = ("none", "horizontal", "vertical")
 ROTATE_CHOICES = ("0", "90", "180", "270")
 LANGUAGE_CHOICES = ("de", "en")
@@ -47,6 +49,7 @@ _CHOICES = {
     "day_capture": DAY_CAPTURE_CHOICES,
     "live_stack": LIVE_STACK_CHOICES,
     "night_wb": NIGHT_WB_CHOICES,
+    "flat_correction": FLAT_CHOICES,
     "image_flip": FLIP_CHOICES,
     "image_rotate": ROTATE_CHOICES,
     "language": LANGUAGE_CHOICES,
@@ -181,6 +184,7 @@ class AgentSettings:
     day_capture: str = "save"
     live_stack: str = "auto"  # SPEC §4.12
     night_wb: str = "auto"  # SPEC §4.11
+    flat_correction: str = "auto"  # SPEC §4.10
     image_flip: str = "none"
     image_rotate: str = "0"
     # How the local UI shows texts and temperatures (SPEC §7).

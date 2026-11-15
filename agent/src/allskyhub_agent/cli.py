@@ -71,6 +71,7 @@ from allskyhub_agent.lightning_sensor import (
 )
 from allskyhub_agent.live import LIVE_WIDTH, LiveState
 from allskyhub_agent.mqtt import MqttConfig, MqttPublisher
+from allskyhub_agent.process.flat import FlatField
 from allskyhub_agent.process.hotpixels import HotPixels
 from allskyhub_agent.process.livestack import LiveStack
 from allskyhub_agent.process.skymask import SkyMask, parse_edits
@@ -127,6 +128,7 @@ from allskyhub_protocol import (
     Event,
     EventKind,
     EventLabel,
+    Flat,
     FrameInfo,
     Mode,
     Observatory,
@@ -420,7 +422,8 @@ def forget_pixel_maps(calibration: Path) -> None:
     """SPEC §4.1: after a change of flip or rotation the hot pixels, the sky mask (with the
     drawn areas, which are fractions of the old picture) and the orientation are of the old
     picture; they are learned again."""
-    for name in ("hotpixels.npz", "skymask.png", "skymask_edits.json", "orientation.json"):
+    for name in ("hotpixels.npz", "skymask.png", "skymask_edits.json", "orientation.json",
+                 "flat.npz"):  # fmt: skip
         try:
             (calibration / name).unlink(missing_ok=True)
         except OSError as exc:
@@ -721,6 +724,7 @@ def main(argv: list[str] | None = None) -> int:
     settings_lock = threading.Lock()
     alpaca_error: list[str | None] = [None]  # SPEC §7.5, for status and the local UI
     observatory: list[Callable[[], Observatory | None]] = [lambda: None]  # N.I.N.A., §6.3
+    flat_box: list[FlatField | None] = [None]  # SPEC §4.10, once the camera is known
     adsb_status: list[Callable[[], AdsbStatus | None]] = [lambda: None]  # receiver, §7.8
     weather_box: list[WeatherStation | None] = [None]  # sensor and heater, §7.11
     lightning_box: list[LightningSensor | None] = [None]  # AS3935, §7.12
@@ -840,6 +844,7 @@ def main(argv: list[str] | None = None) -> int:
                 settings=device_settings() if settings_path else None,
                 sky=sky_meter.latest if sky_meter is not None else None,
                 orientation=orienter.latest if orienter is not None else None,
+                flat=Flat.model_validate(flat_box[0].status()) if flat_box[0] is not None else None,
                 update=update_status() if settings_path else None,
                 alpaca_error=alpaca_error[0],
                 capture_paused=live.paused,
@@ -1170,6 +1175,25 @@ def main(argv: list[str] | None = None) -> int:
     )
     trusted = system.time_trusted if settings_path else lambda: True
 
+    def lens_centre() -> tuple[float, float] | None:
+        """SPEC §4.10: the orientation's lens centre as shares of the frame."""
+        sol = orienter.solution
+        if sol is None or sol.width <= 0 or sol.height <= 0:
+            return None
+        return sol.cx / (sol.width - 1), sol.cy / (sol.height - 1)
+
+    flat: FlatField | None = None
+    if load_settings().flat_correction == "auto":
+        flat = FlatField(
+            Path(args.data) / "calibration" / "flat.npz",
+            srgb=profile.camera == "libcamera",
+            circle_frac=profile.image_circle_frac,
+            centre=lens_centre,
+        )
+        sky_mask.on_median = flat.observe_night
+        sky_meter.undo = flat.undo_for_measuring
+    flat_box[0] = flat
+
     def map_clouds(
         frame: FrameInfo, shape: tuple[int, int], sky: Mask, xs: Points, ys: Points
     ) -> list[float | None] | None:
@@ -1412,6 +1436,8 @@ def main(argv: list[str] | None = None) -> int:
         moon_mode=tuned.moon_mode,
         day_capture=tuned.day_capture,
         flip=tuned.image_flip,
+        flat=flat,
+        flat_min_gain=profile.exposure.day.min_gain,
         rotate=int(tuned.image_rotate),
         live_stack=LiveStack(LIVE_WIDTH) if tuned.live_stack == "auto" else None,
         white_balance=NightWhiteBalance(Path(args.data) / "calibration" / "whitebalance.json")

@@ -122,6 +122,8 @@ class SkyMeter:
         self._latest: SkyMetrics | None = None
         self._mapper: CloudMapper | None = None
         self._day: DayClouds | None = None
+        # SPEC §4.10: the sky values are measured without the night flat.
+        self.undo: Callable[[npt.NDArray[np.uint8]], npt.NDArray[np.uint8]] | None = None
 
     def set_mapper(self, mapper: CloudMapper) -> None:
         """Cloud cover per sky cell (SPEC §6.3 `cloud_map`), once the camera can be oriented."""
@@ -154,6 +156,8 @@ class SkyMeter:
     def measure(self, frame: FrameInfo, image: npt.NDArray[np.uint8]) -> SkyMetrics:
         """`image` RGB or gray, unblurred: a blur turns noise into star-like blobs."""
         cfg = self._cfg
+        if self.undo is not None:
+            image = self.undo(image)
         gray: npt.NDArray[np.uint8] = (
             np.asarray(cv2.cvtColor(image, cv2.COLOR_RGB2GRAY), dtype=np.uint8)
             if image.ndim == 3

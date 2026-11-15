@@ -39,10 +39,10 @@
   <h2>Monate</h2>
   <div class="table-scroll">
   <table class="stats">
-    <thead><tr><th>Monat</th><th>Nächte</th><th>klar</th><th>Stunden klar</th><th>bester SQM</th><th>Meteore</th><th>Polarlicht</th><th>Gewitter</th></tr></thead>
+    <thead><tr><th>Monat</th><th>Nächte</th><th>klar</th><th>Stunden klar</th><th>bester SQM</th>{% if stats.has_hfr %}<th title="Median der Sterngröße in klaren Nächten, kleiner ist schärfer">Sternschärfe</th>{% endif %}<th>Meteore</th><th>Polarlicht</th><th>Gewitter</th></tr></thead>
     <tbody>
       {% for m in stats.months if m.nights %}
-      <tr><td>{{ m.label }}</td><td>{{ m.nights }}</td><td>{{ m.clear_nights }}</td><td>{{ '%.1f' | format(m.clear_hours) | replace('.', ',') }}</td><td>{{ '%.2f' | format(m.best_sqm) | replace('.', ',') if m.best_sqm is not none else '–' }}</td><td>{{ m.meteors }}</td><td>{{ m.aurora }}</td><td>{{ m.storms }}</td></tr>
+      <tr><td>{{ m.label }}</td><td>{{ m.nights }}</td><td>{{ m.clear_nights }}</td><td>{{ '%.1f' | format(m.clear_hours) | replace('.', ',') }}</td><td>{{ '%.2f' | format(m.best_sqm) | replace('.', ',') if m.best_sqm is not none else '–' }}</td>{% if stats.has_hfr %}<td>{{ ('%.1f px' | format(m.hfr)) | replace('.', ',') if m.hfr is not none else '–' }}</td>{% endif %}<td>{{ m.meteors }}</td><td>{{ m.aurora }}</td><td>{{ m.storms }}</td></tr>
       {% endfor %}
     </tbody>
   </table>

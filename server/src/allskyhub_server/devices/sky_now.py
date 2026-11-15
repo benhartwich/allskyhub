@@ -2,7 +2,7 @@
 orientation (drafts 2 and 4, 2026-11-13).
 
 Only what the camera already reports in ``status`` (SPEC §6.3): ``sky`` (stars, cloud
-cover, sky brightness, transparency, the 24-cell ``cloud_map``) and ``orientation``
+cover, sky brightness, transparency, star size, the 24-cell ``cloud_map``) and ``orientation``
 (stars, RMS, north, solve time, §4.8), and ``flat`` (§4.10, the line under it, approved
 2026-11-14). Nothing here is computed from pixels.
 """
@@ -112,6 +112,7 @@ class SkyNow:
     cloud_pct: int | None
     sqm: float | None
     transparency: float | None
+    hfr: float | None = None  # draft E: star size in the zenith, px (SPEC §6.3 `hfr`)
     cells: list[Cell] = field(default_factory=lambda: list[Cell]())
     # Compass letters for the map: (letter, x, y), placed like the image.
     compass: list[tuple[str, float, float]] = field(
@@ -125,6 +126,7 @@ class SkyNow:
             and self.cloud_pct is None
             and self.sqm is None
             and self.transparency is None
+            and self.hfr is None
             and not self.cells
         )
 
@@ -151,6 +153,7 @@ def sky_now(status: dict[str, Any] | None) -> SkyNow | None:
         cloud_pct=None if cover is None else round(min(max(cover, 0.0), 1.0) * 100),
         sqm=_number(sky.get("sqm_mag")),
         transparency=_number(sky.get("transparency")),
+        hfr=_number(sky.get("hfr")),
         cells=cells,
         compass=[(letter, *_xy(91.0, view.angle(az))) for letter, az in COMPASS] if cells else [],
     )

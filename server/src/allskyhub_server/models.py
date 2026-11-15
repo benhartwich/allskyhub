@@ -591,7 +591,8 @@ class PushToken(Base):
 
 
 class SkySample(Base):
-    """One sky measurement from ``status.sky`` (SPEC §6.3): cloud cover, sky brightness, stars.
+    """One sky measurement from ``status.sky`` (SPEC §6.3): cloud cover, sky brightness, stars
+    and their size (``hfr``).
 
     One row per measured frame (``at``); the device repeats the last one between frames."""
 
@@ -605,6 +606,7 @@ class SkySample(Base):
     cloud_cover: Mapped[float | None] = mapped_column(Float)
     sqm_mag: Mapped[float | None] = mapped_column(Float)
     stars: Mapped[int | None] = mapped_column(Integer)
+    hfr: Mapped[float | None] = mapped_column(Float)  # star size in the zenith, px (draft E)
     # Retention counts from arrival at the hub (privacy policy, like thumbnails).
     created_at: Mapped[dt.datetime] = mapped_column(_tz(), server_default=func.now(), index=True)
 
@@ -621,6 +623,8 @@ class NightStat(Base):
     night_id: Mapped[str] = mapped_column(String(8), primary_key=True)
     clear_hours: Mapped[float | None] = mapped_column(Float)
     best_sqm: Mapped[float | None] = mapped_column(Float)
+    # Draft E: the median star size (SPEC §6.3 `hfr`) of the night's clear measurements.
+    median_hfr: Mapped[float | None] = mapped_column(Float)
     meteors: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
     # Radiant-matched meteors per shower (German names), plus "sporadisch".
     showers: Mapped[dict[str, int]] = mapped_column(JSONB, default=dict, server_default="{}")

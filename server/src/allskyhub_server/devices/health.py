@@ -8,6 +8,7 @@ when it appears (and once when it is gone).
 from __future__ import annotations
 
 import datetime as dt
+import statistics
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from typing import Any, Literal, cast
@@ -15,6 +16,7 @@ from typing import Any, Literal, cast
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from allskyhub_server.devices import star_size
 from allskyhub_server.devices.tonight import ForecastCache
 from allskyhub_server.i18n import tr
 from allskyhub_server.models import Device, SkySample
@@ -32,6 +34,7 @@ class Problem:
     key: str
     level: Literal["warn", "error"]
     text: str
+    push: bool = True  # False: shown on the page and in the app, never sent as a notice
 
 
 def _age(delta: dt.timedelta) -> str:
@@ -293,6 +296,81 @@ def dome_hint(
     )
 
 
+# Draft E (approved 2026-11-15): the stars blur before they vanish. The forecast says clear,
+# the camera still sees stars, but they are FACTOR times their usual size.
+BLUR_WINDOW = dt.timedelta(minutes=45)
+BLUR_MIN_SAMPLES = 6
+DEW_GAP_C = 2.0  # air temperature this close to the dew point: name the dew
+
+
+def _px(value: float) -> str:
+    return tr(f"{value:.1f}".replace(".", ","), f"{value:.1f}")
+
+
+def blur_hint(
+    samples: Sequence[tuple[dt.datetime, float | None, float | None]],
+    usual: float | None,
+    forecast: Mapping[dt.datetime, int],
+    now: dt.datetime,
+    env: Mapping[str, Any] | None = None,
+) -> Problem | None:
+    """Dew or frost starting on the dome: in the last ``BLUR_WINDOW`` the camera saw stars
+    (no measurement overcast) and every star size (time, cloud cover, hfr) was at least
+    ``star_size.FACTOR`` times the usual one, while the forecast said clear."""
+    if usual is None or usual <= 0:
+        return None
+    recent = [(t, c, h) for t, c, h in samples if now - t <= BLUR_WINDOW]
+    sized = [h for _, _, h in recent if h is not None]
+    if len(sized) < BLUR_MIN_SAMPLES:
+        return None
+    if any(c is not None and c >= DOME_CAMERA_CLOUDY for _, c, _ in recent):
+        return None
+    if any(h < star_size.FACTOR * usual for h in sized):
+        return None
+    hours = {t.replace(minute=0, second=0, microsecond=0) for t, _, _ in recent}
+    if any(forecast.get(h, 100) > DOME_FORECAST_CLEAR for h in hours):
+        return None
+    now_px, usual_px = _px(statistics.median(sized)), _px(usual)
+    text = tr(
+        f"Die Sterne sind seit 45 Minuten deutlich unschärfer als sonst ({now_px} statt "
+        f"{usual_px} px), obwohl klarer Himmel vorhergesagt ist. Beginnt die Kuppel zu "
+        "beschlagen?",
+        f"For 45 minutes the stars have been much less sharp than usual ({now_px} instead "
+        f"of {usual_px} px) although the forecast says clear: is the dome fogging up?",
+    )
+    air = env.get("temperature_c") if env and not env.get("error") else None
+    dew = env.get("dewpoint_c") if env and not env.get("error") else None
+    if isinstance(air, int | float) and isinstance(dew, int | float) and air - dew < DEW_GAP_C:
+        gap = max(float(air - dew), 0.0)
+        text += tr(
+            f" Die Luft am Gehäuse ist nur {_px(gap)} °C wärmer als der Taupunkt.",
+            f" The air at the housing is only {_px(gap)} °C above the dew point.",
+        )
+    return Problem("dome_blur", "warn", text)
+
+
+def focus_hint(newest_first: list[float]) -> Problem | None:
+    """Draft E: the stars of the recent clear nights are much larger than before (focus
+    shifted, lens loose). Not urgent: never pushed."""
+    found = star_size.drift(newest_first)
+    if found is None:
+        return None
+    now_px, before_px = _px(found[0]), _px(found[1])
+    return Problem(
+        "focus",
+        "warn",
+        tr(
+            f"Seit etwa einer Woche sind die Sterne in klaren Nächten unschärfer als vorher "
+            f"({now_px} statt {before_px} px). Hat sich der Fokus verstellt? Der "
+            "Scharfstell-Modus auf der Seite der Kamera im Heimnetz hilft beim Nachstellen.",
+            f"For about a week the stars of clear nights have been less sharp than before "
+            f"({now_px} instead of {before_px} px). Has the focus shifted? The focus mode on "
+            "the camera's page in the home network helps to set it again.",
+        ),
+        push=False,
+    )
+
+
 async def full_check(
     db: AsyncSession,
     device: Device,
@@ -300,20 +378,37 @@ async def full_check(
     now: dt.datetime,
     forecast: ForecastCache | None,
 ) -> list[Problem]:
-    """``check`` plus the dome hint, which needs the sky samples and the forecast."""
+    """``check`` plus the dome and star size hints, which need the sky samples, the
+    camera's clear nights and the forecast."""
     problems = check(device, online, now)
+    focus = focus_hint(
+        await star_size.medians(db, device.id, star_size.DRIFT_RECENT + star_size.DRIFT_BEFORE)
+    )
+    if focus:
+        problems.append(focus)
     if not online or forecast is None or (device.last_frame or {}).get("mode") != "night":
         return problems
     settings: dict[str, Any] = (device.last_status or {}).get("settings") or {}
     lat, lon = settings.get("latitude"), settings.get("longitude")
     if not isinstance(lat, int | float) or not isinstance(lon, int | float):
         return problems
-    rows = await db.execute(
-        select(SkySample.at, SkySample.cloud_cover).where(
-            SkySample.device_id == device.id, SkySample.at >= now - DOME_WINDOW
+    rows = (
+        await db.execute(
+            select(SkySample.at, SkySample.cloud_cover, SkySample.hfr, SkySample.night_id)
+            .where(SkySample.device_id == device.id, SkySample.at >= now - DOME_WINDOW)
+            .order_by(SkySample.at)
         )
-    )
-    samples = [(at, cloud) for at, cloud in rows.all()]
+    ).all()
     hours = {h.at: h.clouds for h in await forecast.get(float(lat), float(lon))}
-    hint = dome_hint(samples, hours, now)
-    return [*problems, hint] if hint else problems
+    hint = dome_hint([(at, cloud) for at, cloud, _, _ in rows], hours, now)
+    if hint:
+        return [*problems, hint]  # the later stage of the same: said once
+    sized = [(at, cloud, hfr) for at, cloud, hfr, _ in rows]
+    if not any(h is not None for _, _, h in sized):
+        return problems
+    usual = await star_size.usual(db, device.id, rows[-1][3])
+    env = (device.last_status or {}).get("env")
+    blur = blur_hint(
+        sized, usual, hours, now, cast(dict[str, Any], env) if isinstance(env, dict) else None
+    )
+    return [*problems, blur] if blur else problems

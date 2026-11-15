@@ -7,6 +7,7 @@ exist; the statistics then outlive them.
 from __future__ import annotations
 
 import datetime as dt
+import statistics
 from dataclasses import dataclass, field
 
 from sqlalchemy import select, union
@@ -56,6 +57,7 @@ async def refresh_night(db: AsyncSession, device_id: str, night_id: str) -> None
     values = {
         "clear_hours": s.clear_hours,
         "best_sqm": s.best_sqm,
+        "median_hfr": s.median_hfr,
         "meteors": s.meteor_count,
         "showers": s.showers,
         "aurora": s.aurora,
@@ -75,6 +77,7 @@ class Period:
     clear_nights: int = 0  # at least CLEAR_NIGHT_HOURS clear
     clear_hours: float = 0.0
     best_sqm: float | None = None
+    sizes: list[float] = field(default_factory=list[float])  # draft E: clear nights' HFR
     meteors: int = 0
     aurora: int = 0
     storms: int = 0
@@ -86,9 +89,16 @@ class Period:
             self.clear_nights += n.clear_hours >= CLEAR_NIGHT_HOURS
         if n.best_sqm is not None:
             self.best_sqm = max(self.best_sqm or n.best_sqm, n.best_sqm)
+        if n.median_hfr is not None:
+            self.sizes.append(n.median_hfr)
         self.meteors += n.meteors
         self.aurora += n.aurora
         self.storms += n.storms
+
+    @property
+    def hfr(self) -> float | None:
+        """The median star size of the period's clear nights, px."""
+        return round(statistics.median(self.sizes), 2) if self.sizes else None
 
 
 @dataclass
@@ -98,6 +108,10 @@ class Year:
     total: Period
     showers: dict[str, int] = field(default_factory=dict[str, int])
     years: list[int] = field(default_factory=list[int])  # years with data, newest first
+
+    @property
+    def has_hfr(self) -> bool:
+        return any(m.sizes for m in self.months)
 
     @property
     def max_clear_hours(self) -> float:

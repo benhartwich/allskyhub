@@ -1,5 +1,5 @@
 {# Drafts 2 and 4 (2026-11-13): the camera's own measurement of the sky, SPEC §6.3 status.sky
-   (devices/sky_now.py); needs `sn`. #}
+   (devices/sky_now.py); needs `sn`, optionally `hfr_usual` (draft E, devices/star_size). #}
 <section class="card sky-now" aria-labelledby="sky-now-h">
   <div class="cam-meta"><h2 id="sky-now-h">Himmel jetzt</h2>{% if sn.at %}<span class="muted small">gemessen {{ sn.at | age }}</span>{% endif %}</div>
   <div class="sky-tiles">
@@ -15,6 +15,7 @@
     </div>
     {% endif %}
     {% if sn.sqm is not none %}<div class="sky-tile"><small>Himmelshelligkeit</small><strong>{{ '%.1f' | format(sn.sqm) | replace('.', ',') }}</strong><span>mag/⁠″², ungefähr; höher ist dunkler</span></div>{% endif %}
+    {% if sn.hfr is not none %}<div class="sky-tile"><small>Sternschärfe</small><strong>{{ '%.1f' | format(sn.hfr) | replace('.', ',') }} px</strong><span>{% if hfr_usual is defined and hfr_usual is not none %}üblich {{ '%.1f' | format(hfr_usual) | replace('.', ',') }} px; {% endif %}kleiner ist schärfer</span></div>{% endif %}
     {% if sn.transparency is not none %}<div class="sky-tile"><small>Transparenz</small><strong>{{ '%.2f' | format(sn.transparency) | replace('.', ',') }}</strong><span>mag gedämpft über 40°, 0 = klarste Nächte</span></div>{% endif %}
   </div>
 </section>

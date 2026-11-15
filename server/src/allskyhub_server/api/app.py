@@ -150,6 +150,7 @@ class SkyItem(BaseModel):
     cloud_cover: float | None
     sqm_mag: float | None
     stars: int | None
+    hfr: float | None = None  # draft E: star size in the zenith, px; for the app's 1.5.0
 
 
 class FrameItem(BaseModel):
@@ -525,7 +526,7 @@ async def night_sky(
 ) -> list[SkyItem]:
     device = await _own(db, user, device_id)
     return [
-        SkyItem(at=s.at, cloud_cover=s.cloud_cover, sqm_mag=s.sqm_mag, stars=s.stars)
+        SkyItem(at=s.at, cloud_cover=s.cloud_cover, sqm_mag=s.sqm_mag, stars=s.stars, hfr=s.hfr)
         for s in await archive.night_sky(db, device.id, night_id)
     ]
 

@@ -899,6 +899,7 @@ async def _store_sky(
                 cloud_cover=sky.cloud_cover,
                 sqm_mag=sky.sqm_mag,
                 stars=sky.stars,
+                hfr=sky.hfr,
             )
             .on_conflict_do_nothing(index_elements=["device_id", "at"])
         )

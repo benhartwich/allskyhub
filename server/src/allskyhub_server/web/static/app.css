@@ -707,3 +707,20 @@ h1.break { overflow-wrap: anywhere; }
 .sky-history.planetarium .sky-disc { display: block; width: 100%; aspect-ratio: 1; border-radius: 20px;
   background: radial-gradient(circle at 50% 50%, #16224a 0%, #070b1c 46%, #000 47.5%); }
 [data-theme="red"] .sky-history.planetarium .sky-disc { background: radial-gradient(circle at 50% 50%, #200000 0%, #0a0000 46%, #000 47.5%); }
+
+/* Draft D: Satellites 3D (satellites_3d.html, sat_globe.js). */
+.globe-page { display: grid; gap: 16px; }
+@media (min-width: 60rem) { .globe-page { grid-template-columns: minmax(0, 1.7fr) minmax(0, 1fr); align-items: start; } }
+.globe-wrap { padding: 0; overflow: hidden; }
+.globe { position: relative; height: min(72vh, 720px); min-height: 340px; background: #02040c; touch-action: none; cursor: grab; }
+.globe canvas { display: block; width: 100%; height: 100%; }
+.globe-label { position: absolute; transform: translate(8px, -50%); font-size: 12px; line-height: 1.2; white-space: nowrap;
+  color: #dfe5ff; text-shadow: 0 0 4px #000, 0 0 2px #000; pointer-events: none; }
+.globe-label.eye { color: #9fe6ff; } .globe-label.sun { color: #ffd38a; } .globe-label.cam { color: #c8ffa8; font-weight: 600; }
+.globe-legend, #globe-status { margin: 8px 12px; }
+.globe-legend .dot { display: inline-block; width: 9px; height: 9px; border-radius: 50%; margin: 0 4px 0 10px; vertical-align: middle; }
+.globe-legend .dot:first-child { margin-left: 0; }
+.dot.eye { background: #5fd3ff; } .dot.sun { background: #f3b54a; } .dot.shadow { background: #6b7397; } .dot.cam { background: #b8ff8a; }
+.globe-side .sat-row { cursor: pointer; }
+.globe-side .sat-row[aria-current="true"] { outline: 1px solid var(--accent); border-radius: 8px; }
+.globe-side .sat-list { max-height: 60vh; overflow-y: auto; }

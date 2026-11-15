@@ -73,6 +73,17 @@ path = "server/src/allskyhub_server/web/static/leaflet/**"
 SPDX-FileCopyrightText = "2010-2023 Volodymyr Agafonkin, 2010-2011 CloudMade"
 SPDX-License-Identifier = "BSD-2-Clause"
 
+[[annotations]]
+path = "server/src/allskyhub_server/web/static/three/**"
+SPDX-FileCopyrightText = "2010-2026 three.js authors"
+SPDX-License-Identifier = "MIT"
+
+# Satellites 3D: NASA's Blue Marble and Earth at Night (a US government work).
+[[annotations]]
+path = "server/src/allskyhub_server/web/static/globe/**"
+SPDX-FileCopyrightText = "NASA Earth Observatory / Visible Earth"
+SPDX-License-Identifier = "LicenseRef-PublicDomain"
+
 # Land outlines for the app's globe: Natural Earth 1:110m land (v5.1.2), rounded to 0.1°.
 [[annotations]]
 path = "app/assets/geo/land.json"

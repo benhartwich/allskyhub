@@ -32,6 +32,7 @@ from allskyhub_server.devices import (
     pairing,
     public,
     queries,
+    sat_globe,
     settings_form,
     sharing,
     tonight,
@@ -300,6 +301,35 @@ async def satellites_fragment(
         "passes": found.passes,
     }
     return render(request, "_satellites.html", context, session=session)
+
+
+@router.get("/cameras/{device_id}/satelliten/3d")
+async def satellites_3d(
+    request: Request, db: DbSession, session: CurrentSession, device_id: str
+) -> Response:
+    """Draft D: the bright satellites around the Earth (devices/sat_globe.py); the globe
+    loads its data from the JSON below. Only the camera's viewers: it shows the place."""
+    device, _ = await _visible(db, session, device_id)
+    _warm_satellites(request)
+    where = bright_satellites.location(device.last_status)
+    return render(
+        request, "satellites_3d.html", {"device": device, "where": where}, session=session
+    )
+
+
+@router.get("/cameras/{device_id}/satelliten/3d.json")
+async def satellites_3d_json(
+    request: Request, db: DbSession, session: CurrentSession, device_id: str
+) -> JSONResponse:
+    device, _ = await _visible(db, session, device_id)
+    where = bright_satellites.location(device.last_status)
+    if where is None:
+        raise HTTPException(404)
+    catalogue = await request.app.state.bright_satellites.get()
+    data = await asyncio.to_thread(
+        sat_globe.globe, catalogue, where[0], where[1], dt.datetime.now(dt.UTC)
+    )
+    return JSONResponse(data, headers={"Cache-Control": "no-store"})
 
 
 @router.get("/cameras/{device_id}/flugzeuge")

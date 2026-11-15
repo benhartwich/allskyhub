@@ -114,6 +114,18 @@ Future<CameraLocation?> lastKnownLocation() async {
   }
 }
 
+/// Opens where the user can fix [problem]: the phone's location settings when they are
+/// off, otherwise the app's settings (permission blocked). False when nothing opened.
+Future<bool> openLocationFix(LocationProblem problem) async {
+  try {
+    return problem == LocationProblem.serviceOff
+        ? await Geolocator.openLocationSettings()
+        : await Geolocator.openAppSettings();
+  } on Exception {
+    return false;
+  }
+}
+
 String describeLocationProblem(LocationProblem problem) => switch (problem) {
   LocationProblem.serviceOff => tr(
     'Die Standortdienste des Handys sind aus. Schalte sie ein oder gib die Koordinaten ein.',

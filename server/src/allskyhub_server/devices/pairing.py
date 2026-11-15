@@ -41,6 +41,7 @@ from allskyhub_server.models import (
     Frame,
     MeteorPair,
     NightStat,
+    ObsToken,
     PairingCode,
     Product,
     RenderJob,
@@ -48,6 +49,7 @@ from allskyhub_server.models import (
     StatusSample,
     Subscription,
     User,
+    WidgetToken,
 )
 
 NONCE_TTL = dt.timedelta(minutes=5)
@@ -264,6 +266,9 @@ async def unpair(db: AsyncSession, device: Device) -> None:
     )
     # Sharing belongs to the pairing too (roadmap C10).
     await db.execute(delete(CameraMember).where(CameraMember.device_id == device.id))
+    # Read-only keys of the owner (widget, stream view) end with the pairing.
+    await db.execute(delete(WidgetToken).where(WidgetToken.device_id == device.id))
+    await db.execute(delete(ObsToken).where(ObsToken.device_id == device.id))
     device.latest_image_at = None
     device.latest_thumb_at = None
     device.last_frame = None

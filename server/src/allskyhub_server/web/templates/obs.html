@@ -1,0 +1,17 @@
+<!doctype html>
+{# Draft C: the stream view for OBS (web/routes_obs.py); no page around the picture. #}
+<html lang="de" class="obs {{ classes }}{% if red %} obs-red{% endif %}">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex">
+  <title>{{ device.name }} · allskyhub</title>
+  <link rel="stylesheet" href="{{ asset('design/tokens.css') }}">
+  <link rel="stylesheet" href="{{ asset('app.css') }}">
+  <link rel="stylesheet" href="{{ asset('obs.css') }}">
+  <script src="{{ asset('obs.js') }}" defer></script>
+</head>
+<body class="obs-body" data-frame="/obs/{{ token }}/rahmen{{ query }}" data-refresh="{{ refresh_s }}">
+  <main id="obs-stage" class="obs-stage">{% include "_obs_frame.html" %}</main>
+</body>
+</html>

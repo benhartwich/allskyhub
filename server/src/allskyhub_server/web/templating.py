@@ -14,6 +14,7 @@ from fastapi.templating import Jinja2Templates
 from jinja2 import pass_context
 from jinja2.runtime import Context
 
+from allskyhub_server.devices import radiosondes as radiosondes_module
 from allskyhub_server.devices import sky_now as sky_now_module
 from allskyhub_server.devices import sky_overlay as overlay
 from allskyhub_server.devices.event_text import compass
@@ -162,7 +163,7 @@ def sky_layers(device: Any, satellites: bool = True) -> Any:
     without a lens. Satellites only once their elements are loaded (live_fragment), and
     never on public pages: a satellite's place in the sky moves about 1.4° per 10 km of
     the observer's, so its marks and trails would give the exact place away."""
-    from allskyhub_server.devices import bright_satellites
+    from allskyhub_server.devices import bright_satellites, radiosondes
     from allskyhub_server.devices import sky_layers as layers
 
     if device.latest_image_at is None:
@@ -170,7 +171,11 @@ def sky_layers(device: Any, satellites: bool = True) -> Any:
     at = overlay.image_time(device.last_frame, device.latest_image_at)
     current = bright_satellites.current
     catalogue = current.loaded() if satellites and current else None
-    return layers.build(device.last_status, at, catalogue)
+    # Draft B: weather balloons, for the same reason only where satellites are shown.
+    where = bright_satellites.location(device.last_status)
+    sondes = radiosondes.current
+    balloons = sondes.near(*where) if satellites and sondes and where else None
+    return layers.build(device.last_status, at, catalogue, balloons)
 
 
 # SPEC §7.11 status.heater reasons.
@@ -209,6 +214,7 @@ cast(dict[str, Any], templates.env.globals)["heater_text"] = heater_text
 cast(dict[str, Any], templates.env.globals)["air_overlay"] = air_overlay
 cast(dict[str, Any], templates.env.globals)["sky_overlay"] = sky_overlay
 cast(dict[str, Any], templates.env.globals)["sky_layers"] = sky_layers
+cast(dict[str, Any], templates.env.globals)["balloon_credit"] = radiosondes_module.CREDIT
 cast(dict[str, Any], templates.env.globals)["sky_now"] = sky_now
 cast(dict[str, Any], templates.env.globals)["orientation_badge"] = orientation_badge
 cast(dict[str, Any], templates.env.globals)["flat_line"] = flat_line

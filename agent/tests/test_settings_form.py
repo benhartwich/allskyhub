@@ -49,6 +49,7 @@ def test_values_report_every_key_and_fit_device_settings() -> None:
         "night_target_pct": 20,
         "day_capture": "save",
         "live_stack": "auto",
+        "flat_correction": "auto",
         "image_flip": "none",
         "image_rotate": "0",
         "wb_r": 52,

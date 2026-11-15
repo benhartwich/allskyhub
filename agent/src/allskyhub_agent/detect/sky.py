@@ -122,6 +122,10 @@ class SkyMeter:
         self._latest: SkyMetrics | None = None
         self._mapper: CloudMapper | None = None
         self._day: DayClouds | None = None
+        # SPEC §4.10: the sky values are measured without the night flat.
+        self.undo: Callable[[npt.NDArray[np.uint8]], npt.NDArray[np.uint8]] | None = None
+        # ... and `sqm_mag` without any flat: its zero point was calibrated without one.
+        self.unflat: Callable[[npt.NDArray[np.uint8]], npt.NDArray[np.uint8]] | None = None
 
     def set_mapper(self, mapper: CloudMapper) -> None:
         """Cloud cover per sky cell (SPEC §6.3 `cloud_map`), once the camera can be oriented."""
@@ -154,6 +158,9 @@ class SkyMeter:
     def measure(self, frame: FrameInfo, image: npt.NDArray[np.uint8]) -> SkyMetrics:
         """`image` RGB or gray, unblurred: a blur turns noise into star-like blobs."""
         cfg = self._cfg
+        raw = self.unflat(image) if self.unflat is not None else image
+        if self.undo is not None:
+            image = self.undo(image)
         gray: npt.NDArray[np.uint8] = (
             np.asarray(cv2.cvtColor(image, cv2.COLOR_RGB2GRAY), dtype=np.uint8)
             if image.ndim == 3
@@ -175,7 +182,13 @@ class SkyMeter:
                 cloud_map = self._mapper(frame, (h, w), mask, xs, ys)
             if sun <= cfg.sqm_sun_deg:
                 # The mean over the sky, as the offset was calibrated with.
-                mag = sqm(float(gray[mask].mean()), frame.exposure_us, frame.gain, cfg.sqm_offset)
+                plain = (
+                    np.asarray(cv2.cvtColor(raw, cv2.COLOR_RGB2GRAY), dtype=np.uint8)
+                    if raw.ndim == 3
+                    else raw
+                )
+                mean = float(plain[mask].mean())
+                mag = sqm(mean, frame.exposure_us, frame.gain, cfg.sqm_offset)
         elif sun >= cfg.day_sun_deg and image.ndim == 3 and self._day is not None:
             cloud = self._day(frame, image, mask)
         m = SkyMetrics(

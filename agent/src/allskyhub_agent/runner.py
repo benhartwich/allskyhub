@@ -18,6 +18,7 @@ from allskyhub_agent.core.quality import FrameQuality
 from allskyhub_agent.core.sun import sun_elevation
 from allskyhub_agent.core.transform import turn
 from allskyhub_agent.live import LiveState
+from allskyhub_agent.process.flat import FlatField
 from allskyhub_agent.process.hotpixels import HotPixels
 from allskyhub_agent.process.livestack import LiveStack
 from allskyhub_agent.process.skymask import SkyMask
@@ -78,6 +79,8 @@ class Runner:
         live_stack: LiveStack | None = None,
         white_balance: NightWhiteBalance | None = None,
         wb_hold: Callable[[], bool] | None = None,
+        flat: FlatField | None = None,
+        flat_min_gain: float = 0.0,
     ) -> None:
         self._cam = camera
         self._ae = auto_exposure
@@ -109,6 +112,8 @@ class Runner:
         # SPEC §4.11: only cameras whose white balance the agent can set.
         self._wb = white_balance if isinstance(camera, WhiteBalanceCamera) else None
         self._wb_hold = wb_hold or (lambda: False)
+        self._flat = flat  # SPEC §4.10
+        self._flat_min_gain = flat_min_gain
 
     @property
     def mode(self) -> Mode | None:
@@ -152,6 +157,13 @@ class Runner:
             if not focus:
                 self._hot.observe(start, night_id(start, self._tz), elevation, image)
             image = self._hot.apply(image)
+        if self._flat is not None:
+            # SPEC §4.10: twilight frames are collected before the flat, every frame gets it.
+            if not focus:
+                low = frame.gain <= self._flat_min_gain + 0.5
+                sky = self._mask_for(image.shape[0], image.shape[1])
+                self._flat.observe_twilight(start, elevation, image, mean, low, sky)
+            image = self._flat.apply(image)
         keep = not (mode is Mode.DAY and self._day_capture == "live")
         if focus:
             nid, name = night_id(start, self._tz), FOCUS_FRAME_NAME

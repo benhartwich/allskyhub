@@ -782,6 +782,24 @@ def build_schema(profile: Profile) -> list[SettingSpec]:
             },
         },
     ]
+    entries.append(
+        {
+            "key": "flat_correction",
+            "type": "choice",
+            "label": {"de": "Randabdunklung ausgleichen", "en": "Even out the edge"},
+            "group": CAPTURE,
+            "choices": [
+                {"value": "auto", "label": {"de": "Automatisch", "en": "Automatic"}},
+                {"value": "off", "label": {"de": "Aus", "en": "Off"}},
+            ],
+            "help": {
+                "de": "Misst in der Dämmerung, wie das Objektiv zum Rand hin abdunkelt, und "
+                "gleicht es in jedem Bild aus (höchstens doppelt so hell).",
+                "en": "Measures in twilight how the lens darkens toward the edge and evens it "
+                "out in every frame (at most twice as bright).",
+            },
+        }
+    )
     entries.extend(_orientation_entries())
     if profile.camera == "zwo":
         for key, de, en in (

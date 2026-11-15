@@ -253,7 +253,8 @@ The night sky brightens toward the horizon by itself (airglow, light pollution),
 flat is not used for measuring: it is used for the stored and live image and for the
 detections, but `sky.sqm_mag` and the cloud maps (§6.3) are measured without it.
 It is used only after two nights whose curves differ by at most 5 %, and never when the
-twilight flat exists.
+twilight flat exists. `sky.sqm_mag` is always measured without any flat, as its zero
+point was calibrated (Benjamin, 2026-11-15); the twilight flat counts for the cloud maps.
 
 A flat whose largest gain exceeds 2.0 or whose curve is not monotonic within 5 % is not
 used (no correction then), and the reason goes into `status`. libcamera already corrects

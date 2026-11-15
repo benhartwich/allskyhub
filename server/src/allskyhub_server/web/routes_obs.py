@@ -5,17 +5,20 @@ source and other stream tools.
 The owner makes a key on ``/cameras/<id>/stream`` (one per camera; a new one replaces it,
 and it can be revoked). ``/obs/<key>`` works without signing in, also for a camera that is
 not public, and only while that user still owns the camera. The place is never written.
-Satellites and balloons give the exact place away (web/templating.sky_layers): they are
-off unless the owner picks them, with that said next to them.
+Satellites and balloons give the exact place away (web/templating.sky_layers): a key
+shows them only when the owner allowed them when making it (``ObsToken.place_layers``);
+the address can only leave layers out. The key is in the path: the hub's log
+(app.log_path) and nginx (deploy/nginx) write it masked.
 """
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Annotated, Any
 
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, Depends, Form, HTTPException, Request
 from fastapi.responses import FileResponse, RedirectResponse, Response
-from sqlalchemy import delete, select
+from sqlalchemy import delete, func, select
+from sqlalchemy.dialects.postgresql import insert as pg_insert
 
 from allskyhub_protocol import FrameVariant
 from allskyhub_server.auth.tokens import hash_token, new_token
@@ -70,7 +73,7 @@ async def stream_settings(
         "obs_settings.html",
         {
             "device": device,
-            "key": key,
+            "obs_key": key,
             "token": kept.get("token"),
             "layers": LAYERS,
             "tells_place": TELLS_PLACE,
@@ -84,13 +87,25 @@ async def stream_settings(
 
 @router.post("/cameras/{device_id}/stream")
 async def stream_new_key(
-    request: Request, db: DbSession, session: CurrentSession, device_id: str
+    request: Request,
+    db: DbSession,
+    session: CurrentSession,
+    device_id: str,
+    place_layers: Annotated[bool, Form()] = False,
 ) -> Response:
-    """A new key; the old address stops working at once."""
+    """A new key; the old address stops working at once. ``place_layers``: satellites and
+    balloons may be shown (they give the place away)."""
     device = await _own(db, session.user.id, device_id)
-    await db.execute(delete(ObsToken).where(ObsToken.device_id == device.id))
     token = new_token()
-    db.add(ObsToken(token_hash=hash_token(token), user_id=session.user.id, device_id=device.id))
+    values = {"token_hash": hash_token(token), "user_id": session.user.id,
+              "place_layers": place_layers}  # fmt: skip
+    await db.execute(
+        pg_insert(ObsToken)
+        .values(device_id=device.id, **values)
+        .on_conflict_do_update(
+            constraint="uq_obs_token_device_id", set_={**values, "created_at": func.now()}
+        )
+    )  # one per camera, also when the button is pressed twice
     await db.commit()
     return flash.redirect(request, session, f"/cameras/{device.id}/stream", 200, {"token": token})
 
@@ -106,7 +121,7 @@ async def stream_revoke(db: DbSession, session: CurrentSession, device_id: str) 
 # The view
 
 
-async def _device(db: DbSession, token: str) -> Device:
+async def _device(db: DbSession, token: str) -> tuple[Device, ObsToken]:
     row = (
         await db.execute(
             select(ObsToken, User)
@@ -120,18 +135,19 @@ async def _device(db: DbSession, token: str) -> Device:
     device = await queries.owned_one(db, user.id, key.device_id)
     if device is None:
         raise HTTPException(404)
-    return device
+    return device, key
 
 
-def _chosen(request: Request) -> list[str]:
+def _chosen(request: Request, key: ObsToken) -> list[str]:
+    """The layers of the address, without those the key does not allow: the address can
+    only leave layers out."""
     raw = request.query_params.get("ebenen")
-    if raw is None:
-        return list(DEFAULT_LAYERS)
-    return [w for w in raw.split(",") if w in LAYERS]
+    words = list(DEFAULT_LAYERS) if raw is None else raw.split(",")
+    return [w for w in words if w in LAYERS and (key.place_layers or w not in TELLS_PLACE)]
 
 
-def _context(request: Request, device: Device, token: str) -> dict[str, Any]:
-    chosen = _chosen(request)
+def _context(request: Request, device: Device, key: ObsToken, token: str) -> dict[str, Any]:
+    chosen = _chosen(request, key)
     query = request.url.query
     return {
         "device": device,
@@ -155,20 +171,20 @@ def _framed(response: Response) -> Response:
 
 @router.get("/obs/{token}")
 async def obs_view(request: Request, db: DbSession, token: str) -> Response:
-    device = await _device(db, token)
-    return _framed(render(request, "obs.html", _context(request, device, token)))
+    device, key = await _device(db, token)
+    return _framed(render(request, "obs.html", _context(request, device, key, token)))
 
 
 @router.get("/obs/{token}/rahmen")
 async def obs_frame(request: Request, db: DbSession, token: str) -> Response:
     """The picture and its layers, fetched by obs.js when a new image may have come."""
-    device = await _device(db, token)
-    return _framed(render(request, "_obs_frame.html", _context(request, device, token)))
+    device, key = await _device(db, token)
+    return _framed(render(request, "_obs_frame.html", _context(request, device, key, token)))
 
 
 @router.get("/obs/{token}/bild.jpg")
 async def obs_image(request: Request, db: DbSession, token: str) -> Response:
-    device = await _device(db, token)
+    device, _ = await _device(db, token)
     store: ImageStore = request.app.state.images
     path = store.path(device.id, FrameVariant.FULL)
     if not path.is_file():

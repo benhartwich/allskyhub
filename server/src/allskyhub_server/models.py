@@ -377,6 +377,9 @@ class ObsToken(Base):
     token_hash: Mapped[bytes] = mapped_column(LargeBinary(32), primary_key=True)
     user_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("user_account.id", ondelete="CASCADE"))
     device_id: Mapped[str] = mapped_column(ForeignKey("device.id", ondelete="CASCADE"))
+    # Satellites and balloons give the place away: only when the owner allowed them when
+    # making the key; the address can only leave layers out (allsky review of #463).
+    place_layers: Mapped[bool] = mapped_column(Boolean, server_default="false")
     created_at: Mapped[dt.datetime] = mapped_column(_tz(), server_default=func.now())
 
 

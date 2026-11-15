@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import logging
+import re
 import time
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
@@ -107,6 +108,16 @@ from allskyhub_server.web.templating import DESIGN_DIR, STATIC_DIR
 
 access_log = logging.getLogger("allskyhub_server.access")
 
+# Keys in a path, never logged: the stream view's (/obs/<key>) and Zenivo's sync
+# (/zenivo/<station id>.<secret>, SPEC §10.9).
+_SECRET_PATH = re.compile(r"^(/obs/)[^/]+|^(/zenivo/[^/.]*\.)[^/]*")
+
+
+def log_path(path: str) -> str:
+    """The path as logged, with any key in it replaced by "***"."""
+    return _SECRET_PATH.sub(lambda m: (m.group(1) or m.group(2)) + "***", path)
+
+
 SECURITY_HEADERS = {
     b"x-content-type-options": b"nosniff",
     b"x-frame-options": b"DENY",
@@ -173,7 +184,7 @@ class AccessLogMiddleware:
             access_log.info(
                 "%s %s %s",
                 scope["method"],
-                scope["path"],
+                log_path(scope["path"]),
                 status,
                 extra={"duration_ms": round((time.perf_counter() - start) * 1000, 1)},
             )

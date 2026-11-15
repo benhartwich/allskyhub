@@ -22,6 +22,7 @@ def upgrade() -> None:
         sa.Column('token_hash', sa.LargeBinary(length=32), nullable=False),
         sa.Column('user_id', sa.Uuid(), nullable=False),
         sa.Column('device_id', sa.String(length=26), nullable=False),
+        sa.Column('place_layers', sa.Boolean(), server_default=sa.text('false'), nullable=False),
         sa.Column(
             'created_at', sa.DateTime(timezone=True), server_default=sa.text('now()'),
             nullable=False,

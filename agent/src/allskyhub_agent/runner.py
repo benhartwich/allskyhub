@@ -19,6 +19,7 @@ from allskyhub_agent.core.sun import sun_elevation
 from allskyhub_agent.core.transform import turn
 from allskyhub_agent.live import LiveState
 from allskyhub_agent.process.hotpixels import HotPixels
+from allskyhub_agent.process.livestack import LiveStack
 from allskyhub_agent.process.skymask import SkyMask
 from allskyhub_agent.store.images import ImageStore, night_id
 from allskyhub_protocol import FrameInfo, Mode
@@ -66,6 +67,7 @@ class Runner:
         day_capture: str = "save",
         flip: str = "none",
         rotate: int = 0,
+        live_stack: LiveStack | None = None,
     ) -> None:
         self._cam = camera
         self._ae = auto_exposure
@@ -93,6 +95,7 @@ class Runner:
         self._ephemeral: tuple[str, str] | None = None  # the last day frame kept for `live`
         self._flip = flip
         self._rotate = rotate
+        self._stack = live_stack  # SPEC §4.12: only the live image
 
     @property
     def mode(self) -> Mode | None:
@@ -115,6 +118,7 @@ class Runner:
         start = self._clock.now()
         elevation = sun_elevation(start, self._loc.lat, self._loc.lon)
         mode = next_mode(self._mode, elevation, self._dn)
+        changed = mode is not self._mode
         self._mode = mode
 
         focus = self.focus_mode
@@ -165,7 +169,13 @@ class Runner:
         if not focus and keep:
             self._store.append_index(info)
         if self._live is not None:
-            self._live.publish(info, image, sharpness(image))
+            shown = image
+            if self._stack is not None:
+                if focus or changed:
+                    self._stack.clear()  # focus needs each frame; a new mode starts anew
+                if not focus:
+                    shown = self._stack.add(image, start, frame.exposure_us)
+            self._live.publish(info, shown, sharpness(image))
         if not focus:
             for analyze in self._analyzers:
                 analyze(info, image)

@@ -17,6 +17,7 @@ from allskyhub_agent.adapters.asi_sdk import (
     AsiApi,
     CameraInfo,
     Control,
+    ControlCaps,
     ExposureStatus,
     ImageType,
 )
@@ -62,6 +63,14 @@ class ZwoCamera:
         api.set_roi(self._id, self._w, self._h, b, ImageType.RGB24)
         caps = {c.control: c for c in api.controls(self._id)}
         self._writable = {k for k, c in caps.items() if c.writable}
+        self._caps = caps
+        # SPEC §4.11: the normal white balance, the owner's or the camera's own.
+        wb_r, wb_b = self._cfg.wb_r, self._cfg.wb_b
+        self._wb_base = {
+            Control.WB_R: wb_r if wb_r is not None else _default(caps, Control.WB_R),
+            Control.WB_B: wb_b if wb_b is not None else _default(caps, Control.WB_B),
+        }
+        self._wb_now: dict[int, int] = {}
         self._set(Control.BANDWIDTHOVERLOAD, self._cfg.bandwidth)
         for control, value in (
             (Control.WB_R, self._cfg.wb_r),
@@ -82,6 +91,17 @@ class ZwoCamera:
     def _set(self, control: Control, value: int) -> None:
         if control in self._writable:
             self._api.set_control(self._id, control, value)
+
+    def set_white_balance(self, red: float, blue: float) -> None:
+        """SPEC §4.11: red and blue as factors on the normal white balance."""
+        for control, factor in ((Control.WB_R, red), (Control.WB_B, blue)):
+            base, cap = self._wb_base.get(control), self._caps.get(control)
+            if base is None or cap is None or control not in self._writable:
+                continue
+            value = min(cap.max_value, max(cap.min_value, round(base * factor)))
+            if self._wb_now.get(control) != value:
+                self._set(control, value)
+                self._wb_now[control] = value
 
     def capture(self, req: CaptureRequest) -> Frame:
         self._set(Control.GAIN, round(req.gain))
@@ -115,3 +135,8 @@ class ZwoCamera:
         if self._open:
             self._open = False
             self._api.close(self._id)
+
+
+def _default(caps: dict[int, ControlCaps], control: int) -> int | None:
+    cap = caps.get(control)
+    return cap.default if cap is not None else None

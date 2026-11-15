@@ -153,3 +153,19 @@ def test_timeout_stops_exposure() -> None:
     with pytest.raises(CameraError, match="in time"):
         cam.capture(CaptureRequest(1000, 0))
     assert api.calls[-1] == ("stop", ())
+
+
+def test_night_white_balance_scales_the_normal_values() -> None:
+    """SPEC §4.11: factors on the owner's values, or the camera's default; set only on a
+    change and within the control's range."""
+    asi = FakeAsi()
+    cam = ZwoCamera(asi, settings=ZwoSettings(wb_r=50), sleep=lambda s: None)
+    asi.calls.clear()
+    cam.set_white_balance(0.9, 1.2)
+    assert asi.values[Control.WB_R] == 45
+    assert asi.values[Control.WB_B] == 0  # the camera default (0 in the fake) times 1.2
+    n = len(asi.calls)
+    cam.set_white_balance(0.9, 1.2)
+    assert len(asi.calls) == n  # unchanged: nothing sent
+    cam.set_white_balance(30.0, 1.0)
+    assert asi.values[Control.WB_R] == 1000  # the control's maximum

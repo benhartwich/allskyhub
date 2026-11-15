@@ -617,6 +617,7 @@ class DetectionWorker:
         )
         self._sky_mask = sky_mask
         self._orienter = orienter
+        self.aurora_ongoing = False  # SPEC §4.11: the night white balance holds
         self._nlc = nlc
         self._mask_version = -1
         self._rejects: dict[str, int] = {}  # streaks per night that are not meteors
@@ -725,6 +726,7 @@ class DetectionWorker:
 
     def _emit_aurora(self, updates: list[AuroraUpdate]) -> None:
         for u in updates:
+            self.aurora_ongoing = u.episode.ongoing
             event = self.events.save_aurora(u)
             log.info(
                 "aurora %s: index %.1f %%, %d frame(s)%s",

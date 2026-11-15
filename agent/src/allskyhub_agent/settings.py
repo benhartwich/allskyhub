@@ -26,6 +26,8 @@ DEFAULT_KEEP_PRODUCT_DAYS = 90  # SPEC §4.5: about 50 MB a night instead of 1�
 DAY_CAPTURE_CHOICES = ("save", "live", "off")
 # SPEC §4.12: the mean of the newest frames for the live image.
 LIVE_STACK_CHOICES = ("auto", "off")
+# SPEC §4.11: white balance at night from the sky, or the fixed values.
+NIGHT_WB_CHOICES = ("auto", "fixed")
 FLIP_CHOICES = ("none", "horizontal", "vertical")
 ROTATE_CHOICES = ("0", "90", "180", "270")
 LANGUAGE_CHOICES = ("de", "en")
@@ -44,6 +46,7 @@ LIGHT_SOURCE_CHOICES = ("label", "drop", "off")
 _CHOICES = {
     "day_capture": DAY_CAPTURE_CHOICES,
     "live_stack": LIVE_STACK_CHOICES,
+    "night_wb": NIGHT_WB_CHOICES,
     "image_flip": FLIP_CHOICES,
     "image_rotate": ROTATE_CHOICES,
     "language": LANGUAGE_CHOICES,
@@ -177,6 +180,7 @@ class AgentSettings:
     night_target_pct: int = 20
     day_capture: str = "save"
     live_stack: str = "auto"  # SPEC §4.12
+    night_wb: str = "auto"  # SPEC §4.11
     image_flip: str = "none"
     image_rotate: str = "0"
     # How the local UI shows texts and temperatures (SPEC §7).
@@ -305,6 +309,8 @@ class AgentSettings:
         if d.get("timelapse_quality") in TIMELAPSE_CRF:
             later["timelapse_quality"] = d["timelapse_quality"]
         later.update({k: d[k] for k, ok in _CHOICES.items() if d.get(k) in ok})
+        if "night_wb" not in later and ("wb_r" in later or "wb_b" in later):
+            later["night_wb"] = "fixed"  # SPEC §4.11: the owner's own white balance stays
         for k in ("nina_url", "adsb_url"):
             if isinstance(d.get(k), str):
                 later[k] = d[k]

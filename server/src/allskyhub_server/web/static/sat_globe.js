@@ -1,9 +1,9 @@
 // Draft D: Satellites 3D (satellites_3d.html). The hub computes everything in the Earth-fixed
 // frame in Earth radii (devices/sat_globe.py); this draws it with three.js 0.186.1
-// (static/three, MIT): the Earth with day and night, the camera with the circle it sees,
+// (static/three-0.186.1, MIT): the Earth with day and night, the camera with the circle it sees,
 // the bright satellites and the paths of those above its horizon. Own small orbit controls
 // (drag, wheel, pinch) instead of three's addons, so nothing needs an import map.
-import * as THREE from "./three/three.module.js";
+import * as THREE from "./three-0.186.1/three.module.js";
 
 const box = document.getElementById("globe");
 const statusLine = document.getElementById("globe-status");
@@ -72,9 +72,12 @@ async function load() {
     fillList();
     const at = new Date(data.at);
     const note = globe.ready ? "" : " · Dieser Browser kann kein WebGL: nur die Liste.";
-    statusLine.textContent = (data.satellites.length
+    const text = data.satellites.length
       ? `Stand ${at.toLocaleTimeString("de-DE", { hour: "2-digit", minute: "2-digit" })} Uhr · ${data.satellites.length} helle Satelliten`
-      : "Die Bahndaten werden geladen; gleich noch einmal.") + note;
+      : data.loaded === false
+        ? "Die Bahndaten von CelesTrak sind gerade nicht zu bekommen; der Hub versucht es innerhalb einer Stunde wieder."
+        : "Keine hellen Satelliten in den Bahndaten.";
+    statusLine.textContent = text + note;
   } catch {
     statusLine.textContent = "Die Satelliten konnten nicht geladen werden; neuer Versuch in einer Minute.";
   }

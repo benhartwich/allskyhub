@@ -8,7 +8,7 @@ import httpx
 from fastapi import FastAPI
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
-from allskyhub_server.devices import sat_globe
+from allskyhub_server.devices import bright_satellites, sat_globe
 from allskyhub_server.models import Device
 from tests.fake_device import FakeDevice
 from tests.helpers import make_account
@@ -38,11 +38,18 @@ def test_globe_with_the_iss_overhead() -> None:
     dot = sum(a * b for a, b in zip(iss["now"], data["camera"], strict=True)) / _norm(iss["now"])
     assert math.degrees(math.acos(dot)) < 10
     assert len(iss["track"]) == 31  # ±45 min in 3 min steps
+    assert data["loaded"] is True
+    # The same as the satellites card says now (one propagation instead of two).
+    [card] = bright_satellites.now(_iss(), LAT, LON, ISS_TOP)
+    assert iss["altitude"] == round(card.altitude, 1)
+    assert iss["height_km"] == round(card.height_km)
+    assert iss["naked_eye"] == card.naked_eye
 
 
 def test_globe_without_elements() -> None:
     data = sat_globe.globe(None, LAT, LON, ISS_TOP)
     assert data["satellites"] == []
+    assert data["loaded"] is False  # the page says CelesTrak is away
     assert len(data["camera"]) == 3
 
 
@@ -70,3 +77,10 @@ async def test_page_and_data_for_the_cameras_viewers(
     await make_account(new_client)
     assert (await new_client.get(f"/cameras/{dev.device_id}/satelliten/3d")).status_code == 404
     assert (await new_client.get(f"/cameras/{dev.device_id}/satelliten/3d.json")).status_code == 404
+
+
+async def test_versioned_static_folder_is_cached_for_good(client: httpx.AsyncClient) -> None:
+    r = await client.get("/static/three-0.186.1/three.core.js")
+    assert r.status_code == 200
+    assert "immutable" in r.headers["cache-control"]
+    assert (await client.get("/static/sat_globe.js")).headers["cache-control"] == "no-cache"

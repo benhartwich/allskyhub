@@ -16,9 +16,9 @@ from typing import Any, cast
 import numpy as np
 import sgp4.api  # pyright: ignore[reportMissingTypeStubs]
 
-from allskyhub_server.devices import bright_satellites
+from allskyhub_server.devices import astro, bright_satellites
 from allskyhub_server.devices.satellite_match import CHUNK, Catalogue, look_all
-from allskyhub_server.devices.satellites import EARTH_RADIUS_KM, sun_unit
+from allskyhub_server.devices.satellites import EARTH_RADIUS_KM, MIN_ALTITUDE, SKY_DARK, sun_unit
 
 WINDOW = dt.timedelta(minutes=45)
 STEP = dt.timedelta(minutes=3)
@@ -62,6 +62,14 @@ def _point(v: Any) -> list[float]:
     return [round(float(c) / EARTH_RADIUS_KM, 4) for c in v]
 
 
+def _height(range_km: float, altitude: float) -> float:
+    """Height above the ground from the slant range and the altitude angle, as
+    bright_satellites (spherical Earth, observer at sea level)."""
+    r = EARTH_RADIUS_KM
+    e = math.radians(altitude)
+    return math.sqrt(r * r + range_km * range_km + 2 * r * range_km * math.sin(e)) - r
+
+
 def sun_ecef(at: dt.datetime) -> list[float]:
     x, y, z = sun_unit(at)
     g = _gmst(at)
@@ -85,6 +93,9 @@ def globe(catalogue: Catalogue | None, lat: float, lon: float, at: dt.datetime) 
         "camera": camera_ecef(lat, lon),
         "sun": sun_ecef(at),
         "satellites": [],
+        # False while CelesTrak's elements are missing (the catalogue retries within the
+        # hour): the page says so instead of "loading".
+        "loaded": catalogue is not None,
     }
     if catalogue is None or catalogue.array is None or not len(catalogue):
         return base
@@ -93,14 +104,17 @@ def globe(catalogue: Catalogue | None, lat: float, lon: float, at: dt.datetime) 
     now_index = steps
     n = len(catalogue)
     ok, xyz = ecef(catalogue.array, n, times)
-    good, _, alt, _, lit = look_all(catalogue.array, n, lat, lon, times)
-    now = {s.norad: s for s in bright_satellites.now(catalogue, lat, lon, at)}
+    # One propagation for everything: the window, and "now" from its middle step (as
+    # bright_satellites.now, without computing it again; allsky review of #464).
+    good, az, alt, dist, lit = look_all(catalogue.array, n, lat, lon, times)
+    dark = astro.sun_altitude(at, lat, lon) < SKY_DARK
     out: list[dict[str, Any]] = []
     for k in range(n):
         if not ok[k, now_index]:
             continue
         norad = catalogue.norads[k]
-        seen = now.get(norad)
+        a, sunlit = float(alt[k, now_index]), bool(lit[k, now_index])
+        up = bool(good[k, now_index]) and a >= 0
         up_in_window = any(bool(good[k, j]) and float(alt[k, j]) > 0 for j in range(len(times)))
         track = [_point(xyz[k, j]) for j in range(len(times)) if ok[k, j]] if up_in_window else []
         out.append({
@@ -108,12 +122,12 @@ def globe(catalogue: Catalogue | None, lat: float, lon: float, at: dt.datetime) 
             "name": bright_satellites.german_name(norad, catalogue.names[k]),
             "now": _point(xyz[k, now_index]),
             "track": track,
-            "up": seen is not None,
-            "altitude": round(seen.altitude, 1) if seen else None,
-            "azimuth": round(seen.azimuth) if seen else None,
-            "height_km": round(seen.height_km) if seen else None,
-            "sunlit": bool(lit[k, now_index]),
-            "naked_eye": seen.naked_eye if seen else False,
+            "up": up,
+            "altitude": round(a, 1) if up else None,
+            "azimuth": round(float(az[k, now_index])) if up else None,
+            "height_km": round(_height(float(dist[k, now_index]), a)) if up else None,
+            "sunlit": sunlit,
+            "naked_eye": up and sunlit and dark and a >= MIN_ALTITUDE,
         })  # fmt: skip
     base["satellites"] = out
     return base

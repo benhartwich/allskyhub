@@ -178,7 +178,11 @@ _LABELS = {
     "mag": "Helligkeit (mag)",
     "source": "Quelle",
 }
-_SOURCES = {"image_url": "Bild-Adresse (SharedSky)", "indi-allsky": "indi-allsky (SharedSky)"}
+_SOURCES = {
+    "image_url": "Bild-Adresse (SharedSky)",
+    "indi-allsky": "indi-allsky (SharedSky)",
+    "zenivo": "Zenivo (SharedSky)",
+}
 
 
 def _sky(azimuth: object, altitude: object) -> str | None:

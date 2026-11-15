@@ -1,11 +1,11 @@
 {% extends "base.html" %}
 {% block lang %}{{ 'en' if en else 'de' }}{% endblock %}
 {% block title %}{{ t('Kamera verbinden', 'Connect a camera') }} · allskyhub{% endblock %}
-{% block head %}{% if software == 'image-url' %}<link rel="stylesheet" href="{{ asset('leaflet/leaflet.css') }}">
+{% block head %}{% if software in ('image-url', 'zenivo') %}<link rel="stylesheet" href="{{ asset('leaflet/leaflet.css') }}">
 <script src="{{ asset('leaflet/leaflet.js') }}" defer></script>
 <script src="{{ asset('station_map.js') }}" defer></script>{% endif %}{% endblock %}
 {% block content %}
-{% set labels = {'indi-allsky': 'indi-allsky', 'image-url': t('Allsky / Bild-Adresse', 'Allsky / image address'), 'other': t('andere oder eigene Software', 'other or your own software')} %}
+{% set labels = {'indi-allsky': 'indi-allsky', 'image-url': t('Allsky / Bild-Adresse', 'Allsky / image address'), 'zenivo': 'Zenivo', 'other': t('andere oder eigene Software', 'other or your own software')} %}
 <div class="page-head"><h1>{{ t('Kamera verbinden', 'Connect a camera') }}</h1><p class="muted"><a href="/">{{ t('Meine Kameras', 'My cameras') }}</a> › {{ t('Kamera verbinden', 'Connect a camera') }}</p></div>
 <p class="muted">{{ t('Mit SharedSky misst deine Kamera gemeinsam mit den anderen im Netz: Bahnen von Feuerkugeln, Meteorströme, die Himmelshelligkeit. Deine Bilder bleiben deine.', 'With SharedSky your camera measures together with the others in the network: fireball paths, meteor showers, sky brightness. Your images stay yours.') }} <a href="/mitmachen">{{ t('Wie das funktioniert', 'How it works') }}</a></p>
 {% if error %}<p class="msg error" role="alert">{{ error }}</p>{% endif %}
@@ -17,6 +17,7 @@
   </div>
   {% if software == 'indi-allsky' %}<p class="muted small">{{ t('indi-allsky schickt seine Bilder selbst an den Hub (SyncAPI). Du trägst danach nur drei Werte in deiner indi-allsky-Konfiguration ein.', 'indi-allsky sends its images to the hub itself (SyncAPI). Afterwards you just enter three values in your indi-allsky configuration.') }}</p>
   {% elif software == 'image-url' %}<p class="muted small">{{ t('Für Allsky und alle Kameras, die ihr neuestes Bild unter einer festen Adresse zeigen. Der Hub holt das Bild ab, nachdem ein Admin die Station geprüft hat. An deiner Kamera änderst du nichts.', 'For Allsky and every camera that shows its latest image at a fixed address. The hub fetches the image once an admin has checked the station. Nothing changes on your camera.') }}</p>
+  {% elif software == 'zenivo' %}<p class="muted small">{{ t('Zenivo schickt jede Minute ein Bild an den Hub (Sync). Du startest Zenivo danach nur mit einer zusätzlichen Option. Ort und Objektiv gibst du hier an, Zenivo schickt sie nicht mit.', 'Zenivo sends an image to the hub every minute (sync). Afterwards you just start Zenivo with one more option. Enter the location and lens here; Zenivo does not send them.') }}</p>
   {% elif software == 'other' %}<p class="muted small">{{ t('Für gekaufte und selbst geschriebene Software: eine offene Schnittstelle über HTTPS,', 'For commercial and self-written software: an open interface over HTTPS,') }} <a href="/entwickler/connect">{{ t('beschrieben für Entwickler', 'described for developers') }}</a>.</p>{% endif %}
 </section>
 
@@ -29,6 +30,8 @@
   {% if software == 'image-url' %}
   <label>{{ t('Adresse des neuesten Bilds', 'Address of the latest image') }}<input name="url" type="url" value="{{ form.url or '' }}" maxlength="2048" required placeholder="https://my-camera.example.org/allsky/image.jpg"></label>
   <p class="muted small">{{ t('Die Adresse, unter der deine Website oder deine Kamera immer das neueste Bild zeigt (JPEG oder PNG, Port 80 oder 443). Der Hub fragt alle 30 Sekunden bis 5 Minuten nach, je nachdem wie oft sich das Bild ändert, und holt es nur, wenn es neu ist. Den Traffic trägt dein Server.', 'The address where your website or camera always shows the latest image (JPEG or PNG, port 80 or 443). The hub asks every 30 seconds to 5 minutes, depending on how often the image changes, and fetches it only when it is new. The traffic is on your server.') }}</p>
+  {% endif %}
+  {% if software in ('image-url', 'zenivo') %}
   <div id="map" class="map map-small" role="region" aria-label="{{ t('Karte: Standort der Kamera setzen', "Map: set the camera's location") }}"></div>
   <script type="application/json" id="map-config">{{ map_config | tojson }}</script>
   <div class="search-row">
@@ -42,6 +45,8 @@
     <label class="narrow">{{ t('Brennweite (mm, optional)', 'Focal length (mm, optional)') }}<input name="focal_mm" value="{{ form.focal_mm or '' }}" inputmode="decimal" placeholder="1.55"></label>
   </div>
   <datalist id="zones"><option value="Europe/Berlin"><option value="Europe/Vienna"><option value="Europe/Zurich"><option value="Europe/London"><option value="Europe/Paris"><option value="Europe/Amsterdam"><option value="Europe/Prague"><option value="Europe/Warsaw"><option value="UTC"></datalist>
+  {% endif %}
+  {% if software == 'image-url' %}
   <h3>{{ t('Nachweis, dass es deine Kamera ist', "Proof that it's your camera") }}</h3>
   <p class="muted small">{{ t('Ein Admin prüft jede Station von Hand. Hilfreich ist ein Screenshot der Einstellungsseite deiner Kamera, auf dem die Adresse steht, ein Foto der Kamera an ihrem Ort oder ein Link auf deine eigene Website mit dem Bild.', "An admin checks every station by hand. Helpful are a screenshot of your camera's settings page showing the address, a photo of the camera where it stands, or a link to your own website with the image.") }}</p>
   <label>{{ t('Ein paar Worte oder ein Link', 'A few words or a link') }}<textarea name="proof_text" maxlength="2000" rows="3">{{ form.proof_text or '' }}</textarea></label>

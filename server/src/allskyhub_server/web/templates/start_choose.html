@@ -34,6 +34,10 @@
       <strong>indi-allsky</strong>
       <span class="muted">{{ t('Mit INDI, von Aaron Morris.', 'Built on INDI, by Aaron Morris.') }}</span>
     </a>
+    <a class="choice-card" href="/start?kamera=ja&amp;software=zenivo">
+      <strong>Zenivo</strong>
+      <span class="muted">{{ t('Allsky-Software von hoanb1, mit Sync an einen Server.', 'All-sky software by hoanb1, with sync to a server.') }}</span>
+    </a>
     <a class="choice-card" href="/start?kamera=ja&amp;software=andere">
       <strong>{{ t('Andere oder eigene', 'Other or your own') }}</strong>
       <span class="muted">{{ t('Gekaufte Kamera mit eigener Software oder selbst geschrieben.', 'A bought camera with its own software, or something you wrote.') }}</span>
@@ -41,7 +45,7 @@
   </div>
 
   {% else %}
-  {% set name = {'allsky': 'Allsky', 'indi-allsky': 'indi-allsky'}.get(software) %}
+  {% set name = {'allsky': 'Allsky', 'indi-allsky': 'indi-allsky', 'zenivo': 'Zenivo'}.get(software) %}
   <p class="muted small"><a class="back" href="/start?kamera=ja">{{ t('Zurück', 'Back') }}</a></p>
   <div class="page-head"><h1>{{ t('Was möchtest du?', 'What would you like to do?') }}</h1></div>
   <div class="choice-grid two">

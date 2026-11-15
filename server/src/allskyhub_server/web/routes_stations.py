@@ -44,6 +44,7 @@ router = APIRouter(dependencies=[Depends(csrf_protect)])
 SOFTWARE = {
     "indi-allsky": "indi-allsky",
     "image-url": "Allsky / Bild-Adresse",
+    "zenivo": "Zenivo",
     "other": "andere oder eigene Software",
 }
 STATES = {

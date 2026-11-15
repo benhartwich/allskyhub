@@ -126,14 +126,26 @@ async def wrong_login(request: Request) -> StationError:
 async def station_from(request: Request, db: AsyncSession) -> Device:
     """The station of ``Authorization: Bearer <id>:<secret>``, counted against its limit;
     checked from the header alone, before the body is read."""
-    await ip_allowed(request)
     header = request.headers.get("authorization", "")
     scheme, _, value = header.partition(" ")
     station_id, _, secret = value.strip().partition(":")
+    if scheme.lower() != "bearer":
+        station_id = secret = ""
+    return await station_by_secret(request, db, station_id, secret)
+
+
+async def station_by_secret(
+    request: Request, db: AsyncSession, station_id: str, secret: str, software: str | None = None
+) -> Device:
+    """The station with this id and secret (and ``software``, when given), counted against
+    its limit; a wrong one counts against the address."""
+    await ip_allowed(request)
     try:
-        if scheme.lower() != "bearer" or not station_id or not secret:
+        if not station_id or not secret:
             raise StationError(401, "unauthorized")
         device = await stations.authenticate(db, station_id, secret)
+        if software is not None and device.software != software:
+            raise StationError(401, "unauthorized")
     except StationError:
         raise await wrong_login(request) from None
     try:

@@ -156,7 +156,7 @@ async def download_image(request: Request) -> Response:
 # join SharedSky or switch to allskyhub. Each answer is its own address, so the browser's
 # "back" works; the old /start?schritt=… addresses still lead to the building steps.
 WIZARD_SOFTWARE = {"allskyhub": "", "allsky": "image-url", "indi-allsky": "indi-allsky",
-                   "andere": "other"}  # fmt: skip
+                   "zenivo": "zenivo", "andere": "other"}  # fmt: skip
 
 
 @router.get("/start")

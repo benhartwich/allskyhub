@@ -39,6 +39,7 @@ from allskyhub_server.api import connect as connect_api
 from allskyhub_server.api import device as device_api
 from allskyhub_server.api import indi_allsky as indi_allsky_api
 from allskyhub_server.api import widget as app_widget
+from allskyhub_server.api import zenivo as zenivo_api
 from allskyhub_server.auth.hub_keys import HubKeys
 from allskyhub_server.auth.reporters import turnstile_from
 from allskyhub_server.billing import task as billing_task
@@ -419,6 +420,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.state.image_fetcher = image_url.Fetcher(own=image_url.own_addresses(settings.base_url))
     # Stations' meteors (SPEC §10.3, §10.7): the last two frames each on disk, anew at start.
     app.state.station_detector = station_detect.Detector(settings.data_dir / "tmp" / "detect")
+    app.state.zenivo = zenivo_api.Pending(settings.data_dir / "tmp" / "zenivo")  # SPEC §10.9
     app.state.station_detector.buffer.clean(everything=True)
     app.state.github.token = app.state.latest_image.token = github_token(app.state.stores.vault)
     app.add_middleware(CustomDomainMiddleware, hosts=app.state.hosts)
@@ -455,6 +457,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(device_api.router)
     app.include_router(connect_api.router)  # SPEC §10.2
     app.include_router(indi_allsky_api.router)  # SPEC §10.3
+    app.include_router(zenivo_api.router)  # SPEC §10.9
     app.include_router(app_api.router)
     app.include_router(app_overview.router)
     app.include_router(app_manage.router)

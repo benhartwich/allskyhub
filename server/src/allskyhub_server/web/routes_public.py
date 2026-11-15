@@ -65,6 +65,7 @@ STATION_SOFTWARE = {
     "indi-allsky": "indi-allsky",
     "allsky": "Allsky",
     "image-url": "Allsky",
+    "zenivo": "Zenivo",
     "other": "eigene Software",
 }
 

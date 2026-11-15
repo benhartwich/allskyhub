@@ -142,10 +142,35 @@ class _ReportScreenState extends State<ReportScreen>
     super.dispose();
   }
 
+  /// Only these problems send the user to the phone's settings; after "denied" a
+  /// reload on every return would ask for permission again at once (allsky review #469).
+  static bool _toSettings(LocationProblem problem) =>
+      problem == LocationProblem.serviceOff ||
+      problem == LocationProblem.deniedForever;
+
+  Future<void> _openSettings(LocationProblem problem) async {
+    if (await openLocationFix(problem) || !mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          tr(
+            'Die Einstellungen ließen sich nicht öffnen. Erlaube den Standort bitte in den Einstellungen des Handys unter Apps → allskyhub.',
+            'Could not open the settings. Please allow location in the phone\'s settings under Apps → allskyhub.',
+          ),
+        ),
+      ),
+    );
+  }
+
   /// Back from the phone's settings: try the place again.
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
-    if (state == AppLifecycleState.resumed && _problem != null) _load();
+    final problem = _problem;
+    if (state == AppLifecycleState.resumed &&
+        problem != null &&
+        _toSettings(problem)) {
+      _load();
+    }
   }
 
   Future<void> _load() async {
@@ -264,9 +289,10 @@ class _ReportScreenState extends State<ReportScreen>
         'Could not determine the location just now. Try again, ideally out in the open.',
       ),
     };
-    final settings =
-        problem == LocationProblem.serviceOff ||
-        problem == LocationProblem.deniedForever;
+    final settings = _toSettings(problem);
+    final retryIcon = const Icon(Icons.refresh);
+    final retryLabel = Text(tr('Erneut versuchen', 'Try again'));
+    const retryKey = Key('report-retry');
     return ListView(
       key: const Key('report-no-place'),
       padding: const EdgeInsets.all(24),
@@ -285,24 +311,23 @@ class _ReportScreenState extends State<ReportScreen>
             key: const Key('report-open-settings'),
             icon: const Icon(Icons.settings),
             label: Text(tr('Einstellungen öffnen', 'Open settings')),
-            onPressed: () => openLocationFix(problem),
+            onPressed: () => _openSettings(problem),
           ),
           const SizedBox(height: 8),
         ],
-        if (settings)
-          OutlinedButton.icon(
-            key: const Key('report-retry'),
-            icon: const Icon(Icons.refresh),
-            label: Text(tr('Erneut versuchen', 'Try again')),
-            onPressed: _load,
-          )
-        else
-          FilledButton.icon(
-            key: const Key('report-retry'),
-            icon: const Icon(Icons.refresh),
-            label: Text(tr('Erneut versuchen', 'Try again')),
-            onPressed: _load,
-          ),
+        settings
+            ? OutlinedButton.icon(
+                key: retryKey,
+                icon: retryIcon,
+                label: retryLabel,
+                onPressed: _load,
+              )
+            : FilledButton.icon(
+                key: retryKey,
+                icon: retryIcon,
+                label: retryLabel,
+                onPressed: _load,
+              ),
       ],
     );
   }

@@ -17,6 +17,7 @@ from allskyhub_agent.core.metering import Mask, circle_mask, mean_brightness
 from allskyhub_agent.core.quality import FrameQuality
 from allskyhub_agent.core.sun import sun_elevation
 from allskyhub_agent.core.transform import turn
+from allskyhub_agent.detect.hfr import focus_hfr
 from allskyhub_agent.live import LiveState
 from allskyhub_agent.process.flat import FlatField
 from allskyhub_agent.process.hotpixels import HotPixels
@@ -210,7 +211,9 @@ class Runner:
                     self._stack.clear()  # focus needs each frame; a new mode starts anew
                 if not focus:
                     shown = self._stack.add(image, start, frame.exposure_us)
-            self._live.publish(info, shown, sharpness(image))
+            # SPEC §7: the star size only in focus mode, on the full frame.
+            hfr = focus_hfr(image) if focus else None
+            self._live.publish(info, shown, sharpness(image), hfr)
         if not focus:
             for analyze in self._analyzers:
                 analyze(info, image)

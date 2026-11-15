@@ -85,6 +85,7 @@ them most:
 | L33 | System steps by the updater: what a feature needs beyond the venv (today I²C, groups for the sensors) also on cameras flashed before it | agent | Benjamin, 2026-10-17 (OTA cameras had no I²C for L30/L31); SPEC §8 System steps |
 | L34 | First steps: the live page shows what the new camera still lacks (frames, sky mask, north) until it is all green; the camera check goes to the hub in `status.checks` for a setup card | agent + hub | Benjamin, 2026-10-17; SPEC §7 Camera check, §6.3 `checks` |
 | L35 | ✅ Light source check: a lamp near the camera (same place, its own colour) is labelled "Lichtquelle in der Nähe" instead of becoming a thunderstorm | agent | Benjamin, 2026-10-17 (a neighbour's motion-sensor light); SPEC §6.4 Light source check; label only by default |
+| L36 | ✅ Star size (HFR) for focusing and as a sky value: focus mode shows the HFR in the centre and toward the edge with its course, `status.sky.hfr` every night frame | agent | Benjamin, 2026-11-15, idea from Zenivo (MIT); SPEC §6.3, §7. No motor focus: the curated lenses are focused by hand. Rain and drops on the dome follow once real rain nights are collected |
 
 Not ported on purpose: the free-form module manager and file editor (fixed detectors
 instead), the website upload/remote server (the hub and its public page do that).

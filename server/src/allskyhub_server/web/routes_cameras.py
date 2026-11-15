@@ -254,6 +254,10 @@ async def live_fragment(
     registry = _registry(request)
     registry.touch_live(device.id)
     _warm_satellites(request)
+    # Draft B: the balloons of the camera's cell, asked in the background.
+    where = bright_satellites.location(device.last_status)
+    if where is not None:
+        request.app.state.radiosondes.warm(*where)
     return render(
         request,
         "_live.html",

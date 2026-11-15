@@ -52,6 +52,7 @@ from allskyhub_server.devices import (
     late_fireballs,
     lightning_li,
     network,
+    radiosondes,
     station_detect,
     winds,
 )
@@ -340,6 +341,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             if li_store is not None:
                 await li_store.client.aclose()
             await app.state.paddle.client.aclose()
+            await app.state.radiosondes.close()
             await engine.dispose()
 
     app = FastAPI(
@@ -378,6 +380,13 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         groups=(bright_satellites.GROUP,),
     )
     bright_satellites.current = app.state.bright_satellites
+    # Draft B: weather balloons over the live image (devices/radiosondes.py).
+    app.state.radiosondes = radiosondes.Radiosondes(
+        httpx.AsyncClient(headers={"User-Agent": f"allskyhub ({settings.base_url})"})
+        if settings.radiosondes
+        else None
+    )
+    radiosondes.current = app.state.radiosondes
     app.state.paddle = Paddle(settings)
     app.state.github = GitHub(settings.deploy_repo, checks=settings.deploy_check_names)
     app.state.latest_image = LatestImage(settings.deploy_repo)

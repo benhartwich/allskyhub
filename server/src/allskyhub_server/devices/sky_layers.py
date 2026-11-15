@@ -1,5 +1,6 @@
 """More layers over the live image (draft 1, 2026-11-13): the brightest named stars, an
-altitude grid, moon and planets, and the bright satellites. Constellations (H1) and
+altitude grid, moon and planets, and the bright satellites; weather balloons (draft B,
+2026-11-15, devices/radiosondes.py). Constellations (H1) and
 aircraft (H3) stay in ``sky_overlay``.
 
 Everything is drawn with the camera's lens and orientation (SPEC §4.8, §6.3), in pixels of
@@ -15,7 +16,7 @@ from dataclasses import dataclass, field
 from functools import cache
 from typing import Any, cast
 
-from allskyhub_server.devices import bright_satellites
+from allskyhub_server.devices import bright_satellites, radiosondes
 from allskyhub_server.devices.satellite_match import Catalogue, epoch, look_all
 from allskyhub_server.devices.satellites import MIN_ALTITUDE
 from allskyhub_server.devices.sky_overlay import orientation
@@ -58,6 +59,7 @@ class Layers:
     cardinals: list[Mark] = field(default_factory=lambda: list[Mark]())  # N/O/S/W of the grid
     planets: list[Mark] = field(default_factory=lambda: list[Mark]())
     satellites: list[Mark] = field(default_factory=lambda: list[Mark]())
+    balloons: list[Mark] = field(default_factory=lambda: list[Mark]())
 
     @property
     def font(self) -> float:
@@ -79,6 +81,7 @@ def build(
     status: dict[str, Any] | None,
     at: dt.datetime,
     satellites: Catalogue | None = None,
+    balloons: list[radiosondes.Sonde] | None = None,
 ) -> Layers | None:
     """The layers for an image taken ``at``; None without a usable lens or place."""
     found = orientation(status)
@@ -124,7 +127,48 @@ def build(
 
     if satellites is not None and satellites.array is not None and len(satellites):
         result.satellites.extend(_satellites(satellites, lat, lon, at, pixel))
+    if balloons:
+        result.balloons.extend(_balloons(balloons, status, lat, lon, at, pixel))
     return result
+
+
+def _balloons(
+    sondes: list[radiosondes.Sonde],
+    status: dict[str, Any] | None,
+    lat: float,
+    lon: float,
+    at: dt.datetime,
+    pixel: Any,
+) -> list[Mark]:
+    """Weather balloons above the camera's horizon at ``at``, each with the way it came
+    over the last minutes (back along its speed)."""
+    settings: dict[str, Any] = (status or {}).get("settings") or {}
+    raw = settings.get("elevation_m")
+    elevation = float(raw) if isinstance(raw, int | float) and not isinstance(raw, bool) else 0.0
+    marks: list[Mark] = []
+    for sonde in sondes:
+        where = radiosondes.now_at(sonde, at)
+        if where is None:
+            continue
+        alt, az, km = radiosondes.look(lat, lon, elevation, where)
+        if alt < 0.0:
+            continue
+        x, y = cast(tuple[float, float], pixel(alt, az))
+        if not (math.isfinite(x) and math.isfinite(y)):
+            continue
+        ahead = radiosondes.ahead(sonde, at)  # where the marker is, as now_at
+        points: list[tuple[float, float]] = []
+        for k in range(6):
+            back = ahead - radiosondes.TRAIL.total_seconds() * k / 5
+            a, z, _ = radiosondes.look(lat, lon, elevation, radiosondes.moved(sonde, back))
+            if a >= 0.0:
+                points.append(cast(tuple[float, float], pixel(a, z)))
+        trail = "M" + "L".join(f"{px:.1f} {py:.1f}" for px, py in points) if len(points) > 1 else ""
+        arrow = "↑" if sonde.vel_v > 0.5 else "↓" if sonde.vel_v < -0.5 else ""
+        height = f"{where[2] / 1000:.1f}".replace(".", ",")
+        text = f"Wetterballon · {height} km {arrow}".rstrip() + f" · {km:.0f} km entfernt"
+        marks.append(Mark(x, y, text, trail))
+    return marks
 
 
 def _satellites(

@@ -12,6 +12,9 @@
   <g class="lay-planets">
     {% for m in lay.planets %}<circle cx="{{ '%.0f' | format(m.x) }}" cy="{{ '%.0f' | format(m.y) }}" r="{{ lay.font * 0.6 }}"/><text x="{{ '%.0f' | format(m.x + lay.font) }}" y="{{ '%.0f' | format(m.y + lay.font * 0.35) }}" font-size="{{ lay.font }}">{{ m.text }}</text>{% endfor %}
   </g>
+  <g class="lay-balloons">
+    {% for m in lay.balloons %}{% if m.trail %}<path d="{{ m.trail }}"/>{% endif %}<path class="lay-balloon" d="M{{ '%.0f' | format(m.x) }} {{ '%.0f' | format(m.y - lay.font * 0.6) }}l{{ lay.font * 0.55 }} {{ lay.font }}h-{{ lay.font * 1.1 }}z"/><text x="{{ '%.0f' | format(m.x + lay.font * 0.9) }}" y="{{ '%.0f' | format(m.y - lay.font * 0.3) }}" font-size="{{ lay.font }}">{{ m.text }}</text>{% endfor %}
+  </g>
   <g class="lay-sats">
     {% for m in lay.satellites %}{% if m.trail %}<path d="{{ m.trail }}"/>{% endif %}<circle cx="{{ '%.0f' | format(m.x) }}" cy="{{ '%.0f' | format(m.y) }}" r="{{ lay.font * 0.4 }}"/><text x="{{ '%.0f' | format(m.x + lay.font * 0.8) }}" y="{{ '%.0f' | format(m.y - lay.font * 0.4) }}" font-size="{{ lay.font }}">{{ m.text }}</text>{% endfor %}
   </g>

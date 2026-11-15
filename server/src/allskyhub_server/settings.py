@@ -82,6 +82,8 @@ class Settings(BaseSettings):
     adsb: bool = True
     # Roadmap H6 (SPEC §7.9): CelesTrak's orbital elements, to name satellites among meteors.
     satellites: bool = True
+    # Draft B (2026-11-15): weather balloons from SondeHub over the live image.
+    radiosondes: bool = True
     # Fireball package D: GMN's trajectory summaries (CC BY 4.0), matched with our meteors.
     gmn: bool = True
     # Fireball package C: NOAA GFS winds aloft (public domain) for the dark flight.

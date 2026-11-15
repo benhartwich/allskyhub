@@ -652,7 +652,13 @@ h1.break { overflow-wrap: anywhere; }
 .layer-chip:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 .layer-overlay { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; font-family: var(--body); }
 .layer-overlay > g { display: none; }
-.stars-on .lay-stars, .grid-on .lay-grid, .planets-on .lay-planets, .sats-on .lay-sats { display: inline; }
+.stars-on .lay-stars, .grid-on .lay-grid, .planets-on .lay-planets, .sats-on .lay-sats,
+.balloons-on .lay-balloons { display: inline; }
+.balloon-credit { display: none; }
+.balloons-on .balloon-credit { display: inline; }
+.lay-balloons path { fill: none; stroke: rgb(255 143 210 / .7); stroke-width: 1.6; stroke-dasharray: 4 4; vector-effect: non-scaling-stroke; }
+.lay-balloons .lay-balloon { fill: rgb(255 143 210 / .25); stroke: rgb(255 143 210); stroke-dasharray: none; }
+.lay-balloons text { fill: rgb(255 190 228); }
 .layer-overlay text { paint-order: stroke; stroke: rgb(0 0 0 / .65); stroke-width: 3px; vector-effect: non-scaling-stroke;
   dominant-baseline: middle; }
 .lay-grid path { fill: none; stroke: rgb(200 210 240 / .35); stroke-width: 1; stroke-dasharray: 5 6; vector-effect: non-scaling-stroke; }

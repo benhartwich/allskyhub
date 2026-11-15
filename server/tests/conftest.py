@@ -88,6 +88,7 @@ def settings(tmp_path_factory: pytest.TempPathFactory, database_url: str) -> Set
         log_format="console",
         adsb=False,
         satellites=False,
+        radiosondes=False,
         gmn=False,
         winds=False,
         image_url_stations=False,

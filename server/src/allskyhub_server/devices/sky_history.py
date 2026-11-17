@@ -18,7 +18,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from allskyhub_server.devices import events as event_kinds
-from allskyhub_server.devices import sky_layers
+from allskyhub_server.devices import radiosondes, sky_layers
 from allskyhub_server.devices.satellite_match import Catalogue
 from allskyhub_server.devices.sky_overlay import build as constellations
 from allskyhub_server.devices.sky_overlay import orientation as usable_orientation
@@ -122,13 +122,14 @@ async def frame_sky(
     at: dt.datetime,
     satellites: Catalogue | None,
     night_events: list[EventRecord],
+    balloons: list[radiosondes.Sonde] | None = None,
 ) -> dict[str, Any] | None:
     """Everything to draw over a frame taken ``at``, as JSON for the page; None without a
-    usable lens or place."""
+    usable lens or place. ``balloons`` only for the camera's viewers (app 1.5.0)."""
     raw = await orientation_at(db, device, at)
     status: dict[str, Any] = {**(device.last_status or {}), "orientation": raw}
     lines = constellations(status, at)
-    layers = sky_layers.build(status, at, satellites)
+    layers = sky_layers.build(status, at, satellites, balloons)
     if lines is None or layers is None:
         return None
 
@@ -151,6 +152,7 @@ async def frame_sky(
         "grid_cardinals": marks(layers.cardinals),
         "planets": marks(layers.planets),
         "satellites": marks(layers.satellites),
+        "balloons": marks(layers.balloons),
         "tracks": [
             {
                 "x1": round(t.x1),

@@ -9,7 +9,7 @@ import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 
 /// A night of samples every 10 minutes from 20:00 to 04:00 UTC, with a gap after midnight.
-Map<String, dynamic> _series({String? night, int? hours}) {
+Map<String, dynamic> _series({String? night, int? hours, bool hfr = false}) {
   const from = 1791799200.0; // 2026-10-12 12:00 local-ish
   const to = from + 86400;
   final t = <double>[];
@@ -38,7 +38,14 @@ Map<String, dynamic> _series({String? night, int? hours}) {
     'night': hours == null ? (night ?? '20261012') : null,
     'hours': hours,
     'bucket_s': 0,
-    'sky': {'t': t, 'sqm': sqm, 'cloud': cloud, 'stars': stars},
+    'sky': {
+      't': t,
+      'sqm': sqm,
+      'cloud': cloud,
+      'stars': stars,
+      if (hfr) 'hfr': [for (var i = 0; i < t.length; i++) 1.8 + i / 40],
+    },
+    if (hfr) 'hfr_usual': 1.8,
     'status': {
       't': t,
       'exposure': [for (final _ in t) 20.0],
@@ -102,6 +109,36 @@ void main() {
     await tester.tap(find.byKey(const Key('range-168')));
     await tester.pumpAndSettle();
     expect(asked.last, 'hours=168');
+  });
+
+  testWidgets('star size only when the camera measures it (app 1.5.0)', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(420, 2200);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    var hfr = false;
+    final client = HubClient(
+      baseUrl: 'https://hub.example',
+      token: 'tok',
+      httpClient: MockClient(
+        (request) async => http.Response(jsonEncode(_series(hfr: hfr)), 200),
+      ),
+    );
+    Widget screen() => MaterialApp(
+      theme: ThemeData.dark(),
+      home: MeasurementsScreen(client: client, cameraId: 'cam1'),
+    );
+    await tester.pumpWidget(screen());
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('chart-hfr')), findsNothing);
+    hfr = true;
+    await tester.pumpWidget(const SizedBox());
+    await tester.pumpWidget(screen());
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('chart-hfr')), findsOneWidget);
+    expect(find.textContaining('Sternschärfe (px'), findsOneWidget);
+    expect(tester.takeException(), isNull);
   });
 
   test('nice ticks and night arithmetic', () {

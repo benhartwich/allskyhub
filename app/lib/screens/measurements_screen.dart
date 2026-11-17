@@ -30,6 +30,8 @@ class _Panel {
     this.fixed,
     this.right,
     this.moon = false,
+    this.inverted = false,
+    this.usual = false,
   });
 
   final String title;
@@ -39,6 +41,12 @@ class _Panel {
   final (double, double)? fixed;
   final _Line? right; // a second scale on the right
   final bool moon;
+
+  /// Smaller is better (star size): the scale runs downwards, better lies on top.
+  final bool inverted;
+
+  /// Draws the camera's usual star size as a dashed line (SeriesData.hfrUsual).
+  final bool usual;
 }
 
 const _sqm = Color(0xFF7AA2F7);
@@ -50,6 +58,8 @@ const _sensor = Color(0xFFFF9BD2);
 const _cpu = Color(0xFFFF7A93);
 const _disk = Color(0xFF8FE3FF);
 const _moon = Color(0xFFE6E9F5);
+const _hfr = Color(0xFF8FB4FF);
+const _usual = Color(0xFF4CC38A);
 
 List<_Panel> get _panels => [
   _Panel(
@@ -75,6 +85,14 @@ List<_Panel> get _panels => [
     [_Line('cloud', tr('Bewölkung', 'Cloud cover'), '%', _clouds)],
     fixed: (0, 100),
     right: _Line('stars', tr('Sterne', 'Stars'), '', _stars),
+  ),
+  // Draft E (app 1.5.0): only when the camera measures it (agent 0.1.5 and newer).
+  _Panel(
+    tr('Sternschärfe (px, ↑ schärfer)', 'Star size (px, ↑ sharper)'),
+    'sky',
+    [_Line('hfr', tr('Sternschärfe', 'Star size'), 'px', _hfr, digits: 1)],
+    inverted: true,
+    usual: true,
   ),
   _Panel(
     tr('Belichtung (s, log) und Gain', 'Exposure (s, log) and gain'),
@@ -624,7 +642,12 @@ class _ChartPainter extends CustomPainter {
     }
 
     // Left scale.
-    final (lo, hi) = _range(panel.lines, log: panel.log, fixed: panel.fixed);
+    var (lo, hi) = _range(panel.lines, log: panel.log, fixed: panel.fixed);
+    final usual = panel.usual ? data.hfrUsual : null;
+    if (usual != null) {
+      lo = math.min(lo, usual - 0.25);
+      hi = math.max(hi, usual + 0.25);
+    }
     double yLin(double v, double a, double b) =>
         plot.bottom - plot.height * ((v - a) / (b - a)).clamp(-0.05, 1.05);
     double yLeft(double v) => panel.log
@@ -633,6 +656,8 @@ class _ChartPainter extends CustomPainter {
             math.log(lo) / math.ln10,
             math.log(hi) / math.ln10,
           )
+        : panel.inverted
+        ? yLin(v, hi, lo)
         : yLin(v, lo, hi);
     final leftTicks = panel.log
         ? [
@@ -679,6 +704,23 @@ class _ChartPainter extends CustomPainter {
         yMoon,
         _moon.withValues(alpha: 0.7),
         dashed: true,
+      );
+    }
+    if (usual != null) {
+      final py = yLeft(usual);
+      _path(
+        canvas,
+        [data.from, data.to],
+        [usual, usual],
+        x,
+        yLeft,
+        _usual.withValues(alpha: 0.8),
+        dashed: true,
+      );
+      _label(
+        canvas,
+        tr('üblich ${number(usual, 1)} px', 'usual ${number(usual, 1)} px'),
+        Offset(plot.left + 4, py - 8),
       );
     }
     for (final l in panel.lines) {

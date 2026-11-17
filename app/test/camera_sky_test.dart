@@ -1,7 +1,9 @@
 import 'dart:convert';
 
 import 'package:allskyhub_app/api/hub_client.dart';
+import 'package:allskyhub_app/design.dart';
 import 'package:allskyhub_app/screens/camera_sky.dart';
+import 'package:allskyhub_app/screens/globe.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
@@ -232,5 +234,214 @@ void main() {
     await tester.pumpAndSettle();
     expect(asked, ['jetzt', 'nacht']);
     expect(find.textContaining('bis 59° S'), findsOneWidget);
+  });
+
+  testWidgets('weather balloons: a chip only when some are near (app 1.5.0)', (
+    tester,
+  ) async {
+    final without = SkyOverlay.fromJson(
+      jsonDecode(jsonEncode(_overlayJson)) as Map<String, dynamic>,
+    );
+    expect(without.balloons, isEmpty);
+    final withBalloon = SkyOverlay.fromJson(
+      jsonDecode(
+            jsonEncode({
+              ..._overlayJson,
+              'balloons': [
+                {
+                  'x': 600.0,
+                  'y': 300.0,
+                  'text': 'Wetterballon · 30,1 km ↑ · 100 km entfernt',
+                  'trail': 'M600 400L600 300',
+                },
+              ],
+              'balloons_credit': 'Wetterballons: SondeHub (CC BY-SA 2.0)',
+            }),
+          )
+          as Map<String, dynamic>,
+    );
+    shownLayers.value = {};
+    await tester.pumpWidget(_host(LayerChips(overlay: without)));
+    expect(find.byKey(const Key('layer-balloons')), findsNothing);
+    await tester.pumpWidget(
+      _host(
+        Column(
+          children: [
+            LayerChips(overlay: withBalloon),
+            SizedBox(
+              width: 300,
+              height: 300,
+              child: ValueListenableBuilder<Set<SkyLayer>>(
+                valueListenable: shownLayers,
+                builder: (_, shown, _) =>
+                    CustomPaint(painter: SkyOverlayPainter(withBalloon, shown)),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+    expect(find.byKey(const Key('balloons-credit')), findsNothing);
+    await tester.tap(find.byKey(const Key('layer-balloons')));
+    await tester.pump();
+    expect(find.text('Wetterballons: SondeHub (CC BY-SA 2.0)'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+    shownLayers.value = {};
+  });
+
+  testWidgets('flat line and star size tile (app 1.5.0)', (tester) async {
+    final at = DateTime.now()
+        .subtract(const Duration(hours: 3))
+        .toUtc()
+        .toIso8601String();
+    Future<void> show(Map<String, dynamic> status, {double? usual}) =>
+        tester.pumpWidget(
+          _host(
+            Column(
+              children: [
+                FlatLine(status: status),
+                SkyNowCard(status: status, hfrUsual: usual),
+              ],
+            ),
+          ),
+        );
+    await show({
+      'flat': {'source': 'twilight', 'at': at, 'max_gain': 1.42},
+      'sky': {'stars': 212, 'hfr': 1.84},
+    }, usual: 1.8);
+    expect(find.text('Flat gemessen'), findsOneWidget);
+    expect(find.text('Dämmerung'), findsOneWidget);
+    expect(find.text('Rand bis ×1,42'), findsOneWidget);
+    expect(find.text('1,8 px'), findsOneWidget);
+    expect(find.text('üblich 1,8 px'), findsOneWidget);
+
+    await show({
+      'flat': {'source': 'night'},
+    });
+    expect(find.text('Flat geschätzt'), findsOneWidget);
+    await show({
+      'flat': {'source': 'none', 'reason': 'noch keine Dämmerung'},
+    });
+    expect(find.text('kein Flat'), findsOneWidget);
+    expect(find.text('noch keine Dämmerung'), findsOneWidget);
+    await show({
+      'settings': {'flat_correction': 'off'},
+      'flat': {'source': 'twilight'},
+    });
+    expect(find.text('Flat aus'), findsOneWidget);
+    // Older agents: no flat line, no star size.
+    await show({
+      'sky': {'stars': 212},
+    });
+    expect(find.byKey(const Key('flat-line')), findsNothing);
+    expect(find.byKey(const Key('sky-hfr')), findsNothing);
+    // Without a usual value yet; and far above it.
+    await show({
+      'sky': {'hfr': 2.0},
+    });
+    expect(find.text('kleiner ist schärfer'), findsOneWidget);
+    await show({
+      'sky': {'hfr': 3.0},
+    }, usual: 1.8);
+    final value = tester.widget<Text>(find.text('3,0 px'));
+    expect(value.style?.color, isNotNull);
+  });
+
+  testWidgets('satellites on the globe (app 1.5.0)', (tester) async {
+    final asked = <String>[];
+    final hub = MockClient((request) async {
+      asked.add(request.url.path);
+      if (request.url.path.endsWith('/globe')) {
+        return http.Response(
+          jsonEncode({
+            'at': '2026-10-19T04:33:08+00:00',
+            'camera': [0.6229, 0.1142, 0.7739],
+            'sun': [-0.3, 0.8, -0.2],
+            'loaded': true,
+            'satellites': [
+              {
+                'norad': 25544,
+                'name': 'Raumstation ISS',
+                'now': [0.6629, 0.1215, 0.8237],
+                'track': [
+                  [0.60, 0.30, 0.83],
+                  [0.6629, 0.1215, 0.8237],
+                  [0.70, -0.10, 0.80],
+                ],
+                'up': true,
+                'altitude': 80.2,
+                'azimuth': 160.0,
+                'height_km': 418,
+                'sunlit': true,
+                'naked_eye': true,
+              },
+              {
+                'norad': 1,
+                'name': 'Fern',
+                'now': [-1.1, 0.0, 0.0],
+                'track': <Object>[],
+                'up': false,
+                'altitude': null,
+                'azimuth': null,
+                'height_km': null,
+                'sunlit': false,
+                'naked_eye': false,
+              },
+            ],
+          }),
+          200,
+        );
+      }
+      return http.Response(
+        jsonEncode({
+          'located': true,
+          'loaded': true,
+          'now': <Object>[],
+          'passes': <Object>[],
+        }),
+        200,
+      );
+    });
+    final client = HubClient(
+      baseUrl: 'https://hub.example',
+      token: 't',
+      httpClient: hub,
+    );
+    await tester.pumpWidget(
+      _host(SatellitesCard(client: client, cameraId: 'cam1')),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Erdkugel'));
+    await tester.pumpAndSettle();
+    expect(asked.last, '/api/v1/cameras/cam1/satellites/globe');
+    expect(find.byKey(const Key('satellite-globe')), findsOneWidget);
+    expect(find.text('Sichtbar'), findsNothing); // the list's filters
+    // The globe is centred on the camera; the ISS stands just above it.
+    final globe = tester.widget<Globe>(
+      find.byKey(const Key('satellite-globe')),
+    );
+    expect(globe.dots, hasLength(2));
+    expect(globe.tracks, hasLength(1));
+    globe.onTapDot!(0);
+    await tester.pump();
+    expect(
+      find.textContaining('Raumstation ISS · 80° S · 418 km'),
+      findsOneWidget,
+    );
+    await tester.tap(find.text('Liste'));
+    await tester.pumpAndSettle();
+    expect(find.text('Sichtbar'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
+  test('a point in orbit hides behind the Earth only', () {
+    final p = GlobeProjection(0, 0, Offset.zero, 100);
+    expect(p.projectAbove(0, 0, 1.1), isNotNull); // in front
+    expect(p.projectAbove(0, 180, 1.1), isNull); // straight behind
+    // Behind, but beyond the rim: seen past the Earth's edge.
+    expect(p.projectAbove(0, 100, 1.1), isNotNull);
+    final dot = GlobeDot.ecef((0.0, 0.0, 1.1), Sky.aurora);
+    expect(dot.lat, closeTo(90, 1e-9));
+    expect(dot.r, closeTo(1.1, 1e-9));
   });
 }

@@ -325,10 +325,10 @@ class _CameraScreenState extends State<CameraScreen> {
                     ),
             ),
           ),
-          if (_overlay != null)
-            const Padding(
-              padding: EdgeInsets.fromLTRB(16, 10, 16, 0),
-              child: LayerChips(),
+          if (_overlay case final overlay?)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 10, 16, 0),
+              child: LayerChips(overlay: overlay),
             ),
           Padding(
             padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
@@ -358,7 +358,8 @@ class _CameraScreenState extends State<CameraScreen> {
             ),
           ),
           OrientationLine(status: _camera.status),
-          SkyNowCard(status: _camera.status),
+          FlatLine(status: _camera.status),
+          SkyNowCard(status: _camera.status, hfrUsual: _camera.hfrUsual),
           Card(
             margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
             child: Padding(

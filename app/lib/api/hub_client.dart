@@ -49,6 +49,7 @@ class Camera {
     this.frame = const {},
     this.role = 'owner',
     this.settingsSchema = const [],
+    this.hfrUsual,
   });
 
   factory Camera.fromJson(Map<String, dynamic> json) => Camera(
@@ -62,7 +63,12 @@ class Camera {
     frame: (json['frame'] as Map<String, dynamic>?) ?? const {},
     role: json['role'] as String? ?? 'owner',
     settingsSchema: (json['settings_schema'] as List<dynamic>?) ?? const [],
+    hfrUsual: (json['hfr_usual'] as num?)?.toDouble(),
   );
+
+  /// The camera's usual star size in px (draft E, app 1.5.0); null from older hubs or
+  /// before three clear nights.
+  final double? hfrUsual;
 
   final String id;
   final String name;
@@ -681,6 +687,13 @@ class HubClient {
             as Map<String, dynamic>,
       );
 
+  /// Draft D (app 1.5.0): the bright satellites around the Earth for the globe.
+  Future<SatelliteGlobe> satelliteGlobe(String cameraId) async =>
+      SatelliteGlobe.fromJson(
+        await _send('GET', '/cameras/$cameraId/satellites/globe')
+            as Map<String, dynamic>,
+      );
+
   Future<Overview> overview(String cameraId) async => Overview.fromJson(
     await _send('GET', '/cameras/$cameraId/overview') as Map<String, dynamic>,
   );
@@ -916,7 +929,8 @@ class SeriesData {
           : SeriesTable.fromJson(json['status'] as Map<String, dynamic>),
       ephemeris = json['ephemeris'] == null
           ? null
-          : SeriesTable.fromJson(json['ephemeris'] as Map<String, dynamic>);
+          : SeriesTable.fromJson(json['ephemeris'] as Map<String, dynamic>),
+      hfrUsual = (json['hfr_usual'] as num?)?.toDouble();
 
   final double from, to;
   final String tz;
@@ -926,6 +940,9 @@ class SeriesData {
   final SeriesTable sky;
   final SeriesTable? status;
   final SeriesTable? ephemeris;
+
+  /// The camera's usual star size (px) before this night; draft E, owners only.
+  final double? hfrUsual;
 
   double? get moonIllumination =>
       ephemeris?.columns['moon_illumination']?.firstOrNull;
@@ -2453,7 +2470,9 @@ class SkyOverlay {
       planets = _marks(json['planets']),
       satellites = _marks(json['satellites']),
       aircraft = _marks(json['aircraft']),
-      aircraftCredit = json['aircraft_credit'] as String?;
+      aircraftCredit = json['aircraft_credit'] as String?,
+      balloons = _marks(json['balloons']),
+      balloonsCredit = json['balloons_credit'] as String?;
 
   static List<SkyMark> _marks(Object? raw) => [
     for (final m in (raw as List<dynamic>? ?? const []))
@@ -2472,6 +2491,66 @@ class SkyOverlay {
   final List<SkyMark> satellites;
   final List<SkyMark> aircraft;
   final String? aircraftCredit;
+
+  /// Weather balloons near the camera (draft B, app 1.5.0; older hubs: none).
+  final List<SkyMark> balloons;
+  final String? balloonsCredit;
+}
+
+/// A bright satellite on the globe (draft D, app 1.5.0): Earth-fixed positions in Earth
+/// radii (x towards 0° E on the equator, z to the north pole).
+class GlobeSatellite {
+  GlobeSatellite.fromJson(Map<String, dynamic> json)
+    : name = json['name'] as String? ?? '',
+      now = _xyz(json['now']),
+      track = [
+        for (final p in (json['track'] as List<dynamic>? ?? const [])) _xyz(p),
+      ],
+      up = json['up'] as bool? ?? false,
+      sunlit = json['sunlit'] as bool? ?? false,
+      nakedEye = json['naked_eye'] as bool? ?? false,
+      altitude = (json['altitude'] as num?)?.toDouble(),
+      azimuth = (json['azimuth'] as num?)?.toDouble(),
+      heightKm = (json['height_km'] as num?)?.toDouble();
+
+  static (double, double, double) _xyz(Object? raw) {
+    final l = raw as List<dynamic>;
+    return (
+      (l[0] as num).toDouble(),
+      (l[1] as num).toDouble(),
+      (l[2] as num).toDouble(),
+    );
+  }
+
+  final String name;
+  final (double, double, double) now;
+
+  /// The path within 45 minutes either side, only for those above the camera's horizon
+  /// at some time in it.
+  final List<(double, double, double)> track;
+  final bool up;
+  final bool sunlit;
+  final bool nakedEye;
+  final double? altitude;
+  final double? azimuth;
+  final double? heightKm;
+}
+
+/// GET /cameras/{id}/satellites/globe: what the satellite globe draws.
+class SatelliteGlobe {
+  SatelliteGlobe.fromJson(Map<String, dynamic> json)
+    : at = DateTime.parse(json['at'] as String),
+      camera = GlobeSatellite._xyz(json['camera']),
+      loaded = json['loaded'] as bool? ?? false,
+      satellites = [
+        for (final s in (json['satellites'] as List<dynamic>? ?? const []))
+          GlobeSatellite.fromJson(s as Map<String, dynamic>),
+      ];
+
+  final DateTime at;
+  final (double, double, double) camera;
+  final bool loaded;
+  final List<GlobeSatellite> satellites;
 }
 
 class SatelliteNow {

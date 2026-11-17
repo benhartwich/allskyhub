@@ -1,5 +1,6 @@
-New: the sky over your camera and red light for the night.
-• On the camera page: constellations, the brightest stars, a grid, planets and satellites to lay over the live image.
-• Sky now: stars, cloud cover with a cloud map, sky brightness and how well the camera is calibrated.
-• Satellites: what is passing over you right now and tonight's bright passes.
-• Red light: the whole app in red to keep your eyes dark-adapted, by hand or automatically at night.
+New: the sky over your camera, red light and satellites on a globe.
+• Lay over the live image: constellations, stars, a grid, planets, satellites and weather balloons.
+• Sky now: stars, cloud cover, sky brightness and star size, plus the camera's orientation and flat.
+• Satellites: over you now, tonight's passes and on a globe with their paths.
+• Measurements: star size over time.
+• Red light: the whole app in red to keep your eyes dark-adapted.

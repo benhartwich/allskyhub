@@ -1,5 +1,6 @@
-Neu: Der Himmel über deiner Kamera und Rotlicht für die Nacht.
-• Auf der Kameraseite: Sternbilder, hellste Sterne, Gitter, Planeten und Satelliten zum Einblenden über dem Livebild.
-• Himmel jetzt: Sterne, Bewölkung mit Wolkenkarte, Himmelshelligkeit und wie gut die Kamera eingemessen ist.
-• Satelliten: was gerade über dir fliegt und die hellen Überflüge dieser Nacht.
-• Rotlicht: die ganze App in Rot, damit die Augen dunkeladaptiert bleiben – von Hand oder automatisch nachts.
+Neu: Der Himmel über deiner Kamera, Rotlicht und Satelliten auf der Erdkugel.
+• Über dem Livebild einblenden: Sternbilder, Sterne, Gitter, Planeten, Satelliten und Wetterballons.
+• Himmel jetzt: Sterne, Bewölkung, Himmelshelligkeit und Sternschärfe, dazu Ausrichtung und Flat der Kamera.
+• Satelliten: jetzt über dir, die Überflüge der Nacht und als Erdkugel mit Bahnen.
+• Messdaten: Verlauf der Sternschärfe.
+• Rotlicht: die ganze App in Rot für dunkeladaptierte Augen.

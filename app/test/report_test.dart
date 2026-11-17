@@ -150,6 +150,22 @@ void main() {
     await tester.pumpWidget(const SizedBox());
   });
 
+  testWidgets('after "denied", coming back does not ask again', (tester) async {
+    final location = _LaterHere(LocationProblem.denied);
+    await tester.pumpWidget(
+      MaterialApp(
+        home: ReportScreen(client: _hub([]), location: location),
+      ),
+    );
+    await tester.pump();
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.paused);
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+    await tester.pump();
+    expect(location.asked, 1);
+    expect(find.byKey(const Key('report-no-place')), findsOneWidget);
+    await tester.pumpWidget(const SizedBox());
+  });
+
   testWidgets('blocked in the settings: a way there', (tester) async {
     await tester.pumpWidget(
       MaterialApp(
@@ -162,6 +178,12 @@ void main() {
     await tester.pump();
     expect(find.byKey(const Key('report-open-settings')), findsOneWidget);
     expect(find.byKey(const Key('report-retry')), findsOneWidget);
+    // Back from the settings: it tries again by itself.
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.paused);
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+    await tester.pump();
+    await tester.pump();
+    expect(find.byKey(const Key('report-no-place')), findsNothing);
     await tester.pumpWidget(const SizedBox());
   });
 

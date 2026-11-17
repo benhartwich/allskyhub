@@ -2,11 +2,23 @@
   {
     "version": "0.1.5",
     "de": [
+      "Scharfstellen mit Sterngröße: Im Fokus-Modus zeigt das Livebild die Sterngröße (HFR) in der Mitte und zum Rand, den besten Wert und den Verlauf. Kleiner ist schärfer.",
+      "Flat aus Dämmerung und Nacht: Die Kamera rechnet Vignettierung und Staub selbst heraus.",
+      "Nacht-Weißabgleich aus dem Himmel: Nachtbilder haben weniger Farbstich.",
+      "Ruhigeres Livebild: Bei kurzen Belichtungen werden die letzten Bilder gemittelt (nur das Livebild, gespeichert werden weiter Einzelbilder).",
       "Zeitraffer, Keogramme und Sternspuren bleiben 90 Tage, die Einzelbilder wie bisher 14 Tage. Einstellbar unter Einstellungen → Speicher.",
+      "Sternspuren nur noch aus der astronomischen Nacht.",
+      "Weniger Fehlalarme: kein Blitz mehr aus einem kleinen Fleck klaren Himmels, leuchtende Nachtwolken nur noch in ihrer Saison.",
       "Neu: „Was ist neu“ nach jedem Update."
     ],
     "en": [
+      "Focus with star size: in focus mode the live view shows the star size (HFR) in the centre and toward the edge, the best value and the trend. Smaller is sharper.",
+      "Flat from twilight and night: the camera removes vignetting and dust by itself.",
+      "Night white balance from the sky: night frames have less colour cast.",
+      "Calmer live view: with short exposures the last frames are averaged (only the live view, stored frames stay single).",
       "Timelapses, keograms and star trails are kept for 90 days, single frames for 14 days as before. Adjustable under Settings → Storage.",
+      "Star trails only from astronomical night.",
+      "Fewer false alarms: no lightning from a small patch of clear sky, noctilucent clouds only in their season.",
       "New: “What's new” after every update."
     ]
   }

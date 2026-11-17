@@ -12,10 +12,19 @@ import '../api/hub_client.dart';
 import '../design.dart';
 import '../l10n.dart';
 import 'camera_status.dart' show formatAge;
+import 'globe.dart';
 
 // ---- Layers over the live picture (draft 1) -------------------------------------------
 
-enum SkyLayer { constellations, stars, grid, planets, aircraft, satellites }
+enum SkyLayer {
+  constellations,
+  stars,
+  grid,
+  planets,
+  aircraft,
+  satellites,
+  balloons,
+}
 
 String layerTitle(SkyLayer l) => switch (l) {
   SkyLayer.constellations => tr('Sternbilder', 'Constellations'),
@@ -24,13 +33,18 @@ String layerTitle(SkyLayer l) => switch (l) {
   SkyLayer.planets => tr('Mond & Planeten', 'Moon & planets'),
   SkyLayer.aircraft => tr('Flugzeuge', 'Aircraft'),
   SkyLayer.satellites => tr('Satelliten', 'Satellites'),
+  SkyLayer.balloons => tr('Wetterballons', 'Weather balloons'),
 };
 
 /// The layers switched on, kept while the app runs (like the hub's page per browser).
 final shownLayers = ValueNotifier<Set<SkyLayer>>(<SkyLayer>{});
 
 class LayerChips extends StatelessWidget {
-  const LayerChips({super.key});
+  const LayerChips({super.key, this.overlay});
+
+  /// The overlay drawn: the balloon chip only when balloons are near (app 1.5.0), and
+  /// their credit (SondeHub, CC BY-SA 2.0) while they are shown.
+  final SkyOverlay? overlay;
 
   @override
   Widget build(BuildContext context) => ValueListenableBuilder<Set<SkyLayer>>(
@@ -40,14 +54,22 @@ class LayerChips extends StatelessWidget {
       runSpacing: 6,
       children: [
         for (final l in SkyLayer.values)
-          FilterChip(
-            key: Key('layer-${l.name}'),
-            label: Text(layerTitle(l)),
-            selected: shown.contains(l),
-            // The current set, not the one drawn: two quick taps both count.
-            onSelected: (on) => shownLayers.value = on
-                ? {...shownLayers.value, l}
-                : ({...shownLayers.value}..remove(l)),
+          if (l != SkyLayer.balloons || (overlay?.balloons.isNotEmpty ?? false))
+            FilterChip(
+              key: Key('layer-${l.name}'),
+              label: Text(layerTitle(l)),
+              selected: shown.contains(l),
+              // The current set, not the one drawn: two quick taps both count.
+              onSelected: (on) => shownLayers.value = on
+                  ? {...shownLayers.value, l}
+                  : ({...shownLayers.value}..remove(l)),
+            ),
+        if (overlay?.balloonsCredit case final credit?
+            when shown.contains(SkyLayer.balloons))
+          Text(
+            credit,
+            key: const Key('balloons-credit'),
+            style: Theme.of(context).textTheme.bodySmall,
           ),
       ],
     ),
@@ -68,6 +90,7 @@ class SkyOverlayPainter extends CustomPainter {
   static const _planet = Color(0xFFF2C06B);
   static const _sat = Color(0xFF8CE6C8);
   static const _air = Color(0xFFFFC45C);
+  static const _balloon = Color(0xFFFF9E7A);
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -187,6 +210,7 @@ class SkyOverlayPainter extends CustomPainter {
 
     if (shown.contains(SkyLayer.aircraft)) moving(overlay.aircraft, _air);
     if (shown.contains(SkyLayer.satellites)) moving(overlay.satellites, _sat);
+    if (shown.contains(SkyLayer.balloons)) moving(overlay.balloons, _balloon);
   }
 
   @override
@@ -261,6 +285,88 @@ class OrientationLine extends StatelessWidget {
             style: small,
           ),
           if (solved != null) Text(formatAge(solved), style: small),
+        ],
+      ),
+    );
+  }
+}
+
+/// The flat in use (SPEC §4.10, status.flat), under the orientation line; like the hub's
+/// line (devices/sky_now.flat). Nothing from agents that do not send it.
+class FlatLine extends StatelessWidget {
+  const FlatLine({super.key, required this.status});
+
+  final Map<String, dynamic> status;
+
+  @override
+  Widget build(BuildContext context) {
+    final settings = status['settings'];
+    final off =
+        settings is Map<String, dynamic> &&
+        settings['flat_correction'] == 'off';
+    final f = status['flat'];
+    if (!off && f is! Map<String, dynamic>) return const SizedBox.shrink();
+    final flat = f is Map<String, dynamic> ? f : const <String, dynamic>{};
+    final gain = off ? null : _num(flat['max_gain']);
+    final at = off ? null : DateTime.tryParse(flat['at'] as String? ?? '');
+    final reason = flat['reason'];
+    final (label, colour, detail) = off
+        ? (tr('Flat aus', 'Flat off'), Sky.text2, '')
+        : switch (flat['source']) {
+            'twilight' => (
+              tr('Flat gemessen', 'Flat measured'),
+              Sky.aurora,
+              tr('Dämmerung', 'twilight'),
+            ),
+            'night' => (
+              tr('Flat geschätzt', 'Flat estimated'),
+              Sky.warn,
+              tr(
+                'aus den Nachtbildern, nur fürs Bild',
+                'from the night frames, for the picture only',
+              ),
+            ),
+            _ => (
+              tr('kein Flat', 'no flat'),
+              Sky.text2,
+              reason is String ? reason : '',
+            ),
+          };
+    final small = Theme.of(context).textTheme.bodySmall;
+    String dec(double v) => appEnglish
+        ? v.toStringAsFixed(2)
+        : v.toStringAsFixed(2).replaceAll('.', ',');
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 0, 16, 4),
+      child: Wrap(
+        key: const Key('flat-line'),
+        spacing: 10,
+        runSpacing: 4,
+        crossAxisAlignment: WrapCrossAlignment.center,
+        children: [
+          DecoratedBox(
+            decoration: BoxDecoration(
+              color: colour.withAlpha(36),
+              borderRadius: BorderRadius.circular(99),
+            ),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 2),
+              child: Text(
+                label,
+                style: small?.copyWith(
+                  color: colour,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ),
+          ),
+          if (detail.isNotEmpty) Text(detail, style: small),
+          if (gain != null)
+            Text(
+              tr('Rand bis ×${dec(gain)}', 'edge up to ×${dec(gain)}'),
+              style: small,
+            ),
+          if (at != null) Text(formatAge(at), style: small),
         ],
       ),
     );
@@ -352,9 +458,16 @@ class _CloudMapPainter extends CustomPainter {
 
 /// "Himmel jetzt": the camera's own measurement of the sky (status.sky).
 class SkyNowCard extends StatelessWidget {
-  const SkyNowCard({super.key, required this.status});
+  const SkyNowCard({super.key, required this.status, this.hfrUsual});
 
   final Map<String, dynamic> status;
+
+  /// The camera's usual star size (Camera.hfrUsual), for the star size tile.
+  final double? hfrUsual;
+
+  /// As the hub's dome hint (devices/health): this much above the usual size is a
+  /// warning colour.
+  static const blurFactor = 1.5;
 
   @override
   Widget build(BuildContext context) {
@@ -364,6 +477,8 @@ class SkyNowCard extends StatelessWidget {
     final cover = _num(sky['cloud_cover']);
     final sqm = _num(sky['sqm_mag']);
     final transparency = _num(sky['transparency']);
+    final hfr = _num(sky['hfr']);
+    final usual = hfrUsual;
     final raw = sky['cloud_map'];
     final cells = raw is List && raw.length == 24
         ? [for (final v in raw) _num(v)]
@@ -398,6 +513,17 @@ class SkyNowCard extends StatelessWidget {
           tr('Himmelshelligkeit', 'Sky brightness'),
           dec(sqm, 1),
           tr('mag/″², ungefähr', 'mag/″², roughly'),
+        ),
+      if (hfr != null)
+        _tile(
+          context,
+          tr('Sternschärfe', 'Star size'),
+          '${dec(hfr, 1)} px',
+          usual != null
+              ? tr('üblich ${dec(usual, 1)} px', 'usual ${dec(usual, 1)} px')
+              : tr('kleiner ist schärfer', 'smaller is sharper'),
+          warn: usual != null && hfr >= usual * blurFactor,
+          key: const Key('sky-hfr'),
         ),
       if (transparency != null)
         _tile(
@@ -463,9 +589,17 @@ class SkyNowCard extends StatelessWidget {
     );
   }
 
-  Widget _tile(BuildContext context, String label, String value, String note) {
+  Widget _tile(
+    BuildContext context,
+    String label,
+    String value,
+    String note, {
+    bool warn = false,
+    Key? key,
+  }) {
     final theme = Theme.of(context);
     return Container(
+      key: key,
       width: 140,
       padding: const EdgeInsets.all(10),
       decoration: BoxDecoration(
@@ -485,10 +619,11 @@ class SkyNowCard extends StatelessWidget {
           ),
           Text(
             value,
-            style: const TextStyle(
+            style: TextStyle(
               fontFamily: Sky.display,
               fontSize: 24,
               fontWeight: FontWeight.w700,
+              color: warn ? Sky.warn : null,
             ),
           ),
           Text(note, style: theme.textTheme.bodySmall),
@@ -530,6 +665,107 @@ class _SatellitesCardState extends State<SatellitesCard> {
   String _filter = 'jetzt';
   SatelliteView? _view;
   bool _failed = false;
+
+  // Draft D (app 1.5.0): the globe instead of the list.
+  bool _onGlobe = false;
+  SatelliteGlobe? _globe;
+  bool _globeFailed = false;
+  int? _picked;
+
+  Future<void> _loadGlobe() async {
+    setState(() {
+      _globe = null;
+      _globeFailed = false;
+      _picked = null;
+    });
+    try {
+      final g = await widget.client.satelliteGlobe(widget.cameraId);
+      if (mounted) setState(() => _globe = g);
+    } on Object {
+      if (mounted) setState(() => _globeFailed = true);
+    }
+  }
+
+  List<Widget> _globeBody(ThemeData theme) {
+    final g = _globe;
+    if (_globeFailed) {
+      return [
+        Text(
+          tr(
+            'Die Erdkugel ist gerade nicht verfügbar.',
+            'The globe is not available right now.',
+          ),
+        ),
+      ];
+    }
+    if (g == null) return [const LinearProgressIndicator()];
+    if (!g.loaded) {
+      return [
+        Text(
+          tr(
+            'Die Bahndaten der Satelliten sind gerade nicht geladen.',
+            'The satellites’ orbits are not loaded right now.',
+          ),
+        ),
+      ];
+    }
+    final camera = GlobeDot.ecef(g.camera, Sky.aurora);
+    Color colour(GlobeSatellite s) => s.nakedEye
+        ? Sky.accent
+        : s.up
+        ? Sky.warn
+        : Sky.text2;
+    final dots = [
+      for (final s in g.satellites)
+        GlobeDot.ecef(s.now, colour(s), big: s.nakedEye || s.up),
+    ];
+    final tracks = [
+      for (final s in g.satellites)
+        if (s.track.isNotEmpty)
+          [for (final p in s.track) GlobeDot.ecef(p, colour(s))],
+    ];
+    final picked = _picked == null ? null : g.satellites[_picked!];
+    return [
+      SizedBox(
+        height: 300,
+        child: Globe(
+          key: const Key('satellite-globe'),
+          markers: [GlobeMarker(lat: camera.lat, lon: camera.lon, night: true)],
+          center: (lat: camera.lat, lon: camera.lon),
+          now: g.at,
+          dots: dots,
+          tracks: tracks,
+          onTapDot: (i) => setState(() => _picked = i),
+        ),
+      ),
+      const SizedBox(height: 6),
+      if (picked != null)
+        Text(
+          [
+            picked.name,
+            if (picked.up && picked.altitude != null && picked.azimuth != null)
+              '${picked.altitude!.round()}° ${_compass(picked.azimuth!)}',
+            if (picked.heightKm != null) '${picked.heightKm!.round()} km',
+            picked.up
+                ? (picked.nakedEye
+                      ? tr('mit bloßem Auge', 'naked eye')
+                      : tr('über dem Horizont', 'above the horizon'))
+                : tr('unter dem Horizont', 'below the horizon'),
+          ].join(' · '),
+          key: const Key('globe-picked'),
+          style: theme.textTheme.bodyMedium,
+        ),
+      Text(
+        tr(
+          'Grün: deine Kamera. Blau: mit bloßem Auge, gelb: über deinem Horizont, Linien: '
+              'Bahnen ±45 min. Ziehen dreht, zwei Finger zoomen, Antippen zeigt den Satelliten.',
+          'Green: your camera. Blue: naked eye, yellow: above your horizon, lines: '
+              'paths ±45 min. Drag to turn, pinch to zoom, tap a satellite for details.',
+        ),
+        style: theme.textTheme.bodySmall,
+      ),
+    ];
+  }
 
   @override
   void initState() {
@@ -675,38 +911,72 @@ class _SatellitesCardState extends State<SatellitesCard> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(
-              tr('Satelliten', 'Satellites'),
-              style: theme.textTheme.titleMedium,
+            Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    tr('Satelliten', 'Satellites'),
+                    style: theme.textTheme.titleMedium,
+                  ),
+                ),
+                if (_onGlobe)
+                  IconButton(
+                    key: const Key('globe-refresh'),
+                    tooltip: tr('Neu laden', 'Reload'),
+                    icon: const Icon(Icons.refresh),
+                    onPressed: _loadGlobe,
+                  ),
+              ],
             ),
             const SizedBox(height: 8),
-            SegmentedButton<String>(
+            SegmentedButton<bool>(
+              key: const Key('satellites-mode'),
               showSelectedIcon: false,
               segments: [
+                ButtonSegment(value: false, label: Text(tr('Liste', 'List'))),
                 ButtonSegment(
-                  value: 'jetzt',
-                  label: Text(tr('Sichtbar', 'Visible')),
-                ),
-                ButtonSegment(
-                  value: 'oben',
-                  label: Text(tr('Über Horizont', 'Up')),
-                ),
-                ButtonSegment(
-                  value: 'nacht',
-                  label: Text(tr('Diese Nacht', 'This night')),
+                  value: true,
+                  label: Text(tr('Erdkugel', 'Globe')),
                 ),
               ],
-              selected: {_filter},
+              selected: {_onGlobe},
               onSelectionChanged: (s) {
-                setState(() {
-                  _filter = s.first;
-                  _view = null;
-                });
-                _load();
+                setState(() => _onGlobe = s.first);
+                if (_onGlobe && _globe == null) _loadGlobe();
               },
             ),
             const SizedBox(height: 8),
-            ...body,
+            if (_onGlobe)
+              ..._globeBody(theme)
+            else ...[
+              SegmentedButton<String>(
+                showSelectedIcon: false,
+                segments: [
+                  ButtonSegment(
+                    value: 'jetzt',
+                    label: Text(tr('Sichtbar', 'Visible')),
+                  ),
+                  ButtonSegment(
+                    value: 'oben',
+                    label: Text(tr('Über Horizont', 'Up')),
+                  ),
+                  ButtonSegment(
+                    value: 'nacht',
+                    label: Text(tr('Diese Nacht', 'This night')),
+                  ),
+                ],
+                selected: {_filter},
+                onSelectionChanged: (s) {
+                  setState(() {
+                    _filter = s.first;
+                    _view = null;
+                  });
+                  _load();
+                },
+              ),
+              const SizedBox(height: 8),
+              ...body,
+            ],
             const SizedBox(height: 6),
             Text(
               tr(

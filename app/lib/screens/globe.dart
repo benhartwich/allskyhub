@@ -61,6 +61,41 @@ class GlobeMarker {
   final bool night;
 }
 
+/// Something above the ground (a satellite, app 1.5.0): [r] in Earth radii from the
+/// centre; hidden when the Earth stands in front of it.
+class GlobeDot {
+  const GlobeDot({
+    required this.lat,
+    required this.lon,
+    required this.r,
+    required this.color,
+    this.big = false,
+  });
+
+  /// From Earth-fixed coordinates in Earth radii.
+  factory GlobeDot.ecef(
+    (double, double, double) p,
+    Color color, {
+    bool big = false,
+  }) {
+    final (x, y, z) = p;
+    final r = math.sqrt(x * x + y * y + z * z);
+    return GlobeDot(
+      lat: r == 0 ? 0 : math.asin(z / r) / _rad,
+      lon: math.atan2(y, x) / _rad,
+      r: r,
+      color: color,
+      big: big,
+    );
+  }
+
+  final double lat;
+  final double lon;
+  final double r;
+  final Color color;
+  final bool big;
+}
+
 class Globe extends StatefulWidget {
   const Globe({
     super.key,
@@ -68,12 +103,20 @@ class Globe extends StatefulWidget {
     this.onTap,
     this.center = const (lat: 48.0, lon: 10.0),
     this.now,
+    this.dots = const [],
+    this.tracks = const [],
+    this.onTapDot,
   });
 
   final List<GlobeMarker> markers;
   final ValueChanged<int>? onTap;
   final ({double lat, double lon}) center;
   final DateTime? now;
+
+  /// Satellites (app 1.5.0); tapping one calls [onTapDot] with its index.
+  final List<GlobeDot> dots;
+  final List<List<GlobeDot>> tracks;
+  final ValueChanged<int>? onTapDot;
 
   @override
   State<Globe> createState() => _GlobeState();
@@ -97,14 +140,32 @@ class _GlobeState extends State<Globe> {
   double _radius(Size size) => size.shortestSide / 2 * 0.92 * _zoom;
 
   void _tap(Offset at, Size size) {
-    final onTap = widget.onTap;
-    if (onTap == null) return;
     final p = GlobeProjection(
       _lat,
       _lon,
       size.center(Offset.zero),
       _radius(size),
     );
+    final onTapDot = widget.onTapDot;
+    if (onTapDot != null) {
+      var best = -1;
+      var bestDistance = 24.0;
+      for (final (i, d) in widget.dots.indexed) {
+        final q = p.projectAbove(d.lat, d.lon, d.r);
+        if (q == null) continue;
+        final distance = (q - at).distance;
+        if (distance < bestDistance) {
+          best = i;
+          bestDistance = distance;
+        }
+      }
+      if (best >= 0) {
+        onTapDot(best);
+        return;
+      }
+    }
+    final onTap = widget.onTap;
+    if (onTap == null) return;
     var best = -1;
     var bestDistance = 24.0; // a finger's width
     for (final (i, m) in widget.markers.indexed) {
@@ -142,6 +203,8 @@ class _GlobeState extends State<Globe> {
             rings: _rings,
             markers: widget.markers,
             sun: subsolarPoint(widget.now ?? DateTime.now()),
+            dots: widget.dots,
+            tracks: widget.tracks,
           ),
         ),
       );
@@ -165,6 +228,13 @@ class GlobeProjection {
   Offset? project(double lat, double lon) {
     final (x, y, z) = _xyz(lat, lon);
     return z < 0 ? null : center + Offset(x, -y) * radius;
+  }
+
+  /// A point [r] Earth radii from the centre; null when the Earth hides it.
+  Offset? projectAbove(double lat, double lon, double r) {
+    final (x, y, z) = _xyz(lat, lon);
+    if (z < 0 && (x * x + y * y) * r * r < 1) return null;
+    return center + Offset(x, -y) * radius * r;
   }
 
   /// Like [project], but a point on the far side lands on the rim.
@@ -194,8 +264,12 @@ class GlobePainter extends CustomPainter {
     required this.rings,
     required this.markers,
     required this.sun,
+    this.dots = const [],
+    this.tracks = const [],
   });
 
+  final List<GlobeDot> dots;
+  final List<List<GlobeDot>> tracks;
   final double lat;
   final double lon;
   final double radius;
@@ -255,6 +329,40 @@ class GlobePainter extends CustomPainter {
       canvas.drawCircle(q, 9, Paint()..color = color.withValues(alpha: .25));
       canvas.drawCircle(q, 4, Paint()..color = color);
     }
+    for (final track in tracks) {
+      final path = Path();
+      var open = false;
+      for (final d in track) {
+        final q = p.projectAbove(d.lat, d.lon, d.r);
+        if (q == null) {
+          open = false; // behind the Earth: a gap
+          continue;
+        }
+        open ? path.lineTo(q.dx, q.dy) : path.moveTo(q.dx, q.dy);
+        open = true;
+      }
+      canvas.drawPath(
+        path,
+        Paint()
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 1.3
+          ..color = (track.isEmpty ? Sky.warn : track.first.color).withValues(
+            alpha: .55,
+          ),
+      );
+    }
+    for (final d in dots) {
+      final q = p.projectAbove(d.lat, d.lon, d.r);
+      if (q == null) continue;
+      if (d.big) {
+        canvas.drawCircle(
+          q,
+          8,
+          Paint()..color = d.color.withValues(alpha: .25),
+        );
+      }
+      canvas.drawCircle(q, d.big ? 3.5 : 2, Paint()..color = d.color);
+    }
   }
 
   /// The circle of 90° around the point opposite the sun.
@@ -292,5 +400,7 @@ class GlobePainter extends CustomPainter {
       old.radius != radius ||
       old.rings != rings ||
       old.markers != markers ||
-      old.sun != sun;
+      old.sun != sun ||
+      old.dots != dots ||
+      old.tracks != tracks;
 }

@@ -7,12 +7,13 @@ import datetime as dt
 import httpx
 from fastapi import FastAPI
 
-from allskyhub_server.devices import satellite_match
+from allskyhub_server.devices import radiosondes, satellite_match
 from allskyhub_server.models import Device
 from tests.conftest import ISS_TLE
 from tests.fake_device import FakeDevice
 from tests.helpers import owner_email
 from tests.test_app_api import _app_login  # pyright: ignore[reportPrivateUsage]
+from tests.test_radiosondes import ANSWER, LAT, LON
 from tests.test_sky_overlay import AT, LENS, _status  # pyright: ignore[reportPrivateUsage]
 from tests.ws_helpers import paired_token
 
@@ -85,3 +86,35 @@ async def test_satellites(app: FastAPI, client: httpx.AsyncClient) -> None:
     # The overlay draws the ISS at the top of its pass (the image's time).
     d = (await client.get(f"/api/v1/cameras/{device_id}/sky-overlay", headers=auth)).json()
     assert [m["text"] for m in d["satellites"]] == ["Raumstation ISS"]
+
+
+async def test_balloons_hfr_usual_and_globe_for_app_150(
+    app: FastAPI, client: httpx.AsyncClient
+) -> None:
+    """App 1.5.0: weather balloons in the overlay, the usual star size with the camera and
+    the satellite globe; all only for the camera's own viewers."""
+    device_id = await _camera(app, client, AT)
+    auth = await _app_login(client, await owner_email(app, device_id))
+    url = f"/api/v1/cameras/{device_id}/sky-overlay"
+    d = (await client.get(url, headers=auth)).json()
+    assert d["balloons"] == []
+    assert d["balloons_credit"] is None
+    app.state.radiosondes.put(LAT, LON, radiosondes.parse(ANSWER))
+    d = (await client.get(url, headers=auth)).json()
+    [balloon] = d["balloons"]
+    assert balloon["text"].startswith("Wetterballon · 30,1 km")
+    assert balloon["trail"].startswith("M")
+    assert d["balloons_credit"] == radiosondes.CREDIT
+
+    camera = (await client.get(f"/api/v1/cameras/{device_id}", headers=auth)).json()
+    assert camera["hfr_usual"] is None  # no star sizes yet
+
+    globe = f"/api/v1/cameras/{device_id}/satellites/globe"
+    assert (await client.get(globe)).status_code == 401
+    data = (await client.get(globe, headers=auth)).json()
+    assert data["loaded"] is False  # no elements in the tests
+    assert data["satellites"] == []
+    assert len(data["camera"]) == 3
+    assert len(data["sun"]) == 3
+    nope = await client.get("/api/v1/cameras/nope/satellites/globe", headers=auth)
+    assert nope.status_code == 404

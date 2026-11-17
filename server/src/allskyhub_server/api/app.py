@@ -7,6 +7,7 @@ to ``/api/v1/cameras/claim``.
 
 from __future__ import annotations
 
+import asyncio
 import datetime as dt
 from typing import Annotated, Any, Literal
 
@@ -38,10 +39,13 @@ from allskyhub_server.devices import (
     pairing,
     public,
     queries,
+    radiosondes,
+    sat_globe,
     settings_form,
     sightings,
     sky_history,
     sky_overlay,
+    star_size,
 )
 from allskyhub_server.devices import settings as settings_mod
 from allskyhub_server.devices.connections import ConnectionRegistry
@@ -239,6 +243,9 @@ class Camera(BaseModel):
     settings_schema: list[dict[str, Any]] = []
     # Roadmap C10: "owner", or "admin"/"viewer" for a camera shared with this account.
     role: Role = "owner"
+    # Draft E for app 1.5.0: the camera's usual star size (px) for "Himmel jetzt"; only in
+    # GET /cameras/<id>, never on public pages.
+    hfr_usual: float | None = None
 
 
 def _bearer(request: Request) -> str:
@@ -364,7 +371,9 @@ async def camera(request: Request, db: DbSession, user: AppUser, device_id: str)
     if found is None:
         raise HTTPException(404, "Not found")
     device, role = found
-    return _camera(device, _registry(request), request.app.state.settings.base_url, role)
+    out = _camera(device, _registry(request), request.app.state.settings.base_url, role)
+    out.hfr_usual = await star_size.usual_now(db, device)
+    return out
 
 
 @router.get("/cameras/{device_id}/image/{variant}.jpg")
@@ -420,7 +429,16 @@ async def camera_sky_overlay(
     if satellites.loaded() is None:
         await satellites.get()  # the app asks rarely; waits once for the elements
     recent = await events.events(db, device.id, limit=50)
-    drawn = await sky_history.frame_sky(db, device, at, satellites.loaded(), recent)
+    # Draft B for app 1.5.0: the weather balloons of the camera's cell (asked in the
+    # background; the next call has them), as on the web's live image.
+    sondes: radiosondes.Radiosondes | None = request.app.state.radiosondes
+    where = bright_satellites.location(device.last_status)
+    if sondes is not None and where is not None:
+        sondes.warm(*where)
+    balloons = sondes.near(*where) if sondes is not None and where is not None else None
+    drawn = await sky_history.frame_sky(
+        db, device, at, satellites.loaded(), recent, balloons=balloons
+    )
     if drawn is None:
         return {}
     watch = aircraft.current
@@ -437,6 +455,7 @@ async def camera_sky_overlay(
         else []
     )  # fmt: skip
     drawn["aircraft_credit"] = aircraft.CREDIT if planes is not None else None
+    drawn["balloons_credit"] = radiosondes.CREDIT if drawn["balloons"] else None
     return drawn
 
 
@@ -475,6 +494,24 @@ async def camera_satellites(
             for x in v.passes
         ],
     }  # fmt: skip
+
+
+@router.get("/cameras/{device_id}/satellites/globe")
+async def camera_satellite_globe(
+    request: Request, db: DbSession, user: AppUser, device_id: str
+) -> dict[str, Any]:
+    """Draft D for app 1.5.0: the bright satellites around the Earth, the same JSON as the
+    web's globe (devices/sat_globe.py). Only the camera's viewers: it shows the place."""
+    found = await queries.visible_one(db, user.id, device_id)
+    if found is None:
+        raise HTTPException(404, "Not found")
+    where = bright_satellites.location(found[0].last_status)
+    if where is None:
+        raise HTTPException(404, "No location")
+    catalogue = await request.app.state.bright_satellites.get()
+    return await asyncio.to_thread(
+        sat_globe.globe, catalogue, where[0], where[1], dt.datetime.now(dt.UTC)
+    )
 
 
 @router.get("/cameras/{device_id}/nights")

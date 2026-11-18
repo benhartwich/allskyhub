@@ -95,6 +95,8 @@ OUTDATED = "Versionsnummer"
 TO_PUSH = frozenset({WITHDRAWN, OUTDATED})
 WITHDRAW_TRIES = 10
 WITHDRAW_PAUSE = 3.0
+# App infos of the live app: Apple refuses changes to them (409).
+LIVE_INFO = frozenset({"READY_FOR_SALE", "READY_FOR_DISTRIBUTION"})
 # Versions Apple has finished with; after them a new version can be made.
 RELEASED = frozenset(
     {
@@ -293,34 +295,8 @@ async def push(
         )
     app_id = str(apps[0]["id"])
 
-    # Name, subtitle and privacy policy belong to the app info, not to a version.
-    infos = await api.items(f"/apps/{app_id}/appInfos", "App-Infos")
-    info = next(
-        (i for i in infos if _state(i) not in ("READY_FOR_SALE", "READY_FOR_DISTRIBUTION")),
-        infos[0] if infos else None,
-    )
-    if info is None:
-        raise StoreError("App-Infos: Apple liefert keine.")
-    known = {
-        str(_dict(x.get("attributes")).get("locale")): str(x["id"])
-        for x in await api.items(f"/appInfos/{info['id']}/appInfoLocalizations", "Sprachen")
-    }
-    for locale in LOCALES:
-        t = texts(locale, root, play)
-        await api.upsert(
-            known.get(locale),
-            "appInfoLocalizations",
-            {"name": t["name"], "subtitle": t["subtitle"], "privacyPolicyUrl": p.privacy_url},
-            {
-                "attributes": {"locale": locale},
-                "relationships": {"appInfo": _rel("appInfos", str(info["id"]))},
-            },
-            f"Name {locale}",
-        )
-    report.add("Name und Untertitel", "ok", ", ".join(LOCALES))
-    await _soft(report, "Kategorie", _category(api, str(info["id"]), p))
-    await _soft(report, "Altersfreigabe", _age_rating(api, str(info["id"]), p.age_rating))
-
+    # The version first: Apple makes the editable app info (name, subtitle) only with a
+    # new version; while the only one is the live app's, it refuses changes with 409.
     versions = await api.items(
         f"/apps/{app_id}/appStoreVersions", "Versionen", **{"filter[platform]": "IOS"}
     )
@@ -328,14 +304,7 @@ async def push(
     # A version Apple is reviewing (or that waits for release) stays as it is; a new one
     # can only be made once the last one is out (Apple answers 409 otherwise).
     busy = next((v for v in versions if _state(v) not in EDITABLE | RELEASED), None)
-    if version is None and busy is not None:
-        report.add(
-            "Version",
-            "warn",
-            f"Version {_dict(busy.get('attributes')).get('versionString', '')} ist bei Apple "
-            f"({_state(busy)}); Texte, Screenshots und Build bleiben dort unverändert.",
-        )
-    elif version is None:
+    if version is None and busy is None:
         body = {
             "data": {
                 "type": "appStoreVersions",
@@ -345,6 +314,46 @@ async def push(
         }
         version = _dict(
             (await api.call("POST", "/appStoreVersions", "Version", body=body)).get("data")
+        )
+
+    # Name, subtitle and privacy policy belong to the app info, not to a version.
+    infos = await api.items(f"/apps/{app_id}/appInfos", "App-Infos")
+    if not infos:
+        raise StoreError("App-Infos: Apple liefert keine.")
+    info = next((i for i in infos if _state(i) not in LIVE_INFO), None)
+    if info is None:
+        report.add(
+            "Name und Untertitel",
+            "warn",
+            "Unverändert: Apple lässt sie erst mit einer neuen Version ändern.",
+        )
+    else:
+        known = {
+            str(_dict(x.get("attributes")).get("locale")): str(x["id"])
+            for x in await api.items(f"/appInfos/{info['id']}/appInfoLocalizations", "Sprachen")
+        }
+        for locale in LOCALES:
+            t = texts(locale, root, play)
+            await api.upsert(
+                known.get(locale),
+                "appInfoLocalizations",
+                {"name": t["name"], "subtitle": t["subtitle"], "privacyPolicyUrl": p.privacy_url},
+                {
+                    "attributes": {"locale": locale},
+                    "relationships": {"appInfo": _rel("appInfos", str(info["id"]))},
+                },
+                f"Name {locale}",
+            )
+        report.add("Name und Untertitel", "ok", ", ".join(LOCALES))
+        await _soft(report, "Kategorie", _category(api, str(info["id"]), p))
+        await _soft(report, "Altersfreigabe", _age_rating(api, str(info["id"]), p.age_rating))
+
+    if version is None and busy is not None:
+        report.add(
+            "Version",
+            "warn",
+            f"Version {_dict(busy.get('attributes')).get('versionString', '')} ist bei Apple "
+            f"({_state(busy)}); Texte, Screenshots und Build bleiben dort unverändert.",
         )
     if version is not None:
         await _soft(report, "Versionsnummer", _version_string(api, version, p.version))

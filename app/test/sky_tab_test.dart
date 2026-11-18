@@ -10,6 +10,9 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 
+String _ahead(int days) =>
+    DateTime.now().toUtc().add(Duration(days: days)).toIso8601String();
+
 class _Here implements LocationSource {
   final LocationResult result = const LocationResult.missing(
     LocationProblem.denied,
@@ -144,14 +147,16 @@ HubClient _hub(List<Uri> seen) => HubClient(
             'items': [
               {
                 'kind': 'shower',
-                'at': '2026-11-17T21:00:00Z',
+                // Ahead of today: reminders are offered for coming events only
+                // (a fixed date broke the test once it had passed).
+                'at': _ahead(30),
                 'all_day': true,
                 'title': 'Leoniden-Maximum',
                 'text': 'bis 15 pro Stunde',
               },
               {
                 'kind': 'full_moon',
-                'at': '2026-11-24T14:53:00Z',
+                'at': _ahead(37),
                 'all_day': true,
                 'title': 'Vollmond',
                 'text': 'Helle Nächte',

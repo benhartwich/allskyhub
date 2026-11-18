@@ -95,8 +95,6 @@ OUTDATED = "Versionsnummer"
 TO_PUSH = frozenset({WITHDRAWN, OUTDATED})
 WITHDRAW_TRIES = 10
 WITHDRAW_PAUSE = 3.0
-# App infos of the live app: Apple refuses changes to them (409).
-LIVE_INFO = frozenset({"READY_FOR_SALE", "READY_FOR_DISTRIBUTION"})
 # Versions Apple has finished with; after them a new version can be made.
 RELEASED = frozenset(
     {
@@ -320,12 +318,14 @@ async def push(
     infos = await api.items(f"/apps/{app_id}/appInfos", "App-Infos")
     if not infos:
         raise StoreError("App-Infos: Apple liefert keine.")
-    info = next((i for i in infos if _state(i) not in LIVE_INFO), None)
+    # Only an app info in preparation takes changes: the live app's and one in review
+    # (WAITING_FOR_REVIEW, IN_REVIEW) answer 409 (allsky review of #481).
+    info = next((i for i in infos if _state(i) in EDITABLE), None)
     if info is None:
         report.add(
             "Name und Untertitel",
             "warn",
-            "Unverändert: Apple lässt sie erst mit einer neuen Version ändern.",
+            "Unverändert: Apple lässt sie nur bei einer Version in Vorbereitung ändern.",
         )
     else:
         known = {

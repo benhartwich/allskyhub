@@ -714,7 +714,8 @@ async def test_push_appstore(tmp_path: Path) -> None:
             assert request.url.params["filter[bundleId]"] == stores.PACKAGE
             found = [{"id": "APP"}]
         elif path.endswith("/appInfos"):
-            found = [{"id": "INFO", "attributes": {"appStoreState": "PREPARE_FOR_SUBMISSION"}}]
+            # The app info goes along with the version (in review: no changes).
+            found = [{"id": "INFO", "attributes": {"appStoreState": version_state[0]}}]
         elif path.endswith("/appInfoLocalizations"):
             found = [{"id": "INFO-DE", "attributes": {"locale": "de-DE"}}]
         elif path.endswith("/appStoreVersions"):
@@ -819,9 +820,7 @@ async def test_push_appstore(tmp_path: Path) -> None:
     calls.clear()
     report = await appstore.push_report(hub)
     assert [(s.title, s.state) for s in report.steps] == [
-        ("Name und Untertitel", "ok"),
-        ("Kategorie", "ok"),
-        ("Altersfreigabe", "ok"),
+        ("Name und Untertitel", "warn"),  # Apple answers 409 while it reviews
         ("Version", "warn"),
         ("Build", "ok"),
         ("TestFlight-Link", "ok"),
@@ -830,6 +829,7 @@ async def test_push_appstore(tmp_path: Path) -> None:
     ], report.steps
     assert "appStoreVersions" not in created
     assert not [c for c in calls if "appStoreVersion" in c[1] and c[0] != "GET"]
+    assert not [c for c in calls if c[1].startswith(("/v1/appInfoLocalizations", "/v1/appInfos/"))]
     assert ("POST", "/v1/betaGroups/betaGroups-2/relationships/builds") in calls
     # The App Review's contact and test account filled the empty beta fields, both times.
     assert beta_contact[-1] == {

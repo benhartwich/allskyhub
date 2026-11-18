@@ -2157,3 +2157,63 @@ async def test_the_demo_account_goes_to_its_own_codemagic_group(tmp_path: Path) 
         client, "APP3", report, stores.OTHER_APPS["currywursttest"]
     )
     assert report.steps == []
+
+
+async def test_push_appstore_makes_the_next_version_first(tmp_path: Path) -> None:
+    """Only the live 1.1.0 at Apple: its app info refuses a new name (409), so the hub
+    makes the new version first and writes the app info Apple then adds (Ben, 2026-11-18:
+    "es wird keine neue Version angelegt")."""
+    calls: list[tuple[str, str]] = []
+    made: list[dict[str, Any]] = []
+
+    def answer(request: httpx.Request) -> httpx.Response:
+        path, method = request.url.path, request.method
+        calls.append((method, path))
+        if request.url.host == "upload.example":
+            return httpx.Response(200)
+        body: Any = json.loads(request.content) if request.content else None
+        if method == "PATCH" and path.startswith("/v1/appInfoLocalizations/LIVE"):
+            detail = "The field 'name' can not be modified in the current state."
+            return httpx.Response(409, json={"errors": [{"detail": detail}]})
+        if method == "POST":
+            kind = path.rsplit("/", 1)[1]
+            if kind == "appStoreVersions":
+                made.append(body["data"]["attributes"])
+            return httpx.Response(201, json={"data": {"id": f"{kind}-new", "attributes": {}}})
+        if method in ("PATCH", "DELETE"):
+            return httpx.Response(204 if method == "DELETE" else 200, json={"data": {}})
+        found: list[dict[str, Any]] = []
+        if path == "/v1/apps":
+            found = [{"id": "APP"}]
+        elif path.endswith("/appStoreVersions"):
+            live = {"versionString": "1.1.0", "appVersionState": "READY_FOR_DISTRIBUTION"}
+            found = [{"id": "V0", "attributes": live}]
+            found += [{"id": "appStoreVersions-new", "attributes": {
+                "versionString": appstore.VERSION, "appVersionState": "PREPARE_FOR_SUBMISSION"}}
+                for _ in made]  # fmt: skip
+        elif path.endswith("/appInfos"):
+            found = [{"id": "LIVE", "attributes": {"state": "READY_FOR_DISTRIBUTION"}}]
+            if made:
+                found.append({"id": "NEXT", "attributes": {"state": "PREPARE_FOR_SUBMISSION"}})
+        elif path.endswith("/appInfoLocalizations"):
+            owner = path.split("/")[3]
+            found = [{"id": f"{owner}-DE", "attributes": {"locale": "de-DE"}}]
+        elif path.endswith(("/appStoreReviewDetail", "/betaAppReviewDetail")):
+            return httpx.Response(200, json={"data": {"id": "RD", "attributes": {}}})
+        elif path.endswith("/ageRatingDeclaration"):
+            return httpx.Response(200, json={"data": {"id": "AGE", "attributes": {}}})
+        return httpx.Response(200, json={"data": found})
+
+    hub = stores.Stores(
+        tmp_path / "store",
+        "benhartwich/allskyhub",
+        httpx.AsyncClient(transport=httpx.MockTransport(answer)),
+    )
+    hub.vault.put("asc", *stores.parse_asc(_p8(), "2X9R4HXF34", ISSUER), by="a")
+    report = await appstore.push_report(hub)
+    states = {s.title: s.state for s in report.steps}
+    assert states["Name und Untertitel"] == "ok", report.steps
+    assert made == [{"platform": "IOS", "versionString": appstore.VERSION}]
+    assert ("PATCH", "/v1/appInfoLocalizations/NEXT-DE") in calls
+    assert not [c for c in calls if c[1].startswith("/v1/appInfoLocalizations/LIVE")]
+    assert not [c for c in calls if c == ("PATCH", "/v1/appInfos/LIVE")]

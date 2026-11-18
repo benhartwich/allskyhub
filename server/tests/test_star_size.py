@@ -293,6 +293,13 @@ async def test_cloudy_star_size_hidden_on_page_app_and_chart(
     camera = (await client.get(f"/api/v1/cameras/{dev.device_id}", headers=auth)).json()
     assert "hfr" not in camera["status"]["sky"]
     assert camera["status"]["sky"]["cloud_cover"] == 1.0
+    async with maker() as db:  # without a cloud cover: not shown either (review of #476)
+        device = await db.get(Device, dev.device_id)
+        assert device is not None
+        device.last_status = {"settings": CAMERA, "sky": {"at": at.isoformat(), "hfr": 1.2}}
+        await db.commit()
+    camera = (await client.get(f"/api/v1/cameras/{dev.device_id}", headers=auth)).json()
+    assert "hfr" not in camera["status"]["sky"]
     url = f"/api/v1/cameras/{dev.device_id}/nights/20261117/sky"
     night = (await client.get(url, headers=auth)).json()
     assert [s["hfr"] for s in night] == [None]

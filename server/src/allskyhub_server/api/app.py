@@ -293,11 +293,15 @@ def _camera(
 
 
 def _app_status(status: dict[str, Any] | None) -> dict[str, Any] | None:
-    """The camera's status as the app reads it: without the star size under clouds
-    (devices/star_size.clear), so App 1.5.0 shows no misleadingly sharp value."""
-    if status is None or not star_size.clear_now(status)[1]:
+    """The camera's status as the app reads it: the star size only where the page shows
+    one too (devices/star_size.clear: not under clouds, nor without a cloud cover), so App
+    1.5.0 shows no misleadingly sharp value."""
+    sky = (status or {}).get("sky")
+    if status is None or not isinstance(sky, dict) or "hfr" not in sky:
         return status
-    sky = {k: v for k, v in cast(dict[str, Any], status["sky"]).items() if k != "hfr"}
+    if star_size.clear_now(status)[0] is not None:
+        return status
+    sky = {k: v for k, v in cast(dict[str, Any], sky).items() if k != "hfr"}
     return {**status, "sky": sky}
 
 

@@ -511,10 +511,12 @@ async def camera_satellites(
 
 @router.get("/cameras/{device_id}/satellites/globe")
 async def camera_satellite_globe(
-    request: Request, db: DbSession, user: AppUser, device_id: str
+    request: Request, response: Response, db: DbSession, user: AppUser, device_id: str
 ) -> dict[str, Any]:
     """Draft D for app 1.5.0: the bright satellites around the Earth, the same JSON as the
-    web's globe (devices/sat_globe.py). Only the camera's viewers: it shows the place."""
+    web's globe (devices/sat_globe.py). Only the camera's viewers: it shows the place, so
+    no cache keeps it (review of #473)."""
+    response.headers["Cache-Control"] = "no-store"
     found = await queries.visible_one(db, user.id, device_id)
     if found is None:
         raise HTTPException(404, "Not found")

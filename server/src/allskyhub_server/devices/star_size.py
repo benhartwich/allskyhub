@@ -14,6 +14,7 @@ from typing import Any, cast
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from allskyhub_server.devices.night_summary import CLEAR_BELOW
 from allskyhub_server.models import Device, NightStat
 
 USUAL_NIGHTS = 14
@@ -24,6 +25,31 @@ DRIFT_BEFORE = 30
 DRIFT_MIN_BEFORE = 5
 FACTOR = 1.5  # this much larger counts as blurred (to be checked on real data)
 RELEASE = 1.3  # a hint already given goes only below this (no flapping around FACTOR)
+
+
+def clear(hfr: float | None, cloud_cover: float | None) -> float | None:
+    """The star size only under a clear sky (cloud cover below ``CLEAR_BELOW``, as for the
+    night's median): under clouds the camera finds few stars, mostly hot pixels and noise,
+    and their small size would read as unusually sharp (Ben's camera, 2026-11-18: 1.2 px
+    at 100 % cloud against 3.2 px clear)."""
+    if hfr is None or cloud_cover is None or cloud_cover >= CLEAR_BELOW:
+        return None
+    return hfr
+
+
+def clear_now(status: dict[str, Any] | None) -> tuple[float | None, bool]:
+    """(star size, hidden by clouds) from SPEC §6.3 ``status.sky``."""
+    sky = (status or {}).get("sky")
+    if not isinstance(sky, dict):
+        return None, False
+    sky = cast(dict[str, Any], sky)
+    raw, cover = _number(sky.get("hfr")), _number(sky.get("cloud_cover"))
+    cloudy = raw is not None and cover is not None and cover >= CLEAR_BELOW
+    return clear(raw, cover), cloudy
+
+
+def _number(v: object) -> float | None:
+    return float(v) if isinstance(v, int | float) and not isinstance(v, bool) else None
 
 
 def camera_key(device: Device) -> str | None:
@@ -71,12 +97,9 @@ async def usual(db: AsyncSession, device: Device, before_night: str | None) -> f
 async def usual_now(db: AsyncSession, device: Device) -> float | None:
     """The usual value next to the camera's current star size; None (no query) while the
     camera reports none."""
-    sky = (device.last_status or {}).get("sky")
-    if not isinstance(sky, dict):
+    if clear_now(device.last_status)[0] is None:
         return None
-    sky = cast(dict[str, Any], sky)
-    if sky.get("hfr") is None:
-        return None
+    sky = cast(dict[str, Any], (device.last_status or {})["sky"])
     night = sky.get("night_id")
     return await usual(db, device, night if isinstance(night, str) else None)
 

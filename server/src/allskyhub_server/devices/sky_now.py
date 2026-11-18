@@ -14,6 +14,8 @@ import math
 from dataclasses import dataclass, field
 from typing import Any, Literal, cast
 
+from allskyhub_server.devices import star_size
+
 # The agent accepts a solve up to 0.6° RMS (SPEC §4.8); below these it is good or usable.
 RMS_GOOD = 0.2
 RMS_USABLE = 0.4
@@ -113,6 +115,7 @@ class SkyNow:
     sqm: float | None
     transparency: float | None
     hfr: float | None = None  # draft E: star size in the zenith, px (SPEC §6.3 `hfr`)
+    hfr_cloudy: bool = False  # measured, but under clouds (devices/star_size.clear)
     cells: list[Cell] = field(default_factory=lambda: list[Cell]())
     # Compass letters for the map: (letter, x, y), placed like the image.
     compass: list[tuple[str, float, float]] = field(
@@ -147,13 +150,15 @@ def sky_now(status: dict[str, Any] | None) -> SkyNow | None:
     stars = sky.get("stars")
     view = _view(status)
     cells = _cells(sky.get("cloud_map"), view)
+    hfr, hfr_cloudy = star_size.clear_now(status)
     now = SkyNow(
         at=_time(sky.get("at")),
         stars=stars if isinstance(stars, int) and not isinstance(stars, bool) else None,
         cloud_pct=None if cover is None else round(min(max(cover, 0.0), 1.0) * 100),
         sqm=_number(sky.get("sqm_mag")),
         transparency=_number(sky.get("transparency")),
-        hfr=_number(sky.get("hfr")),
+        hfr=hfr,
+        hfr_cloudy=hfr_cloudy,
         cells=cells,
         compass=[(letter, *_xy(91.0, view.angle(az))) for letter, az in COMPASS] if cells else [],
     )

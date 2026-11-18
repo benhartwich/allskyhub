@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import asyncio
 import datetime as dt
-from typing import Annotated, Any, Literal
+from typing import Annotated, Any, Literal, cast
 
 from fastapi import APIRouter, Depends, HTTPException, Path, Query, Request
 from fastapi.responses import FileResponse, Response
@@ -282,7 +282,7 @@ def _camera(
         paired_at=device.paired_at,
         last_seen_at=device.last_seen_at,
         latest_image_at=device.latest_image_at,
-        status=device.last_status,
+        status=_app_status(device.last_status),
         frame=device.last_frame,
         public_url=(
             f"{base_url.rstrip('/')}/sky/{device.public_slug}" if device.public_slug else None
@@ -290,6 +290,15 @@ def _camera(
         settings_schema=[s.model_dump(mode="json") for s in settings_form.schema_of(device)[0]],
         role=role,
     )
+
+
+def _app_status(status: dict[str, Any] | None) -> dict[str, Any] | None:
+    """The camera's status as the app reads it: without the star size under clouds
+    (devices/star_size.clear), so App 1.5.0 shows no misleadingly sharp value."""
+    if status is None or not star_size.clear_now(status)[1]:
+        return status
+    sky = {k: v for k, v in cast(dict[str, Any], status["sky"]).items() if k != "hfr"}
+    return {**status, "sky": sky}
 
 
 async def _limit(request: Request, key: str, limits: tuple[ratelimit.Limit, ...]) -> None:
@@ -563,7 +572,13 @@ async def night_sky(
 ) -> list[SkyItem]:
     device = await _own(db, user, device_id)
     return [
-        SkyItem(at=s.at, cloud_cover=s.cloud_cover, sqm_mag=s.sqm_mag, stars=s.stars, hfr=s.hfr)
+        SkyItem(
+            at=s.at,
+            cloud_cover=s.cloud_cover,
+            sqm_mag=s.sqm_mag,
+            stars=s.stars,
+            hfr=star_size.clear(s.hfr, s.cloud_cover),
+        )
         for s in await archive.night_sky(db, device.id, night_id)
     ]
 

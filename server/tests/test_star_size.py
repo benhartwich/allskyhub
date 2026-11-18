@@ -13,6 +13,8 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from allskyhub_server.devices import health, star_size, stats
 from allskyhub_server.models import Device, NightStat, SkySample
 from tests.fake_device import FakeDevice
+from tests.helpers import owner_email
+from tests.test_app_api import _app_login  # pyright: ignore[reportPrivateUsage]
 from tests.ws_helpers import paired_token
 
 NOW = dt.datetime(2026, 10, 13, 23, 30, tzinfo=dt.UTC)
@@ -130,6 +132,7 @@ async def test_nights_live_tile_and_stats(app: FastAPI, client: httpx.AsyncClien
                         "at": "2026-10-05T21:00:00+00:00",
                         "night_id": "20261005",
                         "stars": 150,
+                        "cloud_cover": 0.05,
                         "hfr": 2.94,
                     },
                 },
@@ -253,3 +256,43 @@ async def test_full_check_blur_and_focus(app: FastAPI, client: httpx.AsyncClient
     keys = [p.key for p in found]
     assert "dome_blur" in keys
     assert "focus" not in keys
+
+
+def test_no_star_size_under_clouds() -> None:
+    """Under clouds the camera finds hot pixels, not stars: their small size would read as
+    unusually sharp (Ben's camera, 2026-11-18: 1.2 px overcast, 3.2 px clear)."""
+    assert star_size.clear(3.2, 0.0) == 3.2
+    assert star_size.clear(1.2, 0.3) is None
+    assert star_size.clear(1.2, None) is None
+    assert star_size.clear_now({"sky": {"hfr": 1.2, "cloud_cover": 1.0}}) == (None, True)
+    assert star_size.clear_now({"sky": {"hfr": 3.2, "cloud_cover": 0.1}}) == (3.2, False)
+    assert star_size.clear_now({"sky": {"hfr": 3.2}}) == (None, False)  # cover unknown
+    assert star_size.clear_now(None) == (None, False)
+
+
+async def test_cloudy_star_size_hidden_on_page_app_and_chart(
+    app: FastAPI, client: httpx.AsyncClient
+) -> None:
+    dev = FakeDevice()
+    await paired_token(client, dev)
+    at = dt.datetime.now(dt.UTC) - dt.timedelta(minutes=5)
+    maker: async_sessionmaker[AsyncSession] = app.state.sessionmaker
+    async with maker() as db:
+        device = await db.get(Device, dev.device_id)
+        assert device is not None
+        sky = {"at": at.isoformat(), "stars": 40, "cloud_cover": 1.0, "hfr": 1.2}
+        device.last_status = {"settings": CAMERA, "sky": sky}
+        device.latest_image_at = at
+        db.add(SkySample(device_id=dev.device_id, night_id="20261117", at=at,
+                         cloud_cover=1.0, stars=40, hfr=1.2))  # fmt: skip
+        await db.commit()
+    live = (await client.get(f"/cameras/{dev.device_id}/live")).text
+    assert "bewölkt, nicht messbar" in live
+    assert "1,2 px" not in live
+    auth = await _app_login(client, await owner_email(app, dev.device_id))
+    camera = (await client.get(f"/api/v1/cameras/{dev.device_id}", headers=auth)).json()
+    assert "hfr" not in camera["status"]["sky"]
+    assert camera["status"]["sky"]["cloud_cover"] == 1.0
+    url = f"/api/v1/cameras/{dev.device_id}/nights/20261117/sky"
+    night = (await client.get(url, headers=auth)).json()
+    assert [s["hfr"] for s in night] == [None]

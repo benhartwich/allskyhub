@@ -476,7 +476,9 @@ base64url-encoded without padding.
   −18°), else null. `stars` is the number of stars detected at night, else null. `hfr` (optional) is the
   star size at night (sun ≤ −12°), else null: the median half-flux radius in pixels of
   up to 25 unsaturated stars in the central 40 % of the short side (the zenith), measured
-  on the full frame; null with fewer than 3 such stars. Lower is sharper; it grows when the
+  on the full frame; null with fewer than 10 such stars or fewer than 150 `stars` in the
+  frame (under clouds the few left are mostly hot pixels and noise, which look sharper
+  than real stars). Lower is sharper; it grows when the
   focus shifts or the dome fogs up before the stars disappear.
   `cloud_map` (optional, roadmap H4; null or missing unless all of: sun ≤ −12°, a trusted
   clock and an orientation, §4.8): cloud cover per sky cell, a list of 24 values, each

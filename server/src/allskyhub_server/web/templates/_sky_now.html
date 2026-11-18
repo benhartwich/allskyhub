@@ -15,7 +15,7 @@
     </div>
     {% endif %}
     {% if sn.sqm is not none %}<div class="sky-tile"><small>Himmelshelligkeit</small><strong>{{ '%.1f' | format(sn.sqm) | replace('.', ',') }}</strong><span>mag/⁠″², ungefähr; höher ist dunkler</span></div>{% endif %}
-    {% if sn.hfr is not none %}<div class="sky-tile"><small>Sternschärfe</small><strong>{{ '%.1f' | format(sn.hfr) | replace('.', ',') }} px</strong><span>{% if hfr_usual is defined and hfr_usual is not none %}üblich {{ '%.1f' | format(hfr_usual) | replace('.', ',') }} px; {% endif %}kleiner ist schärfer</span></div>{% endif %}
+    {% if sn.hfr is not none %}<div class="sky-tile"><small>Sternschärfe</small><strong>{{ '%.1f' | format(sn.hfr) | replace('.', ',') }} px</strong><span>{% if hfr_usual is defined and hfr_usual is not none %}üblich {{ '%.1f' | format(hfr_usual) | replace('.', ',') }} px; {% endif %}kleiner ist schärfer</span></div>{% elif sn.hfr_cloudy %}<div class="sky-tile"><small>Sternschärfe</small><strong>–</strong><span>bewölkt, nicht messbar</span></div>{% endif %}
     {% if sn.transparency is not none %}<div class="sky-tile"><small>Transparenz</small><strong>{{ '%.2f' | format(sn.transparency) | replace('.', ',') }}</strong><span>mag gedämpft über 40°, 0 = klarste Nächte</span></div>{% endif %}
   </div>
 </section>

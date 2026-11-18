@@ -43,7 +43,7 @@ SKY_FIELDS = (
 )
 # Draft E: the star size, only for the camera's own viewers (it is about the camera, not
 # the sky).
-HFR_FIELD = Field("hfr", lambda s: s.hfr)
+HFR_FIELD = Field("hfr", lambda s: star_size.clear(s.hfr, s.cloud_cover))
 STATUS_FIELDS = (
     Field("exposure", lambda s: None if not s.exposure_us else s.exposure_us / 1e6),
     Field("gain", lambda s: s.gain),

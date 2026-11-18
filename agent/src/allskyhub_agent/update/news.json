@@ -1,5 +1,14 @@
 [
   {
+    "version": "0.1.6",
+    "de": [
+      "Sterngröße nur noch bei genug Sternen: Unter Wolken meldet die Kamera keinen Wert mehr, der fälschlich besonders scharf aussah."
+    ],
+    "en": [
+      "Star size only with enough stars: under clouds the camera no longer reports a value that looked misleadingly sharp."
+    ]
+  },
+  {
     "version": "0.1.5",
     "de": [
       "Scharfstellen mit Sterngröße: Im Fokus-Modus zeigt das Livebild die Sterngröße (HFR) in der Mitte und zum Rand, den besten Wert und den Verlauf. Kleiner ist schärfer.",

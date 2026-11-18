@@ -27,7 +27,7 @@ import numpy as np
 import numpy.typing as npt
 
 from allskyhub_agent.core.metering import circle_mask
-from allskyhub_agent.detect.hfr import centre_crop, star_hfr
+from allskyhub_agent.detect.hfr import HfrConfig, centre_crop, star_hfr
 from allskyhub_protocol import FrameInfo, SkyMetrics
 
 Mask = npt.NDArray[np.bool_]
@@ -51,6 +51,10 @@ class SkyConfig:
     day_sun_deg: float = 3.0  # colour based cloud cover at or above this sun elevation
     sqm_sun_deg: float = -18.0  # SQM only at astronomical night
     hfr_crop: float = 0.4  # star size in this central part of the short side (zenith)
+    # Under clouds the few "stars" left are hot pixels and noise, which look sharper than
+    # real stars: star size only with this many stars in the frame and in the crop.
+    hfr_min_stars: int = 150
+    hfr_min_measured: int = 10
 
 
 _template: npt.NDArray[np.uint8] | None = None
@@ -117,6 +121,7 @@ class SkyMeter:
 
     def __init__(self, cfg: SkyConfig | None = None, radius_frac: float = 0.48) -> None:
         self._cfg = cfg or SkyConfig()
+        self._hfr = HfrConfig(min_stars=self._cfg.hfr_min_measured)
         self._radius = radius_frac
         self._masks: dict[tuple[int, int], tuple[Mask, Mask]] = {}
         self._learned: Mask | None = None
@@ -180,8 +185,9 @@ class SkyMeter:
             xs, ys = star_points(gray, mask, cfg.star_threshold)
             stars = count_stars(xs, ys)
             # SPEC §6.3 `hfr`: on the full frame, a smaller one would make stars look sharp.
-            sizes = star_hfr(centre_crop(gray, cfg.hfr_crop))
-            hfr = sizes.hfr if sizes is not None else None
+            if stars >= cfg.hfr_min_stars:
+                sizes = star_hfr(centre_crop(gray, cfg.hfr_crop), self._hfr)
+                hfr = sizes.hfr if sizes is not None else None
             up = inner[ys, xs]
             cloud = night_cloud_cover((h, w), inner, xs[up], ys[up], cfg.cells_across)
             if self._mapper is not None:

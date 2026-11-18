@@ -87,6 +87,19 @@ def test_sky_reports_hfr_only_at_night() -> None:
     assert meter.measure(_frame(-5.0), rgb).hfr is None
 
 
+def test_sky_reports_no_hfr_under_clouds() -> None:
+    """Few stars left (clouds): what remains is mostly hot pixels and noise, which would
+    look sharper than the real stars (Ben's camera, 18.11.: 1.2 px overcast, 3.3 px clear)."""
+    img = _field(1.5, n=60, size=600)
+    rgb = np.empty((600, 600, 3), dtype=np.uint8)
+    rgb[:, :, :] = img[:, :, None]
+    assert star_hfr(img) is not None  # enough for the focus helper
+    night = SkyMeter().measure(_frame(-20.0), rgb)
+    assert night.stars is not None
+    assert night.stars < 150
+    assert night.hfr is None
+
+
 def test_focus_mode_smooths_and_keeps_the_best() -> None:
     live = LiveState()
     live.set_focus_mode(True)

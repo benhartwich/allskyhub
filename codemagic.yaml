@@ -41,7 +41,9 @@ workflows:
     <<: *app_dir
     environment:
       <<: *flutter
-      xcode: latest
+      # Apple: from April 2027 uploads need the iOS 27 SDK (ITMS-90725); Codemagic's
+      # `latest` stays on Xcode 26 until it switches majors, so pinned.
+      xcode: "27.2"
     scripts:
       - *get
       - *check
@@ -61,7 +63,9 @@ workflows:
     <<: *app_dir
     environment:
       <<: *flutter
-      xcode: latest
+      # Apple: from April 2027 uploads need the iOS 27 SDK (ITMS-90725); Codemagic's
+      # `latest` stays on Xcode 26 until it switches majors, so pinned.
+      xcode: "27.2"
       groups: [allskyhub_store]
     scripts:
       - *get

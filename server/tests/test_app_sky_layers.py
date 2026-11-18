@@ -111,7 +111,9 @@ async def test_balloons_hfr_usual_and_globe_for_app_150(
 
     globe = f"/api/v1/cameras/{device_id}/satellites/globe"
     assert (await client.get(globe)).status_code == 401
-    data = (await client.get(globe, headers=auth)).json()
+    answer = await client.get(globe, headers=auth)
+    assert answer.headers["cache-control"] == "no-store"
+    data = answer.json()
     assert data["loaded"] is False  # no elements in the tests
     assert data["satellites"] == []
     assert len(data["camera"]) == 3

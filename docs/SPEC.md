@@ -478,7 +478,8 @@ base64url-encoded without padding.
   up to 25 unsaturated stars in the central 40 % of the short side (the zenith), measured
   on the full frame; null with fewer than 10 such stars or fewer than 150 `stars` in the
   frame (under clouds the few left are mostly hot pixels and noise, which look sharper
-  than real stars). Lower is sharper; it grows when the
+  than real stars), and null unless `cloud_cover` is below 0.3 (thin clouds make the
+  stars look sharper too). Lower is sharper; it grows when the
   focus shifts or the dome fogs up before the stars disappear.
   `cloud_map` (optional, roadmap H4; null or missing unless all of: sun ≤ −12°, a trusted
   clock and an orientation, §4.8): cloud cover per sky cell, a list of 24 values, each

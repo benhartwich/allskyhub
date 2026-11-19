@@ -1,5 +1,14 @@
 [
   {
+    "version": "0.1.7",
+    "de": [
+      "Sterngröße nur noch bei klarem Himmel: Auch dünne Wolken ließen die Sterne schärfer aussehen, als sie sind."
+    ],
+    "en": [
+      "Star size only under a clear sky: even thin clouds made the stars look sharper than they are."
+    ]
+  },
+  {
     "version": "0.1.6",
     "de": [
       "Sterngröße nur noch bei genug Sternen: Unter Wolken meldet die Kamera keinen Wert mehr, der fälschlich besonders scharf aussah."

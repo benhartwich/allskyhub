@@ -55,6 +55,9 @@ class SkyConfig:
     # real stars: star size only with this many stars in the frame and in the crop.
     hfr_min_stars: int = 150
     hfr_min_measured: int = 10
+    # Thin clouds dim the faint stars' wings and make the stars look sharper even with
+    # hundreds left (18./19.11.: 3.2 px clear, 1.3 px at 0.9): only below this cover.
+    hfr_max_cloud: float = 0.3
 
 
 _template: npt.NDArray[np.uint8] | None = None
@@ -184,12 +187,13 @@ class SkyMeter:
         if sun <= cfg.night_sun_deg:
             xs, ys = star_points(gray, mask, cfg.star_threshold)
             stars = count_stars(xs, ys)
-            # SPEC §6.3 `hfr`: on the full frame, a smaller one would make stars look sharp.
-            if stars >= cfg.hfr_min_stars:
-                sizes = star_hfr(centre_crop(gray, cfg.hfr_crop), self._hfr)
-                hfr = sizes.hfr if sizes is not None else None
             up = inner[ys, xs]
             cloud = night_cloud_cover((h, w), inner, xs[up], ys[up], cfg.cells_across)
+            # SPEC §6.3 `hfr`: on the full frame, a smaller one would make stars look sharp.
+            clear = cloud is not None and cloud < cfg.hfr_max_cloud
+            if stars >= cfg.hfr_min_stars and clear:
+                sizes = star_hfr(centre_crop(gray, cfg.hfr_crop), self._hfr)
+                hfr = sizes.hfr if sizes is not None else None
             if self._mapper is not None:
                 cloud_map = self._mapper(frame, (h, w), mask, xs, ys)
             if sun <= cfg.sqm_sun_deg:

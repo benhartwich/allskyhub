@@ -100,6 +100,28 @@ def test_sky_reports_no_hfr_under_clouds() -> None:
     assert night.hfr is None
 
 
+def test_sky_reports_no_hfr_under_thin_clouds() -> None:
+    """Enough stars, but only in a hole of the clouds: thin clouds make stars look sharp
+    (Ben's camera, 18./19.11.: 1.3 px at 0.9 cloud cover with 200 stars)."""
+    rng = np.random.default_rng(1)
+    img = np.full((600, 600), 20.0)
+    for x, y in rng.uniform(170, 430, (500, 2)):
+        x0, y0 = int(x) - 15, int(y) - 15
+        yy, xx = np.mgrid[y0 : y0 + 31, x0 : x0 + 31]
+        img[y0 : y0 + 31, x0 : x0 + 31] += 120.0 * np.exp(
+            -((xx - x) ** 2 + (yy - y) ** 2) / (2 * 1.5**2)
+        )
+    img += rng.normal(0, 2.0, img.shape)
+    gray = np.minimum(np.maximum(img, 0), 255).astype(np.uint8)
+    rgb = np.repeat(gray[:, :, None], 3, axis=2)
+    night = SkyMeter().measure(_frame(-20.0), rgb)
+    assert night.stars is not None
+    assert night.stars >= 150
+    assert night.cloud_cover is not None
+    assert night.cloud_cover >= 0.3
+    assert night.hfr is None
+
+
 def test_focus_mode_smooths_and_keeps_the_best() -> None:
     live = LiveState()
     live.set_focus_mode(True)

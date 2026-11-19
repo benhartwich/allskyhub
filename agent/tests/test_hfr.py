@@ -113,7 +113,8 @@ def test_sky_reports_no_hfr_under_thin_clouds() -> None:
         )
     img += rng.normal(0, 2.0, img.shape)
     gray = np.minimum(np.maximum(img, 0), 255).astype(np.uint8)
-    rgb = np.repeat(gray[:, :, None], 3, axis=2)
+    rgb = np.empty((600, 600, 3), dtype=np.uint8)
+    rgb[:, :, :] = gray[:, :, None]
     night = SkyMeter().measure(_frame(-20.0), rgb)
     assert night.stars is not None
     assert night.stars >= 150

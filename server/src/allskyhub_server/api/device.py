@@ -429,8 +429,39 @@ async def device_ws(websocket: WebSocket) -> None:
 
     watchdog = asyncio.create_task(expire())
     bucket = _Bucket()
-    # How long the messages held up the reader (k44i7rl6, 2026-11-20): logged at the end.
-    handled, busy_s, slowest_s, reported = 0, 0.0, 0.0, 0
+    # The reader only reads; the messages are handled one after the other from a queue.
+    # A reader held up by the handling (or by the bucket) reads nothing more, so the
+    # device's pings go unanswered and it reconnects (k44i7rl6, 2026-11-20).
+    inbox: asyncio.Queue[str | None] = asyncio.Queue()
+    queued = [0]  # characters waiting in the inbox
+    # How long the messages held up the handling, and what they were: logged at the end.
+    handled, busy_s, slowest_s, reported, most = 0, 0.0, 0.0, 0, 0
+    types: dict[str, int] = {}
+
+    async def read() -> None:
+        try:
+            while True:
+                raw = await websocket.receive_text()
+                if len(raw) > MAX_MESSAGE_CHARS:
+                    log.warning("message too large", extra={"device_id": info.device_id})
+                    continue
+                if queued[0] + len(raw) > MAX_QUEUED_CHARS:
+                    log.warning("device backlog full", extra={"device_id": info.device_id})
+                    await close(TRY_AGAIN_LATER)
+                    return
+                queued[0] += len(raw)
+                inbox.put_nowait(raw)
+        except (WebSocketDisconnect, WebSocketDisconnected):
+            # The second: this side closed it (replaced by a new connection, token
+            # expired, backlog full) while the reader waited for the next message.
+            pass
+        except RuntimeError as e:
+            # Starlette after a close from this side; logged in case it is something else.
+            log.debug("device reader ended", extra={"device_id": info.device_id, "error": str(e)})
+        finally:
+            inbox.put_nowait(None)
+
+    reader: asyncio.Task[None] | None = None
     try:  # from attach on: whatever happens, detach in finally
         if old is not None:
             with contextlib.suppress(Exception):  # its device may be gone already
@@ -439,11 +470,15 @@ async def device_ws(websocket: WebSocket) -> None:
             maker, info.device_id, offline_notified_at=None, offline_mailed_at=None
         )  # a new outage may notify
         log.info("device connected", extra={"device_id": info.device_id})
-        while True:
-            raw = await websocket.receive_text()
-            if len(raw) > MAX_MESSAGE_CHARS:
-                log.warning("message too large", extra={"device_id": info.device_id})
-                continue
+        reader = asyncio.create_task(read())
+        while (raw := await inbox.get()) is not None:
+            if reader.done():
+                break  # gone: the device sends the rest again after it reconnects
+            most = max(most, inbox.qsize() + 1)
+            queued[0] -= len(raw)
+            kind = _TYPE.search(raw[:200])
+            name = kind.group(1) if kind else "?"
+            types[name] = types.get(name, 0) + 1
             started = time.monotonic()
             slow = None
             if reported < SLOW_REPORTS:
@@ -461,13 +496,19 @@ async def device_ws(websocket: WebSocket) -> None:
                 handled += 1
                 busy_s += took
                 slowest_s = max(slowest_s, took)
-    except (WebSocketDisconnect, WebSocketDisconnected):
-        # The second: this side closed it (replaced by a new connection, token expired)
-        # while the loop waited for the next message.
-        pass
     finally:
         watchdog.cancel()
-        await registry.detach(conn)
+        try:
+            if reader is not None:
+                reader.cancel()
+                try:
+                    await reader
+                except asyncio.CancelledError:
+                    pass
+                except Exception:  # must never keep the connection in the registry
+                    log.exception("device reader failed", extra={"device_id": info.device_id})
+        finally:
+            await registry.detach(conn)
         log.info(
             "device disconnected",
             extra={
@@ -475,12 +516,17 @@ async def device_ws(websocket: WebSocket) -> None:
                 "messages": handled,
                 "busy_s": round(busy_s, 2),
                 "slowest_s": round(slowest_s, 2),
+                "most_waiting": most,
+                "types": types,
             },
         )
 
 
 # No protocol message comes near this; a status with its schema is a few kB.
 MAX_MESSAGE_CHARS = 256_000
+# Messages read but not handled yet; a device that sends more is closed and comes back.
+MAX_QUEUED_CHARS = 32_000_000
+TRY_AGAIN_LATER = 1013  # RFC 6455: the device reconnects with its backoff (SPEC §6.1)
 # A message that takes longer holds up the device's WebSocket: nothing more is read, so its
 # pings go unanswered and it reconnects (k44i7rl6, 2026-11-20). Logged with what it awaits.
 SLOW_MESSAGE_S = 1.0

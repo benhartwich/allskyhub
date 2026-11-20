@@ -443,7 +443,14 @@ async def device_ws(websocket: WebSocket) -> None:
                 log.warning("message too large", extra={"device_id": info.device_id})
                 continue
             await bucket.take()  # a flooding device is slowed down, nothing is lost
-            await _handle(raw, conn, maker, settings, registry, notifier, store, kp)
+            reader = asyncio.current_task()
+            slow = asyncio.get_running_loop().call_later(
+                SLOW_MESSAGE_S, _report_slow, reader, info.device_id, raw
+            )
+            try:
+                await _handle(raw, conn, maker, settings, registry, notifier, store, kp)
+            finally:
+                slow.cancel()
     except (WebSocketDisconnect, WebSocketDisconnected):
         # The second: this side closed it (replaced by a new connection, token expired)
         # while the loop waited for the next message.
@@ -456,6 +463,45 @@ async def device_ws(websocket: WebSocket) -> None:
 
 # No protocol message comes near this; a status with its schema is a few kB.
 MAX_MESSAGE_CHARS = 256_000
+# A message that takes longer holds up the device's WebSocket: nothing more is read, so its
+# pings go unanswered and it reconnects (k44i7rl6, 2026-11-20). Logged with what it awaits.
+SLOW_MESSAGE_S = 5.0
+_TYPE = re.compile(r'"type"\s*:\s*"([a-z_]{1,32})"')
+
+
+def _report_slow(task: asyncio.Task[Any] | None, device_id: str, raw: str) -> None:
+    """Log the reader's await chain while one message is still being handled."""
+    if task is None or task.done():
+        return
+    kind = _TYPE.search(raw[:200])
+    log.warning(
+        "slow device message",
+        extra={
+            "device_id": device_id,
+            "type": kind.group(1) if kind else None,
+            "after_s": SLOW_MESSAGE_S,
+            "stack": _await_chain(task),
+        },
+    )
+
+
+def _await_chain(task: asyncio.Task[Any]) -> str:
+    """Where a suspended task waits: its coroutines down the ``await``s (a task's own
+    stack shows only the outermost frame), innermost last."""
+    lines: list[str] = []
+    step: Any = task.get_coro()
+    for _ in range(60):
+        frame = getattr(step, "cr_frame", None) or getattr(step, "gi_frame", None)
+        if frame is None:
+            if step is not None:
+                lines.append(f"  awaiting {type(step).__name__}: {str(step)[:200]}")
+            break
+        code = frame.f_code
+        lines.append(f"  {code.co_filename}:{frame.f_lineno} in {code.co_name}")
+        step = getattr(step, "cr_await", None) or getattr(step, "gi_yieldfrom", None)
+    return "\n".join(lines)[-6000:]
+
+
 # Messages a device may send in a burst (a night of backlog: products and hundreds of
 # events) and per second after that.
 BURST = 1000

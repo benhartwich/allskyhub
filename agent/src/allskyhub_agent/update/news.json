@@ -1,5 +1,14 @@
 [
   {
+    "version": "0.1.10",
+    "de": [
+      "Stabilere Verbindung zum Hub: Nach einem Verbindungsabbruch gehen nur noch die neuen Markierungen nach, nicht mehr alle der letzten Wochen."
+    ],
+    "en": [
+      "A steadier connection to the hub: after a dropout only the new labels go again, no longer all of the last weeks."
+    ]
+  },
+  {
     "version": "0.1.9",
     "de": [
       "Das neueste Bild hat Vorrang: Es wartet nicht mehr, bis die Originalbilder der Ereignisse hochgeladen sind."

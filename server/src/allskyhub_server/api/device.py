@@ -429,6 +429,8 @@ async def device_ws(websocket: WebSocket) -> None:
 
     watchdog = asyncio.create_task(expire())
     bucket = _Bucket()
+    # How long the messages held up the reader (k44i7rl6, 2026-11-20): logged at the end.
+    handled, busy_s, slowest_s, reported = 0, 0.0, 0.0, 0
     try:  # from attach on: whatever happens, detach in finally
         if old is not None:
             with contextlib.suppress(Exception):  # its device may be gone already
@@ -442,15 +444,23 @@ async def device_ws(websocket: WebSocket) -> None:
             if len(raw) > MAX_MESSAGE_CHARS:
                 log.warning("message too large", extra={"device_id": info.device_id})
                 continue
-            await bucket.take()  # a flooding device is slowed down, nothing is lost
-            reader = asyncio.current_task()
-            slow = asyncio.get_running_loop().call_later(
-                SLOW_MESSAGE_S, _report_slow, reader, info.device_id, raw
-            )
+            started = time.monotonic()
+            slow = None
+            if reported < SLOW_REPORTS:
+                slow = asyncio.get_running_loop().call_later(
+                    SLOW_MESSAGE_S, _report_slow, asyncio.current_task(), info.device_id, raw
+                )
             try:
+                await bucket.take()  # a flooding device is slowed down, nothing is lost
                 await _handle(raw, conn, maker, settings, registry, notifier, store, kp)
             finally:
-                slow.cancel()
+                took = time.monotonic() - started
+                if slow is not None:
+                    slow.cancel()
+                    reported += took >= SLOW_MESSAGE_S
+                handled += 1
+                busy_s += took
+                slowest_s = max(slowest_s, took)
     except (WebSocketDisconnect, WebSocketDisconnected):
         # The second: this side closed it (replaced by a new connection, token expired)
         # while the loop waited for the next message.
@@ -458,14 +468,23 @@ async def device_ws(websocket: WebSocket) -> None:
     finally:
         watchdog.cancel()
         await registry.detach(conn)
-        log.info("device disconnected", extra={"device_id": info.device_id})
+        log.info(
+            "device disconnected",
+            extra={
+                "device_id": info.device_id,
+                "messages": handled,
+                "busy_s": round(busy_s, 2),
+                "slowest_s": round(slowest_s, 2),
+            },
+        )
 
 
 # No protocol message comes near this; a status with its schema is a few kB.
 MAX_MESSAGE_CHARS = 256_000
 # A message that takes longer holds up the device's WebSocket: nothing more is read, so its
 # pings go unanswered and it reconnects (k44i7rl6, 2026-11-20). Logged with what it awaits.
-SLOW_MESSAGE_S = 5.0
+SLOW_MESSAGE_S = 1.0
+SLOW_REPORTS = 3  # per connection: a backlog of slow messages must not flood the log
 _TYPE = re.compile(r'"type"\s*:\s*"([a-z_]{1,32})"')
 
 

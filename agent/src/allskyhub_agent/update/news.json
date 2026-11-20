@@ -1,5 +1,14 @@
 [
   {
+    "version": "0.1.9",
+    "de": [
+      "Das neueste Bild hat Vorrang: Es wartet nicht mehr, bis die Originalbilder der Ereignisse hochgeladen sind."
+    ],
+    "en": [
+      "The newest picture comes first: it no longer waits until the events' original frames are uploaded."
+    ]
+  },
+  {
     "version": "0.1.8",
     "de": [
       "Zuverlässigere Bild-Uploads bei schwachem WLAN: Ein langsamer Upload unterbricht die Verbindung zum Hub nicht mehr."

@@ -56,6 +56,7 @@ from allskyhub_agent.discovery import Announcer, host_name, local_ipv4
 from allskyhub_agent.hub.identity import DEFAULT_KEY_PATH, DeviceIdentity
 from allskyhub_agent.hub.pairing import PairingState
 from allskyhub_agent.hub.public import PublicPage
+from allskyhub_agent.hub.syncmark import SYNC_MARK_NAME, SyncMark
 from allskyhub_agent.importer import privileges
 from allskyhub_agent.importer.allsky import AllskyImporter, AllskySettings
 from allskyhub_agent.importer.backlog import BACKLOG_NAME, Backlog
@@ -872,6 +873,8 @@ def main(argv: list[str] | None = None) -> int:
         def set_settings(a: SetSettingsArgs) -> list[str]:
             return change_settings(a.model_dump(exclude_unset=True), "the hub")
 
+        synced = SyncMark(args.data / SYNC_MARK_NAME)
+        synced.start(datetime.now(UTC))
         hub = HubManager(
             identity,
             pairing,
@@ -886,8 +889,12 @@ def main(argv: list[str] | None = None) -> int:
             settings_schema=current_schema if settings_path else None,
             backlog=Backlog(args.data / BACKLOG_NAME),
             night_events=event_store.night_events,
-            resend=lambda: [*labels.all(), *LocalArchive(store).deleted_nights(datetime.now(UTC))],
+            resend=lambda since: [
+                *labels.all(since),
+                *LocalArchive(store).deleted_nights(datetime.now(UTC)),
+            ],
             on_label=label_from_hub,
+            synced=synced,
         )
         hub.start(hub_url)
         print(f"device {identity.device_id}, hub {hub_url}")

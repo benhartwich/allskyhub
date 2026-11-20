@@ -7,10 +7,11 @@ import contextlib
 import json
 import random
 import stat
+import threading
 import time
 import urllib.request
 from dataclasses import dataclass, field
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
@@ -26,6 +27,7 @@ from allskyhub_agent.hub.backoff import MAX_S, Backoff
 from allskyhub_agent.hub.client import HubConfig, HubSession
 from allskyhub_agent.hub.identity import DeviceIdentity
 from allskyhub_agent.hub.pairing import PairingState
+from allskyhub_agent.hub.syncmark import MARGIN, SyncMark
 from allskyhub_agent.live import LiveState
 from allskyhub_agent.products.build import newest_products
 from allskyhub_agent.store.images import ImageStore
@@ -38,10 +40,12 @@ from allskyhub_protocol import (
     ErrorReply,
     Event,
     EventKind,
+    EventLabel,
     FrameInfo,
     Hello,
     HubKey,
     Mode,
+    NightDeleted,
     Products,
     Purpose,
     SetSettingsArgs,
@@ -745,7 +749,6 @@ def test_imported_nights_are_announced_once(tmp_path: Path) -> None:
 
 def test_labels_both_ways(tmp_path: Path) -> None:
     """SPEC §6.4 Labels: all labels again after hello; `label_event` from the hub."""
-    from allskyhub_protocol import EventLabel, NightDeleted
 
     store, _, _ = _store_with_frame(tmp_path)
     identity = DeviceIdentity.load_or_create(tmp_path / "device.key")
@@ -778,7 +781,7 @@ def test_labels_both_ways(tmp_path: Path) -> None:
             ) as http:
                 session = HubSession(
                     cfg, identity, pairing, store, LiveState(), "sim", "0.1.0",
-                    lambda: None, http, resend=lambda: [mine, NightDeleted(night_id="20261001")],
+                    lambda: None, http, resend=lambda _: [mine, NightDeleted(night_id="20261001")],
                     on_label=on_label,
                 )  # fmt: skip
                 stop = asyncio.Event()
@@ -904,3 +907,60 @@ def test_slow_frame_upload_does_not_hold_up_the_connection(
     assert [u[1] for u in hub.uploads] == ["full", "thumb"]
     assert most[0] == 1
     assert "hub connection closed" in caplog.text
+
+
+def test_labels_go_again_only_since_the_last_connection_that_stayed_up(tmp_path: Path) -> None:
+    """SPEC §6.4 Labels: after a reconnect only the labels set while offline (2026-11-20:
+    all 4056 of 35 nights after every reconnect held up the hub for a minute)."""
+    store, _, _ = _store_with_frame(tmp_path)
+    identity = DeviceIdentity.load_or_create(tmp_path / "device.key")
+    hub = FakeHub(register_unpaired=0, close_code=1000)
+    mark = SyncMark(tmp_path / "data" / "hub-labels-synced")
+    asked: list[datetime | None] = []
+    twice = threading.Event()
+
+    def resend(since: datetime | None) -> list[EventLabel | NightDeleted]:
+        asked.append(since)
+        if len(asked) >= 2:
+            twice.set()
+        return []
+
+    async def scenario() -> None:
+        async with serve(hub.ws_handler, "127.0.0.1", 0) as server:
+            port = server.sockets[0].getsockname()[1]
+            cfg = HubConfig(hub_url=f"http://127.0.0.1:{port}", stable_s=0.0)
+            pairing = PairingState(identity.device_id, cfg.hub_url, "sim", "0.1.0")
+            async with httpx.AsyncClient(
+                transport=httpx.MockTransport(hub.handle), base_url=cfg.hub_url
+            ) as http:
+                session = HubSession(
+                    cfg, identity, pairing, store, LiveState(), "sim", "0.1.0",
+                    lambda: None, http, resend=resend, synced=mark,
+                )  # fmt: skip
+                stop = asyncio.Event()
+                task = asyncio.create_task(session.run(stop))
+                assert await asyncio.to_thread(twice.wait, 10)
+                stop.set()
+                await asyncio.wait_for(task, 10)
+
+    before = datetime.now(UTC)
+    asyncio.run(scenario())
+    assert asked[0] is None  # never synced: all of them
+    second = asked[1]
+    assert second is not None
+    assert before - MARGIN <= second <= datetime.now(UTC) - MARGIN
+
+
+def test_sync_mark_survives_and_ignores_garbage(tmp_path: Path) -> None:
+    mark = SyncMark(tmp_path / "m")
+    assert mark.get() is None
+    at = datetime(2026, 11, 20, 8, 0, tzinfo=UTC)
+    mark.set(at)
+    assert SyncMark(tmp_path / "m").get() == at - MARGIN
+    mark.start(at + timedelta(days=5))  # a mark is there: kept
+    assert mark.get() == at - MARGIN
+    (tmp_path / "m").write_text("nonsense")
+    assert mark.get() is None
+    fresh = SyncMark(tmp_path / "new")
+    fresh.start(at)
+    assert fresh.get() == at - timedelta(days=1) - MARGIN

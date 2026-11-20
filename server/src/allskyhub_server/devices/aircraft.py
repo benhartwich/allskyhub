@@ -677,6 +677,7 @@ class Watch:
         for key in [k for k, t in self._checked_new.items() if t < now - KEEP]:
             del self._checked_new[key]
         changed: set[str] = set()
+        await self._load_satellites()
         async with self._maker() as db:
             rows = (
                 await db.execute(
@@ -718,6 +719,14 @@ class Watch:
             labels.deliver_later(self._maker, self._registry, device_id)
         return changed
 
+    async def _load_satellites(self) -> None:
+        """Load (or fail to load) the satellite catalogue before a database session is
+        opened: the first ``get`` after a start fetches CelesTrak, and every meteor of a
+        camera's resend waited for it holding a connection until the pool ran dry and
+        pages failed after 30 s (2026-11-20). ``_verdict``'s ``get`` is then instant."""
+        if self.satellites is not None:
+            await self.satellites.get()
+
     async def _verdict(
         self,
         event: EventRecord,
@@ -750,6 +759,7 @@ class Watch:
         positions already cover it. True if it got an automatic label."""
         from allskyhub_server.devices import labels
 
+        await self._load_satellites()
         async with self._maker() as db:
             row = (
                 await db.execute(

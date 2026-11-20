@@ -1,5 +1,14 @@
 [
   {
+    "version": "0.1.8",
+    "de": [
+      "Zuverlässigere Bild-Uploads bei schwachem WLAN: Ein langsamer Upload unterbricht die Verbindung zum Hub nicht mehr."
+    ],
+    "en": [
+      "More reliable picture uploads over weak Wi-Fi: a slow upload no longer interrupts the connection to the hub."
+    ]
+  },
+  {
     "version": "0.1.7",
     "de": [
       "Sterngröße nur noch bei klarem Himmel: Auch dünne Wolken ließen die Sterne schärfer aussehen, als sie sind."

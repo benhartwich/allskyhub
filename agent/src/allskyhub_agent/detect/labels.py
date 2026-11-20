@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import json
 import threading
+from datetime import datetime
 from pathlib import Path
 from typing import Any, cast
 
@@ -61,11 +62,12 @@ class Labels:
             tmp.replace(path)
             return True
 
-    def all(self) -> list[EventLabel]:
-        """Every stored label, for sending them again after a reconnect."""
+    def all(self, since: datetime | None = None) -> list[EventLabel]:
+        """Every stored label, or those set at or after `since`, for sending them again after
+        a reconnect."""
         out: list[EventLabel] = []
         for night in self._store.nights():
-            out.extend(self.night(night).values())
+            out.extend(v for v in self.night(night).values() if since is None or v.at >= since)
         return out
 
     def false_positives(self, night: str) -> set[str]:

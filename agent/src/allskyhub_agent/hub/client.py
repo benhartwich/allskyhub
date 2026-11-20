@@ -28,6 +28,7 @@ from websockets.exceptions import ConnectionClosed, InvalidStatus, WebSocketExce
 from allskyhub_agent.hub.backoff import Backoff
 from allskyhub_agent.hub.identity import DeviceIdentity
 from allskyhub_agent.hub.pairing import PairingState
+from allskyhub_agent.hub.syncmark import SyncMark
 from allskyhub_agent.importer.backlog import Backlog
 from allskyhub_agent.live import LiveState
 from allskyhub_agent.products.build import product_path
@@ -219,8 +220,9 @@ class HubSession:
         backlog: Backlog | None = None,
         night_products: Callable[[str], Products | None] | None = None,
         night_events: Callable[[str], list[Event]] | None = None,
-        resend: Callable[[], list[EventLabel | NightDeleted]] | None = None,
+        resend: Callable[[datetime | None], list[EventLabel | NightDeleted]] | None = None,
         on_label: Callable[[EventLabel], bool] | None = None,
+        synced: SyncMark | None = None,
     ) -> None:
         self._cfg = cfg
         # SPEC §6.4 Labels, §7: the owner's labels and deleted nights, sent again after
@@ -228,6 +230,8 @@ class HubSession:
         # whether the event is known.
         self._resend = resend
         self._on_label = on_label
+        # Labels go again only from this mark on, moved after every connection that stayed up.
+        self._synced = synced
         self._messages: list[EventLabel | NightDeleted | Aircraft] = []
         self._backlog = backlog
         self._night_products = night_products
@@ -298,10 +302,12 @@ class HubSession:
                 if stop.is_set():
                     return
                 token = await self._token()
-                started = self._monotonic()
+                started, started_at = self._monotonic(), _now()
                 code = await self._session(token, stop)
                 if self._monotonic() - started >= self._cfg.stable_s:
                     self._backoff.reset()
+                    if self._synced is not None:
+                        await asyncio.to_thread(self._synced.set, started_at)
                 if code == CloseCode.REPLACED:
                     log.warning("another connection of this device took over; waiting")
                     delay = self._cfg.replaced_wait_s
@@ -390,7 +396,8 @@ class HubSession:
                     # SPEC §6.4/§6.7: the current night's events again; the hub upserts.
                     self._events = await asyncio.to_thread(self._events_src.current_events)
                 if self._resend is not None:
-                    self._messages = [*await asyncio.to_thread(self._resend)]
+                    since = self._synced.get() if self._synced is not None else None
+                    self._messages = [*await asyncio.to_thread(self._resend, since)]
                 tasks: list[asyncio.Task[Any]] = [
                     asyncio.create_task(self._reader(ws, token)),
                     asyncio.create_task(self._writer(ws)),

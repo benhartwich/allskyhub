@@ -218,6 +218,9 @@ def test_labels(tmp_path: Path) -> None:
     assert not labels.set(old)
     assert labels.false_positives(NIGHT) == {"meteor-20261012T200000Z"}
     assert len(labels.all()) == 1
+    # After a reconnect only those set since the hub last had them (SPEC §6.4 Labels).
+    assert labels.all(lab.at) == [lab]
+    assert labels.all(lab.at + timedelta(seconds=1)) == []
 
 
 def test_auto_label_gives_way(tmp_path: Path) -> None:

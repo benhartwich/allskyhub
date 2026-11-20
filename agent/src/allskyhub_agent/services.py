@@ -5,6 +5,7 @@ from __future__ import annotations
 import logging
 import threading
 from collections.abc import Callable
+from datetime import datetime
 from pathlib import Path
 
 import httpx
@@ -14,6 +15,7 @@ from allskyhub_agent.discovery import Announcer
 from allskyhub_agent.hub.client import EventSource, HubClient, HubConfig, HubSession, LocalAccess
 from allskyhub_agent.hub.identity import DeviceIdentity
 from allskyhub_agent.hub.pairing import PairingState
+from allskyhub_agent.hub.syncmark import SyncMark
 from allskyhub_agent.importer.backlog import Backlog
 from allskyhub_agent.live import LiveState
 from allskyhub_agent.products.build import newest_products, night_products
@@ -52,9 +54,11 @@ class HubManager:
         settings_schema: Callable[[], list[SettingSpec]] | None = None,
         backlog: Backlog | None = None,
         night_events: Callable[[str], list[Event]] | None = None,
-        resend: Callable[[], list[EventLabel | NightDeleted]] | None = None,
+        resend: Callable[[datetime | None], list[EventLabel | NightDeleted]] | None = None,
         on_label: Callable[[EventLabel], bool] | None = None,
+        synced: SyncMark | None = None,
     ) -> None:
+        self._synced = synced
         self._night_events = night_events
         self._resend = resend
         self._on_label = on_label
@@ -97,6 +101,7 @@ class HubManager:
                 night_events=self._night_events,
                 resend=self._resend,
                 on_label=self._on_label,
+                synced=self._synced,
             )
 
         client = HubClient(make_session, cfg)

@@ -253,9 +253,14 @@ class HubSession:
         # Products wait here until the writer sends them; a newer night replaces an older one.
         self._products: Products | None = None
         self._uploads: set[asyncio.Task[None]] = set()
-        # Frame and event pictures one at a time, in the hub's order: on a poor uplink more at
-        # once only slow each other down.
-        self._pictures = asyncio.Lock()
+        # Frame and event pictures one at a time per kind, in the hub's order: on a poor uplink
+        # more at once only slow each other down. Frames have their own lane, so the newest
+        # frame does not wait behind a night's event originals (~1 MB each; 2026-11-20: 224
+        # meteor originals asked for again after every reconnect).
+        self._pictures = {
+            CommandName.UPLOAD_FRAME: asyncio.Lock(),
+            CommandName.UPLOAD_EVENT: asyncio.Lock(),
+        }
         self._backoff = Backoff()
 
     # --- called from the capture thread via HubClient -------------------------------------
@@ -514,7 +519,7 @@ class HubSession:
         if cmd.name is CommandName.UPLOAD_PRODUCT:
             reply = await self._upload_product(ref, cmd, token)
         else:
-            async with self._pictures:
+            async with self._pictures[cmd.name]:
                 try:
                     async with asyncio.timeout(self._cfg.picture_timeout_s):
                         reply = await self._command(ref, cmd, token)

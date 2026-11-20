@@ -451,10 +451,13 @@ async def device_ws(websocket: WebSocket) -> None:
                     return
                 queued[0] += len(raw)
                 inbox.put_nowait(raw)
-        except (WebSocketDisconnect, WebSocketDisconnected, RuntimeError):
-            # The second and third: this side closed it (replaced by a new connection,
-            # token expired, backlog full) while the reader waited for the next message.
+        except (WebSocketDisconnect, WebSocketDisconnected):
+            # The second: this side closed it (replaced by a new connection, token
+            # expired, backlog full) while the reader waited for the next message.
             pass
+        except RuntimeError as e:
+            # Starlette after a close from this side; logged in case it is something else.
+            log.debug("device reader ended", extra={"device_id": info.device_id, "error": str(e)})
         finally:
             inbox.put_nowait(None)
 
@@ -495,11 +498,17 @@ async def device_ws(websocket: WebSocket) -> None:
                 slowest_s = max(slowest_s, took)
     finally:
         watchdog.cancel()
-        if reader is not None:
-            reader.cancel()
-            with contextlib.suppress(asyncio.CancelledError):
-                await reader
-        await registry.detach(conn)
+        try:
+            if reader is not None:
+                reader.cancel()
+                try:
+                    await reader
+                except asyncio.CancelledError:
+                    pass
+                except Exception:  # must never keep the connection in the registry
+                    log.exception("device reader failed", extra={"device_id": info.device_id})
+        finally:
+            await registry.detach(conn)
         log.info(
             "device disconnected",
             extra={

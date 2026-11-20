@@ -270,3 +270,26 @@ def test_tracks_follow_the_great_circle() -> None:
     assert points[0] == pytest.approx((10.0, 0.0), abs=1e-9)
     # Opposite points on the horizon have no single great circle: no division by zero.
     assert len(overflight_map.great_circle((0.0, 0.0), (0.0, 180.0), 4)) == 5
+
+
+async def test_a_resend_after_a_reconnect_does_not_ask_again(
+    client: httpx.AsyncClient, live_app: str
+) -> None:
+    """2026-11-20: a camera on a weak link reconnected every minute and resent its night's
+    events; each time the hub asked for every original again, which never finished. A
+    request still on its way is kept across the reconnect; the original's window is long
+    enough for a queue of whole frames."""
+    dev = FakeDevice()
+    token = await paired_token(client, dev)
+    real = _event(0, FRAME)
+    async with device_ws(live_app, token) as ws:
+        await send(ws, real)
+        assert sorted(v for _, v in await _requests(ws)) == [
+            EventVariant.ORIGINAL,
+            EventVariant.THUMB,
+        ]
+    async with device_ws(live_app, token) as ws:
+        await send(ws, real)
+        assert await _requests(ws, first=1.0) == []
+        # Asked half an hour's window ago: the original may still start now.
+        assert await _put(live_app, token, real, EventVariant.ORIGINAL, _jpeg(3096, 2080)) == 204

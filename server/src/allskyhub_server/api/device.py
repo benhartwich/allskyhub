@@ -860,16 +860,23 @@ async def _on_event(
             _background(aircraft.current.check_new(conn.device_id, body.id))
     if not body.has_image:
         return
+    wanted: list[EventVariant] = []
     if not stored.has_thumb:
-        await registry.request_event(conn.device_id, body.night_id, body.id, EventVariant.THUMB)
+        wanted.append(EventVariant.THUMB)
     # Owners who keep events longer keep them in full: fetch the picture while it exists
     # (again when it was replaced, so the kept picture is the final one).
     if (keep_days or DEFAULT_EVENT_KEEP_DAYS) > DEFAULT_EVENT_KEEP_DAYS and not stored.has_full:
-        await registry.request_event(conn.device_id, body.night_id, body.id, EventVariant.FULL)
+        wanted.append(EventVariant.FULL)
     # SPEC §6.5 (roadmap L28): the whole frame right away, unless a false positive (those
     # only when someone opens them).
     if has_frame(stored) and not stored.has_original and not dismissed(stored):
-        await registry.request_event(conn.device_id, body.night_id, body.id, EventVariant.ORIGINAL)
+        wanted.append(EventVariant.ORIGINAL)
+    for variant in wanted:
+        # A resend after a reconnect does not ask again for what is still on its way.
+        if replaced or not registry.is_requested(
+            conn.device_id, body.night_id, body.id, variant, "event"
+        ):
+            await registry.request_event(conn.device_id, body.night_id, body.id, variant)
 
 
 _tasks: set[asyncio.Task[Any]] = set()

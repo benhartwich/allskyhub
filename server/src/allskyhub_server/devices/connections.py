@@ -33,6 +33,9 @@ log = logging.getLogger(__name__)
 # longer: the device may still be busy with an earlier timelapse.
 UPLOAD_WINDOW = dt.timedelta(minutes=2)
 PRODUCT_UPLOAD_WINDOW = dt.timedelta(minutes=30)
+# An event's original is a whole frame (about 1 MB): the device sends them one after the
+# other, so the last of a night's few hundred starts long after it was asked for.
+ORIGINAL_UPLOAD_WINDOW = dt.timedelta(minutes=30)
 # A viewer counts as watching for this long after the page last fetched an image.
 LIVE_HOLD = dt.timedelta(seconds=30)
 
@@ -54,8 +57,6 @@ class Connection:
     device_id: str
     send_text: SendText
     close: Close
-    # (night_id, name, variant) → until when the hub accepts that upload.
-    requested: dict[UploadKey, dt.datetime] = field(default_factory=dict[UploadKey, dt.datetime])
     # Commands waiting for their ack/error (SPEC §6.5), by envelope id.
     replies: dict[str, asyncio.Future[Ack | ErrorReply]] = field(
         default_factory=dict[str, "asyncio.Future[Ack | ErrorReply]"]
@@ -70,6 +71,10 @@ class ConnectionRegistry:
     def __init__(self) -> None:
         self._conns: dict[str, Connection] = {}
         self._live_until: dict[str, dt.datetime] = {}
+        # Per device, across reconnects: (what, night_id, name, variant) → until when the hub
+        # accepts that upload. A camera that reconnects every minute (2026-11-20) must not be
+        # asked for the same pictures again and again.
+        self._requested: dict[str, dict[UploadKey, dt.datetime]] = {}
         self._lock = asyncio.Lock()
 
     async def attach(self, conn: Connection) -> Connection | None:
@@ -163,7 +168,8 @@ class ConnectionRegistry:
         args = UploadEventArgs(night_id=night_id, event_id=event_id, variant=variant)
         cmd = Command(name=CommandName.UPLOAD_EVENT, args=args.model_dump(mode="json"))
         key = ("event", night_id, event_id, variant)
-        return await self._request(device_id, key, cmd, UPLOAD_WINDOW)
+        window = ORIGINAL_UPLOAD_WINDOW if variant is EventVariant.ORIGINAL else UPLOAD_WINDOW
+        return await self._request(device_id, key, cmd, window)
 
     async def _request(
         self, device_id: str, key: UploadKey, cmd: Command, window: dt.timedelta
@@ -172,8 +178,9 @@ class ConnectionRegistry:
         if conn is None:
             return False
         now = _now()
-        conn.requested = {k: v for k, v in conn.requested.items() if v > now}
-        conn.requested[key] = now + window
+        requested = {k: v for k, v in self._requested.get(device_id, {}).items() if v > now}
+        requested[key] = now + window
+        self._requested[device_id] = requested
         await conn.send_text(Envelope.wrap(cmd, ts=now).model_dump_json())
         return True
 
@@ -186,8 +193,7 @@ class ConnectionRegistry:
         what: Kind = "frame",
     ) -> bool:
         """The hub asked for this upload and the window to start it is still open."""
-        conn = self._conns.get(device_id)
-        until = conn.requested.get((what, night_id, name, variant)) if conn else None
+        until = self._requested.get(device_id, {}).get((what, night_id, name, variant))
         return until is not None and until > _now()
 
     def is_pending(
@@ -211,7 +217,5 @@ class ConnectionRegistry:
     ) -> bool:
         """Mark a valid upload as done. The window was checked when the upload started, so a
         long one that ends after it still counts."""
-        conn = self._conns.get(device_id)
-        if conn is None:
-            return False
-        return conn.requested.pop((what, night_id, name, variant), None) is not None
+        requested = self._requested.get(device_id, {})
+        return requested.pop((what, night_id, name, variant), None) is not None

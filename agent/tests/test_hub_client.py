@@ -859,6 +859,8 @@ def test_slow_frame_upload_does_not_hold_up_the_connection(
             args={"night_id": night, "name": name, "variant": "thumb"},
         ),
         Command(name=CommandName.FOCUS_MODE, args={"on": True}),
+        # No event source: not_found at once, an event does not wait for the frames.
+        Command(name=CommandName.UPLOAD_EVENT, args={"night_id": night, "event_id": "x"}),
     ]
     running: list[int] = []
     most: list[int] = [0]
@@ -891,11 +893,14 @@ def test_slow_frame_upload_does_not_hold_up_the_connection(
     with caplog.at_level("INFO", logger="allskyhub_agent.hub.client"):
         asyncio.run(scenario())
     acks = [r.TYPE if r else None for r in hub.reply_order]
-    assert acks == ["ack", "ack", "ack"]
+    assert acks == ["ack", "ack", "ack", "error"]
     # The focus command was answered first, while the frames were still on their way.
     focus = hub.reply_order[2]
     assert focus is not None
     assert next(iter(hub.replies)) == focus.ref
+    event = hub.reply_order[3]
+    assert event is not None
+    assert list(hub.replies).index(event.ref) == 1
     assert [u[1] for u in hub.uploads] == ["full", "thumb"]
     assert most[0] == 1
     assert "hub connection closed" in caplog.text

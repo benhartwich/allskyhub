@@ -840,3 +840,62 @@ def test_too_many_requests_waits_for_retry_after(tmp_path: Path) -> None:
     _run_for(hub, tmp_path, 1.6)
     assert len(hub.token_times) >= 2
     assert hub.token_times[1] - hub.token_times[0] >= 0.99  # Retry-After: 1, not 0.5 s
+
+
+def test_slow_frame_upload_does_not_hold_up_the_connection(
+    tmp_path: Path, caplog: pytest.LogCaptureFixture
+) -> None:
+    """2026-11-20: ~1 MB storm frames over weak WLAN did not get through in 30 s; the upload
+    held the reader, the connection dropped every minute and nothing said why. Now other
+    commands are answered meanwhile, pictures go one at a time, and the end is logged."""
+    store, night, name = _store_with_frame(tmp_path)
+    live = LiveState()
+    identity = DeviceIdentity.load_or_create(tmp_path / "device.key")
+    hub = FakeHub(register_unpaired=0, close_code=1000)
+    hub.commands = [
+        Command(name=CommandName.UPLOAD_FRAME, args={"night_id": night, "name": name}),
+        Command(
+            name=CommandName.UPLOAD_FRAME,
+            args={"night_id": night, "name": name, "variant": "thumb"},
+        ),
+        Command(name=CommandName.FOCUS_MODE, args={"on": True}),
+    ]
+    running: list[int] = []
+    most: list[int] = [0]
+
+    async def slow(req: httpx.Request) -> httpx.Response:
+        if req.url.path.startswith("/device/v1/frames/"):
+            running.append(1)
+            most[0] = max(most[0], len(running))
+            await asyncio.sleep(0.6)
+            running.pop()
+        return await hub.ahandle(req)
+
+    async def scenario() -> None:
+        async with serve(hub.ws_handler, "127.0.0.1", 0) as server:
+            port = server.sockets[0].getsockname()[1]
+            cfg = HubConfig(hub_url=f"http://127.0.0.1:{port}")
+            pairing = PairingState(identity.device_id, cfg.hub_url, "sim", "0.1.0")
+            async with httpx.AsyncClient(
+                transport=httpx.MockTransport(slow), base_url=cfg.hub_url
+            ) as http:
+                session = HubSession(
+                    cfg, identity, pairing, store, live, "sim", "0.1.0", lambda: None, http
+                )
+                stop = asyncio.Event()
+                task = asyncio.create_task(session.run(stop))
+                await asyncio.wait_for(hub.done.wait(), 10)
+                stop.set()
+                await asyncio.wait_for(task, 10)
+
+    with caplog.at_level("INFO", logger="allskyhub_agent.hub.client"):
+        asyncio.run(scenario())
+    acks = [r.TYPE if r else None for r in hub.reply_order]
+    assert acks == ["ack", "ack", "ack"]
+    # The focus command was answered first, while the frames were still on their way.
+    focus = hub.reply_order[2]
+    assert focus is not None
+    assert next(iter(hub.replies)) == focus.ref
+    assert [u[1] for u in hub.uploads] == ["full", "thumb"]
+    assert most[0] == 1
+    assert "hub connection closed" in caplog.text

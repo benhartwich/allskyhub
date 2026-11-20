@@ -91,6 +91,11 @@ def _retry_after(exc: Exception) -> float:
         return 0.0
 
 
+_UPLOADS = frozenset(
+    {CommandName.UPLOAD_PRODUCT, CommandName.UPLOAD_FRAME, CommandName.UPLOAD_EVENT}
+)
+
+
 @dataclass(frozen=True)
 class HubConfig:
     hub_url: str = "https://allskyhub.org"
@@ -103,6 +108,11 @@ class HubConfig:
     # anew, and a 4401 right after connecting waits like any other failure (SPEC §6.1).
     stable_s: float = 60.0
     http_timeout_s: float = 30.0
+    # A frame or event picture over a poor uplink (2026-11-20: ~1 MB storm frames over weak
+    # WLAN took minutes): sending it may take this long, one at a time.
+    picture_timeout_s: float = 300.0
+    # Keepalive pings may wait behind such an upload on the same uplink.
+    ping_timeout_s: float = 60.0
 
     @property
     def ws_url(self) -> str:
@@ -125,8 +135,23 @@ Connector = Callable[[str, str], AbstractAsyncContextManager[WebSocketLike]]
 
 def default_connector(url: str, token: str) -> AbstractAsyncContextManager[WebSocketLike]:
     return ws_connect(  # pyright: ignore[reportReturnType]
-        url, additional_headers={"Authorization": f"Bearer {token}"}, open_timeout=30
+        url,
+        additional_headers={"Authorization": f"Bearer {token}"},
+        open_timeout=30,
+        ping_timeout=HubConfig.ping_timeout_s,
     )
+
+
+def _closed(exc: ConnectionClosed) -> int | None:
+    """The hub's close code; says why the connection ended (2026-11-20: it ended every
+    minute and nothing in the journal said so)."""
+    rcvd, sent = exc.rcvd, exc.sent
+    log.info(
+        "hub connection closed: received %s, sent %s",
+        f"{rcvd.code} {rcvd.reason}".strip() if rcvd else "nothing",
+        f"{sent.code} {sent.reason}".strip() if sent else "nothing",
+    )
+    return rcvd.code if rcvd else None
 
 
 class _NotPaired(Exception):
@@ -228,6 +253,9 @@ class HubSession:
         # Products wait here until the writer sends them; a newer night replaces an older one.
         self._products: Products | None = None
         self._uploads: set[asyncio.Task[None]] = set()
+        # Frame and event pictures one at a time, in the hub's order: on a poor uplink more at
+        # once only slow each other down.
+        self._pictures = asyncio.Lock()
         self._backoff = Backoff()
 
     # --- called from the capture thread via HubClient -------------------------------------
@@ -372,16 +400,18 @@ class HubSession:
                 for t in done:
                     exc = t.exception()
                     if isinstance(exc, ConnectionClosed):
-                        return exc.rcvd.code if exc.rcvd else None
+                        return _closed(exc)
                     if exc is not None:
                         raise exc
+                if tasks[0] in done:
+                    log.info("hub connection closed normally")
                 return None
         except InvalidStatus as exc:
             if exc.response.status_code == 401:
                 return CloseCode.REAUTH
             raise
         except ConnectionClosed as exc:
-            return exc.rcvd.code if exc.rcvd else None
+            return _closed(exc)
         finally:
             self._frames = None
             self._products = None
@@ -470,8 +500,9 @@ class HubSession:
                 continue
             if not isinstance(env.body, Command):
                 continue
-            if env.body.name is CommandName.UPLOAD_PRODUCT:
-                # A timelapse can take minutes to upload; keep reading commands meanwhile.
+            if env.body.name in _UPLOADS:
+                # A timelapse, or a frame over a poor uplink, can take minutes to upload; keep
+                # reading commands (and the connection) meanwhile.
                 task = asyncio.create_task(self._reply_later(ws, env.id, env.body, token))
                 self._uploads.add(task)
                 task.add_done_callback(self._uploads.discard)
@@ -480,7 +511,15 @@ class HubSession:
             await self._send(ws, reply)
 
     async def _reply_later(self, ws: WebSocketLike, ref: str, cmd: Command, token: str) -> None:
-        reply = await self._upload_product(ref, cmd, token)
+        if cmd.name is CommandName.UPLOAD_PRODUCT:
+            reply = await self._upload_product(ref, cmd, token)
+        else:
+            async with self._pictures:
+                try:
+                    async with asyncio.timeout(self._cfg.picture_timeout_s):
+                        reply = await self._command(ref, cmd, token)
+                except TimeoutError:
+                    reply = ErrorReply(ref=ref, code=ErrorCode.FAILED, message="timeout")
         with contextlib.suppress(ConnectionClosed):
             await self._send(ws, reply)
 
@@ -545,6 +584,7 @@ class HubSession:
                 params={"variant": args.variant.value},
                 content=data,
                 headers={"Authorization": f"Bearer {token}", "Content-Type": "image/jpeg"},
+                timeout=httpx.Timeout(self._cfg.http_timeout_s, write=None),
             )
         except httpx.HTTPError as exc:
             return ErrorReply(ref=ref, code=ErrorCode.FAILED, message=str(exc)[:200])
@@ -576,6 +616,7 @@ class HubSession:
                 params={"variant": args.variant.value},
                 content=data,
                 headers={"Authorization": f"Bearer {token}", "Content-Type": "image/jpeg"},
+                timeout=httpx.Timeout(self._cfg.http_timeout_s, write=None),
             )
         except httpx.HTTPError as exc:
             return ErrorReply(ref=ref, code=ErrorCode.FAILED, message=str(exc)[:200])

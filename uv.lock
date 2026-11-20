@@ -44,7 +44,7 @@ wheels = [
 
 [[package]]
 name = "allskyhub-agent"
-version = "0.1.7"
+version = "0.1.8"
 source = { editable = "agent" }
 dependencies = [
     { name = "allskyhub-design" },

@@ -522,7 +522,8 @@ base64url-encoded without padding.
   mag/arcsec² per sky cell, so light domes show with their direction and strength. A list
   of 48 values, each rounded to 0.01 and clipped to 14.00..23.00, or null. Cells are 16
   azimuth sectors × the 3 altitude bands of `cloud_map`, index = 16·band + sector; sector
-  k (0..15) covers azimuth (k·22.5° − 11.25°) .. (k·22.5° + 11.25°), so each cell lies
+  k (0..15) covers azimuth k·22.5° .. (k + 1)·22.5° (centred on k·22.5° + 11.25°, so that
+  no sector straddles a `cloud_map` sector edge at 22.5° + m·45°), so each cell lies
   inside `cloud_map` cell 8·band + ((k + 1) // 2) mod 8. Measured on the frame scaled to
   960 px width, on linear values (§4.10; never a ratio of sRGB values). A cell's linear
   brightness L_cell is the median of its pixels inside the sky mask (§4.7), without clipped

@@ -196,3 +196,49 @@ async def test_failed_load_waits_before_the_next(tmp_path: Path) -> None:
     assert await catalogue.get() is None
     assert len(calls) == 1
     await client.aclose()
+
+
+async def test_no_connection_waits_for_the_catalogue(
+    app: FastAPI, client: httpx.AsyncClient
+) -> None:
+    """A slow first CelesTrak fetch after a start keeps no database connection (2026-11-20:
+    27 meteors of a resend waited for it with one each, the pool ran dry, pages gave 500)."""
+    import asyncio
+
+    from allskyhub_server.devices import aircraft
+    from tests.test_aircraft_labels import _camera
+    from tests.test_web_events import record
+
+    dev, _, _ = await _camera(app, client)
+    maker: async_sessionmaker[AsyncSession] = app.state.sessionmaker
+    async with maker() as db:
+        device = await db.get(Device, dev.device_id)
+        assert device
+        device.last_status = {"settings": {"latitude": LAT, "longitude": LON}}
+        (a_alt, a_az), (b_alt, b_az) = _where(AT), _where(AT + dt.timedelta(seconds=4))
+        row = record(dev.device_id)
+        row.event_id, row.start, row.end = "meteor-slow", AT, AT + dt.timedelta(seconds=4)
+        row.data = {**row.data, "start_altitude_deg": a_alt, "start_azimuth_deg": a_az,
+                    "end_altitude_deg": b_alt, "end_azimuth_deg": b_az}  # fmt: skip
+        db.add(row)
+        await db.commit()
+    engine = app.state.engine
+    release = asyncio.Event()
+    asked = asyncio.Event()
+
+    class _Slow:
+        async def get(self) -> sm.Catalogue | None:
+            asked.set()
+            await release.wait()
+            return None
+
+    watch: aircraft.Watch = app.state.aircraft
+    watch.satellites = _Slow()  # pyright: ignore[reportAttributeAccessIssue]
+    task = asyncio.create_task(watch.check_new(dev.device_id, "meteor-slow"))
+    try:
+        await asyncio.wait_for(asked.wait(), 5)
+        held = engine.pool.checkedout()
+    finally:
+        release.set()
+    assert not await task
+    assert held == 0

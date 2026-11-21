@@ -529,7 +529,7 @@ base64url-encoded without padding.
   pixels and without pixels within 3 px of a detected star, each pixel corrected for
   throughput and pixel solid angle: divided by the twilight flat (§4.10) when there is
   one, which as a fit on the uniform sky already holds both (never divided by the solid
-  angle again), else multiplied by the lens model's relative pixel solid angle
+  angle again), else divided by the lens model's relative pixel solid angle
   Ω_px = sinθ / (r · dr/dθ) (§4.8) only, vignetting then left in. The night flat is never
   used: it would take out the brightening toward the horizon that the map is about. The
   cell is anchored to the same frame's `sqm_mag`:

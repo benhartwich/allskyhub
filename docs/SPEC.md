@@ -517,6 +517,35 @@ base64url-encoded without padding.
   size, another camera or another profile starts the reference again.
   `transparency` (optional, roadmap L26): the median of the non-null cells of bands 1 and 2
   (above 40°), else null. Both are rounded to 0.01.
+  `brightness_map` (optional, roadmap L37; null or missing unless all of: sun ≤ −18°, a
+  trusted clock, an orientation (§4.8) and a non-null `sqm_mag`): the sky brightness in
+  mag/arcsec² per sky cell, so light domes show with their direction and strength. A list
+  of 48 values, each rounded to 0.01 and clipped to 14.00..23.00, or null. Cells are 16
+  azimuth sectors × the 3 altitude bands of `cloud_map`, index = 16·band + sector; sector
+  k (0..15) covers azimuth k·22.5° .. (k + 1)·22.5° (centred on k·22.5° + 11.25°, so that
+  no sector straddles a `cloud_map` sector edge at 22.5° + m·45°), so each cell lies
+  inside `cloud_map` cell 8·band + ((k + 1) // 2) mod 8. Measured on the frame scaled to
+  960 px width, on linear values (§4.10; never a ratio of sRGB values). A cell's linear
+  brightness L_cell is the median of its pixels inside the sky mask (§4.7), without clipped
+  pixels and without pixels within 3 px of a detected star, each pixel corrected for
+  throughput and pixel solid angle: divided by the twilight flat (§4.10) when there is
+  one, which as a fit on the uniform sky already holds both (never divided by the solid
+  angle again), else divided by the lens model's relative pixel solid angle
+  Ω_px = sinθ / (r · dr/dθ) (§4.8) only, vignetting then left in. The night flat is never
+  used: it would take out the brightening toward the horizon that the map is about. The
+  cell is anchored to the same frame's `sqm_mag`:
+  value = `sqm_mag` − 2.5·log10(L_cell / L_ref), with L_ref the linear mean of the
+  unflattened frame over the sky mask, the statistic `sqm_mag`'s zero point was fitted on,
+  so the map is approximate exactly like `sqm_mag` and consistent with it. A cell is null
+  with fewer than 200 such pixels and when its centre is within 25° of a moon that is at
+  least 25 % lit. `brightness_map_flat` (optional): `"twilight"` or `"geometry"`, which
+  correction was used. Clouds are not left out: a cloud lit by a town is brighter, and
+  the hub decides with `cloud_map` which cells were clear.
+  Known limits: twilight brightens toward the horizon too and the flat's radial fit takes
+  that in, so the low band reads systematically too dark with a twilight flat (to be sized
+  against the lens geometry); without one, vignetting makes the outer cells too dark. The
+  Milky Way raises the median of the cells it crosses: a single map is not meaningful, only
+  the hub's night map, the median per cell over many frames while the Milky Way moves.
   `checks` (optional, null on older agents): the camera check of §7, `[{id, state, detail}]`
   (`allskyhub_protocol.CheckItem`, at most 30) without the light `hub`, with `state` `ok`,
   `warn` or `fail` and `detail` the German text of what to do. Ids are stable (`power`,

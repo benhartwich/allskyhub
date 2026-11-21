@@ -21,7 +21,7 @@ from collections.abc import Callable, Mapping
 from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
-from typing import Any, cast
+from typing import Any, Literal, cast
 from zoneinfo import ZoneInfo
 
 import httpx
@@ -44,6 +44,7 @@ from allskyhub_agent.core.exposure import AutoExposure
 from allskyhub_agent.core.quality import FrameQuality
 from allskyhub_agent.core.sun import sun_elevation
 from allskyhub_agent.detect import tuning
+from allskyhub_agent.detect.brightness import BrightnessMeter
 from allskyhub_agent.detect.cloudmap import cloud_map
 from allskyhub_agent.detect.daycloud import CALIBRATION_FILE as DAY_CALIBRATION
 from allskyhub_agent.detect.daycloud import DayCloud
@@ -1213,6 +1214,23 @@ def main(argv: list[str] | None = None) -> int:
                          here.lat, here.lon)  # fmt: skip
 
     sky_meter.set_mapper(map_clouds)
+    brightness = BrightnessMeter(srgb=profile.camera == "libcamera")
+
+    def map_brightness(
+        frame: FrameInfo, shown: Rgb, raw: Rgb, sky: Mask, xs: Points, ys: Points, mag: float
+    ) -> tuple[list[float | None], Literal["twilight", "geometry"]] | None:
+        """SPEC §6.3 `brightness_map`: only with an orientation and a trusted clock; divided
+        by the twilight flat when that is the one in use, never by the night flat."""
+        sol = orienter.solution
+        if sol is None or not trusted():
+            return None
+        source = flat.status()["source"] if flat is not None else None
+        mode: Literal["twilight", "geometry"] = "twilight" if source == "twilight" else "geometry"
+        cells = brightness.measure(sol, shown, raw, mode, sky, xs, ys, mag, frame.captured_at,
+                                   here.lat, here.lon)  # fmt: skip
+        return (cells, mode) if cells is not None else None
+
+    sky_meter.set_brightness(map_brightness)
     day_cloud = DayCloud(Path(args.data) / "calibration" / DAY_CALIBRATION)
 
     def day_clouds(frame: FrameInfo, rgb: Rgb, sky: Mask) -> float | None:

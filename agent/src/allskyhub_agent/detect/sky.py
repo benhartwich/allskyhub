@@ -21,6 +21,7 @@ import math
 import threading
 from collections.abc import Callable
 from dataclasses import dataclass
+from typing import Literal
 
 import cv2
 import numpy as np
@@ -39,6 +40,12 @@ CloudMapper = Callable[
 ]
 # (frame, RGB image, sky mask) -> the cloud cover by day (SPEC §6.3) or None.
 DayClouds = Callable[[FrameInfo, Rgb, Mask], float | None]
+# (frame, image as given, image without any flat, sky mask, star xs, star ys, sqm_mag) ->
+# the brightness map and the correction used (SPEC §6.3 `brightness_map`) or None.
+BrightnessMapper = Callable[
+    [FrameInfo, npt.NDArray[np.uint8], npt.NDArray[np.uint8], Mask, Points, Points, float],
+    tuple[list[float | None], Literal["twilight", "geometry"]] | None,
+]
 
 
 @dataclass(frozen=True)
@@ -132,6 +139,7 @@ class SkyMeter:
         self._latest: SkyMetrics | None = None
         self._mapper: CloudMapper | None = None
         self._day: DayClouds | None = None
+        self._brightness: BrightnessMapper | None = None
         # SPEC §4.10: the sky values are measured without the night flat.
         self.undo: Callable[[npt.NDArray[np.uint8]], npt.NDArray[np.uint8]] | None = None
         # ... and `sqm_mag` without any flat: its zero point was calibrated without one.
@@ -140,6 +148,10 @@ class SkyMeter:
     def set_mapper(self, mapper: CloudMapper) -> None:
         """Cloud cover per sky cell (SPEC §6.3 `cloud_map`), once the camera can be oriented."""
         self._mapper = mapper
+
+    def set_brightness(self, brightness: BrightnessMapper) -> None:
+        """Sky brightness per sky cell (SPEC §6.3 `brightness_map`, roadmap L37)."""
+        self._brightness = brightness
 
     def set_day_clouds(self, day: DayClouds) -> None:
         """Cloud cover by day (SPEC §6.3 `cloud_cover`, roadmap L22), needs an orientation."""
@@ -168,6 +180,7 @@ class SkyMeter:
     def measure(self, frame: FrameInfo, image: npt.NDArray[np.uint8]) -> SkyMetrics:
         """`image` RGB or gray, unblurred: a blur turns noise into star-like blobs."""
         cfg = self._cfg
+        shown = image
         raw = self.unflat(image) if self.unflat is not None else image
         if self.undo is not None:
             image = self.undo(image)
@@ -184,6 +197,7 @@ class SkyMeter:
         mag: float | None = None
         cloud_map: list[float | None] | None = None
         hfr: float | None = None
+        brightness: tuple[list[float | None], Literal["twilight", "geometry"]] | None = None
         if sun <= cfg.night_sun_deg:
             xs, ys = star_points(gray, mask, cfg.star_threshold)
             stars = count_stars(xs, ys)
@@ -205,6 +219,8 @@ class SkyMeter:
                 )
                 mean = float(plain[mask].mean())
                 mag = sqm(mean, frame.exposure_us, frame.gain, cfg.sqm_offset)
+                if mag is not None and self._brightness is not None:
+                    brightness = self._brightness(frame, shown, raw, mask, xs, ys, mag)
         elif sun >= cfg.day_sun_deg and image.ndim == 3 and self._day is not None:
             cloud = self._day(frame, image, mask)
         m = SkyMetrics(
@@ -215,6 +231,8 @@ class SkyMeter:
             stars=stars,
             hfr=hfr,
             cloud_map=cloud_map,
+            brightness_map=brightness[0] if brightness is not None else None,
+            brightness_map_flat=brightness[1] if brightness is not None else None,
         )
         with self._lock:
             self._latest = m

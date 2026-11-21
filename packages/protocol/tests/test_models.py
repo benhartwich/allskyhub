@@ -519,3 +519,24 @@ def test_status_carries_the_camera_check() -> None:
     assert st.checks[0] == CheckItem(id="mask", state=CheckState.WARN,
                                      detail="Himmelsmaske noch nicht gelernt.")  # fmt: skip
     assert st.checks[1].id == "future_check"
+
+
+def test_sky_brightness_map_has_48_cells_within_the_range() -> None:
+    """SPEC §6.3 `brightness_map`: 48 cells, each 14.00..23.00 or null."""
+    from allskyhub_protocol import SkyMetrics
+
+    at = "2026-11-21T22:00:00+00:00"
+    cells: list[float | None] = [21.3] * 47 + [None]
+    m = SkyMetrics.model_validate(
+        {
+            "at": at,
+            "night_id": "20261121",
+            "brightness_map": cells,
+            "brightness_map_flat": "twilight",
+        }
+    )
+    assert m.brightness_map == cells
+    assert SkyMetrics.model_validate({"at": at, "night_id": "20261121"}).brightness_map is None
+    for bad in ([21.0] * 24, [13.0] * 48):
+        with pytest.raises(ValidationError):
+            SkyMetrics.model_validate({"at": at, "night_id": "20261121", "brightness_map": bad})

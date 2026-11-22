@@ -293,10 +293,14 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         )
         app.state.renderer = Renderer(app.state.sessionmaker, app.state.images, settings)
         adsb_client = httpx.AsyncClient(headers={"User-Agent": f"allskyhub ({settings.base_url})"})
+        quota = aircraft.Quota()
         app.state.aircraft = aircraft.Watch(
             app.state.sessionmaker,
             app.state.connections,
-            aircraft.http_fetch(adsb_client) if settings.adsb else None,
+            aircraft.http_fetch(adsb_client, quota, settings.adsblol_key)
+            if settings.adsb
+            else None,
+            quota,
         )
         app.state.aircraft.satellites = SatelliteCatalogue(
             settings.data_dir / "gp", adsb_client if settings.satellites else None

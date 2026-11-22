@@ -247,3 +247,77 @@ def test_day_line_runs_through_the_top() -> None:
     x, y = overflight_map.xy(89.0, 90.0)
     assert f"{x} {y}" in line.path  # the highest point is one of its points
     assert line.path.startswith("M" + " ".join(map(str, overflight_map.xy(20.0, 0.0))))
+
+
+def test_quota_from_adsb_lol_headers() -> None:
+    """SPEC §7.8: the daily quota spread over what is left of the window."""
+    quota = aircraft.Quota()
+    assert quota.spacing(NOON, False) == aircraft.FETCH_EVERY  # unknown yet
+    quota.update(httpx.Headers({"x-ratelimit-limit": "500, 500;w=86400",
+                                "x-ratelimit-remaining": "100",
+                                "x-ratelimit-reset": "36000"}), 200, NOON)  # fmt: skip
+    assert (quota.limit, quota.remaining) == (500, 100)
+    assert quota.spacing(NOON, False) == dt.timedelta(seconds=360)
+    assert quota.spacing(NOON, True) == dt.timedelta(seconds=90)  # a live image: a quarter
+    quota.remaining = 20  # few left: no larger share for the live image
+    assert quota.spacing(NOON, True) == dt.timedelta(seconds=1800)
+    quota.remaining = 100_000
+    assert quota.spacing(NOON, False) == aircraft.FETCH_EVERY  # never faster than 10 s
+    assert not quota.exhausted(NOON)
+    quota.update(httpx.Headers({"retry-after": "600"}), 429, NOON)
+    assert quota.exhausted(NOON)
+    assert quota.spacing(NOON, False) == dt.timedelta(seconds=600)
+    # After the window everything is unknown again until the next answer.
+    later = NOON + dt.timedelta(seconds=601)
+    assert not quota.exhausted(later)
+    assert quota.spacing(later, False) == aircraft.FETCH_EVERY
+    # A 429 without any quota header (a short burst limit) changes nothing here.
+    fresh = aircraft.Quota()
+    fresh.update(httpx.Headers({}), 429, NOON)
+    assert fresh.remaining is None
+
+
+async def test_watch_paces_by_the_daily_quota(
+    app: FastAPI, client: httpx.AsyncClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The real request with its key; the quota sets the pace, and once it is spent the
+    hub waits for the window instead of asking every 5 minutes (2026-11-22)."""
+    camera = await _camera(app, client, day_aircraft=True)
+    now = NOON
+    left = [3]
+    keys: list[str | None] = []
+
+    def answer(request: httpx.Request) -> httpx.Response:
+        keys.append(request.headers.get("x-api-key"))
+        reset = {"x-ratelimit-limit": "500, 500;w=86400", "x-ratelimit-reset": "3000"}
+        if left[0] == 0:
+            return httpx.Response(429, headers={**reset, "x-ratelimit-remaining": "0"})
+        left[0] -= 1
+        headers = {**reset, "x-ratelimit-remaining": str(left[0] * 10)}
+        return httpx.Response(200, json={"now": now.timestamp() * 1000, "ac": []},
+                              headers=headers)  # fmt: skip
+
+    quota = aircraft.Quota()
+    async with httpx.AsyncClient(transport=httpx.MockTransport(answer)) as http:
+        fetch = aircraft.http_fetch(http, quota, "k3y", clock=lambda: now)
+        watch = aircraft.Watch(app.state.sessionmaker, app.state.connections, fetch, quota)
+        monkeypatch.setattr(app.state.connections, "online_ids", lambda: [camera])
+
+        def watched(device_id: str, at: dt.datetime) -> bool:
+            return True
+
+        monkeypatch.setattr(watch, "_is_watched", watched)
+        asked: list[int] = []
+        while now < NOON + dt.timedelta(seconds=4000):
+            before = len(keys)
+            await watch.round(now)
+            if len(keys) > before:
+                asked.append(int((now - NOON).total_seconds()))
+            now += dt.timedelta(seconds=10)
+    assert keys[0] == "k3y"
+    # 20 left for 3000 s: every 150 s (the live image's larger share needs more than 50);
+    # then 10 left for 3000 s: 300 s later.
+    assert asked[:3] == [0, 150, 450]
+    # The third answer leaves 0: the hub waits for the window, and only then asks again.
+    assert asked[3] == 450 + 3000
+    assert len(asked) == 4

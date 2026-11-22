@@ -382,10 +382,73 @@ def match(
 
 Fetch = Callable[[float, float, int], Awaitable[dict[str, Any]]]
 
+# SPEC §7.8: adsb.lol counts requests per day (without a key 500 per address, more with
+# one; the window ends at 00:00 UTC). A live image may spend this share faster, borrowing
+# from the rest of the day, while more than WATCH_RESERVE requests are left.
+WATCH_SHARE = 4
+WATCH_RESERVE = 50
 
-def http_fetch(client: httpx.AsyncClient) -> Fetch:
+
+def _first_int(value: str | None) -> int | None:
+    """``"500, 500;w=86400"`` → 500."""
+    if not value:
+        return None
+    head = value.split(",")[0].split(";")[0].strip()
+    return int(head) if head.isdigit() else None
+
+
+@dataclass
+class Quota:
+    """adsb.lol's daily quota as its answers report it (``x-ratelimit-*``, ``Retry-After``);
+    unknown until the first answer, and after the window ends."""
+
+    limit: int | None = None
+    remaining: int | None = None
+    reset_at: dt.datetime | None = None
+
+    def update(self, headers: httpx.Headers, status: int, now: dt.datetime) -> None:
+        remaining = _first_int(headers.get("x-ratelimit-remaining"))
+        reset = _first_int(headers.get("x-ratelimit-reset"))
+        if status == 429 and reset is None:
+            reset = _first_int(headers.get("retry-after"))
+        if remaining is None and reset is None:
+            return
+        self.limit = _first_int(headers.get("x-ratelimit-limit")) or self.limit
+        self.remaining = 0 if status == 429 else remaining
+        if reset is not None:
+            self.reset_at = now + dt.timedelta(seconds=reset)
+
+    def _known(self, now: dt.datetime) -> bool:
+        return self.remaining is not None and self.reset_at is not None and self.reset_at > now
+
+    def exhausted(self, now: dt.datetime) -> bool:
+        return self._known(now) and self.remaining == 0
+
+    def spacing(self, now: dt.datetime, watched: bool) -> dt.timedelta:
+        """How long one request should wait so the rest lasts until the window ends."""
+        if not self._known(now) or self.reset_at is None or self.remaining is None:
+            return FETCH_EVERY
+        left = self.reset_at - now
+        if self.remaining <= 0:
+            return left
+        spacing = left / self.remaining
+        if watched and self.remaining > WATCH_RESERVE:
+            spacing /= WATCH_SHARE
+        return max(FETCH_EVERY, spacing)
+
+
+def http_fetch(
+    client: httpx.AsyncClient,
+    quota: Quota | None = None,
+    key: str = "",
+    clock: Callable[[], dt.datetime] | None = None,
+) -> Fetch:
+    headers = {"x-api-key": key} if key else {}
+
     async def fetch(lat: float, lon: float, nm: int) -> dict[str, Any]:
-        r = await client.get(API.format(lat=lat, lon=lon, nm=nm), timeout=8.0)
+        r = await client.get(API.format(lat=lat, lon=lon, nm=nm), timeout=8.0, headers=headers)
+        if quota is not None:
+            quota.update(r.headers, r.status_code, (clock or _now)())
         r.raise_for_status()
         body: dict[str, Any] = r.json()
         return body
@@ -578,10 +641,14 @@ class Watch:
         maker: async_sessionmaker[AsyncSession],
         registry: ConnectionRegistry,
         fetch: Fetch | None,
+        quota: Quota | None = None,
     ) -> None:
         self._maker = maker
         self._registry = registry
         self._fetch = fetch
+        self.quota = quota or Quota()
+        # SPEC §7.8: when the next request may go, without and with a live image watched.
+        self._next_fetch: tuple[dt.datetime, dt.datetime] | None = None
         self.tracks = Tracks()
         self._checked: dict[tuple[str, str], dt.datetime] = {}
         # Meteors check_new has computed: a camera sends its backlog again after each
@@ -627,20 +694,41 @@ class Watch:
         self._rounds += 1
         wanted: list[tuple[str, float, float]] = []
         by_day: list[tuple[str, float, float, dt.tzinfo]] = []
+        watched = False
         for device_id, status, day_on in rows:
-            place = wants_aircraft(status, self._is_watched(device_id, now), now)
+            seen = self._is_watched(device_id, now)
+            place = wants_aircraft(status, seen, now)
+            watched = watched or (seen and place is not None)
             day = wants_day(status, day_on, now)
             if day is not None:
                 by_day.append((device_id, *day, _zone(status)))
             where = place or (day if day_round else None)
             if where is not None:
                 wanted.append((device_id, *where))
-        if wanted and (self._paused_until is None or now >= self._paused_until):
+        paused = self._paused_until is not None and now < self._paused_until
+        # SPEC §7.8: the daily quota sets the pace, from what the last answer said was left
+        # (a live image watched: a larger share), so it lasts until the window ends.
+        paced = self._next_fetch is not None and now < self._next_fetch[watched]
+        if wanted and not paused and not paced:
+            requests = len(areas(wanted))
             outcome = await fetch_areas(self.tracks, self._fetch, wanted, now)
+            self._next_fetch = (
+                now + self.quota.spacing(now, False) * requests,
+                now + self.quota.spacing(now, True) * requests,
+            )
             if outcome == "throttled":
-                self._backoff = min(MAX_BACKOFF, max(self._backoff, FETCH_EVERY) * 2)
-                self._paused_until = now + self._backoff
-                log.warning("adsb.lol throttled", extra={"wait_s": self._backoff.seconds})
+                if self.quota.exhausted(now) and self.quota.reset_at is not None:
+                    # The day's share is spent: wait for the window, not 5 minutes.
+                    self._paused_until = self.quota.reset_at
+                    log.warning(
+                        "adsb.lol quota spent",
+                        extra={"until": self.quota.reset_at.isoformat(),
+                               "limit": self.quota.limit},
+                    )  # fmt: skip
+                else:
+                    self._backoff = min(MAX_BACKOFF, max(self._backoff, FETCH_EVERY) * 2)
+                    self._paused_until = now + self._backoff
+                    log.warning("adsb.lol throttled", extra={"wait_s": self._backoff.seconds})
             elif outcome == "ok":
                 self._backoff, self._paused_until = dt.timedelta(0), None
         if day_round:

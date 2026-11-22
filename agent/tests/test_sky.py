@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime
+from typing import Literal
 
 import cv2
 import numpy as np
@@ -134,3 +135,31 @@ def test_cloud_map_comes_from_the_mapper_at_night_only() -> None:
     assert calls[0] > 0
     assert meter.measure(frame(10), starry(40)).cloud_map is None
     assert len(calls) == 1
+
+
+def test_brightness_map_only_with_an_sqm_value() -> None:
+    """SPEC §6.3 `brightness_map`: needs a non-null `sqm_mag` (sun ≤ -18°) and gets it."""
+    meter = SkyMeter()
+    got: list[float] = []
+
+    def brightness(
+        f: FrameInfo,
+        shown: np.ndarray,
+        raw: np.ndarray,
+        sky: np.ndarray,
+        xs: np.ndarray,
+        ys: np.ndarray,
+        mag: float,
+    ) -> tuple[list[float | None], Literal["twilight", "geometry"]]:
+        got.append(mag)
+        return [20.5] * 48, "geometry"
+
+    meter.set_brightness(brightness)
+    m = meter.measure(frame(-30), starry(40))
+    assert m.brightness_map == [20.5] * 48
+    assert m.brightness_map_flat == "geometry"
+    assert got == [m.sqm_mag]
+    dusk = meter.measure(frame(-15), starry(40))
+    assert dusk.brightness_map is None
+    assert dusk.brightness_map_flat is None
+    assert len(got) == 1

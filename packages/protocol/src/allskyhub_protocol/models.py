@@ -223,6 +223,13 @@ class SkyMetrics(BaseModel):
     cloud_map: list[Annotated[float, Field(ge=0, le=1)] | None] | None = Field(
         default=None, min_length=24, max_length=24
     )
+    # SPEC §6.3 (roadmap L37): sky brightness per sky cell in mag/arcsec² (16 azimuth
+    # sectors x the 3 bands of `cloud_map`, index = 16·band + sector), each or the whole
+    # map null; anchored to `sqm_mag`. `brightness_map_flat` says how it was corrected.
+    brightness_map: list[Annotated[float, Field(ge=14, le=23)] | None] | None = Field(
+        default=None, min_length=48, max_length=48
+    )
+    brightness_map_flat: Literal["twilight", "geometry"] | None = None
 
 
 class Lens(BaseModel):

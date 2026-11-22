@@ -122,6 +122,10 @@ class Period:
     clear_hours: float = 0.0
     best_sqm: float | None = None
     sizes: list[float] = field(default_factory=list[float])  # draft E: clear nights' HFR
+    # L37: the nights' sky brightness maps with their correction.
+    maps: list[tuple[list[float | None], str | None]] = field(
+        default_factory=list[tuple[list[float | None], str | None]]
+    )
     meteors: int = 0
     aurora: int = 0
     storms: int = 0
@@ -135,9 +139,19 @@ class Period:
             self.best_sqm = max(self.best_sqm or n.best_sqm, n.best_sqm)
         if n.median_hfr is not None:
             self.sizes.append(n.median_hfr)
+        if n.brightness_map is not None:
+            self.maps.append((n.brightness_map, n.brightness_map_flat))
         self.meteors += n.meteors
         self.aurora += n.aurora
         self.storms += n.storms
+
+    @property
+    def brightness(self) -> brightness.Chart | None:
+        """L37: the period's sky brightness per cell (median of its night maps)."""
+        found = brightness.combine(self.maps)
+        if found is None:
+            return None
+        return brightness.chart(self.label, found[0], found[1], english())
 
     @property
     def hfr(self) -> float | None:
@@ -156,6 +170,16 @@ class Year:
     @property
     def has_hfr(self) -> bool:
         return any(m.sizes for m in self.months)
+
+    @property
+    def brightness_months(self) -> list[tuple[str, brightness.Chart]]:
+        """L37: the months with a sky brightness map, for the small charts."""
+        out: list[tuple[str, brightness.Chart]] = []
+        for m in self.months:
+            found = m.brightness
+            if found is not None:
+                out.append((m.label, found))
+        return out
 
     @property
     def max_clear_hours(self) -> float:

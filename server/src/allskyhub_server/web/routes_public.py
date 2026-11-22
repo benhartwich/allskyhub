@@ -250,6 +250,11 @@ async def sky_night(
                 if sections.sky
                 else []
             ),
+            "brightness_chart": (
+                await brightness.night_chart(db, device.id, night_id, english())
+                if sections.sky
+                else None
+            ),
         },
         session=session,
     )

@@ -1,0 +1,9 @@
+{# L37 (devices/brightness.py): the polar chart of a sky brightness map; zenith in the
+   middle, north up, east left as one looks up. Uses no context (stats.html shadows t). #}
+{% macro polar(b, label) %}<svg class="brightness-polar" viewBox="0 0 {{ b.size }} {{ b.size }}" role="img" aria-label="{{ label }}">
+    {% for d in b.empty %}<path class="cell empty" d="{{ d }}"/>{% endfor %}
+    {% for c in b.cells %}<path class="cell" d="{{ c.path }}" fill="{{ c.color }}"><title>{{ c.label }}</title></path>{% endfor %}
+    {% for r in b.rings %}<circle class="ring" cx="{{ b.size / 2 }}" cy="{{ b.size / 2 }}" r="{{ '%.1f' | format(r) }}"/>{% endfor %}
+    {% for x, y, letter in b.cardinals %}<text class="tick" x="{{ '%.1f' | format(x) }}" y="{{ '%.1f' | format(y) }}" text-anchor="middle" dominant-baseline="middle">{{ letter }}</text>{% endfor %}
+  </svg>{% endmacro %}
+{% macro scale(b, en) %}<p class="legend small">{% for step in b.legend %}<span class="step"><span class="swatch" style="background: {{ step.color }}"></span>{% if loop.first or loop.last %} {{ step.value if en else step.value | replace('.', ',') }}{% endif %}</span>{% endfor %}</p>{% endmacro %}

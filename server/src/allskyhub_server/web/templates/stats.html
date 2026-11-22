@@ -49,6 +49,19 @@
   </div>
 </section>
 
+{% set maps = stats.brightness_months %}
+{% if maps %}
+{% from "_brightness_svg.html" import polar, scale %}
+<section class="card stack brightness-map">
+  <div class="cam-meta"><h2>Himmelshelligkeit nach Richtung</h2><span class="muted small">pro Monat, mag/⁠″², höher ist dunkler</span></div>
+  <div class="brightness-months">
+    {% for label, b in maps %}<figure>{{ polar(b, 'Himmelshelligkeit pro Richtung im ' ~ label) }}<figcaption>{{ label }} · {{ ('%.1f' | format(b.darkest.value)) | replace('.', ',') }}</figcaption></figure>{% endfor %}
+  </div>
+  {{ scale(maps[0][1], false) }}
+  <p class="muted small">Median der Nachtkarten eines Monats (mindestens 3 Nächte je Feld, nur klare Aufnahmen ohne Mond). Die Zahl ist das dunkelste Feld. So lässt sich sehen, ob eine Richtung über die Monate heller wird, etwa durch neue Beleuchtung.</p>
+</section>
+{% endif %}
+
 {% if stats.showers %}
 <section class="card">
   <h2>Meteore nach Strom</h2>

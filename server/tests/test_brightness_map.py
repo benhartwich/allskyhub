@@ -221,3 +221,47 @@ async def test_chart_on_the_pages_and_the_app_layer(
         device.public_profile = profile.model_copy(update={"sections": sections}).model_dump()
         await db.commit()
     assert "Himmelshelligkeit nach Richtung" not in (await client.get(f"/sky/{slug}")).text
+
+
+def test_month_map_combines_nights() -> None:
+    nights = [(_map(20.0 + 0.1 * k), "twilight") for k in range(3)]
+    found = brightness.combine(nights)
+    assert found is not None
+    values, flat = found
+    assert flat == "twilight"
+    assert values[47] == 21.1  # the middle night
+    assert brightness.combine(nights[:2]) is None  # too few nights per cell
+    # The month's most common correction only; broken maps are skipped.
+    mixed = brightness.combine([*nights, (_map(17.0), "geometry"), ([1.0], "geometry")])
+    assert mixed is not None
+    assert mixed[0][47] == 21.1
+
+
+async def test_night_pages_and_month_maps(app: FastAPI, client: httpx.AsyncClient) -> None:
+    dev = FakeDevice()
+    await paired_token(client, dev)
+    maker: async_sessionmaker[AsyncSession] = app.state.sessionmaker
+    async with maker() as db:
+        device = await db.get(Device, dev.device_id)
+        assert device
+        device.last_status = _status()
+        public.enable(device)
+        slug = device.public_slug
+        for day in (3, 4, 5):
+            db.add(NightStat(device_id=dev.device_id, night_id=f"202603{day:02d}",
+                             brightness_map=_map(), brightness_map_flat="twilight"))  # fmt: skip
+        db.add(NightStat(device_id=dev.device_id, night_id="20260406"))  # no map
+        await db.commit()
+
+    heading = "Himmelshelligkeit nach Richtung"
+    night = (await client.get(f"/cameras/{dev.device_id}/nights/20260304")).text
+    assert heading in night
+    assert "(Dämmerungs-Flat)" in night
+    assert heading not in (await client.get(f"/cameras/{dev.device_id}/nights/20260406")).text
+    assert heading in (await client.get(f"/sky/{slug}/nights/20260304")).text
+
+    page = (await client.get(f"/cameras/{dev.device_id}/stats?year=2026")).text
+    assert heading in page
+    assert page.count('class="brightness-polar"') == 1  # March only
+    assert "Mär · 21,5" in page
+    assert heading not in (await client.get(f"/cameras/{dev.device_id}/stats?year=2025")).text

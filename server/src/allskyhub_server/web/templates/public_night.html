@@ -47,6 +47,7 @@
   {% with data_url = "/sky/" ~ slug ~ "/charts/data", with_status = false, compact = true, default_range = night_id, full_url = "/sky/" ~ slug ~ "/charts?night=" ~ night_id %}{% include "_chart_viewer.html" %}{% endwith %}
 </section>
 {% endif %}
+{% if brightness_chart %}{% include "_brightness_map.html" %}{% endif %}
 {% if frames %}
 <ul class="thumbs">
   {% for f in frames %}

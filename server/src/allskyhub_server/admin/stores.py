@@ -317,6 +317,26 @@ OTHER_APPS = {
         app_paths=("app",),
         capabilities=(),
     ),
+    # Benjamin, 2026-11-22: Krok, a German learning app (Flutter in app/ of a private
+    # repository), only its test APK built here (app=krok-test) for sideloading, read at
+    # /download/krok-test.json for its update notice.
+    "krok": OtherApp(
+        key="krok",
+        title="Krok",
+        package="eu.webinx.krok",
+        name="Krok",
+        repo="benhartwich/krok",
+        codemagic_name="",
+        group="",
+        contact_email="support@webinx.eu",
+        website="https://krok.webinx.eu",
+        version_file="app/pubspec.yaml",
+        private=True,
+        test_apk=True,
+        stores=False,
+        app_paths=("app",),
+        capabilities=(),
+    ),
     "currywursttest": OtherApp(
         key="currywursttest",
         title="Currywurst Test",

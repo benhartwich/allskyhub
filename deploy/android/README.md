@@ -80,6 +80,12 @@ Further apps (admin/stores.py `OTHER_APPS`) come from the request's first line,
   Vinventory's), `--dart-define=WICHTL_BUILD=<commit count>` and `WICHTL_CHANNEL=test`. The hub
   serves `/download/wichtl-test.apk` and its `latest.json` as `/download/wichtl-test.json`,
   which the app reads for its update notice.
+- `app=krok-test`: the same for Krok, a German learning app (Benjamin, 2026-11-22): Flutter
+  in `app/` of the private github.com/benhartwich/krok (the token needs read access), package
+  `eu.webinx.krok` (no store app beside it), signed from `KROK_*` with
+  `/var/lib/allskyhub-android/keys/krok-test.{p12,env}` (made on the first run; back it up),
+  `--dart-define=KROK_BUILD=<commit count>` and `KROK_CHANNEL=test`. Public at
+  `/download/krok-test.apk` and `/download/krok-test.json`.
 
 The hub only drops `request` into its folder; root never writes there (anything in a
 folder the hub owns could be a symlink). The answers, state (`running`, `ok`, `built` =

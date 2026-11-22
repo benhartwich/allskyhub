@@ -151,7 +151,8 @@ class Period:
         found = brightness.combine(self.maps)
         if found is None:
             return None
-        return brightness.chart(self.label, found[0], found[1], english())
+        # stats.html is German only (review of #502): German directions there too.
+        return brightness.chart(self.label, found[0], found[1])
 
     @property
     def hfr(self) -> float | None:

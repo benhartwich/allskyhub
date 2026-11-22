@@ -607,6 +607,11 @@ class SkySample(Base):
     sqm_mag: Mapped[float | None] = mapped_column(Float)
     stars: Mapped[int | None] = mapped_column(Integer)
     hfr: Mapped[float | None] = mapped_column(Float)  # star size in the zenith, px (draft E)
+    # L37: the cloud map (24 cells) gates the brightness map (48 cells) per cell for the
+    # night map (devices/brightness.py); both as the device sent them.
+    cloud_map: Mapped[list[float | None] | None] = mapped_column(JSONB(none_as_null=True))
+    brightness_map: Mapped[list[float | None] | None] = mapped_column(JSONB(none_as_null=True))
+    brightness_map_flat: Mapped[str | None] = mapped_column(String(10))
     # Retention counts from arrival at the hub (privacy policy, like thumbnails).
     created_at: Mapped[dt.datetime] = mapped_column(_tz(), server_default=func.now(), index=True)
 
@@ -628,6 +633,9 @@ class NightStat(Base):
     # ...and the camera that measured it (star_size.camera_key): sizes are in the frame's
     # pixels, so only nights of the same camera are compared. Kept from the first pass.
     hfr_camera: Mapped[str | None] = mapped_column(String(160))
+    # L37: sky brightness per cell from the clear moonless frames (devices/brightness.py).
+    brightness_map: Mapped[list[float | None] | None] = mapped_column(JSONB(none_as_null=True))
+    brightness_map_flat: Mapped[str | None] = mapped_column(String(10))
     meteors: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
     # Radiant-matched meteors per shower (German names), plus "sporadisch".
     showers: Mapped[dict[str, int]] = mapped_column(JSONB, default=dict, server_default="{}")

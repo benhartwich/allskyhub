@@ -10,11 +10,11 @@ import datetime as dt
 import statistics
 from dataclasses import dataclass, field
 
-from sqlalchemy import func, select, union
+from sqlalchemy import case, func, select, union
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from allskyhub_server.devices import star_size
+from allskyhub_server.devices import bright_satellites, brightness, star_size
 from allskyhub_server.devices.event_text import shower_name
 from allskyhub_server.devices.night_summary import summarize
 from allskyhub_server.i18n import english
@@ -56,7 +56,10 @@ async def refresh_night(db: AsyncSession, device_id: str, night_id: str) -> None
     positive counts nowhere). The caller commits."""
     s = await summarize(db, device_id, night_id)
     device = await db.get(Device, device_id)
+    sky_map = await _brightness(db, device, night_id) if device else None
     values: dict[str, object] = {
+        "brightness_map": sky_map.values if sky_map else None,
+        "brightness_map_flat": sky_map.flat if sky_map else None,
         "clear_hours": s.clear_hours,
         "best_sqm": s.best_sqm,
         "median_hfr": s.median_hfr,
@@ -74,11 +77,41 @@ async def refresh_night(db: AsyncSession, device_id: str, night_id: str) -> None
     # The camera of the night's first pass stays (a later camera change must not relabel
     # the nights still recomputed).
     camera = func.coalesce(NightStat.hfr_camera, insert.excluded.hfr_camera)
+    # A label change recomputes a night weeks later, when its samples have expired
+    # (maintenance, keep_thumb_days): what came from the samples then stays as it was
+    # (review of #500). The map and its correction go together.
+    new_map = insert.excluded.brightness_map
+    kept: dict[str, object] = {
+        name: func.coalesce(insert.excluded[name], NightStat.__table__.c[name])
+        for name in ("clear_hours", "best_sqm", "median_hfr", "brightness_map")
+    }
+    kept["brightness_map_flat"] = case(
+        (new_map.is_(None), NightStat.brightness_map_flat),
+        else_=insert.excluded.brightness_map_flat,
+    )
     await db.execute(
         insert.on_conflict_do_update(
-            index_elements=["device_id", "night_id"], set_={**values, "hfr_camera": camera}
+            index_elements=["device_id", "night_id"],
+            set_={**values, **kept, "hfr_camera": camera},
         )
     )
+
+
+async def _brightness(
+    db: AsyncSession, device: Device, night_id: str
+) -> brightness.NightMap | None:
+    """L37: the night's sky brightness per cell; needs the place for the moon."""
+    where = bright_satellites.location(device.last_status)
+    if where is None:
+        return None
+    samples = await db.scalars(
+        select(SkySample).where(
+            SkySample.device_id == device.id,
+            SkySample.night_id == night_id,
+            SkySample.brightness_map.is_not(None),
+        )
+    )
+    return brightness.night_map(samples, *where)
 
 
 @dataclass

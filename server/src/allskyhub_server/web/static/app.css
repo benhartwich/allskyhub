@@ -732,3 +732,12 @@ h1.break { overflow-wrap: anywhere; }
 .globe-side .sat-row { cursor: pointer; }
 .globe-side .sat-row[aria-current="true"] { outline: 1px solid var(--accent); border-radius: 8px; }
 .globe-side .sat-list { max-height: 60vh; overflow-y: auto; }
+
+/* L37 (devices/brightness.py): the night's sky brightness per sky cell. */
+.brightness-map svg { width: 100%; max-width: 320px; height: auto; display: block; margin: 0 auto; }
+.brightness-map .cell { stroke: var(--bg); stroke-width: 1; }
+.brightness-map .cell.empty { fill: var(--surface-2); }
+.brightness-map .ring { fill: none; stroke: var(--line); stroke-width: 1; }
+.brightness-map .tick { fill: var(--text-2); font-size: 12px; font-weight: 700; }
+.brightness-map .legend { display: flex; justify-content: center; align-items: center; gap: 2px; margin: 0; color: var(--text-2); }
+.brightness-map .legend .swatch { width: 18px; height: 10px; border-radius: 2px; display: inline-block; vertical-align: middle; }

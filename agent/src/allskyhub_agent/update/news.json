@@ -1,5 +1,14 @@
 [
   {
+    "version": "0.1.11",
+    "de": [
+      "Himmelshelligkeit nach Richtung: In klaren Nächten misst die Kamera, wie hell der Himmel in 16 Richtungen und 3 Höhen ist, und zeigt so Lichtglocken."
+    ],
+    "en": [
+      "Sky brightness by direction: on clear nights the camera measures how bright the sky is in 16 directions and 3 heights, which shows light domes."
+    ]
+  },
+  {
     "version": "0.1.10",
     "de": [
       "Stabilere Verbindung zum Hub: Nach einem Verbindungsabbruch gehen nur noch die neuen Markierungen nach, nicht mehr alle der letzten Wochen."

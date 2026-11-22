@@ -271,6 +271,12 @@ def test_quota_from_adsb_lol_headers() -> None:
     later = NOON + dt.timedelta(seconds=601)
     assert not quota.exhausted(later)
     assert quota.spacing(later, False) == aircraft.FETCH_EVERY
+    # A 429 that still reports some left is a burst limit, not the day's end (#503).
+    burst = aircraft.Quota()
+    burst.update(httpx.Headers({"x-ratelimit-remaining": "120", "x-ratelimit-reset": "36000"}),
+                 429, NOON)  # fmt: skip
+    assert burst.remaining == 120
+    assert not burst.exhausted(NOON)
     # A 429 without any quota header (a short burst limit) changes nothing here.
     fresh = aircraft.Quota()
     fresh.update(httpx.Headers({}), 429, NOON)
@@ -321,3 +327,36 @@ async def test_watch_paces_by_the_daily_quota(
     # The third answer leaves 0: the hub waits for the window, and only then asks again.
     assert asked[3] == 450 + 3000
     assert len(asked) == 4
+
+
+async def test_burst_429_with_quota_left_backs_off(
+    app: FastAPI, client: httpx.AsyncClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Review of #503: a 429 that reports 120 left means the normal backoff (20 s, …),
+    not a pause until the window ends."""
+    camera = await _camera(app, client, day_aircraft=True)
+    now = NOON
+    codes = [429, 200]
+
+    def answer(request: httpx.Request) -> httpx.Response:
+        code = codes.pop(0) if codes else 200
+        headers = {"x-ratelimit-remaining": "120", "x-ratelimit-reset": "36000"}
+        body: dict[str, Any] = {"now": now.timestamp() * 1000, "ac": []}
+        return httpx.Response(code, json=body, headers=headers)
+
+    quota = aircraft.Quota()
+    async with httpx.AsyncClient(transport=httpx.MockTransport(answer)) as http:
+        fetch = aircraft.http_fetch(http, quota, clock=lambda: now)
+        watch = aircraft.Watch(app.state.sessionmaker, app.state.connections, fetch, quota)
+        monkeypatch.setattr(app.state.connections, "online_ids", lambda: [camera])
+        asked: list[int] = []
+        while now < NOON + dt.timedelta(seconds=400):
+            before = len(codes)
+            await watch.round(now)
+            if len(codes) < before:
+                asked.append(int((now - NOON).total_seconds()))
+            now += dt.timedelta(seconds=10)
+    # By day every third round (30 s); after the 429 at 0 s the backoff (20 s) and the
+    # quota's pace (36000 s / 120 = 300 s) wait, not the window end.
+    assert asked[0] == 0
+    assert asked[1] <= 300

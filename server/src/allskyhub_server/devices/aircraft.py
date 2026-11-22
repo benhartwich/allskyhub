@@ -414,7 +414,12 @@ class Quota:
         if remaining is None and reset is None:
             return
         self.limit = _first_int(headers.get("x-ratelimit-limit")) or self.limit
-        self.remaining = 0 if status == 429 else remaining
+        if remaining is not None:
+            # A 429 that still reports some left is a short burst limit, not the day's end
+            # (review of #503): the normal backoff handles it.
+            self.remaining = remaining
+        elif status == 429:
+            self.remaining = 0  # Retry-After alone: nothing until then
         if reset is not None:
             self.reset_at = now + dt.timedelta(seconds=reset)
 
@@ -648,7 +653,8 @@ class Watch:
         self._fetch = fetch
         self.quota = quota or Quota()
         # SPEC §7.8: when the next request may go, without and with a live image watched.
-        self._next_fetch: tuple[dt.datetime, dt.datetime] | None = None
+        self._next_fetch: dt.datetime | None = None
+        self._next_fetch_watched: dt.datetime | None = None
         self.tracks = Tracks()
         self._checked: dict[tuple[str, str], dt.datetime] = {}
         # Meteors check_new has computed: a camera sends its backlog again after each
@@ -708,14 +714,13 @@ class Watch:
         paused = self._paused_until is not None and now < self._paused_until
         # SPEC §7.8: the daily quota sets the pace, from what the last answer said was left
         # (a live image watched: a larger share), so it lasts until the window ends.
-        paced = self._next_fetch is not None and now < self._next_fetch[watched]
+        next_fetch = self._next_fetch_watched if watched else self._next_fetch
+        paced = next_fetch is not None and now < next_fetch
         if wanted and not paused and not paced:
             requests = len(areas(wanted))
             outcome = await fetch_areas(self.tracks, self._fetch, wanted, now)
-            self._next_fetch = (
-                now + self.quota.spacing(now, False) * requests,
-                now + self.quota.spacing(now, True) * requests,
-            )
+            self._next_fetch = now + self.quota.spacing(now, False) * requests
+            self._next_fetch_watched = now + self.quota.spacing(now, True) * requests
             if outcome == "throttled":
                 if self.quota.exhausted(now) and self.quota.reset_at is not None:
                     # The day's share is spent: wait for the window, not 5 minutes.

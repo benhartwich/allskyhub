@@ -1341,15 +1341,23 @@ A broker that cannot be reached is retried with backoff and never slows capture.
 Roadmap H3 (Benjamin, 2026-10-13): aircraft are labelled over the live image, and meteor
 detections that are an aircraft are marked. Two sources:
 
-- **adsb.lol** (hub, always): adsb.lol (ODbL, no key) gives only current positions, so the
-  hub fetches the aircraft within 150 km of a camera every 10 s while that camera is
-  online and has a location, and either it is night there (sun below −6°) with meteor
+- **adsb.lol** (hub, always): adsb.lol (ODbL, optional key) gives only current positions,
+  so the hub fetches the aircraft within 150 km of a camera every 10 s while that camera
+  is online and has a location, and either it is night there (sun below −6°) with meteor
   detection not off, or someone watches its live image; cameras within 150 km of each
-  other share one request. If adsb.lol answers 429 or a server error (5xx), the hub waits
-  twice as long before the next request (20 s, 40 s, … at most 5 minutes) and goes back
-  to the normal pace after the first answer that works (Benjamin, 2026-10-18); positions
-  missing in that time leave meteors unchecked and passes by day unrecorded. The credit
-  "Aircraft data: adsb.lol (ODbL)" is shown wherever aircraft are drawn.
+  other share one request. adsb.lol counts requests per day (2026: 500 per address
+  without a key, 1000 with an adhoc key, 7200 with a feeder key; the window ends at
+  00:00 UTC) and reports it in `x-ratelimit-remaining` and `x-ratelimit-reset`. The hub
+  sends its key, if set (`x-api-key`), and spreads what is left evenly until the window
+  ends: a request at most every 10 s, else every (time left ÷ requests left); while a
+  live image is watched a quarter of that, as long as more than 50 are left (Benjamin,
+  2026-11-22: 500 a day were spent in the first 80 minutes of the night). If adsb.lol
+  answers 429 with the day's share spent, the hub waits until the window ends; on any
+  other 429 or a server error (5xx) it waits twice as long before the next request
+  (20 s, 40 s, … at most 5 minutes) and goes back to the normal pace after the first
+  answer that works (Benjamin, 2026-10-18); positions missing in that time leave meteors
+  unchecked and passes by day unrecorded. The credit "Aircraft data: adsb.lol (ODbL)" is
+  shown wherever aircraft are drawn.
 - **the owner's receiver** (agent, optional): setting `adsb_url`, empty = off, the URL of a
   readsb, dump1090-fa or tar1090 `aircraft.json` on the local network (for example
   `http://192.168.1.40/tar1090/data/aircraft.json`). The agent reads it every 5 s, keeps

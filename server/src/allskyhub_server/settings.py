@@ -80,6 +80,9 @@ class Settings(BaseSettings):
     trust_proxy_headers: bool = False
     # Roadmap H3 (SPEC §7.8): fetch aircraft from adsb.lol for the cameras that need them.
     adsb: bool = True
+    # adsb.lol's API key (header x-api-key; adhoc or feeder key from adsb.lol/mmb): a larger
+    # daily quota than the 500 requests per address without one. Empty = without.
+    adsblol_key: str = ""
     # Roadmap H6 (SPEC §7.9): CelesTrak's orbital elements, to name satellites among meteors.
     satellites: bool = True
     # Draft B (2026-11-15): weather balloons from SondeHub over the live image.

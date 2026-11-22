@@ -25,6 +25,9 @@
 #                                          "app=wichtl-test" the test APK of the Flutter
 #                                          app in app/ of the private
 #                                          github.com/benhartwich/wichtl-app (no store)
+#                                          "app=krok-test" the test APK of the Flutter
+#                                          app in app/ of the private
+#                                          github.com/benhartwich/krok (no store)
 #
 # Flutter and Gradle run in a container (ghcr.io/cirruslabs/flutter; for the Expo app
 # reactnativecommunity/react-native-android), limited in CPU and memory so the hub keeps
@@ -121,6 +124,14 @@ main() {
             SRC=$BASE/src-wichtl PRIVATE=1 VARIANT=test
             REPO_URL=${ALLSKYHUB_WICHTL_REPO_URL:-https://github.com/benhartwich/wichtl-app.git}
             RELEASE=$BASE/release-wichtl-test
+        elif [[ $first == app=krok-test ]]; then
+            # Only a test APK (Benjamin, 2026-11-22): the German learning app Krok, Flutter
+            # in app/ of the private github.com/benhartwich/krok; its Gradle file signs from
+            # KROK_* (package eu.webinx.krok, no store app beside it).
+            app=krok APP_DIR=app PREFIX=KROK PACKAGE=eu.webinx.krok
+            SRC=$BASE/src-krok PRIVATE=1 VARIANT=test
+            REPO_URL=${ALLSKYHUB_KROK_REPO_URL:-https://github.com/benhartwich/krok.git}
+            RELEASE=$BASE/release-krok-test
         fi
         install -d -m 755 "$RELEASE"
         rm -f -- "$RELEASE/log"

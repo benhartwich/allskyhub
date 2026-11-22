@@ -340,7 +340,7 @@ async def test_vinventory_test_apk(
     monkeypatch.setattr(settings, "admin_emails", email)
     page = await client.get("/admin/apps")
     assert "Test-APK" in page.text
-    assert page.text.count('value="build-test-apk"') == 2  # Vinventory and Wichtl
+    assert page.text.count('value="build-test-apk"') == 3  # Vinventory, Wichtl and Krok
     token = csrf_from(page.text)
     r = await client.post(
         follow_redirects=True,
@@ -450,6 +450,43 @@ async def test_wichtl_only_a_test_apk(
     assert (await client.get("/download/bortle-test.json")).status_code == 404
     (done / "latest.json").write_text(json.dumps({**latest, "file": "../x.apk"}))
     assert (await client.get("/download/wichtl-test.json")).status_code == 404
+
+
+async def test_krok_only_a_test_apk(
+    app: FastAPI,
+    client: httpx.AsyncClient,
+    settings: Settings,
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    """Benjamin, 2026-11-22: Krok, like Wichtl only a test APK; the app's server reads
+    /download/krok-test.json for its update notice."""
+    hub = stores.Stores(
+        tmp_path / "store", "benhartwich/allskyhub", release_out=tmp_path / "release"
+    )
+    monkeypatch.setitem(app_state(app), "stores", hub)
+    email = await make_account(client)
+    monkeypatch.setattr(settings, "admin_emails", email)
+    page = await client.get("/admin/apps")
+    card = page.text.split('id="app-krok"', 1)[1].split("</section>\n", 1)[0]
+    assert "Nur Test-APK" in card
+    assert 'value="setup"' not in card
+    r = await client.post(
+        "/admin/apps", follow_redirects=True,
+        data={"csrf_token": csrf_from(page.text), "app": "krok", "action": "build-test-apk"},
+    )  # fmt: skip
+    assert "baut die Test-APK" in r.text
+    assert (tmp_path / "android-release" / "request").read_text().startswith("app=krok-test\n")
+    done = tmp_path / "release-krok-test"
+    done.mkdir()
+    (done / "krok-test-12.apk").write_bytes(b"PK\x03\x04krok")
+    latest = {"build": 12, "version": "0.1.0", "commit": "2ce4721",
+              "built_at": "2026-11-22T12:00:00Z", "size": 8, "sha256": "00",
+              "file": "krok-test-12.apk"}  # fmt: skip
+    (done / "latest.json").write_text(json.dumps(latest))
+    r = await client.get("/download/krok-test.json")
+    assert r.json() == latest | {"url": "/download/krok-test.apk"}
+    assert (await client.get("/download/krok-test.apk")).content == b"PK\x03\x04krok"
 
 
 async def test_a_flash_only_for_its_session(

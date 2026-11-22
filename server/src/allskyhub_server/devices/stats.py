@@ -10,7 +10,7 @@ import datetime as dt
 import statistics
 from dataclasses import dataclass, field
 
-from sqlalchemy import func, select, union
+from sqlalchemy import case, func, select, union
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -77,9 +77,22 @@ async def refresh_night(db: AsyncSession, device_id: str, night_id: str) -> None
     # The camera of the night's first pass stays (a later camera change must not relabel
     # the nights still recomputed).
     camera = func.coalesce(NightStat.hfr_camera, insert.excluded.hfr_camera)
+    # A label change recomputes a night weeks later, when its samples have expired
+    # (maintenance, keep_thumb_days): what came from the samples then stays as it was
+    # (review of #500). The map and its correction go together.
+    new_map = insert.excluded.brightness_map
+    kept: dict[str, object] = {
+        name: func.coalesce(insert.excluded[name], NightStat.__table__.c[name])
+        for name in ("clear_hours", "best_sqm", "median_hfr", "brightness_map")
+    }
+    kept["brightness_map_flat"] = case(
+        (new_map.is_(None), NightStat.brightness_map_flat),
+        else_=insert.excluded.brightness_map_flat,
+    )
     await db.execute(
         insert.on_conflict_do_update(
-            index_elements=["device_id", "night_id"], set_={**values, "hfr_camera": camera}
+            index_elements=["device_id", "night_id"],
+            set_={**values, **kept, "hfr_camera": camera},
         )
     )
 

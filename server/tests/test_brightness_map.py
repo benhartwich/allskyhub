@@ -8,7 +8,7 @@ import datetime as dt
 
 import httpx
 from fastapi import FastAPI
-from sqlalchemy import select
+from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from allskyhub_protocol import Mode, SkyMetrics, Status
@@ -155,6 +155,18 @@ async def test_stored_with_the_cloud_map_and_kept_per_night(
         await db.refresh(night)
         assert night.brightness_map == _map()
         assert night.brightness_map_flat == "twilight"
+        best_sqm, clear_hours = night.best_sqm, night.clear_hours
+        assert best_sqm == 20.9
+        assert clear_hours is not None
+        # The samples expire; a label change recomputes the night weeks later (review of
+        # #500): what came from the samples stays.
+        await db.execute(delete(SkySample))
+        await stats.refresh_night(db, dev.device_id, "20261108")
+        await db.commit()
+        await db.refresh(night)
+        assert night.brightness_map == _map()
+        assert night.brightness_map_flat == "twilight"
+        assert (night.best_sqm, night.clear_hours) == (best_sqm, clear_hours)
 
 
 async def test_chart_on_the_pages_and_the_app_layer(

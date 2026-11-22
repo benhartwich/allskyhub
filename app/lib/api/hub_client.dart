@@ -2435,6 +2435,29 @@ class SkyMark {
   final List<(double, double)> trail;
 }
 
+/// A cell of the night's sky brightness map over the picture (SPEC §6.3
+/// `brightness_map`, roadmap L37): its outline in frame pixels, the value in
+/// mag/arcsec², the hub's colour and a label ("SSW · 15–40°: 19,00").
+class BrightnessCell {
+  BrightnessCell.fromJson(Map<String, dynamic> json)
+    : outline = parseSvgPath(
+        json['path'] as String? ?? '',
+      ).expand((l) => l).toList(),
+      value = (json['value'] as num).toDouble(),
+      argb = _hex(json['color'] as String? ?? ''),
+      label = json['label'] as String? ?? '';
+
+  static int _hex(String s) {
+    final v = int.tryParse(s.replaceFirst('#', ''), radix: 16);
+    return v == null || s.length != 7 ? 0xFF3987E5 : 0xFF000000 | v;
+  }
+
+  final List<(double, double)> outline;
+  final double value;
+  final int argb; // opaque; the painter makes it see-through
+  final String label;
+}
+
 /// Polylines of an SVG path made of M and L commands only (what the hub draws).
 List<List<(double, double)>> parseSvgPath(String d) {
   final out = <List<(double, double)>>[];
@@ -2472,7 +2495,16 @@ class SkyOverlay {
       aircraft = _marks(json['aircraft']),
       aircraftCredit = json['aircraft_credit'] as String?,
       balloons = _marks(json['balloons']),
-      balloonsCredit = json['balloons_credit'] as String?;
+      balloonsCredit = json['balloons_credit'] as String?,
+      brightnessNight =
+          (json['brightness'] as Map<String, dynamic>?)?['night_id'] as String?,
+      brightness = [
+        for (final c
+            in ((json['brightness'] as Map<String, dynamic>?)?['cells']
+                    as List<dynamic>? ??
+                const []))
+          BrightnessCell.fromJson(c as Map<String, dynamic>),
+      ];
 
   static List<SkyMark> _marks(Object? raw) => [
     for (final m in (raw as List<dynamic>? ?? const []))
@@ -2495,6 +2527,10 @@ class SkyOverlay {
   /// Weather balloons near the camera (draft B, app 1.5.0; older hubs: none).
   final List<SkyMark> balloons;
   final String? balloonsCredit;
+
+  /// The newest night's sky brightness per cell (L37; older hubs and cameras: none).
+  final List<BrightnessCell> brightness;
+  final String? brightnessNight;
 }
 
 /// A bright satellite on the globe (draft D, app 1.5.0): Earth-fixed positions in Earth

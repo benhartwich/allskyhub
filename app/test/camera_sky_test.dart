@@ -289,6 +289,77 @@ void main() {
     shownLayers.value = {};
   });
 
+  testWidgets(
+    'sky brightness: a chip and a legend only with a night map (L37)',
+    (tester) async {
+      final without = SkyOverlay.fromJson(
+        jsonDecode(jsonEncode(_overlayJson)) as Map<String, dynamic>,
+      );
+      expect(without.brightness, isEmpty);
+      final mapped = SkyOverlay.fromJson(
+        jsonDecode(
+              jsonEncode({
+                ..._overlayJson,
+                'brightness': {
+                  'night_id': '20261108',
+                  'flat': 'twilight',
+                  'scale': [17.0, 22.0],
+                  'cells': [
+                    {
+                      'path': 'M600 100L700 120L680 200L600 190Z',
+                      'value': 21.5,
+                      'color': '#104281',
+                      'label': 'N · 65–90°: 21,50',
+                    },
+                    {
+                      'path': 'M100 600L200 620L180 700L100 690Z',
+                      'value': 19.0,
+                      'color': '#6da7ec',
+                      'label': 'SSW · 15–40°: 19,00',
+                    },
+                  ],
+                },
+              }),
+            )
+            as Map<String, dynamic>,
+      );
+      expect(mapped.brightness, hasLength(2));
+      expect(mapped.brightness.first.outline, hasLength(4));
+      expect(mapped.brightness.first.argb, 0xFF104281);
+      shownLayers.value = {};
+      await tester.pumpWidget(_host(LayerChips(overlay: without)));
+      expect(find.byKey(const Key('layer-brightness')), findsNothing);
+      await tester.pumpWidget(
+        _host(
+          Column(
+            children: [
+              LayerChips(overlay: mapped),
+              SizedBox(
+                width: 300,
+                height: 300,
+                child: ValueListenableBuilder<Set<SkyLayer>>(
+                  valueListenable: shownLayers,
+                  builder: (_, shown, _) =>
+                      CustomPaint(painter: SkyOverlayPainter(mapped, shown)),
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+      expect(find.byKey(const Key('brightness-legend')), findsNothing);
+      await tester.tap(find.byKey(const Key('layer-brightness')));
+      await tester.pump();
+      expect(
+        find.textContaining('Hellste Richtung SSW · 15–40°: 19,00'),
+        findsOneWidget,
+      );
+      expect(find.textContaining('Nacht 08.11.'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+      shownLayers.value = {};
+    },
+  );
+
   testWidgets('flat line and star size tile (app 1.5.0)', (tester) async {
     final at = DateTime.now()
         .subtract(const Duration(hours: 3))

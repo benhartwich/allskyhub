@@ -1,14 +1,10 @@
 {# L37 (devices/brightness.py): the night's sky brightness per sky cell, from the clear
    moonless frames; zenith in the middle, north up, east left as one looks up. #}
+{% from "_brightness_svg.html" import polar, scale %}
 {% set b = brightness_chart %}
 <div class="card stack brightness-map">
   <div class="cam-meta"><h2>{{ t('Himmelshelligkeit nach Richtung', 'Sky brightness by direction') }}</h2><span class="muted small">{{ b.night_id | night_title }} · mag/⁠″², {{ t('höher ist dunkler', 'higher is darker') }}</span></div>
-  <svg viewBox="0 0 {{ b.size }} {{ b.size }}" role="img" aria-label="{{ t('Himmelshelligkeit pro Himmelsrichtung und Höhe', 'Sky brightness by direction and altitude') }}">
-    {% for d in b.empty %}<path class="cell empty" d="{{ d }}"/>{% endfor %}
-    {% for c in b.cells %}<path class="cell" d="{{ c.path }}" fill="{{ c.color }}"><title>{{ c.label }}</title></path>{% endfor %}
-    {% for r in b.rings %}<circle class="ring" cx="{{ b.size / 2 }}" cy="{{ b.size / 2 }}" r="{{ '%.1f' | format(r) }}"/>{% endfor %}
-    {% for x, y, letter in b.cardinals %}<text class="tick" x="{{ '%.1f' | format(x) }}" y="{{ '%.1f' | format(y) }}" text-anchor="middle" dominant-baseline="middle">{{ letter }}</text>{% endfor %}
-  </svg>
-  <p class="legend small">{% for step in b.legend %}<span class="step"><span class="swatch" style="background: {{ step.color }}"></span>{% if loop.first or loop.last %} {{ step.value if en else step.value | replace('.', ',') }}{% endif %}</span>{% endfor %}</p>
+  {{ polar(b, t('Himmelshelligkeit pro Himmelsrichtung und Höhe', 'Sky brightness by direction and altitude')) }}
+  {{ scale(b, en) }}
   <p class="muted small">{{ t('Hellste Richtung', 'Brightest direction') }}: {{ b.brightest.label }} · {{ t('dunkelste', 'darkest') }}: {{ b.darkest.label }}. {{ t('Nur klare Aufnahmen ohne Mond; leere Felder hatten zu wenige.', 'Only clear frames without the moon; empty cells had too few.') }} {{ t('Zum Horizont hin liest die Karte etwas zu dunkel', 'Toward the horizon the map reads a little too dark') }} ({{ t('Vignettierung', 'vignetting') if b.flat == 'geometry' else t('Dämmerungs-Flat', 'twilight flat') }}).</p>
 </div>

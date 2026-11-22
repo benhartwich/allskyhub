@@ -282,3 +282,47 @@ async def image_layer(
             for c in cells(values, pixel, english)
         ],
     }
+
+
+async def night_chart(
+    db: AsyncSession, device_id: str, night_id: str, english: bool = False
+) -> Chart | None:
+    """One night's map, for its night page."""
+    row = (
+        await db.execute(
+            select(NightStat.brightness_map, NightStat.brightness_map_flat).where(
+                NightStat.device_id == device_id, NightStat.night_id == night_id
+            )
+        )
+    ).first()
+    if row is None or row[0] is None:
+        return None
+    return chart(night_id, row[0], row[1], english)
+
+
+MIN_NIGHTS = 3  # night values per cell for a month's map
+
+
+def combine(
+    maps: Iterable[tuple[Any, str | None]], min_nights: int = MIN_NIGHTS
+) -> tuple[list[float | None], str | None] | None:
+    """Several night maps in one (a month's): per cell the median of the nights that
+    have it, with at least ``min_nights``. Like a night, only the most common correction
+    counts (twilight and geometry maps differ toward the horizon)."""
+    parsed = [(v, flat) for raw, flat in maps if (v := _floats(raw, CELLS)) is not None]
+    if not parsed:
+        return None
+    flat = Counter(f for _, f in parsed).most_common(1)[0][0]
+    per_cell: list[list[float]] = [[] for _ in range(CELLS)]
+    for values, f in parsed:
+        if f != flat:
+            continue
+        for i, v in enumerate(values):
+            if v is not None:
+                per_cell[i].append(v)
+    result: list[float | None] = [
+        round(statistics.median(vs), 2) if len(vs) >= min_nights else None for vs in per_cell
+    ]
+    if all(v is None for v in result):
+        return None
+    return result, flat

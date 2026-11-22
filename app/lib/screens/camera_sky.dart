@@ -24,6 +24,7 @@ enum SkyLayer {
   aircraft,
   satellites,
   balloons,
+  brightness,
 }
 
 String layerTitle(SkyLayer l) => switch (l) {
@@ -34,6 +35,7 @@ String layerTitle(SkyLayer l) => switch (l) {
   SkyLayer.aircraft => tr('Flugzeuge', 'Aircraft'),
   SkyLayer.satellites => tr('Satelliten', 'Satellites'),
   SkyLayer.balloons => tr('Wetterballons', 'Weather balloons'),
+  SkyLayer.brightness => tr('Himmelshelligkeit', 'Sky brightness'),
 };
 
 /// The layers switched on, kept while the app runs (like the hub's page per browser).
@@ -54,7 +56,12 @@ class LayerChips extends StatelessWidget {
       runSpacing: 6,
       children: [
         for (final l in SkyLayer.values)
-          if (l != SkyLayer.balloons || (overlay?.balloons.isNotEmpty ?? false))
+          if (switch (l) {
+            SkyLayer.balloons => overlay?.balloons.isNotEmpty ?? false,
+            // L37: only when the camera has a night map.
+            SkyLayer.brightness => overlay?.brightness.isNotEmpty ?? false,
+            _ => true,
+          })
             FilterChip(
               key: Key('layer-${l.name}'),
               label: Text(layerTitle(l)),
@@ -71,8 +78,33 @@ class LayerChips extends StatelessWidget {
             key: const Key('balloons-credit'),
             style: Theme.of(context).textTheme.bodySmall,
           ),
+        if (overlay case final o?
+            when shown.contains(SkyLayer.brightness) && o.brightness.isNotEmpty)
+          Text(
+            brightnessLegend(o),
+            key: const Key('brightness-legend'),
+            style: Theme.of(context).textTheme.bodySmall,
+          ),
       ],
     ),
+  );
+}
+
+/// What the brightness layer shows, in words: the night, the scale, the brightest and
+/// the darkest direction (L37).
+String brightnessLegend(SkyOverlay o) {
+  final cells = o.brightness;
+  final brightest = cells.reduce((a, b) => b.value < a.value ? b : a);
+  final darkest = cells.reduce((a, b) => b.value > a.value ? b : a);
+  final night = o.brightnessNight;
+  final date = night != null && night.length == 8
+      ? '${night.substring(6)}.${night.substring(4, 6)}.'
+      : '';
+  return tr(
+    'Nacht $date, mag/″², hell = heller Himmel. '
+        'Hellste Richtung ${brightest.label}, dunkelste ${darkest.label}.',
+    'Night $date, mag/″², light = brighter sky. '
+        'Brightest ${brightest.label}, darkest ${darkest.label}.',
   );
 }
 
@@ -150,6 +182,23 @@ class SkyOverlayPainter extends CustomPainter {
       ..style = PaintingStyle.stroke
       ..strokeWidth = w
       ..strokeCap = StrokeCap.round;
+
+    // L37: under everything else, see-through so the sky stays visible.
+    if (shown.contains(SkyLayer.brightness)) {
+      final edge = stroke(const Color(0x40000000), 0.6);
+      for (final cell in overlay.brightness) {
+        if (cell.outline.length < 3) continue;
+        final first = at(cell.outline.first.$1, cell.outline.first.$2);
+        final path = Path()..moveTo(first.dx, first.dy);
+        for (final p in cell.outline.skip(1)) {
+          final o = at(p.$1, p.$2);
+          path.lineTo(o.dx, o.dy);
+        }
+        path.close();
+        canvas.drawPath(path, Paint()..color = Color(cell.argb).withAlpha(115));
+        canvas.drawPath(path, edge);
+      }
+    }
 
     if (shown.contains(SkyLayer.grid)) {
       polylines(overlay.grid, stroke(_grid, 1));

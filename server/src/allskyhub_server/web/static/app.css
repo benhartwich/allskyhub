@@ -741,3 +741,6 @@ h1.break { overflow-wrap: anywhere; }
 .brightness-map .tick { fill: var(--text-2); font-size: 12px; font-weight: 700; }
 .brightness-map .legend { display: flex; justify-content: center; align-items: center; gap: 2px; margin: 0; color: var(--text-2); }
 .brightness-map .legend .swatch { width: 18px; height: 10px; border-radius: 2px; display: inline-block; vertical-align: middle; }
+.brightness-months { display: grid; gap: 12px; grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); }
+.brightness-months figure { margin: 0; display: grid; gap: 4px; justify-items: center; }
+.brightness-months figcaption { font-size: 12px; color: var(--text-2); font-variant-numeric: tabular-nums; }

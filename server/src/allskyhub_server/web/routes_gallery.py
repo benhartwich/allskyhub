@@ -16,6 +16,7 @@ from allskyhub_server.auth.sessions import SessionInfo
 from allskyhub_server.devices import (
     aircraft,
     archive,
+    brightness,
     day_aircraft,
     events,
     fireball,
@@ -42,6 +43,7 @@ from allskyhub_server.devices.event_text import EVENT_TITLES, event_rows, meteor
 from allskyhub_server.devices.images import ImageStore
 from allskyhub_server.devices.queries import Role
 from allskyhub_server.devices.tonight import ForecastCache
+from allskyhub_server.i18n import english
 from allskyhub_server.models import AircraftPass, Device, EventRecord, Frame, RenderJob
 from allskyhub_server.web.deps import CurrentSession, DbSession, csrf_protect
 from allskyhub_server.web.render import render
@@ -118,6 +120,7 @@ async def night(
                 sky_chart.STATUS_SERIES,
             ),
             "products": await archive.night_products(db, device.id, night_id),
+            "brightness_chart": await brightness.night_chart(db, device.id, night_id, english()),
             "events": events.collapse(night_events),
             "meteors": meteor_summary(night_events),
             "overflights": events.overflight_count(all_events),

@@ -33,6 +33,7 @@ from allskyhub_server.devices import (
     aircraft,
     archive,
     bright_satellites,
+    brightness,
     events,
     labels,
     lightning_li,
@@ -461,6 +462,10 @@ async def camera_sky_overlay(
         else None
     )
     drawn["at"] = at.isoformat()
+    # L37: the newest night's sky brightness per cell, as filled paths (app layer).
+    drawn["brightness"] = await brightness.image_layer(
+        db, device.id, device.last_status, at.date(), english()
+    )
     drawn["aircraft"] = (
         [{"x": round(a.x, 1), "y": round(a.y, 1), "text": a.text, "trail": a.trail}
          for a in planes.items]

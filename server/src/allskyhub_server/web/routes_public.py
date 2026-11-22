@@ -14,6 +14,7 @@ from allskyhub_server.auth import ratelimit
 from allskyhub_server.devices import (
     aircraft,
     archive,
+    brightness,
     map_tiles,
     network,
     public,
@@ -29,6 +30,7 @@ from allskyhub_server.devices.images import ImageStore
 from allskyhub_server.devices.map_tiles import MapTiles
 from allskyhub_server.devices.space_weather import KpCache, OvationCache
 from allskyhub_server.devices.tonight import ForecastCache
+from allskyhub_server.i18n import english
 from allskyhub_server.models import Device
 from allskyhub_server.web.deps import DbSession, OptionalSession, SettingsDep, client_ip
 from allskyhub_server.web.render import render
@@ -175,6 +177,11 @@ async def sky_page(
             "station": await _station(db, device),
             "part": await network.part(db, device) if device.network else None,
             "comparison": await network.comparison(db, device, now) if sections.sky else None,
+            "brightness_chart": (
+                await brightness.latest_chart(db, device.id, now.date(), english())
+                if sections.sky
+                else None
+            ),
             "night_id": night_id,
             "products": products if sections.archive else [],
             "video": await public.night_video(db, device, night_id) if night_id else None,

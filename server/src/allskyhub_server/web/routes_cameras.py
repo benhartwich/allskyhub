@@ -20,6 +20,7 @@ from allskyhub_server.devices import (
     aircraft,
     archive,
     bright_satellites,
+    brightness,
     camera_map,
     discord,
     domains,
@@ -45,6 +46,7 @@ from allskyhub_server.devices.event_text import EVENT_TITLES, orientation_line, 
 from allskyhub_server.devices.images import ImageStore
 from allskyhub_server.devices.queries import Role
 from allskyhub_server.devices.tonight import ForecastCache
+from allskyhub_server.i18n import english
 from allskyhub_server.models import Device, Product, User
 from allskyhub_server.web.deps import (
     CurrentSession,
@@ -188,6 +190,7 @@ async def _camera_context(
         ),
         "nowcast": await nowcast.for_device(db, forecast, device, now),
         "last_night": await _last_night(db, device),
+        "brightness_chart": await brightness.latest_chart(db, device.id, now.date(), english()),
         "health": await health.full_check(db, device, online, now, forecast),
         "hfr_usual": await star_size.usual_now(db, device),
         "paused": health.paused(device),

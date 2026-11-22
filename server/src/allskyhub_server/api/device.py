@@ -1005,6 +1005,7 @@ async def _store_sky(
 ) -> None:
     """SPEC §6.3 ``status.sky``: one row per measured frame (the device repeats the last
     measurement until a new frame comes, so duplicates of ``at`` are skipped)."""
+    mapped = sky.brightness_map is not None and any(v is not None for v in sky.brightness_map)
     async with maker() as db:
         if not await _still_paired(db, device_id):
             return
@@ -1018,6 +1019,10 @@ async def _store_sky(
                 sqm_mag=sky.sqm_mag,
                 stars=sky.stars,
                 hfr=sky.hfr,
+                # L37: the cloud map only travels with a brightness map (it gates its cells).
+                cloud_map=sky.cloud_map if mapped else None,
+                brightness_map=sky.brightness_map if mapped else None,
+                brightness_map_flat=sky.brightness_map_flat if mapped else None,
             )
             .on_conflict_do_nothing(index_elements=["device_id", "at"])
         )

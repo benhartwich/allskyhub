@@ -14,7 +14,7 @@ from sqlalchemy import func, select, union
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from allskyhub_server.devices import star_size
+from allskyhub_server.devices import bright_satellites, brightness, star_size
 from allskyhub_server.devices.event_text import shower_name
 from allskyhub_server.devices.night_summary import summarize
 from allskyhub_server.i18n import english
@@ -56,7 +56,10 @@ async def refresh_night(db: AsyncSession, device_id: str, night_id: str) -> None
     positive counts nowhere). The caller commits."""
     s = await summarize(db, device_id, night_id)
     device = await db.get(Device, device_id)
+    sky_map = await _brightness(db, device, night_id) if device else None
     values: dict[str, object] = {
+        "brightness_map": sky_map.values if sky_map else None,
+        "brightness_map_flat": sky_map.flat if sky_map else None,
         "clear_hours": s.clear_hours,
         "best_sqm": s.best_sqm,
         "median_hfr": s.median_hfr,
@@ -79,6 +82,23 @@ async def refresh_night(db: AsyncSession, device_id: str, night_id: str) -> None
             index_elements=["device_id", "night_id"], set_={**values, "hfr_camera": camera}
         )
     )
+
+
+async def _brightness(
+    db: AsyncSession, device: Device, night_id: str
+) -> brightness.NightMap | None:
+    """L37: the night's sky brightness per cell; needs the place for the moon."""
+    where = bright_satellites.location(device.last_status)
+    if where is None:
+        return None
+    samples = await db.scalars(
+        select(SkySample).where(
+            SkySample.device_id == device.id,
+            SkySample.night_id == night_id,
+            SkySample.brightness_map.is_not(None),
+        )
+    )
+    return brightness.night_map(samples, *where)
 
 
 @dataclass

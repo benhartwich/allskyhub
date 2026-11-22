@@ -102,6 +102,7 @@
   {% if comparison %}{% with name = title, heading = none %}{% include "_sky_compare.html" %}{% endwith %}{% endif %}
 </div>
 {% endif %}
+{% if not station and brightness_chart %}{% include "_brightness_map.html" %}{% endif %}
 
 {% if sky_charts %}
 <section class="stack">

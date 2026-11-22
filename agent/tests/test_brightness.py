@@ -57,9 +57,9 @@ def test_solid_angle_of_an_equidistant_lens() -> None:
     """Ω_px = sinθ / (r · dr/dθ), 1 at the lens centre; equidistant: sinθ / θ."""
     r = np.array([0.0, 300.0, 600.0])
     omega = solid_angle(SOL, SOL.cx + r, np.full(3, SOL.cy))
-    theta = r / SOL.a1 * math.pi / 2
-    want = np.where(theta > 0, np.sin(theta) / np.maximum(theta, 1e-12), 1.0)
-    assert omega == pytest.approx(want, rel=1e-4)
+    thetas = [float(x) / SOL.a1 * math.pi / 2 for x in r]
+    want = [math.sin(t) / t if t > 0 else 1.0 for t in thetas]
+    assert omega.tolist() == pytest.approx(want, rel=1e-4)
 
 
 def test_cell_medians_need_200_pixels() -> None:

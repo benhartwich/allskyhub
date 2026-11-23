@@ -281,7 +281,7 @@ async def test_the_way_in(client: httpx.AsyncClient) -> None:
     assert "neben indi-allsky" in goal.text
     join = {"kamera": "ja", "software": "allsky", "wahl": "mitmachen"}
     r = await client.get("/start", params=join)
-    assert r.headers["location"] == "/stationen/neu?software=image-url"
+    assert r.headers["location"] == "/stationen/neu?software=allsky"  # its module (§10.4)
     r = await client.get("/start", params={**join, "wahl": "umsteigen"})
     assert r.headers["location"] == "/allsky"
     steps = await client.get("/start", params={"kamera": "nein"})

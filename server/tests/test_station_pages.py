@@ -91,6 +91,38 @@ async def test_indi_allsky_and_other_software(app: FastAPI, client: httpx.AsyncC
         )
 
 
+async def test_allsky_joins_with_its_module(client: httpx.AsyncClient) -> None:
+    """SPEC §10.1/§10.4: Allsky is a choice of its own and leads to the module, with a
+    secret at once and no admin check (an Allsky owner who chose the image address and then
+    "other software" to use the module, 2026-11-23)."""
+    await make_account(client)
+    page = await client.get("/stationen/neu", params={"software": "allsky"})
+    assert "SharedSky aus Allskys Module Manager" in page.text
+    assert 'name="url"' not in page.text
+    r = await _new(client, "allsky", name="Sternwarte Nordheim")
+    assert r.status_code == 200
+    station_id = r.url.path.rsplit("/", 1)[1]
+    assert "Im Allsky-Modul eintragen" in r.text
+    assert "Module Manager" in r.text
+    assert station_id in r.text
+    assert re.search(r'data-copy="[0-9a-f]{64}"', r.text)
+    assert "allsky-modules/tree/master/allsky_sharedsky" in r.text
+    assert "wartet auf Prüfung" not in r.text
+    join = await client.get("/mitmachen")
+    assert "Das Modul <strong>SharedSky</strong>" in join.text
+    assert "Andere Kameras mit Bild im Netz" in join.text
+
+
+async def test_wizard_offers_the_worlds_time_zones(client: httpx.AsyncClient) -> None:
+    """A station in New Zealand (2026-11-23): every zone is offered, none is preset (the
+    browser's own is filled in by station_map.js)."""
+    await make_account(client)
+    page = await client.get("/stationen/neu", params={"software": "image-url"})
+    assert '<option value="Pacific/Auckland">' in page.text
+    assert '<option value="Etc/GMT+5">' not in page.text
+    assert 'name="timezone" id="timezone" value=""' in page.text
+
+
 async def test_others_cannot_see_a_station(
     client: httpx.AsyncClient, new_client: httpx.AsyncClient
 ) -> None:

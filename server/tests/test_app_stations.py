@@ -57,6 +57,13 @@ async def test_connect_with_indi_allsky_and_other(client: httpx.AsyncClient) -> 
     )  # fmt: skip
     assert other.json()["base_url"] is None
     assert other.json()["docs_url"] == "http://testserver/entwickler/connect"
+    allsky = await client.post(
+        "/api/v1/stations", headers=auth,
+        data={"software": "allsky", "name": "Sternwarte Nordheim", "terms": "true"},
+    )  # fmt: skip
+    assert allsky.status_code == 200  # SPEC §10.4: the module, a secret at once
+    assert allsky.json()["station"]["software"] == "allsky"
+    assert len(allsky.json()["secret"]) == 64
 
     sid = station["id"]
     wrong = await client.post(

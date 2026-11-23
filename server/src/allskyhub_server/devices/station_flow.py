@@ -24,7 +24,7 @@ from allskyhub_server.settings import Settings
 
 log = logging.getLogger(__name__)
 
-SOFTWARE = ("indi-allsky", "image-url", "zenivo", "other")
+SOFTWARE = ("allsky", "indi-allsky", "image-url", "zenivo", "other")
 
 
 class StationInputError(Exception):

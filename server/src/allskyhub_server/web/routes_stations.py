@@ -11,6 +11,7 @@ from __future__ import annotations
 import base64
 import datetime as dt
 import logging
+import zoneinfo
 from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile
@@ -41,12 +42,23 @@ log = logging.getLogger(__name__)
 
 router = APIRouter(dependencies=[Depends(csrf_protect)])
 
+# SPEC §10.1: Allsky joins with its module (§10.4); the image address (§10.7) is for
+# cameras that only show their image online, Allsky without the module among them.
 SOFTWARE = {
+    "allsky": "Allsky",
     "indi-allsky": "indi-allsky",
-    "image-url": "Allsky / Bild-Adresse",
     "zenivo": "Zenivo",
+    "image-url": "Bild-Adresse",
     "other": "andere oder eigene Software",
 }
+ALLSKY_MODULE = "https://github.com/AllskyTeam/allsky-modules/tree/master/allsky_sharedsky"
+# The wizard's time zones: the whole world (a station in New Zealand, 2026-11-23); the
+# browser's own zone is filled in by station_map.js.
+ZONES = sorted(
+    z
+    for z in zoneinfo.available_timezones()
+    if "/" in z and not z.startswith(("Etc/", "SystemV/", "posix/", "right/"))
+)
 STATES = {
     "pending": "wartet auf Prüfung",
     "approved": "freigegeben",
@@ -102,6 +114,7 @@ async def new_form(request: Request, session: CurrentSession, software: str = ""
         {
             "software": software if software in SOFTWARE else "",
             "choices": SOFTWARE,
+            "zones": ZONES,
             "form": {},
             "visibility": public.Visibility(),
             "map_config": _map_config(None, None, editable=True),
@@ -160,8 +173,9 @@ async def create(
         return render(
             request,
             "station_new.html",
-            {"software": software, "choices": SOFTWARE, "form": form, "error": exc.message,
-             "visibility": shown, "map_config": _map_config(None, None, editable=True)},
+            {"software": software, "choices": SOFTWARE, "zones": ZONES, "form": form,
+             "error": exc.message, "visibility": shown,
+             "map_config": _map_config(None, None, editable=True)},
             session=session,
             status_code=400,
         )  # fmt: skip
@@ -199,6 +213,7 @@ async def station_page(
             "time_source": (device.last_frame or {}).get("time_source"),
             "place": settings_,
             "docs": DOCS,
+            "allsky_module": ALLSKY_MODULE,
             "visibility": public.visibility(device),
             "public_from": device.public_from,
             "unmailed": device.public_from == public.UNMAILED,

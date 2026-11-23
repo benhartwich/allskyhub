@@ -69,7 +69,7 @@ class StationItem(BaseModel):
 
 class StationCreated(BaseModel):
     station: StationItem
-    # Once, for indi-allsky and other software; an image address has none.
+    # Once, for Allsky, indi-allsky and other software; an image address has none.
     secret: str | None = None
     base_url: str | None = None  # indi-allsky's "Base URL"; Zenivo's --sync-target
     docs_url: str
@@ -163,7 +163,7 @@ async def create_station(
     db: DbSession,
     settings: SettingsDep,
     user: AppUser,
-    software: Annotated[Literal["indi-allsky", "image-url", "zenivo", "other"], Form()],
+    software: Annotated[Literal["allsky", "indi-allsky", "image-url", "zenivo", "other"], Form()],
     name: Annotated[str, Form(max_length=100)],
     terms: Annotated[bool, Form()] = False,
     url: Annotated[str, Form(max_length=2048)] = "",

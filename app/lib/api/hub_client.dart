@@ -1885,7 +1885,8 @@ class Station {
   final String id;
   final String name;
 
-  /// `indi-allsky`, `image-url` (Allsky and others by their image address) or `other`.
+  /// `allsky` (its SharedSky module), `indi-allsky`, `image-url` (cameras by their image
+  /// address, Allsky without the module too), `zenivo` or `other`.
   final String software;
 
   /// connected, waiting (nothing received yet), pending, declined or paused.

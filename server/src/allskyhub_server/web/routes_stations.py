@@ -356,6 +356,14 @@ async def admin_station(
 ) -> Response:
     """Fetched once on opening, through the same safe fetcher as the stations."""
     admin_only(session, settings)
+    if await db.get(StationSource, device_id) is None:
+        removed = await db.get(Device, device_id)
+        # The owner removed it before the check (§10.1): the admin's mail still links here.
+        if removed is not None and removed.kind == "station" and removed.owner_id is None:
+            return render(
+                request, "admin_station_gone.html", {"device": removed}, session=session,
+                status_code=410,
+            )  # fmt: skip
     source, device, owner = await _admin_station(db, device_id)
     status, kept = flash.take(request, session)
     fetcher: image_url.Fetcher = request.app.state.image_fetcher

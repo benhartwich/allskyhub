@@ -1,0 +1,9 @@
+{% extends "base.html" %}
+{% block title %}{{ device.name }} · Station entfernt · allskyhub{% endblock %}
+{% block content %}
+<div class="page-head"><h1>{{ device.name }}</h1><p class="muted"><a href="/admin">Admin</a> › <a href="/admin/stationen">Stationen</a> › entfernt</p></div>
+<section class="card stack">
+  <p>Der Besitzer hat diese Station entfernt. Ihre Bild-Adresse, die Bilder und der Nachweis sind gelöscht, es gibt nichts mehr zu prüfen.</p>
+  <p><a class="button" href="/admin/stationen">Zu den Stationen</a></p>
+</section>
+{% endblock %}

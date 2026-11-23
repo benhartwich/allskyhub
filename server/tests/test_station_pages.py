@@ -184,6 +184,18 @@ async def test_image_address_checked_by_an_admin(
     assert owner_mail
     assert "freigegeben" in owner_mail[0].subject
 
+    # The owner removes it: the admin's link shows that instead of "not found".
+    page = await client.get(f"/stationen/{station_id}")
+    await client.post(
+        f"/stationen/{station_id}/entfernen",
+        data={"csrf_token": csrf_from(page.text), "password": PASSWORD},
+    )
+    removed = await new_client.get(f"/admin/stationen/{station_id}")
+    assert removed.status_code == 410
+    assert "Der Besitzer hat diese Station entfernt" in removed.text
+    assert (await client.get(f"/admin/stationen/{station_id}")).status_code == 404  # not admin
+    assert (await new_client.get("/admin/stationen/" + "x" * 26)).status_code == 404
+
 
 async def test_public_pages(client: httpx.AsyncClient) -> None:
     join = await client.get("/mitmachen")

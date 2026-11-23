@@ -186,6 +186,28 @@ void main() {
     expect(find.text('Entwickler-Doku öffnen'), findsOneWidget);
   });
 
+  testWidgets('Allsky: ID, secret and the module, no review', (tester) async {
+    _tall(tester);
+    final hub = _Hub();
+    await tester.pumpWidget(
+      _app(StationConnectScreen(client: hub.client(), software: 'allsky')),
+    );
+    expect(find.text('Allsky verbinden'), findsOneWidget);
+    expect(find.byKey(const Key('station-url')), findsNothing);
+    await tester.enterText(
+      find.byKey(const Key('station-name')),
+      'Sternwarte Nordheim',
+    );
+    await tester.tap(find.byKey(const Key('station-terms')));
+    await tester.tap(find.byKey(const Key('station-create')));
+    await tester.pumpAndSettle();
+    expect(find.text('Im Allsky-Modul eintragen'), findsOneWidget);
+    expect(find.textContaining('Module Manager'), findsOneWidget);
+    expect(find.text('f' * 64), findsOneWidget);
+    expect(find.text('Anleitung des Moduls öffnen'), findsOneWidget);
+    expect(hub.sent.last.body, contains('name="software"\r\n\r\nallsky'));
+  });
+
   testWidgets('by the image address: place from the phone, then the review', (
     tester,
   ) async {

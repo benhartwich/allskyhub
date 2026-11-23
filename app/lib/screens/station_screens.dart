@@ -21,10 +21,14 @@ import 'network_screens.dart';
 
 /// The answers of the second question, and what "Kamera verbinden" sends for them.
 const _software = {
-  'allsky': 'image-url',
+  'allsky': 'allsky', // its SharedSky module (SPEC §10.4)
   'indi-allsky': 'indi-allsky',
   'andere': 'other',
 };
+
+/// The SharedSky module's guide in the AllskyTeam's module repository.
+const allskyModuleGuide =
+    'https://github.com/AllskyTeam/allsky-modules/tree/master/allsky_sharedsky';
 
 /// The phone's place as exact as it gets (the camera's place enters the trajectories;
 /// [LocationSource] rounds to about 1 km); null without permission.
@@ -565,6 +569,7 @@ class _StationConnectScreenState extends State<StationConnectScreen> {
         InputDecoration(labelText: label, hintText: hint);
     final title = switch (widget.software) {
       'indi-allsky' => tr('indi-allsky verbinden', 'Connect indi-allsky'),
+      'allsky' => tr('Allsky verbinden', 'Connect Allsky'),
       'image-url' => tr(
         'Über die Bild-Adresse verbinden',
         'Connect by the image address',
@@ -580,6 +585,10 @@ class _StationConnectScreenState extends State<StationConnectScreen> {
             'indi-allsky' => tr(
               'Danach zeigt die App drei Werte, die du in indi-allsky unter Konfiguration → SyncAPI einträgst. An der Kamera installierst du nichts.',
               'Then the app shows three values to enter in indi-allsky under Config → SyncAPI. Nothing to install on the camera.',
+            ),
+            'allsky' => tr(
+              'Danach zeigt die App eine Station-ID und ein Geheimnis. Du trägst sie im Modul SharedSky ein, das du in Allskys Module Manager installierst. Keine Prüfung durch einen Admin nötig.',
+              "Then the app shows a station ID and a secret. You enter them in the SharedSky module, which you install from Allsky's Module Manager. No admin check needed.",
             ),
             'image-url' => tr(
               'Der Hub holt das neueste Bild deiner Kamera von ihrer Adresse ab, zum Beispiel deiner Allsky-Website. Ein Admin prüft die Station vorher von Hand.',
@@ -835,6 +844,7 @@ class StationAccessScreen extends StatelessWidget {
     final theme = Theme.of(context);
     final station = created.station;
     final indi = station.software == 'indi-allsky';
+    final allsky = station.software == 'allsky';
     Widget value(String label, String text, Key key) => Card(
       margin: const EdgeInsets.only(bottom: 10),
       child: ListTile(
@@ -862,6 +872,8 @@ class StationAccessScreen extends StatelessWidget {
           Text(
             indi
                 ? tr('In indi-allsky eintragen', 'Enter in indi-allsky')
+                : allsky
+                ? tr('Im Allsky-Modul eintragen', 'Enter in the Allsky module')
                 : tr('Zugangsdaten', 'Access'),
             style: theme.textTheme.headlineSmall,
           ),
@@ -871,6 +883,11 @@ class StationAccessScreen extends StatelessWidget {
                 ? tr(
                     'In indi-allsky unter Konfiguration → SyncAPI: einschalten, Bilder auf „jedes Bild“ stellen und diese drei Werte eintragen.',
                     'In indi-allsky under Config → SyncAPI: switch it on, set images to “every image” and enter these three values.',
+                  )
+                : allsky
+                ? tr(
+                    'In der Allsky-WebUI im Module Manager „SharedSky“ installieren (steht es dort nicht, bei Allsky v2026.10.01_01: allsky_sharedsky.py laut Anleitung nach ~/allsky/config/myFiles/modules/ kopieren), in den Tag- und den Nacht-Ablauf aufnehmen (nachts hinter „Meteor Detection (temporal)“, vor das Overlay), diese beiden Werte eintragen und auf „Test“ drücken.',
+                    'In the Allsky WebUI install “SharedSky” from the Module Manager (not listed there, on Allsky v2026.10.01_01: copy allsky_sharedsky.py into ~/allsky/config/myFiles/modules/ as the guide says), add it to the day and night flows (at night after “Meteor Detection (temporal)”, before the overlay), enter these two values and press “Test”.',
                   )
                 : tr(
                     'Jede Anfrage trägt „Authorization: Bearer <Station-ID>:<Geheimnis>“. Alles Weitere steht in der Entwickler-Doku, mit einem Testmodus.',
@@ -894,9 +911,16 @@ class StationAccessScreen extends StatelessWidget {
               const Key('access-secret'),
             ),
             TextButton(
-              onPressed: () => _open(Uri.parse(created.docsUrl)),
+              onPressed: () => _open(
+                Uri.parse(allsky ? allskyModuleGuide : created.docsUrl),
+              ),
               child: Text(
-                tr('Entwickler-Doku öffnen', 'Open the developer docs'),
+                allsky
+                    ? tr(
+                        'Anleitung des Moduls öffnen',
+                        'Open the module’s guide',
+                      )
+                    : tr('Entwickler-Doku öffnen', 'Open the developer docs'),
               ),
             ),
           ],
@@ -960,6 +984,7 @@ class StationCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final software = switch (station.software) {
       'indi-allsky' => 'indi-allsky',
+      'allsky' => 'Allsky',
       'image-url' => tr('Bild-Adresse', 'image address'),
       _ => tr('eigene Software', 'own software'),
     };

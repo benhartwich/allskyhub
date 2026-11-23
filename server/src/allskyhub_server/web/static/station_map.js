@@ -33,6 +33,16 @@
   } else {
     map.setView([50, 10], 4);
   }
+  // The camera's time zone: the browser's own, unless one is given (most owners set up a
+  // station from where it stands).
+  const zone = document.getElementById("timezone");
+  if (zone && !zone.value) {
+    try {
+      zone.value = Intl.DateTimeFormat().resolvedOptions().timeZone || "";
+    } catch {
+      // an old browser: the field stays empty and the hub takes the place's night
+    }
+  }
   if (!config.editable || !lat || !lon) return;
   map.on("click", (event) => {
     lat.value = event.latlng.lat.toFixed(5);

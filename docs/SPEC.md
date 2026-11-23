@@ -1736,9 +1736,10 @@ The hub keeps a thumbnail of each image and the full frame only for images with
 A module `allsky_sharedsky` for the Allsky module system sends `PUT /station` and, after
 each image, `POST /frames` and, when the meteor detection of the AllskyTeam's module
 repository (`allsky_meteordetect`, "Meteor Detection (temporal)", which sets
-`AS_METEORCOUNT` and the meteor image's path) confirmed one, `POST /events`. It is
-offered to the AllskyTeam's module repository after talking with its maintainers, and
-until then installable from this repository.
+`AS_METEORCOUNT` and the meteor image's path) confirmed one, `POST /events`. It is in the
+AllskyTeam's module repository (installed with Allsky's Module Manager); its source stays
+in this repository. "Kamera verbinden" offers Allsky as its own software, which leads to
+the module; an Allsky camera without it can still join by its image address (§10.7).
 
 ### 10.5 Developer documentation
 

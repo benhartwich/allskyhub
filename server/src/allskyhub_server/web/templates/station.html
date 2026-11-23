@@ -10,7 +10,7 @@
 
 {% if secret %}
 <section class="card stack">
-  <h2>{% if device.software == 'indi-allsky' %}{{ t('In indi-allsky eintragen', 'Enter in indi-allsky') }}{% elif device.software == 'zenivo' %}{{ t('Zenivo damit starten', 'Start Zenivo with this') }}{% else %}{{ t('Zugangsdaten', 'Credentials') }}{% endif %}</h2>
+  <h2>{% if device.software == 'indi-allsky' %}{{ t('In indi-allsky eintragen', 'Enter in indi-allsky') }}{% elif device.software == 'zenivo' %}{{ t('Zenivo damit starten', 'Start Zenivo with this') }}{% elif device.software == 'allsky' %}{{ t('Im Allsky-Modul eintragen', 'Enter in the Allsky module') }}{% else %}{{ t('Zugangsdaten', 'Credentials') }}{% endif %}</h2>
   {% if device.software == 'indi-allsky' %}
   <p class="muted small">{{ t('In indi-allsky unter Konfiguration → SyncAPI: einschalten, Bilder auf „jedes Bild“ stellen und diese drei Werte eintragen.', 'In indi-allsky under Config → SyncAPI: turn it on, set images to "every image" and enter these three values.') }}</p>
   <dl class="facts">
@@ -24,6 +24,17 @@
   <dl class="facts">
     <dt>{{ t('Option', 'Option') }}</dt><dd><code class="copy-value">--sync-target {{ target }}</code> <button type="button" class="secondary small" data-copy="--sync-target {{ target }}">{{ copy }}</button></dd>
   </dl>
+  {% elif device.software == 'allsky' %}
+  <ol class="small">
+    <li>{% if en %}In the Allsky WebUI open <strong>Module Manager</strong>, search for <strong>SharedSky</strong> and install it. Not listed there (Allsky v2026.10.01_01)? Copy <a href="{{ allsky_module_file }}">allsky_sharedsky.py</a> into <code>~/allsky/config/myFiles/modules/</code> instead.{% else %}In der Allsky-WebUI den <strong>Module Manager</strong> öffnen, <strong>SharedSky</strong> suchen und installieren. Steht es dort nicht (Allsky v2026.10.01_01)? Dann <a href="{{ allsky_module_file }}">allsky_sharedsky.py</a> nach <code>~/allsky/config/myFiles/modules/</code> kopieren.{% endif %}</li>
+    <li>{% if en %}Add <strong>SharedSky</strong> to the day and night flows: in the night flow after <em>Meteor Detection (temporal)</em>, and before the <em>Overlay</em> module.{% else %}<strong>SharedSky</strong> in den Tag- und den Nacht-Ablauf aufnehmen: nachts hinter <em>Meteor Detection (temporal)</em> und vor das <em>Overlay</em>-Modul.{% endif %}</li>
+    <li>{{ t('Diese beiden Werte im Modul eintragen und auf „Test“ drücken.', 'Enter these two values in the module and press "Test".') }}</li>
+  </ol>
+  <dl class="facts">
+    <dt>{{ t('Station-ID', 'Station ID') }}</dt><dd><code class="copy-value">{{ device.id }}</code> <button type="button" class="secondary small" data-copy="{{ device.id }}">{{ copy }}</button></dd>
+    <dt>{{ t('Geheimnis', 'Secret') }}</dt><dd><code class="copy-value">{{ secret }}</code> <button type="button" class="secondary small" data-copy="{{ secret }}">{{ copy }}</button></dd>
+  </dl>
+  <p class="muted small">{% if en %}Details and all settings: <a href="{{ allsky_module }}">the module's guide</a>.{% else %}Einzelheiten und alle Einstellungen: <a href="{{ allsky_module }}">Anleitung des Moduls</a> (englisch).{% endif %}</p>
   {% else %}
   <dl class="facts">
     <dt>{{ t('Station-ID', 'Station ID') }}</dt><dd><code class="copy-value">{{ device.id }}</code> <button type="button" class="secondary small" data-copy="{{ device.id }}">{{ copy }}</button></dd>

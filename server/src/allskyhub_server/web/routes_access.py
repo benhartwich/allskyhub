@@ -155,7 +155,7 @@ async def download_image(request: Request) -> Response:
 # The way in after signing up (Benjamin, 2026-11-05): a camera or not; which software;
 # join SharedSky or switch to allskyhub. Each answer is its own address, so the browser's
 # "back" works; the old /start?schritt=… addresses still lead to the building steps.
-WIZARD_SOFTWARE = {"allskyhub": "", "allsky": "image-url", "indi-allsky": "indi-allsky",
+WIZARD_SOFTWARE = {"allskyhub": "", "allsky": "allsky", "indi-allsky": "indi-allsky",
                    "zenivo": "zenivo", "andere": "other"}  # fmt: skip
 
 

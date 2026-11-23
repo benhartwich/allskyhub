@@ -52,6 +52,12 @@ SOFTWARE = {
     "other": "andere oder eigene Software",
 }
 ALLSKY_MODULE = "https://github.com/AllskyTeam/allsky-modules/tree/master/allsky_sharedsky"
+# The Module Manager checks out the modules branch named like the installed Allsky; the
+# release v2026.10.01_01 has none with SharedSky, so the file is copied by hand there.
+ALLSKY_MODULE_FILE = (
+    "https://raw.githubusercontent.com/AllskyTeam/allsky-modules/master/"
+    "allsky_sharedsky/allsky_sharedsky.py"
+)
 # The wizard's time zones: the whole world (a station in New Zealand, 2026-11-23); the
 # browser's own zone is filled in by station_map.js.
 ZONES = sorted(
@@ -214,6 +220,7 @@ async def station_page(
             "place": settings_,
             "docs": DOCS,
             "allsky_module": ALLSKY_MODULE,
+            "allsky_module_file": ALLSKY_MODULE_FILE,
             "visibility": public.visibility(device),
             "public_from": device.public_from,
             "unmailed": device.public_from == public.UNMAILED,

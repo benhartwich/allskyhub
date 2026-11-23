@@ -107,6 +107,8 @@ async def test_allsky_joins_with_its_module(client: httpx.AsyncClient) -> None:
     assert station_id in r.text
     assert re.search(r'data-copy="[0-9a-f]{64}"', r.text)
     assert "allsky-modules/tree/master/allsky_sharedsky" in r.text
+    assert "v2026.10.01_01" in r.text  # its Module Manager has no SharedSky yet
+    assert "myFiles/modules" in r.text
     assert "wartet auf Prüfung" not in r.text
     join = await client.get("/mitmachen")
     assert "Das Modul <strong>SharedSky</strong>" in join.text

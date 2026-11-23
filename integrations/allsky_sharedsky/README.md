@@ -27,7 +27,11 @@ the station's name.
 
 1. Create a free account at <https://allskyhub.org> and choose **Connect a camera**,
    software **Allsky**. The hub shows a **station ID** and a **secret**, once.
-2. Install the module with Allsky's **Module Manager** (search for *SharedSky*).
+2. Install the module with Allsky's **Module Manager** (search for *SharedSky*). The
+   manager uses the module branch of your Allsky version; if SharedSky is not listed
+   there (Allsky v2026.10.01_01 and older), copy
+   [`allsky_sharedsky.py`](https://raw.githubusercontent.com/AllskyTeam/allsky-modules/master/allsky_sharedsky/allsky_sharedsky.py) into your own modules folder,
+   `~/allsky/config/myFiles/modules/`.
 3. In the WebUI, add **SharedSky** to the day and night flows:
    - Put it **after Meteor Detection (temporal)** in the night flow.
    - Put it **before the Overlay** module, so the hub gets the image without text.

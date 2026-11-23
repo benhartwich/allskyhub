@@ -886,8 +886,8 @@ class StationAccessScreen extends StatelessWidget {
                   )
                 : allsky
                 ? tr(
-                    'In der Allsky-WebUI im Module Manager „SharedSky“ installieren (steht es dort nicht, bei Allsky v2026.10.01_01 und älter: allsky_sharedsky.py laut Anleitung nach ~/allsky/config/myFiles/modules/ kopieren), in den Tag- und den Nacht-Ablauf aufnehmen (nachts hinter „Meteor Detection (temporal)“, vor das Overlay), diese beiden Werte eintragen und auf „Test“ drücken.',
-                    'In the Allsky WebUI install “SharedSky” from the Module Manager (not listed there, on Allsky v2026.10.01_01 and older: copy allsky_sharedsky.py into ~/allsky/config/myFiles/modules/ as the guide says), add it to the day and night flows (at night after “Meteor Detection (temporal)”, before the overlay), enter these two values and press “Test”.',
+                    'In der Allsky-WebUI im Module Manager „SharedSky“ installieren (steht es dort nicht, bei Allsky v2026.10.01_01: allsky_sharedsky.py laut Anleitung nach ~/allsky/config/myFiles/modules/ kopieren), in den Tag- und den Nacht-Ablauf aufnehmen (nachts hinter „Meteor Detection (temporal)“, vor das Overlay), diese beiden Werte eintragen und auf „Test“ drücken.',
+                    'In the Allsky WebUI install “SharedSky” from the Module Manager (not listed there, on Allsky v2026.10.01_01: copy allsky_sharedsky.py into ~/allsky/config/myFiles/modules/ as the guide says), add it to the day and night flows (at night after “Meteor Detection (temporal)”, before the overlay), enter these two values and press “Test”.',
                   )
                 : tr(
                     'Jede Anfrage trägt „Authorization: Bearer <Station-ID>:<Geheimnis>“. Alles Weitere steht in der Entwickler-Doku, mit einem Testmodus.',

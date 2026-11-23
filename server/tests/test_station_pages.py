@@ -98,6 +98,7 @@ async def test_allsky_joins_with_its_module(client: httpx.AsyncClient) -> None:
     await make_account(client)
     page = await client.get("/stationen/neu", params={"software": "allsky"})
     assert "SharedSky aus Allskys Module Manager" in page.text
+    assert "Allsky v2026.10.01 oder neuer" in page.text  # allsky_base came then
     assert 'name="url"' not in page.text
     r = await _new(client, "allsky", name="Sternwarte Nordheim")
     assert r.status_code == 200

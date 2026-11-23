@@ -25,11 +25,13 @@ the station's name.
 
 ## Setup
 
+The module needs Allsky v2026.10.01 or newer (its module base, `allsky_base`).
+
 1. Create a free account at <https://allskyhub.org> and choose **Connect a camera**,
    software **Allsky**. The hub shows a **station ID** and a **secret**, once.
 2. Install the module with Allsky's **Module Manager** (search for *SharedSky*). The
    manager uses the module branch of your Allsky version; if SharedSky is not listed
-   there (Allsky v2026.10.01_01 and older), copy
+   there (Allsky v2026.10.01_01), copy
    [`allsky_sharedsky.py`](https://raw.githubusercontent.com/AllskyTeam/allsky-modules/master/allsky_sharedsky/allsky_sharedsky.py) into your own modules folder,
    `~/allsky/config/myFiles/modules/`.
 3. In the WebUI, add **SharedSky** to the day and night flows:

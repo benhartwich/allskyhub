@@ -2241,6 +2241,15 @@ class Stores:
         root = (await self.fetch_listing(client, other)) / "play" if other else self.listing
         email = other.contact_email if other else CONTACT_EMAIL
         website = other.website if other else CONTACT_WEBSITE
+        # Checked before Google is asked: a missing picture broke the push halfway as an
+        # internal error (currywursttest, 2026-11-23: no feature.png).
+        missing = [
+            str(p.relative_to(root.parent))
+            for p in (root / "icon.png", *(root / lang / "feature.png" for lang in LANGUAGES))
+            if not p.is_file()
+        ]
+        if missing:
+            raise StoreError(f"Im Repository fehlt {', '.join(missing)}.")
         app = f"{PLAY}/applications/{package}"
         r = await client.post(f"{app}/edits", headers=auth)
         if r.status_code == 404:

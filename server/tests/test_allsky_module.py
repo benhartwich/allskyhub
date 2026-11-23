@@ -10,6 +10,7 @@ import importlib.util
 import io
 import json
 import os
+import re
 import sys
 import time
 import types
@@ -289,3 +290,46 @@ async def test_module_sends_station_images_and_meteors(
         assert len(frames) == 1
     state = json.loads((tmp_path / "config" / "sharedsky" / "state.json").read_text())
     assert sorted(state["sent"]) == [f"{unseen}:0", f"{small}:0", f"{stamp}:0"]
+
+
+def _installer_meta_data(source: str, name: str = "meta_data") -> str | None:
+    """Allsky's installer reads ``meta_data`` without running the module
+    (``getMetaDataFromFileByName`` in html/includes/moduleinstallerutil.php), line by line:
+    from the line starting with the name, with the name, ``=`` and spaces removed, to the
+    ``}`` that brings its brace count back to zero; the text must then be JSON."""
+    found, level, out = False, 0, ""
+    for line in source.splitlines():
+        right, left = line.rstrip(), line.lstrip()
+        if right.endswith("{"):
+            level += 1
+        if left.startswith("}"):
+            level -= 1
+        if left.startswith(name):
+            found = True
+            line = line.replace(name, "").replace("=", "").replace(" ", "")
+        if found:
+            out += line + "\n"
+        if line.strip() == "}" and found and level == 0:
+            break
+    return out if found else None
+
+
+def test_installer_reads_the_meta_data() -> None:
+    """Kentner, 2026-11-23: "allsky_sharedsky cannot be installed because the module
+    metadata is invalid" (an annotation on ``meta_data`` made it invalid JSON there)."""
+    raw = _installer_meta_data(MODULE.read_text())
+    assert raw is not None
+    meta = json.loads(raw)
+    assert meta["module"] == "allsky_sharedsky"
+    assert meta["version"] in meta["changelog"]
+    assert meta["arguments"].keys() == meta["argumentdetails"].keys()
+    # Its second check (moduleFunctionExists): a wrapper ``sharedsky(params, event)`` or a
+    # ``run(self)`` in the ALLSKYMODULEBASE class, with these patterns.
+    returns = r"(?:\s*->\s*[^:]+)?"
+    wrapper = r"def\s+sharedsky\s*\(\s*params\s*,\s*event\s*\)" + returns + r"\s*:"
+    run = (
+        r"class\s+[A-Za-z_][A-Za-z0-9_]*\s*\(\s*ALLSKYMODULEBASE\s*\)\s*:[\s\S]*?"
+        r"def\s+run\s*\(\s*self\b[^)]*\)" + returns + r"\s*:"
+    )
+    source = MODULE.read_text()
+    assert re.search(wrapper, source, re.M) or re.search(run, source, re.M)

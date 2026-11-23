@@ -1289,7 +1289,7 @@ async def test_admin_enters_push_and_turnstile(
     assert stores.TITLES["fcm"] in (await client.get("/admin")).text
 
 
-def _bortle_tarball() -> bytes:
+def _bortle_tarball(leave_out: str = "") -> bytes:
     """Like GitHub's tarball of bortle-app main: store/ plus things to leave out."""
     import io
     import tarfile
@@ -1314,6 +1314,7 @@ def _bortle_tarball() -> bytes:
             f"store/appstore/{lang}/keywords.txt": b"astro,teleskop",
             f"store/appstore/{lang}/promotional_text.txt": b"Neu",
         }
+    files.pop(leave_out, None)
     out = io.BytesIO()
     with tarfile.open(fileobj=out, mode="w:gz") as tar:
         for name, data in files.items():
@@ -1364,6 +1365,31 @@ async def test_bortle_play_listing_from_its_repository(tmp_path: Path) -> None:
     assert not (extracted / "lib").exists()
     assert not (extracted / "store" / "link").exists()
     assert not (tmp_path / "store" / "listings" / "evil.txt").exists()
+
+
+async def test_listing_without_its_feature_graphic_names_the_file(tmp_path: Path) -> None:
+    """currywursttest, 2026-11-23: a missing feature.png was an internal error halfway
+    through the push; now it is named, before Google is asked for an edit."""
+    seen: list[str] = []
+
+    def answer(request: httpx.Request) -> httpx.Response:
+        seen.append(request.url.path)
+        if request.url.host == "codeload.github.com":
+            return httpx.Response(200, content=_bortle_tarball("store/play/en-US/feature.png"))
+        if request.url.host == "oauth2.googleapis.com":
+            return httpx.Response(200, json={"access_token": "t"})
+        return httpx.Response(500)
+
+    hub = stores.Stores(
+        tmp_path / "store",
+        "benhartwich/allskyhub",
+        httpx.AsyncClient(transport=httpx.MockTransport(answer)),
+    )
+    hub.vault.put("play", *stores.parse_play(_play_json()), by="a")
+    report = await hub.push_listing(stores.OTHER_APPS["bortle"])
+    states = {s.title: (s.state, s.text) for s in report.steps}
+    assert states["Store-Eintrag"] == ("fail", "Im Repository fehlt play/en-US/feature.png.")
+    assert not any(p.endswith("/edits") for p in seen)
 
 
 async def test_bortle_app_store_push_uses_its_profile(

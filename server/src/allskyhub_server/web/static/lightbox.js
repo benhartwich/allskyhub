@@ -281,7 +281,9 @@
     status.textContent = "Vorschau – das Vollbild wird von der Kamera geholt …";
     const until = Date.now() + FETCH_FOR_MS;
     let found = false;
-    while (current === shown && box.open && Date.now() < until) {
+    // Not box.open here: open() calls show() before showModal() (review of #515).
+    // Closing bumps `shown` (finish), which ends the loop.
+    while (current === shown && Date.now() < until) {
       let code = 0;
       try {
         code = (await fetch(url, { credentials: "same-origin" })).status;
@@ -330,6 +332,7 @@
   };
 
   const finish = () => {
+    shown++; // a fetch still running for the closed picture stops
     document.documentElement.classList.remove("lb-open");
     img.removeAttribute("src");
     if (pushed) {

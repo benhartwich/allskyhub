@@ -216,6 +216,10 @@ def apply_station(device: Device, body: StationIn) -> None:
         past_orientations.dropped(device, dt.datetime.now(dt.UTC))
         status["orientation"] = None
     device.last_status = status
+    # Chosen as "other" but sending with Allsky's module (a station, 2026-11-24): the
+    # station shows as Allsky. Only this way round; nothing checks "other" or "allsky".
+    if device.software == "other" and (body.software or "").strip().lower() == "allsky":
+        device.software = "allsky"
     device.name = body.name.strip()[:100]
     device.agent_version = (body.software_version or "")[:64]
     device.last_seen_at = dt.datetime.now(dt.UTC)

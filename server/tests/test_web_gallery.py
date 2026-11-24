@@ -68,8 +68,20 @@ async def test_gallery_night_and_products(
     assert "1 Bilder" not in gallery.text
     assert "2 Produkte" in gallery.text
 
+    # A frame whose full picture only the camera has: the viewer fetches it (2026-11-24).
+    maker: async_sessionmaker[AsyncSession] = app.state.sessionmaker
+    async with maker() as db:
+        db.add(
+            Frame(device_id=dev.device_id, night_id=NIGHT, name="b.jpg",
+                  captured_at=dt.datetime(2026, 10, 6, 21, 15, tzinfo=dt.UTC), mode="night",
+                  exposure_us=30_000_000, gain=100, mean=0.2, sun_elevation=-25,
+                  has_full=False, has_thumb=True)
+        )  # fmt: skip
+        await db.commit()
     night = await client.get(f"{base}/nights/{NIGHT}")
     assert f"{base}/frames/{NIGHT}/a.jpg/thumb.jpg" in night.text
+    assert f'data-full="{base}/frames/{NIGHT}/b.jpg/full.jpg"' in night.text
+    assert f'data-full="{base}/frames/{NIGHT}/a.jpg/full.jpg"' not in night.text
     assert "Zeitraffer · 1:35 · 250,0 MB" in night.text
     assert (await client.get(f"{base}/frames/{NIGHT}/a.jpg/full.jpg")).content == JPEG
 

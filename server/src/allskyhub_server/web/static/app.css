@@ -319,6 +319,8 @@ html.lb-open { overflow: hidden; }
   border: 3px solid rgb(255 255 255 / .2); border-top-color: var(--accent); animation: lb-spin .8s linear infinite; }
 @keyframes lb-spin { to { transform: rotate(360deg); } }
 .lb-status { position: absolute; margin: 0; color: var(--text-2); }
+.lb-fetching .lb-status { bottom: 12px; padding: 4px 10px; border-radius: 6px;
+  background: rgb(0 0 0 / .65); color: #fff; font-size: .9rem; }
 .lb-bar { display: flex; align-items: center; gap: 12px; padding: 10px 16px calc(10px + env(safe-area-inset-bottom));
   background: linear-gradient(transparent, rgb(0 0 0 / .7)); }
 .lb-caption { flex: 1; margin: 0; min-width: 0; display: flex; gap: 10px; align-items: baseline;

@@ -1,5 +1,14 @@
 [
   {
+    "version": "0.1.12",
+    "de": [
+      "Mond-HDR-Test (experimentell, in den Einstellungen unter Aufnahme): Unter hellem Mond legt die Kamera nachts alle 10 Minuten das lange Bild und drei kurze Belichtungen ab, als Grundlage für Bilder, in denen der Mond nicht mehr ausbrennt."
+    ],
+    "en": [
+      "Moon HDR test (experimental, in the settings under Capture): while a bright moon is up, every 10 minutes at night the camera keeps the long frame and three short exposures, the groundwork for pictures in which the moon no longer burns out."
+    ]
+  },
+  {
     "version": "0.1.11",
     "de": [
       "Himmelshelligkeit nach Richtung: In klaren Nächten misst die Kamera, wie hell der Himmel in 16 Richtungen und 3 Höhen ist, und zeigt so Lichtglocken."

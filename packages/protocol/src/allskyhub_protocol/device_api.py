@@ -195,7 +195,7 @@ class SetSettingsArgs(_Model):
     as extra fields (JSON scalars) and are checked with `invalid_settings` (SPEC §6.9)."""
 
     model_config = ConfigDict(extra="allow", frozen=True)
-    __pydantic_extra__: dict[str, str | int | float | bool | None] = Field(  # pyright: ignore[reportIncompatibleVariableOverride]
+    __pydantic_extra__: dict[str, bool | int | float | str | None] = Field(  # pyright: ignore[reportIncompatibleVariableOverride]
         init=False
     )
 

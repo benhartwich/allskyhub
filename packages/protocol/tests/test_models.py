@@ -1,5 +1,6 @@
 """Protocol model tests (SPEC §6)."""
 
+import json
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
@@ -9,6 +10,7 @@ from pydantic import ValidationError
 from allskyhub_protocol import (
     Command,
     CommandName,
+    DeviceSettings,
     Envelope,
     Event,
     EventKind,
@@ -17,6 +19,8 @@ from allskyhub_protocol import (
     Lens,
     Mode,
     Orientation,
+    SetSettingsArgs,
+    Status,
     parse_envelope,
 )
 
@@ -540,3 +544,35 @@ def test_sky_brightness_map_has_48_cells_within_the_range() -> None:
     for bad in ([21.0] * 24, [13.0] * 48):
         with pytest.raises(ValidationError):
             SkyMetrics.model_validate({"at": at, "night_id": "20261121", "brightness_map": bad})
+
+
+def test_settings_keep_bools_inside_an_envelope() -> None:
+    """SPEC §6.3: a bool setting is a JSON bool on the wire. In the union `str | int | ...`
+    pydantic serialised True inside an envelope as 1 (bool is an int), and the hub's
+    settings page showed the switch as off (2026-11-24)."""
+    settings = DeviceSettings.model_validate(
+        {"timezone": "UTC", "camera": "x", "day_delay_s": 1, "night_delay_s": 0,
+         "moon_mode": True, "keep_days": 14, "jpeg_quality": 90.5, "language": "de"}
+    )  # fmt: skip
+    status = Status(
+        mode=Mode.NIGHT, exposure_us=1, gain=0.0, mean=0.1, settings=settings,
+        cpu_temp_c=None, disk_free_pct=50.0, uptime_s=1, time_trusted=True,
+    )  # fmt: skip
+    raw = Envelope.wrap(status, ts=datetime(2026, 11, 24, tzinfo=UTC)).model_dump_json()
+    sent = json.loads(raw)["body"]["settings"]
+    assert sent["moon_mode"] is True
+    assert sent["keep_days"] == 14
+    assert sent["jpeg_quality"] == 90.5
+    assert sent["language"] == "de"
+    back = parse_envelope(raw).body
+    assert isinstance(back, Status)
+    assert back.settings is not None
+    assert back.settings.model_extra == {
+        "moon_mode": True, "keep_days": 14, "jpeg_quality": 90.5, "language": "de"
+    }  # fmt: skip
+    args = SetSettingsArgs.model_validate({"moon_mode": False})
+    command = Command(name=CommandName.SET_SETTINGS, args=args.model_dump(mode="json"))
+    assert (
+        json.loads(Envelope.wrap(command, ts=TS).model_dump_json())["body"]["args"]["moon_mode"]
+        is False
+    )

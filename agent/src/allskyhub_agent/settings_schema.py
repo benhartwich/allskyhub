@@ -715,6 +715,21 @@ def build_schema(profile: Profile) -> list[SettingSpec]:
             },
         },
         {
+            "key": "moon_hdr_test",
+            "type": "bool",
+            "label": {"de": "Mond-HDR-Test", "en": "Moon HDR test"},
+            "group": {"de": "Aufnahme", "en": "Capture"},
+            "help": {
+                "de": "Experimentell. Steht ein heller Mond am Himmel, legt die Kamera "
+                "nachts alle 10 Minuten das lange Bild und drei kurze Belichtungen als PNG "
+                "und DNG unter hdr-test ab, etwa 70 MB je Satz. Die gespeicherten Bilder "
+                "ändern sich nicht.",
+                "en": "Experimental. While a bright moon is up, every 10 minutes at night "
+                "the camera keeps the long frame and three short exposures as PNG and DNG "
+                "under hdr-test, about 70 MB a set. The stored images do not change.",
+            },
+        },
+        {
             "key": "day_target_pct",
             "type": "int",
             "label": {"de": "Helligkeit am Tag", "en": "Brightness by day"},

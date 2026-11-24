@@ -6,7 +6,8 @@ import logging
 import threading
 from collections.abc import Callable
 from dataclasses import dataclass
-from datetime import UTC, tzinfo
+from datetime import UTC, datetime, tzinfo
+from pathlib import Path
 
 from allskyhub_agent.adapters.camera import Camera, CameraError, CaptureRequest, Image
 from allskyhub_agent.core.clock import Clock
@@ -22,6 +23,7 @@ from allskyhub_agent.live import LiveState
 from allskyhub_agent.process.flat import FlatField
 from allskyhub_agent.process.hotpixels import HotPixels
 from allskyhub_agent.process.livestack import LiveStack
+from allskyhub_agent.process.moonhdr import MoonHdrTest
 from allskyhub_agent.process.skymask import SkyMask
 from allskyhub_agent.process.whitebalance import (
     Gains,
@@ -31,7 +33,7 @@ from allskyhub_agent.process.whitebalance import (
 )
 from allskyhub_agent.store.images import ImageStore, night_id
 from allskyhub_protocol import FrameInfo, Mode
-from allskyhub_sky.astro import bright_moon_up
+from allskyhub_sky.astro import bright_moon_up, moon_altitude, moon_illumination
 
 log = logging.getLogger(__name__)
 
@@ -82,6 +84,7 @@ class Runner:
         wb_hold: Callable[[], bool] | None = None,
         flat: FlatField | None = None,
         flat_min_gain: float = 0.0,
+        moon_hdr: MoonHdrTest | None = None,
     ) -> None:
         self._cam = camera
         self._ae = auto_exposure
@@ -115,6 +118,7 @@ class Runner:
         self._wb_hold = wb_hold or (lambda: False)
         self._flat = flat  # SPEC §4.10
         self._flat_min_gain = flat_min_gain
+        self._hdr = moon_hdr  # experimental, off by default
 
     @property
     def mode(self) -> Mode | None:
@@ -146,7 +150,24 @@ class Runner:
             # SPEC §4.11: the learned gains at night, the normal ones by day.
             g = self._wb.gains if mode is Mode.NIGHT else Gains()
             self._cam.set_white_balance(g.red, g.blue)
-        frame = self._cam.capture(CaptureRequest(settings.exposure_us, settings.gain))
+        hdr = self._hdr_folder(start, mode, focus)
+        frame = self._cam.capture(
+            CaptureRequest(
+                settings.exposure_us, settings.gain, raw=hdr / "long.dng" if hdr else None
+            )
+        )
+        if hdr is not None and self._hdr is not None:
+            try:
+                self._hdr.record(
+                    self._cam,
+                    hdr,
+                    frame,
+                    start,
+                    moon_altitude(start, self._loc.lat, self._loc.lon),
+                    moon_illumination(start),
+                )
+            except OSError as exc:
+                log.warning("moon HDR test failed: %s", exc)
         # SPEC §4.1: turned before anything else sees the frame.
         image = turn(frame.image, self._flip, self._rotate)
 
@@ -218,6 +239,18 @@ class Runner:
             for analyze in self._analyzers:
                 analyze(info, image)
         return info
+
+    def _hdr_folder(self, start: datetime, mode: Mode, focus: bool) -> Path | None:
+        """The moon HDR test's folder when a set is due: at night, a bright moon up."""
+        if self._hdr is None or focus or mode is not Mode.NIGHT:
+            return None
+        if not bright_moon_up(start, self._loc.lat, self._loc.lon):
+            return None
+        try:
+            return self._hdr.due(start, night_id(start, self._tz))
+        except OSError as exc:
+            log.warning("moon HDR test: %s", exc)
+            return None
 
     def _mode_now(self) -> Mode:
         """The mode for now, as `step` would pick it (SPEC §4.2)."""

@@ -76,6 +76,7 @@ from allskyhub_agent.mqtt import MqttConfig, MqttPublisher
 from allskyhub_agent.process.flat import FlatField
 from allskyhub_agent.process.hotpixels import HotPixels
 from allskyhub_agent.process.livestack import LiveStack
+from allskyhub_agent.process.moonhdr import MoonHdrTest
 from allskyhub_agent.process.skymask import SkyMask, parse_edits
 from allskyhub_agent.process.whitebalance import NightWhiteBalance
 from allskyhub_agent.products.build import (
@@ -1464,6 +1465,9 @@ def main(argv: list[str] | None = None) -> int:
         flip=tuned.image_flip,
         flat=flat,
         flat_min_gain=profile.exposure.day.min_gain,
+        moon_hdr=MoonHdrTest(Path(args.data) / "hdr-test", short_gain=profile.exposure.day.min_gain)
+        if tuned.moon_hdr_test
+        else None,
         rotate=int(tuned.image_rotate),
         live_stack=LiveStack(LIVE_WIDTH) if tuned.live_stack == "auto" else None,
         white_balance=NightWhiteBalance(Path(args.data) / "calibration" / "whitebalance.json")

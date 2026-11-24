@@ -1,5 +1,6 @@
 """Capture loop end to end with the simulated camera (SPEC §4.1-§4.3)."""
 
+import json
 from datetime import UTC, datetime, timedelta
 from itertools import pairwise
 from pathlib import Path
@@ -15,6 +16,7 @@ from allskyhub_agent.core.quality import FrameQuality
 from allskyhub_agent.core.sun import sun_elevation
 from allskyhub_agent.live import LiveState
 from allskyhub_agent.process.livestack import LiveStack
+from allskyhub_agent.process.moonhdr import MoonHdrTest
 from allskyhub_agent.profiles import get_profile
 from allskyhub_agent.runner import Location, LoopConfig, Runner
 from allskyhub_agent.store.images import ImageStore
@@ -28,6 +30,7 @@ def make_runner(
     start: datetime,
     quality: FrameQuality | None = None,
     moon_mode: bool = False,
+    moon_hdr: MoonHdrTest | None = None,
 ) -> tuple[Runner, SimClock]:
     clock = SimClock(start)
     profile = get_profile("sim")
@@ -46,6 +49,7 @@ def make_runner(
         mask_radius_frac=profile.image_circle_frac,
         quality=quality,
         moon_mode=moon_mode,
+        moon_hdr=moon_hdr,
     )
     return runner, clock
 
@@ -112,6 +116,35 @@ def test_moon_mode_follows_the_moon(tmp_path: Path) -> None:
     runner, _ = make_runner(tmp_path, datetime(2026, 10, 10, 22, 0, tzinfo=UTC), moon_mode=True)
     runner.step()
     assert not runner.moon
+
+
+def test_moon_hdr_test_keeps_sets_under_a_bright_moon(tmp_path: Path) -> None:
+    """Experimental (SPEC §4.13 draft): every 10 min at night with a bright moon, the long
+    frame and three short ones at the lowest gain; the stored frames stay as they are."""
+    hdr = MoonHdrTest(tmp_path / "hdr-test")
+    runner, clock = make_runner(tmp_path, datetime(2026, 10, 25, 22, 0, tzinfo=UTC), moon_hdr=hdr)
+    for _ in range(25):  # 30 s apart: 12.5 min
+        runner.step()
+        clock.sleep(runner.delay())
+    sets = sorted((tmp_path / "hdr-test").glob("*/*"))
+    taken = [datetime.strptime(p.name + "+0000", "%Y%m%d-%H%M%S%z") for p in sets]
+    assert len(taken) >= 2
+    assert all(b - a >= timedelta(minutes=10) for a, b in pairwise(taken))
+    files = sorted(p.name for p in sets[0].iterdir())
+    assert files == [
+        "long.png", "set.json", "short-1000us.png", "short-250us.png", "short-4000us.png"
+    ]  # fmt: skip
+    meta = json.loads((sets[0] / "set.json").read_text())
+    assert [s["exposure_us"] for s in meta["short"]] == [250, 1000, 4000]
+    assert meta["long"]["exposure_us"] > 4000
+    assert meta["moon"]["altitude_deg"] > 0
+    assert "lat" not in json.dumps(meta)  # the place is private
+    hdr = MoonHdrTest(tmp_path / "new" / "hdr-test")
+    runner, _ = make_runner(
+        tmp_path / "new", datetime(2026, 10, 10, 22, 0, tzinfo=UTC), moon_hdr=hdr
+    )
+    runner.step()
+    assert not (tmp_path / "new" / "hdr-test").exists()
 
 
 def test_turn() -> None:

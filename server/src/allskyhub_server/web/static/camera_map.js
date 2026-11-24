@@ -8,7 +8,11 @@
   const sqm = config.layer === "sqm";
   const KEY = "ash-map-base";
 
-  const map = L.map(el, { maxZoom: config.maxZoom, minZoom: 2, worldCopyJump: true });
+  // The zoom at which the whole world fits the map's width (2026-11-24: cameras in
+  // Germany, Nevada and New Zealand did not fit at the old fixed minimum of 2).
+  const worldZoom = () => Math.max(0, Math.floor(Math.log2(Math.max(el.clientWidth, 256) / 256)));
+  const map = L.map(el, { maxZoom: config.maxZoom, minZoom: worldZoom(), worldCopyJump: true });
+  window.addEventListener("resize", () => map.setMinZoom(worldZoom()));
   map.setView([config.view[0], config.view[1]], config.view[2]);
   map.attributionControl.setPrefix('<a href="https://leafletjs.com">Leaflet</a>');
 
@@ -104,7 +108,10 @@
       .addTo(map);
   }
   if (markers.length && !new URLSearchParams(location.search).has("region")) {
-    map.fitBounds(L.featureGroup(markers).getBounds().pad(0.4), { maxZoom: 6 });
+    const bounds = L.featureGroup(markers).getBounds();
+    // Cameras on several continents: the whole world, not a padded slice of it.
+    if (bounds.getEast() - bounds.getWest() > 120) map.setView([20, 10], worldZoom());
+    else map.fitBounds(bounds.pad(0.4), { maxZoom: 6 });
   }
 
   // Place search (Nominatim through the hub).

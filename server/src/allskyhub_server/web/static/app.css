@@ -182,6 +182,8 @@ table.stats.target-hours th:nth-child(2) { text-align: left; }
 .map-results button { text-align: left; }
 .map-bases [aria-pressed="true"] { box-shadow: 0 0 0 1px var(--accent) inset; }
 .leaflet-container { font: inherit; }
+/* Above and below the world when it is zoomed out (the whole world on a phone). */
+.map.leaflet-container { background: #0d1430; }
 .leaflet-interactive.map-dot { fill: var(--aurora); fill-opacity: 1; stroke: #fff; }
 .map path.leaflet-interactive:focus { outline: none; }
 .map.map-dark .leaflet-control-attribution { background: rgb(4 6 15 / .7); color: #b9c2dd; }

@@ -1,5 +1,16 @@
 [
   {
+    "version": "0.1.13",
+    "de": [
+      "Mond-HDR-Test: Die kurzen Belichtungen reichen jetzt von 1 bis 500 ms, damit auch der helle Hof um den Mond erfasst wird.",
+      "Eingeschaltete Einstellungen erscheinen in der App und auf allskyhub.org wieder als eingeschaltet."
+    ],
+    "en": [
+      "Moon HDR test: the short exposures now range from 1 to 500 ms, so the bright halo around the moon is captured too.",
+      "Settings that are on show as on again in the app and on allskyhub.org."
+    ]
+  },
+  {
     "version": "0.1.12",
     "de": [
       "Mond-HDR-Test (experimentell, in den Einstellungen unter Aufnahme): Unter hellem Mond legt die Kamera nachts alle 10 Minuten das lange Bild und drei kurze Belichtungen ab, als Grundlage für Bilder, in denen der Mond nicht mehr ausbrennt."

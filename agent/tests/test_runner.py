@@ -120,7 +120,7 @@ def test_moon_mode_follows_the_moon(tmp_path: Path) -> None:
 
 def test_moon_hdr_test_keeps_sets_under_a_bright_moon(tmp_path: Path) -> None:
     """Experimental (SPEC §4.13 draft): every 10 min at night with a bright moon, the long
-    frame and three short ones at the lowest gain; the stored frames stay as they are."""
+    frame and four short ones at the lowest gain; the stored frames stay as they are."""
     hdr = MoonHdrTest(tmp_path / "hdr-test")
     runner, clock = make_runner(tmp_path, datetime(2026, 10, 25, 22, 0, tzinfo=UTC), moon_hdr=hdr)
     for _ in range(25):  # 30 s apart: 12.5 min
@@ -132,11 +132,12 @@ def test_moon_hdr_test_keeps_sets_under_a_bright_moon(tmp_path: Path) -> None:
     assert all(b - a >= timedelta(minutes=10) for a, b in pairwise(taken))
     files = sorted(p.name for p in sets[0].iterdir())
     assert files == [
-        "long.png", "set.json", "short-1000us.png", "short-250us.png", "short-4000us.png"
+        "long.png", "set.json", "short-100000us.png", "short-10000us.png", "short-1000us.png",
+        "short-500000us.png",
     ]  # fmt: skip
     meta = json.loads((sets[0] / "set.json").read_text())
-    assert [s["exposure_us"] for s in meta["short"]] == [250, 1000, 4000]
-    assert meta["long"]["exposure_us"] > 4000
+    assert [s["exposure_us"] for s in meta["short"]] == [1000, 10_000, 100_000, 500_000]
+    assert meta["long"]["exposure_us"] > 500_000
     assert meta["moon"]["altitude_deg"] > 0
     assert "lat" not in json.dumps(meta)  # the place is private
     hdr = MoonHdrTest(tmp_path / "new" / "hdr-test")

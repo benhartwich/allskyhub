@@ -22,7 +22,8 @@ from allskyhub_agent.adapters.camera import Camera, CameraError, CaptureRequest,
 
 log = logging.getLogger(__name__)
 
-# Each set is about 4 DNGs of 18 MB (HQ camera); below this much free space it stops.
+# A set is about 25 MB of PNG (ZWO) or 90 MB with DNGs (HQ camera); below this much
+# free space it stops.
 MIN_FREE_BYTES = 5 * 1024**3
 
 
@@ -31,7 +32,9 @@ class MoonHdrTest:
         self,
         root: Path,
         interval_s: float = 600.0,
-        short_us: Sequence[int] = (250, 1000, 4000),
+        # The disc at 1 ms, the halo around it up to 500 ms (first night, 2026-11-24: at
+        # 0.25-4 ms only the disc showed, the halo stayed black).
+        short_us: Sequence[int] = (1000, 10_000, 100_000, 500_000),
         short_gain: float = 0.0,
     ) -> None:
         self._root = root

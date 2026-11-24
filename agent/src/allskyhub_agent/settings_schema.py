@@ -721,12 +721,12 @@ def build_schema(profile: Profile) -> list[SettingSpec]:
             "group": {"de": "Aufnahme", "en": "Capture"},
             "help": {
                 "de": "Experimentell. Steht ein heller Mond am Himmel, legt die Kamera "
-                "nachts alle 10 Minuten das lange Bild und drei kurze Belichtungen als PNG "
-                "und DNG unter hdr-test ab, etwa 70 MB je Satz. Die gespeicherten Bilder "
+                "nachts alle 10 Minuten das lange Bild und vier kurze Belichtungen als PNG "
+                "und DNG unter hdr-test ab, etwa 25–90 MB je Satz. Die gespeicherten Bilder "
                 "ändern sich nicht.",
                 "en": "Experimental. While a bright moon is up, every 10 minutes at night "
-                "the camera keeps the long frame and three short exposures as PNG and DNG "
-                "under hdr-test, about 70 MB a set. The stored images do not change.",
+                "the camera keeps the long frame and four short exposures as PNG and DNG "
+                "under hdr-test, about 25-90 MB a set. The stored images do not change.",
             },
         },
         {

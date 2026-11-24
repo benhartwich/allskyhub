@@ -54,9 +54,11 @@ SOFTWARE = {
 ALLSKY_MODULE = "https://github.com/AllskyTeam/allsky-modules/tree/master/allsky_sharedsky"
 # The Module Manager checks out the modules branch named like the installed Allsky; the
 # release v2026.10.01_01 has none with SharedSky, so the file is copied by hand there.
+# Our own copy until AllskyTeam/allsky-modules#439 is merged: master still has v1.0.0,
+# whose meta_data the installer cannot read (2026-11-24, back to AllskyTeam after it).
 ALLSKY_MODULE_FILE = (
-    "https://raw.githubusercontent.com/AllskyTeam/allsky-modules/master/"
-    "allsky_sharedsky/allsky_sharedsky.py"
+    "https://raw.githubusercontent.com/benhartwich/allskyhub/main/"
+    "integrations/allsky_sharedsky/allsky_sharedsky.py"
 )
 # The wizard's time zones: the whole world (a station in New Zealand, 2026-11-23); the
 # browser's own zone is filled in by station_map.js.

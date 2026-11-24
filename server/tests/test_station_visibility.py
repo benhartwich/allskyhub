@@ -70,7 +70,7 @@ async def test_defaults_and_public_page(
     assert page.status_code == 200
     assert "SharedSky-Station · indi-allsky" in page.text
     assert "Sternwarte Musterberg" in page.text
-    assert "49.9° N, 10.9° O" in page.text  # rounded to 0.1°
+    assert "49,9° N, 10,9° O" in page.text  # rounded to 0.1°
     assert "Heute Nacht" in page.text
     assert "SharedSky-Netz" in page.text
     assert (await new_client.get(f"/sky/{device.public_slug}/latest.jpg")).status_code == 404

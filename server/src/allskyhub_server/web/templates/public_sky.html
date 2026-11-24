@@ -20,7 +20,7 @@
   <div>
     <p class="eyebrow">{% if station %}SharedSky-Station · {{ station.software }}{% else %}Allsky-Kamera{% endif %}{% if profile.location_label %} · {{ profile.location_label }}{% endif %}</p>
     <h1>{{ title }}</h1>
-    {% if coordinates %}<p class="muted">{{ '%.1f' | format(coordinates[0]) }}° {{ 'N' if coordinates[0] >= 0 else 'S' }}, {{ '%.1f' | format(coordinates[1]) }}° {{ 'O' if coordinates[1] >= 0 else 'W' }}</p>{% endif %}
+    {% if coordinates %}<p class="muted">{{ coords(coordinates[0], coordinates[1]) }}</p>{% endif %}
   </div>
   {% if kp and kp.days %}
   <div class="kp-strip" aria-label="Polarlicht-Vorhersage (Kp-Index)">

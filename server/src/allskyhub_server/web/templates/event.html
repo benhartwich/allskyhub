@@ -43,7 +43,7 @@
   <dl class="facts">
     <dt>Höhe</dt><dd>{{ '%.0f' | format(p.high_km) }} km → {{ '%.0f' | format(p.low_km) }} km</dd>
     <dt>Länge der Spur</dt><dd>{{ '%.0f' | format(p.length_km) }} km</dd>
-    <dt>Über</dt><dd>{{ '%.2f' | format(p.high_lat) | replace('.', ',') }}° N, {{ '%.2f' | format(p.high_lon) | replace('.', ',') }}° O → {{ '%.2f' | format(p.low_lat) | replace('.', ',') }}° N, {{ '%.2f' | format(p.low_lon) | replace('.', ',') }}° O</dd>
+    <dt>Über</dt><dd>{{ coords(p.high_lat, p.high_lon, 2) }} → {{ coords(p.low_lat, p.low_lon, 2) }}</dd>
     <dt>Schnittwinkel</dt><dd>{{ p.convergence_deg | round | int }}° {% if p.convergence_deg < 20 %}<span class="warn">(flach, ungenauer)</span>{% endif %}</dd>
     {% if p.low_err_km is not none %}<dt>Genauigkeit</dt><dd>{% if p.high_err_km is not none %}Anfang ± {{ '%.1f' | format(p.high_err_km) | replace('.', ',') }} km, {% endif %}Ende ± {{ '%.1f' | format(p.low_err_km) | replace('.', ',') }} km</dd>{% endif %}
   </dl>

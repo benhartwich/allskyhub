@@ -201,7 +201,22 @@ def t(context: Context, de: str, en: str) -> str:
     return en if context.get("en") else de
 
 
+@pass_context
+def coords(context: Context, lat: float, lon: float, digits: int = 1) -> str:
+    """ "33,5° S, 151,2° O" ("33.5° S, 151.2° E"): the hemisphere letter carries the sign
+    (2026-11-24: south and west showed a minus before the S or W, and the owner's page
+    always N and O)."""
+    en = bool(context.get("en"))
+
+    def part(value: float, plus: str, minus: str) -> str:
+        number = f"{abs(value):.{digits}f}"
+        return f"{number if en else number.replace('.', ',')}° {plus if value >= 0 else minus}"
+
+    return f"{part(lat, 'N', 'S')}, {part(lon, 'E' if en else 'O', 'W')}"
+
+
 cast(dict[str, Any], templates.env.globals)["t"] = t
+cast(dict[str, Any], templates.env.globals)["coords"] = coords
 cast(dict[str, Any], templates.env.globals)["asset"] = asset
 # The app in the stores (Benjamin, 2026-10-28; iOS released 2026-11-07).
 PLAY_STORE_URL = "https://play.google.com/store/apps/details?id=org.allskyhub.app"

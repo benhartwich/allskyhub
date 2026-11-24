@@ -89,7 +89,7 @@ async def test_profile_texts_and_coordinates(
 
     await _save(client, device_id, show_coordinates="on")
     page = (await new_client.get(f"/sky/{slug}")).text
-    assert "50.0° N, 10.4° O" in page
+    assert "50,0° N, 10,4° O" in page
     assert "50.036" not in page
 
     too_long = await _save(client, device_id, title="x" * 101)
@@ -170,3 +170,14 @@ def test_kp_parse() -> None:
     assert space_weather.parse({"nope": 1}, today).days == []
     assert round(space_weather.needed_kp(48.1)) == 8
     assert space_weather.needed_kp(70) == 0
+
+
+def test_coordinates_carry_the_sign_in_the_letter() -> None:
+    """2026-11-24: south and west had a minus before S or W, the owner's page always N/O."""
+    from allskyhub_server.web.templating import templates
+
+    page = templates.env.from_string("{{ coords(lat, lon) }} | {{ coords(lat, lon, 3) }}")
+    assert page.render(lat=-33.50, lon=151.20) == "33,5° S, 151,2° O | 33,500° S, 151,200° O"
+    assert page.render(lat=40.10, lon=-105.30, en=True) == (
+        "40.1° N, 105.3° W | 40.100° N, 105.300° W"
+    )

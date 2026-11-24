@@ -204,6 +204,29 @@ async def test_open_api(
     assert r.json()["ok"] is True
 
 
+async def test_other_station_sending_with_allsky_becomes_allsky(
+    app: FastAPI, client: httpx.AsyncClient, new_client: httpx.AsyncClient
+) -> None:
+    """2026-11-24: a station chosen as "other", sending with Allsky's module."""
+    maker: async_sessionmaker[AsyncSession] = app.state.sessionmaker
+    station_id, secret = await _station(app, client, "other")
+    auth = _auth(station_id, secret)
+    r = await new_client.put("/api/connect/v1/station", json=_station_body(), headers=auth)
+    assert r.status_code == 200
+    async with maker() as db:
+        device = await db.get(Device, station_id)
+        assert device is not None
+        assert device.software == "other"  # MySky stays other
+    r = await new_client.put(
+        "/api/connect/v1/station", json=_station_body(software="Allsky"), headers=auth
+    )
+    assert r.status_code == 200
+    async with maker() as db:
+        device = await db.get(Device, station_id)
+        assert device is not None
+        assert device.software == "allsky"
+
+
 async def test_limits(
     app: FastAPI, client: httpx.AsyncClient, new_client: httpx.AsyncClient,
     monkeypatch: pytest.MonkeyPatch,

@@ -762,6 +762,12 @@ class HubClient {
     '/cameras/$cameraId/frames/$nightId/$name/${thumb ? 'thumb' : 'full'}.jpg',
   );
 
+  /// Make sure the hub has the full frame: true when it is there, false while the hub
+  /// fetches it from the camera (202); a HubException (404) when the camera is offline
+  /// or no longer has it. Never downloads the file itself.
+  Future<bool> ensureFrame(String cameraId, String nightId, String name) =>
+      _ensure(frameUrl(cameraId, nightId, name));
+
   /// URL of the latest image; `live` asks the hub for every frame (SPEC §6.5).
   Uri imageUrl(String id, {bool thumb = false, bool live = false, int? bust}) =>
       _uri('/cameras/$id/image/${thumb ? 'thumb' : 'full'}.jpg', {

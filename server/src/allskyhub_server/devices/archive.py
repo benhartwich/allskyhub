@@ -97,13 +97,34 @@ async def night_products(db: AsyncSession, device_id: str, night_id: str) -> lis
     return sorted(rows, key=lambda p: (rank.get(p.kind, len(rank)), p.kind))
 
 
-def frame_file(
-    store: ImageStore, device_id: str, night_id: str, name: str, variant: FrameVariant
+async def frame_file(
+    db: AsyncSession,
+    store: ImageStore,
+    registry: ConnectionRegistry,
+    device_id: str,
+    night_id: str,
+    name: str,
+    variant: FrameVariant,
 ) -> Response:
+    """The frame's file. Without the full frame the hub asks the camera, which keeps it
+    for ``keep_days`` (SPEC §4.5, §6.5 ``upload_frame``), and answers 202
+    ``{"status": "requested"}`` (Benjamin, 2026-11-24: enlarged night frames were the
+    640 px preview); 404 when the camera is offline or the frame unknown."""
     path = store.frame_path(device_id, night_id, name, variant)
-    if not path.is_file():
-        raise HTTPException(404, "Not found")
-    return FileResponse(path, media_type="image/jpeg", headers={"Cache-Control": PRIVATE_CACHE})
+    if path.is_file():
+        return FileResponse(path, media_type="image/jpeg", headers={"Cache-Control": PRIVATE_CACHE})
+    if variant is FrameVariant.FULL:
+        known = await db.scalar(
+            select(Frame.id).where(
+                Frame.device_id == device_id, Frame.night_id == night_id, Frame.name == name
+            )
+        )
+        if known is not None and (
+            registry.is_pending(device_id, night_id, name, variant, "frame")
+            or await registry.request_upload(device_id, night_id, name, variant)
+        ):
+            return JSONResponse({"status": "requested"}, status_code=202)
+    raise HTTPException(404, "Not found")
 
 
 async def product_file(

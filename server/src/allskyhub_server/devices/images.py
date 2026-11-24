@@ -38,9 +38,16 @@ class ImageStore:
         return self._inside(device_id, self.root / device_id / night_id / variant.value / name)
 
     def save_frame(
-        self, device_id: str, night_id: str, name: str, variant: FrameVariant, data: bytes
+        self,
+        device_id: str,
+        night_id: str,
+        name: str,
+        variant: FrameVariant,
+        data: bytes,
+        latest: bool = True,
     ) -> None:
-        """Archive the image and make it the latest one; atomic for readers of both."""
+        """Archive the image and, with ``latest``, make it the latest one; atomic for
+        readers of both. An older frame fetched for the archive is not the latest."""
         target = self.frame_path(device_id, night_id, name, variant)
         target.parent.mkdir(parents=True, exist_ok=True)
         fd, tmp = tempfile.mkstemp(dir=target.parent, suffix=".part")
@@ -51,11 +58,13 @@ class ImageStore:
         except BaseException:
             Path(tmp).unlink(missing_ok=True)
             raise
-        latest = self.path(device_id, variant)
-        link = latest.with_suffix(".link")
+        if not latest:
+            return
+        newest = self.path(device_id, variant)
+        link = newest.with_suffix(".link")
         link.unlink(missing_ok=True)
         os.link(target, link)
-        link.replace(latest)
+        link.replace(newest)
 
     def render_path(self, device_id: str, job_id: str, suffix: str) -> Path:
         """Roadmap C8; under the device's folder, so removing the camera removes it."""

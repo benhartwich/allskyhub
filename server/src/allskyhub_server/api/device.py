@@ -254,18 +254,33 @@ async def upload_frame(
     if not registry.take_upload(info.device_id, night_id, name, variant):
         raise HTTPException(404, "Upload was not requested")  # taken by a parallel upload
     store: ImageStore = request.app.state.images
-    await asyncio.to_thread(store.save_frame, info.device_id, night_id, name, variant, data)
     full = variant is FrameVariant.FULL
+    held = Frame.has_full if full else Frame.has_thumb
+    # A frame fetched for the archive (opened in the app, a day pass) is older than the
+    # latest image and must not replace it (2026-11-24).
+    this = (
+        select(Frame.captured_at)
+        .where(Frame.device_id == info.device_id, Frame.night_id == night_id, Frame.name == name)
+        .scalar_subquery()
+    )
+    newer = await db.scalar(
+        select(Frame.id)
+        .where(Frame.device_id == info.device_id, held.is_(True), Frame.captured_at > this)
+        .limit(1)
+    )
+    latest = newer is None
+    await asyncio.to_thread(store.save_frame, info.device_id, night_id, name, variant, data, latest)
     await db.execute(
         update(Frame)
         .where(Frame.device_id == info.device_id, Frame.night_id == night_id, Frame.name == name)
         .values({"has_full": True} if full else {"has_thumb": True})
     )
-    await db.execute(
-        update(Device)
-        .where(Device.id == info.device_id)
-        .values({"latest_image_at": _now()} if full else {"latest_thumb_at": _now()})
-    )
+    if latest:
+        await db.execute(
+            update(Device)
+            .where(Device.id == info.device_id)
+            .values({"latest_image_at": _now()} if full else {"latest_thumb_at": _now()})
+        )
     await db.commit()
     return Response(status_code=204)
 

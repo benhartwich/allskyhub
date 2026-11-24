@@ -364,15 +364,12 @@ class _FrameViewerState extends State<FrameViewer> {
     title: (i) => clock(widget.frames[i].capturedAt),
     image: (i) {
       final f = widget.frames[i];
-      return _ArchiveImage(
+      return _ArchiveFrame(
+        key: ValueKey('full:${f.name}'),
         client: widget.client,
-        url: widget.client.frameUrl(
-          widget.cameraId,
-          widget.nightId,
-          f.name,
-          thumb: !f.hasFull,
-        ),
-        fit: BoxFit.contain,
+        cameraId: widget.cameraId,
+        nightId: widget.nightId,
+        frame: f,
       );
     },
     caption: (i) {
@@ -382,13 +379,84 @@ class _FrameViewerState extends State<FrameViewer> {
           : tr('Tag', 'Day');
       final sun = frame.sunElevation.toStringAsFixed(1);
       final previewOnly = tr(
-        '\nNur Vorschau: das Vollbild ist nicht mehr im Archiv.',
-        '\nPreview only: the full picture is no longer in the archive.',
+        '\nVorschau: das Vollbild holt der Hub von der Kamera, solange sie es hat.',
+        '\nPreview: the hub fetches the full picture from the camera while it has it.',
       );
       return '$mode · ${exposure(frame.exposureUs)}'
           ' · Gain ${frame.gain.round()} · ${tr('Sonne', 'Sun')} $sun°'
           '${frame.hasFull ? '' : previewOnly}';
     },
+  );
+}
+
+/// A frame in the viewer: the full picture when the hub has it, else the preview while
+/// the hub fetches the full one from the camera (it keeps it for some days, SPEC §4.5),
+/// then the full one in its place.
+class _ArchiveFrame extends StatefulWidget {
+  const _ArchiveFrame({
+    super.key,
+    required this.client,
+    required this.cameraId,
+    required this.nightId,
+    required this.frame,
+  });
+
+  final HubClient client;
+  final String cameraId;
+  final String nightId;
+  final FrameItem frame;
+
+  @override
+  State<_ArchiveFrame> createState() => _ArchiveFrameState();
+}
+
+class _ArchiveFrameState extends State<_ArchiveFrame> {
+  static const _interval = Duration(seconds: 2);
+  static const _timeout = Duration(minutes: 2);
+  late bool _full = widget.frame.hasFull;
+  bool _gone = false;
+
+  @override
+  void initState() {
+    super.initState();
+    if (!_full) _fetch();
+  }
+
+  @override
+  void dispose() {
+    _gone = true;
+    super.dispose();
+  }
+
+  Future<void> _fetch() async {
+    final deadline = DateTime.now().add(_timeout);
+    while (!_gone && DateTime.now().isBefore(deadline)) {
+      try {
+        if (await widget.client.ensureFrame(
+          widget.cameraId,
+          widget.nightId,
+          widget.frame.name,
+        )) {
+          if (!_gone) setState(() => _full = true);
+          return;
+        }
+      } on Exception {
+        return; // offline or no longer on the camera: the preview stays
+      }
+      await Future<void>.delayed(_interval);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) => _ArchiveImage(
+    client: widget.client,
+    url: widget.client.frameUrl(
+      widget.cameraId,
+      widget.nightId,
+      widget.frame.name,
+      thumb: !_full,
+    ),
+    fit: BoxFit.contain,
   );
 }
 

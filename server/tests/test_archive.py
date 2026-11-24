@@ -8,7 +8,7 @@ import datetime as dt
 import httpx
 import pytest
 from fastapi import FastAPI
-from sqlalchemy import update
+from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from websockets.asyncio.client import ClientConnection
 
@@ -19,7 +19,7 @@ from allskyhub_server.models import Device, Frame
 from allskyhub_server.settings import Settings
 from tests.fake_device import FakeDevice
 from tests.helpers import home_csrf, owner_email
-from tests.ws_helpers import JPEG, device_ws, frame_info, next_command, paired_token, send
+from tests.ws_helpers import JPEG, TS, device_ws, frame_info, next_command, paired_token, send
 
 
 async def _app_auth(client: httpx.AsyncClient, email: str) -> dict[str, str]:
@@ -100,6 +100,71 @@ async def test_gallery_lists_archived_frames_and_thumbs_come_more_often(
         from sqlalchemy import func, select
 
         assert await db.scalar(select(func.count()).select_from(Frame)) == 0
+
+
+async def test_an_enlarged_frame_is_fetched_and_stays_out_of_the_latest(
+    app: FastAPI, client: httpx.AsyncClient, live_app: str
+) -> None:
+    """Benjamin, 2026-11-24: an enlarged night frame was the 640 px preview. The hub now
+    asks the camera for the full frame (202 meanwhile); an older frame fetched that way
+    does not become the camera's latest image."""
+    dev = FakeDevice()
+    token = await paired_token(client, dev)
+    maker: async_sessionmaker[AsyncSession] = app.state.sessionmaker
+    store: ImageStore = app.state.images
+    auth = await _app_auth(client, (await owner_email(app, dev.device_id)))
+    base = f"/api/v1/cameras/{dev.device_id}"
+    async with device_ws(live_app, token) as ws:
+        await send(ws, frame_info("image-1.jpg"))
+        await _upload_requested(live_app, token, ws, 2)
+        async with maker() as db:
+            await db.execute(
+                update(Device)
+                .where(Device.id == dev.device_id)
+                .values(
+                    latest_thumb_at=dt.datetime.now(dt.UTC) - dt.timedelta(hours=1),
+                    latest_image_at=dt.datetime.now(dt.UTC) - dt.timedelta(hours=1),
+                )
+            )
+            await db.commit()
+        later = frame_info("image-2.jpg")
+        await send(ws, later.model_copy(update={"captured_at": TS + dt.timedelta(hours=1)}))
+        await _upload_requested(live_app, token, ws, 2)
+        newest = store.frame_path(dev.device_id, "20261006", "image-2.jpg", FrameVariant.FULL)
+        latest = store.path(dev.device_id, FrameVariant.FULL)
+        assert latest.samefile(newest)
+        # image-1's full frame is gone from the hub (retention), the camera still has it.
+        store.frame_path(dev.device_id, "20261006", "image-1.jpg", FrameVariant.FULL).unlink()
+        async with maker() as db:
+            await db.execute(
+                update(Frame).where(Frame.name == "image-1.jpg").values(has_full=False)
+            )
+            image_at = await db.scalar(
+                select(Device.latest_image_at).where(Device.id == dev.device_id)
+            )
+            await db.commit()
+
+        url = f"{base}/frames/20261006/image-1.jpg/full.jpg"
+        asked = await client.get(url, headers=auth)
+        assert (asked.status_code, asked.json()) == (202, {"status": "requested"})
+        again = await client.get(url, headers=auth)
+        assert again.status_code == 202  # asked once, still on its way
+        fetched = await _upload_requested(live_app, token, ws, 1)
+        assert (fetched[0].name, fetched[0].variant) == ("image-1.jpg", FrameVariant.FULL)
+        with pytest.raises(TimeoutError):
+            await asyncio.wait_for(ws.recv(), 0.3)
+
+    got = await client.get(url, headers=auth)
+    assert (got.status_code, got.content) == (200, JPEG)
+    assert latest.samefile(newest)
+    async with maker() as db:
+        assert (
+            await db.scalar(select(Device.latest_image_at).where(Device.id == dev.device_id))
+            == image_at
+        )
+    # Offline: nothing to ask, and an unknown frame is never asked for.
+    unknown = await client.get(f"{base}/frames/20261006/nope.jpg/full.jpg", headers=auth)
+    assert unknown.status_code == 404
 
 
 async def test_retention_drops_full_images_first_then_frames(

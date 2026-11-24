@@ -90,8 +90,51 @@ void main() {
 
     await tester.tap(find.byKey(const ValueKey('image-2.jpg')));
     await tester.pumpAndSettle();
-    expect(find.textContaining('Nur Vorschau'), findsOneWidget);
+    expect(find.textContaining('Vorschau: das Vollbild holt'), findsOneWidget);
     expect(find.textContaining('20.0 s'), findsOneWidget);
+  });
+
+  testWidgets('the viewer swaps the preview for the fetched full frame', (
+    tester,
+  ) async {
+    var asked = 0;
+    final client = HubClient(
+      baseUrl: 'https://hub.example',
+      token: 'tok',
+      httpClient: MockClient((request) async {
+        if (request.url.path.endsWith('image-2.jpg/full.jpg')) {
+          asked++;
+          // The hub asks the camera (202), then has it.
+          return asked < 2
+              ? http.Response('{"status":"requested"}', 202)
+              : http.Response('', 200);
+        }
+        return http.Response('', 404);
+      }),
+    );
+    final frames = [for (final f in framesJson) FrameItem.fromJson(f)];
+    String shown() {
+      final image = tester.widget<Image>(find.byType(Image).first);
+      return (image.image as NetworkImage).url;
+    }
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: FrameViewer(
+          client: client,
+          cameraId: 'cam',
+          nightId: '20261006',
+          frames: frames,
+          initial: 1,
+        ),
+      ),
+    );
+    await tester.pump();
+    expect(shown(), endsWith('image-2.jpg/thumb.jpg'));
+    await tester.pump(const Duration(seconds: 3));
+    await tester.pump();
+    expect(asked, 2);
+    expect(shown(), endsWith('image-2.jpg/full.jpg'));
   });
 
   testWidgets('empty archive explains itself', (tester) async {

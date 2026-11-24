@@ -605,7 +605,9 @@ async def frame_image(
     variant: FrameVariant,
 ) -> Response:
     device = await _own(db, user, device_id)
-    return archive.frame_file(request.app.state.images, device.id, night_id, name, variant)
+    return await archive.frame_file(
+        db, request.app.state.images, _registry(request), device.id, night_id, name, variant
+    )
 
 
 @router.get("/cameras/{device_id}/nights/{night_id}/products")

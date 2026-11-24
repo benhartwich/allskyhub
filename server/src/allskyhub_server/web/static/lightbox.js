@@ -2,8 +2,13 @@
 // the bare file. Links with the same data-lightbox value form a group (← → to browse).
 // Zoom with wheel, pinch, double click/tap or + −; drag to pan; swipe to browse or close.
 // Delegated from the document, so links swapped in by htmx work without rebinding.
+// A link with data-full shows its preview while the hub fetches that full picture from
+// the camera (202 meanwhile), then the full one (archive frames, 2026-11-24).
 (() => {
   const MAX_SCALE = 8;
+  const FETCH_EVERY_MS = 2000;
+  const FETCH_FOR_MS = 120000;
+  let shown = 0; // which show() is current, so a late answer never swaps another picture
   const icon = (d) => `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="${d}"/></svg>`;
   let box = null;
   let img = null;
@@ -67,7 +72,7 @@
     });
     img.addEventListener("load", () => {
       box.classList.remove("lb-loading");
-      status.textContent = "";
+      if (!box.classList.contains("lb-fetching")) status.textContent = "";
     });
     img.addEventListener("error", () => {
       box.classList.remove("lb-loading");
@@ -261,9 +266,46 @@
     counter.textContent = links.length > 1 ? `${index + 1} / ${links.length}` : "";
     original.href = a.href;
     box.classList.toggle("lb-single", links.length < 2);
+    box.classList.remove("lb-fetching");
+    const current = ++shown;
+    if (a.dataset.full) fetchFull(a.dataset.full, current);
     // Fetch the neighbours ahead, so browsing feels instant.
     for (const n of [index + 1, index - 1]) {
       if (links.length > 1) new Image().src = links[(n + links.length) % links.length].href;
+    }
+  };
+
+  // Ask the hub until it has the full picture; the preview stays meanwhile.
+  const fetchFull = async (url, current) => {
+    box.classList.add("lb-fetching");
+    status.textContent = "Vorschau – das Vollbild wird von der Kamera geholt …";
+    const until = Date.now() + FETCH_FOR_MS;
+    let found = false;
+    // Not box.open here: open() calls show() before showModal() (review of #515).
+    // Closing bumps `shown` (finish), which ends the loop.
+    while (current === shown && Date.now() < until) {
+      let code = 0;
+      try {
+        code = (await fetch(url, { credentials: "same-origin" })).status;
+      } catch {
+        code = 0;
+      }
+      if (current !== shown) return;
+      if (code === 200) {
+        found = true;
+        break;
+      }
+      if (code !== 202) break;
+      await new Promise((r) => setTimeout(r, FETCH_EVERY_MS));
+    }
+    if (current !== shown) return;
+    if (found) {
+      box.classList.remove("lb-fetching");
+      status.textContent = "";
+      img.src = url;
+      original.href = url;
+    } else {
+      status.textContent = "Nur Vorschau: die Kamera hat das Vollbild nicht mehr oder ist nicht erreichbar.";
     }
   };
 
@@ -290,6 +332,7 @@
   };
 
   const finish = () => {
+    shown++; // a fetch still running for the closed picture stops
     document.documentElement.classList.remove("lb-open");
     img.removeAttribute("src");
     if (pushed) {

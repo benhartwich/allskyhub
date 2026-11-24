@@ -106,6 +106,12 @@ class FormGroup:
     fields: list[FormField]
 
 
+def _on(value: object) -> bool:
+    """A reported bool setting: true, or 1 from cameras that send bools as numbers
+    (2026-11-24: the boxes looked empty although the camera had them on)."""
+    return value is True or (type(value) in (int, float) and value == 1)
+
+
 def _text(value: object) -> str:
     if value is None:
         return ""
@@ -135,12 +141,12 @@ def groups(
         if spec.write_only:
             # SPEC §6.9: the value is never reported, only whether there is one.
             f.value = ""
-            f.is_set = current.get(f"{spec.key}_set") is True
+            f.is_set = _on(current.get(f"{spec.key}_set"))
         elif spec.type is SettingType.LOCATION:
             f.lat = submitted.get("latitude", "") if submitted else _text(current.get("latitude"))
             f.lon = submitted.get("longitude", "") if submitted else _text(current.get("longitude"))
         elif spec.type is SettingType.BOOL:
-            f.checked = (spec.key in submitted) if submitted else current.get(spec.key) is True
+            f.checked = (spec.key in submitted) if submitted else _on(current.get(spec.key))
         elif spec.type is SettingType.CHOICE:
             f.choices = [(c.value, localized(c.label, lang)) for c in spec.choices or []]
         if spec.key == "timezone" and not f.value:

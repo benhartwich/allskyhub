@@ -137,6 +137,17 @@ void main() {
     expect(cleared, {'mqtt_password': null});
   });
 
+  test('a bool reported as 1 counts as on (2026-11-24)', () {
+    expect([settingOn(true), settingOn(1), settingOn(1.0)], [true, true, true]);
+    expect(
+      [settingOn(false), settingOn(0), settingOn('1'), settingOn(null)],
+      [false, false, false, false],
+    );
+    final current = {...schemaCurrent, 'product_keogram': 1};
+    final (none, _) = schemaChanges(schema, current, _unchanged());
+    expect(none, isEmpty); // on stays on, nothing to send
+  });
+
   test('the schema form checks numbers and the location', () {
     String? problem(void Function(SettingsInput) edit) {
       final input = _unchanged();

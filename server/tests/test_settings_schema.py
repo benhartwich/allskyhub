@@ -156,3 +156,19 @@ async def test_nothing_to_save_is_a_notice(
     r = await client.post(f"/cameras/{dev.device_id}/settings", data=form)
     assert r.status_code == 200
     assert "Nichts zu speichern" in r.text
+
+
+def test_a_bool_sent_as_a_number_shows_its_box() -> None:
+    """2026-11-24: a camera reported its switched-on settings as 1; the boxes looked empty."""
+    from allskyhub_server.devices import settings_form
+
+    schema = settings_form.parse_schema(SCHEMA)
+    assert schema is not None
+
+    def checked(value: object) -> bool:
+        fields = [f for g in settings_form.groups(schema, {**CURRENT, "overlay": value})
+                  for f in g.fields]  # fmt: skip
+        return next(f.checked for f in fields if f.spec.key == "overlay")
+
+    assert (checked(True), checked(1), checked(1.0)) == (True, True, True)
+    assert (checked(False), checked(0), checked("1"), checked(2)) == (False, False, False, False)

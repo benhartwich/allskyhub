@@ -49,7 +49,7 @@ class _CameraSettingsScreenState extends State<CameraSettingsScreen> {
           _controller('latitude', _num(_current['latitude']));
           _controller('longitude', _num(_current['longitude']));
         case 'bool':
-          _input.switches[f.key] = _current[f.key] == true;
+          _input.switches[f.key] = settingOn(_current[f.key]);
         case 'choice':
           final value = _current[f.key];
           _input.choices[f.key] = f.choices.any((c) => c.$1 == value)
@@ -201,7 +201,7 @@ class _CameraSettingsScreenState extends State<CameraSettingsScreen> {
           onChanged: (value) => setState(() => _input.choices[f.key] = value),
         );
       default:
-        final isSet = _current['${f.key}_set'] == true;
+        final isSet = settingOn(_current['${f.key}_set']);
         return Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [

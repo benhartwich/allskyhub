@@ -17,6 +17,11 @@ double? parseNumber(String text) =>
     double.tryParse(text.trim().replaceAll(',', '.'));
 
 /// One entry of `settings_schema`.
+
+/// A reported bool setting: true, or 1 from cameras that send bools as numbers
+/// (2026-11-24: switched-on settings looked off).
+bool settingOn(Object? value) => value == true || (value is num && value == 1);
+
 class SettingField {
   SettingField.fromJson(Map<String, dynamic> json)
     : key = json['key'] as String,
@@ -165,7 +170,7 @@ String _fmt(double v) => v == v.roundToDouble() ? '${v.round()}' : '$v';
         }
       case 'bool':
         final on = input.switches[key];
-        if (on != null && on != (current[key] == true)) changes[key] = on;
+        if (on != null && on != settingOn(current[key])) changes[key] = on;
       case 'choice':
         final value = input.choices[key];
         if (value != null && value != current[key]) changes[key] = value;

@@ -122,6 +122,8 @@ out of moon mode only moves the target; the damping above makes the change gradu
 Every frame carries: capture time (UTC), mode, exposure (µs), gain, measured mean,
 sun elevation, sensor temperature if available, the profile id, and `bad` (§4.9; null
 for a good frame, missing from older agents).
+Frames merged with a short exposure (§4.13) also carry `hdr`
+`{short_exposure_us, short_gain, masked_pct}`; missing for every other frame.
 
 Timestamps come from the system clock, synchronized by NTP. A Pi has no real-time clock,
 so after a boot without network the clock can be wrong: the agent reports
@@ -292,6 +294,35 @@ only feeds the local live image (§7); the hub's latest image is the stored fram
 stored frames, detections, products and the sky values stay single frames.
 `live_stack` (§6.9): `auto` (default) or `off`. Timelapses are built from the stored
 single frames as before.
+
+### 4.13 Moon HDR (draft, Benjamin 2026-11-24, experimental)
+
+Near full moon the long night exposure burns out the moon and a wide halo around it,
+while the stars need that exposure. With `moon_hdr` (§6.9, `off` default, `on`) the agent
+takes a second, short exposure right after each night frame and merges both into the
+stored picture.
+
+- **When.** Night mode, the moon above the horizon and at least half lit (as moon mode,
+  §4.3), and in the previous long frame at least 0.05 % of the pixels inside the sky mask
+  saturated (any channel at least 0.98). Otherwise no short frame is taken.
+- **Short exposure.** Gain at the profile's lowest. The exposure is the auto exposure's
+  second channel (§4.3, still the only place that computes exposure and gain): it aims
+  at 0.80 for the 99.9th percentile of the pixels that are saturated in the long frame,
+  damped and clamped like the long one, within 32 µs to 50 ms; it starts at 1 ms.
+- **Merge.** On linear values (as §4.10), after hot pixels and flat for both frames.
+  `k = (t_long · G_long) / (t_short · G_short)` with `G = 10^(gain · gain_db_per_unit / 20)`.
+  The mask is every pixel at least 0.90 in any channel of the long frame, grown by 2 px
+  and feathered with a 6 px blur to 0..1. Per pixel `m · k · short + (1 − m) · long`; the
+  values above 1 are rolled off into 0.85..1 (`0.85 + 0.15 · (1 − e^(−(x − 0.85)/0.15))`),
+  below 0.85 nothing changes, so sky and stars keep their brightness.
+- **What uses which.** The stored frame, thumbnail, live image, the hub's latest image and
+  the timelapse show the merged picture. The auto exposure, bad frames (§4.9), sky values
+  (§6.3), star sizes, clouds, sky brightness and every detection run on the long frame,
+  so measurements do not change with the setting. The short frame itself is not stored;
+  `hdr` in the frame metadata (§4.4) says what was merged.
+- **Limits.** Glare inside the lens and dome (ghosts, the veil around the moon) is not
+  saturation and stays. The night's frame interval grows by the short exposure plus one
+  readout.
 
 ## 5. Products (M4)
 

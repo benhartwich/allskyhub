@@ -71,6 +71,7 @@ _PRODUCT_SWITCHES = (
     "alpaca_enabled",
     "bad_frames",
     "moon_mode",
+    "moon_hdr_test",
     "mqtt_tls",
     "https",
     "heater_active_low",
@@ -192,6 +193,8 @@ class AgentSettings:
     temperature_unit: str = "c"
     # Moon mode (SPEC §4.3, roadmap L20) and bad frames (SPEC §4.9, roadmap L19).
     moon_mode: bool = True
+    # Experimental: keep long and short frames under a bright moon (SPEC §4.13 draft).
+    moon_hdr_test: bool = False
     bad_frames: bool = True
     bad_dark_pct: int = 2
     bad_bright_pct: int = 90

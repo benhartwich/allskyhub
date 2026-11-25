@@ -169,6 +169,8 @@ class FrameItem(BaseModel):
     gain: float
     sun_elevation: float
     has_full: bool
+    # SPEC §4.13: the frame was fused with short exposures around the moon.
+    hdr: bool = False
 
 
 class EventItem(BaseModel):
@@ -569,6 +571,7 @@ async def frames(
             gain=f.gain,
             sun_elevation=f.sun_elevation,
             has_full=f.has_full,
+            hdr=f.hdr is not None,
         )
         for f in await archive.night_frames(db, device.id, night_id)
     ]

@@ -34,6 +34,7 @@ const framesJson = [
     'gain': 100,
     'sun_elevation': -8.0,
     'has_full': false,
+    'hdr': true,
   },
 ];
 
@@ -92,6 +93,7 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.textContaining('Vorschau: das Vollbild holt'), findsOneWidget);
     expect(find.textContaining('20.0 s'), findsOneWidget);
+    expect(find.textContaining('Mond-HDR'), findsOneWidget);
   });
 
   testWidgets('the viewer swaps the preview for the fetched full frame', (

@@ -304,3 +304,25 @@ async def test_a_gift_for_a_term_ends(
     async with maker() as db:
         await maintenance.purge(db, store, settings, now=now + dt.timedelta(days=500))
     assert not thumb.exists()  # the year and its grace are over
+
+
+async def test_a_moon_hdr_frame_is_marked(
+    app: FastAPI, client: httpx.AsyncClient, live_app: str
+) -> None:
+    """SPEC §4.4 `hdr`, §4.13: a fused frame is kept as such and labelled in the app list
+    and the web viewer's caption."""
+    from allskyhub_protocol import HdrInfo
+
+    dev = FakeDevice()
+    token = await paired_token(client, dev)
+    hdr = HdrInfo(short_exposures_us=[1000, 10000, 100000, 500000], short_gain=0, region_px=9200)
+    async with device_ws(live_app, token) as ws:
+        await send(ws, frame_info("moon.jpg").model_copy(update={"hdr": hdr}))
+        await _upload_requested(live_app, token, ws, 2)
+    auth = await _app_auth(client, (await owner_email(app, dev.device_id)))
+    frames = (
+        await client.get(f"/api/v1/cameras/{dev.device_id}/nights/20261006/frames", headers=auth)
+    ).json()
+    assert [(f["name"], f["hdr"]) for f in frames] == [("moon.jpg", True)]
+    page = (await client.get(f"/cameras/{dev.device_id}/nights/20261006")).text
+    assert "Uhr · Mond-HDR" in page

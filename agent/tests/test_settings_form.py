@@ -45,7 +45,7 @@ def test_values_report_every_key_and_fit_device_settings() -> None:
         "night_max_exposure_s": None,
         "night_max_gain": None,
         "moon_mode": True,
-        "moon_hdr_test": False,
+        "moon_hdr": "off",
         "day_target_pct": 35,
         "night_target_pct": 20,
         "day_capture": "save",

@@ -7,9 +7,8 @@ import threading
 from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import UTC, datetime, tzinfo
-from pathlib import Path
 
-from allskyhub_agent.adapters.camera import Camera, CameraError, CaptureRequest, Image
+from allskyhub_agent.adapters.camera import Camera, CameraError, CaptureRequest, Frame, Image
 from allskyhub_agent.core.clock import Clock
 from allskyhub_agent.core.daynight import DayNightConfig, next_mode
 from allskyhub_agent.core.exposure import AutoExposure, Exposure
@@ -20,10 +19,10 @@ from allskyhub_agent.core.sun import sun_elevation
 from allskyhub_agent.core.transform import turn
 from allskyhub_agent.detect.hfr import focus_hfr
 from allskyhub_agent.live import LiveState
+from allskyhub_agent.process import moonhdr
 from allskyhub_agent.process.flat import FlatField
 from allskyhub_agent.process.hotpixels import HotPixels
 from allskyhub_agent.process.livestack import LiveStack
-from allskyhub_agent.process.moonhdr import MoonHdrTest
 from allskyhub_agent.process.skymask import SkyMask
 from allskyhub_agent.process.whitebalance import (
     Gains,
@@ -32,8 +31,8 @@ from allskyhub_agent.process.whitebalance import (
     inner_sky,
 )
 from allskyhub_agent.store.images import ImageStore, night_id
-from allskyhub_protocol import FrameInfo, Mode
-from allskyhub_sky.astro import bright_moon_up, moon_altitude, moon_illumination
+from allskyhub_protocol import FrameInfo, HdrInfo, Mode
+from allskyhub_sky.astro import bright_moon_up
 
 log = logging.getLogger(__name__)
 
@@ -55,6 +54,10 @@ class Location:
 class LoopConfig:
     day_delay_s: float = 30.0
     night_delay_s: float = 0.0
+
+
+def _unknown_moon(_at: datetime, _width: int, _height: int) -> moonhdr.Point | None:
+    return None  # no orientation: the largest saturated patch (SPEC §4.13)
 
 
 class Runner:
@@ -84,7 +87,8 @@ class Runner:
         wb_hold: Callable[[], bool] | None = None,
         flat: FlatField | None = None,
         flat_min_gain: float = 0.0,
-        moon_hdr: MoonHdrTest | None = None,
+        moon_hdr: bool = False,
+        moon_pixel: Callable[[datetime, int, int], moonhdr.Point | None] | None = None,
     ) -> None:
         self._cam = camera
         self._ae = auto_exposure
@@ -118,7 +122,11 @@ class Runner:
         self._wb_hold = wb_hold or (lambda: False)
         self._flat = flat  # SPEC §4.10
         self._flat_min_gain = flat_min_gain
-        self._hdr = moon_hdr  # experimental, off by default
+        # SPEC §4.13: short exposures after the next night frame when this one burnt out
+        # around the moon; `moon_pixel` predicts where it stands (orientation, §4.8).
+        self._hdr = moon_hdr
+        self._moon_pixel = moon_pixel or _unknown_moon
+        self._hdr_next = False
 
     @property
     def mode(self) -> Mode | None:
@@ -150,24 +158,9 @@ class Runner:
             # SPEC §4.11: the learned gains at night, the normal ones by day.
             g = self._wb.gains if mode is Mode.NIGHT else Gains()
             self._cam.set_white_balance(g.red, g.blue)
-        hdr = self._hdr_folder(start, mode, focus)
-        frame = self._cam.capture(
-            CaptureRequest(
-                settings.exposure_us, settings.gain, raw=hdr / "long.dng" if hdr else None
-            )
-        )
-        if hdr is not None and self._hdr is not None:
-            try:
-                self._hdr.record(
-                    self._cam,
-                    hdr,
-                    frame,
-                    start,
-                    moon_altitude(start, self._loc.lat, self._loc.lon),
-                    moon_illumination(start),
-                )
-            except OSError as exc:
-                log.warning("moon HDR test failed: %s", exc)
+        frame = self._cam.capture(CaptureRequest(settings.exposure_us, settings.gain))
+        moon_up = mode is Mode.NIGHT and bright_moon_up(start, self._loc.lat, self._loc.lon)
+        shorts = self._shorts() if self._hdr_next and moon_up and not focus else []
         # SPEC §4.1: turned before anything else sees the frame.
         image = turn(frame.image, self._flip, self._rotate)
 
@@ -186,22 +179,34 @@ class Runner:
                 sky = self._mask_for(image.shape[0], image.shape[1])
                 self._flat.observe_twilight(start, elevation, image, mean, low, sky)
             image = self._flat.apply(image)
+        shown, hdr = image, None
+        if self._hdr and moon_up and not focus:
+            at = self._moon_pixel(start, image.shape[1], image.shape[0])
+            if shorts:
+                longest = [self._prepare(f.image) for f in reversed(shorts)]
+                fused = moonhdr.fuse(image, longest, at)
+                if fused is not None:
+                    shown = fused.image
+                    hdr = HdrInfo(
+                        short_exposures_us=[f.exposure_us for f in shorts],
+                        short_gain=shorts[0].gain,
+                        region_px=fused.region_px,
+                    )
+            self._hdr_next = moonhdr.wanted(image, self._mask_for(*image.shape[:2]), at)
+        else:
+            self._hdr_next = False
         keep = not (mode is Mode.DAY and self._day_capture == "live")
         if focus:
             nid, name = night_id(start, self._tz), FOCUS_FRAME_NAME
         else:
-            stored = self._store.save(image, start)
+            stored = self._store.save(shown, start)
             nid, name = stored.night_id, stored.name
             if self._ephemeral is not None:
                 self._store.remove(*self._ephemeral)  # `live`: only the newest stays
                 self._ephemeral = None
             if not keep:
                 self._ephemeral = (nid, name)
-        self._moon = (
-            self._moon_mode
-            and mode is Mode.NIGHT
-            and bright_moon_up(start, self._loc.lat, self._loc.lon)
-        )
+        self._moon = self._moon_mode and moon_up
         self._ae.update(mode, Exposure(frame.exposure_us, frame.gain), mean, focus, self._moon)
 
         info = FrameInfo(
@@ -216,6 +221,7 @@ class Runner:
             sensor_temp_c=frame.sensor_temp_c,
             profile=self._profile,
             bad=None if focus else self._quality.judge(mean),
+            hdr=hdr,
         )
         if not focus and keep:
             self._store.append_index(info)
@@ -226,12 +232,11 @@ class Runner:
                 hold = self._moon or self._wb_hold()
                 self._wb.observe(start, image, inner_sky(mask, WB_SKY_FRAC), hold)
         if self._live is not None:
-            shown = image
             if self._stack is not None:
                 if focus or changed:
                     self._stack.clear()  # focus needs each frame; a new mode starts anew
                 if not focus:
-                    shown = self._stack.add(image, start, frame.exposure_us)
+                    shown = self._stack.add(shown, start, frame.exposure_us)
             # SPEC §7: the star size only in focus mode, on the full frame.
             hfr = focus_hfr(image) if focus else None
             self._live.publish(info, shown, sharpness(image), hfr)
@@ -240,17 +245,26 @@ class Runner:
                 analyze(info, image)
         return info
 
-    def _hdr_folder(self, start: datetime, mode: Mode, focus: bool) -> Path | None:
-        """The moon HDR test's folder when a set is due: at night, a bright moon up."""
-        if self._hdr is None or focus or mode is not Mode.NIGHT:
-            return None
-        if not bright_moon_up(start, self._loc.lat, self._loc.lon):
-            return None
+    def _shorts(self) -> list[Frame]:
+        """SPEC §4.13: the fixed ladder at the lowest gain, right after the long frame,
+        shortest first; none when one fails (the long frame is stored as it is)."""
         try:
-            return self._hdr.due(start, night_id(start, self._tz))
-        except OSError as exc:
-            log.warning("moon HDR test: %s", exc)
-            return None
+            return [  # the profile's lowest gain, as for the twilight flat
+                self._cam.capture(CaptureRequest(us, self._flat_min_gain))
+                for us in moonhdr.SHORT_US
+            ]
+        except CameraError as exc:
+            log.warning("moon HDR: a short exposure failed: %s", exc)
+            return []
+
+    def _prepare(self, image: Image) -> Image:
+        """A short frame as the stored ones: turned, hot pixels and flat applied."""
+        image = turn(image, self._flip, self._rotate)
+        if self._hot is not None:
+            image = self._hot.apply(image)
+        if self._flat is not None:
+            image = self._flat.apply(image)
+        return image
 
     def _mode_now(self) -> Mode:
         """The mode for now, as `step` would pick it (SPEC §4.2)."""

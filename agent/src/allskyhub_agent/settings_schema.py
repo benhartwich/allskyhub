@@ -715,18 +715,23 @@ def build_schema(profile: Profile) -> list[SettingSpec]:
             },
         },
         {
-            "key": "moon_hdr_test",
-            "type": "bool",
-            "label": {"de": "Mond-HDR-Test", "en": "Moon HDR test"},
+            "key": "moon_hdr",
+            "type": "choice",
+            "label": {"de": "Mond-HDR", "en": "Moon HDR"},
             "group": {"de": "Aufnahme", "en": "Capture"},
+            "choices": [
+                {"value": "off", "label": {"de": "Aus", "en": "Off"}},
+                {"value": "on", "label": {"de": "An", "en": "On"}},
+            ],
             "help": {
-                "de": "Experimentell. Steht ein heller Mond am Himmel, legt die Kamera "
-                "nachts alle 10 Minuten das lange Bild und vier kurze Belichtungen als PNG "
-                "und DNG unter hdr-test ab, etwa 25–90 MB je Satz. Die gespeicherten Bilder "
-                "ändern sich nicht.",
-                "en": "Experimental. While a bright moon is up, every 10 minutes at night "
-                "the camera keeps the long frame and four short exposures as PNG and DNG "
-                "under hdr-test, about 25-90 MB a set. The stored images do not change.",
+                "de": "Experimentell. Brennt nachts ein heller Mond aus, nimmt die Kamera nach "
+                "jedem Bild vier kurze Belichtungen auf und rechnet den Mond und seinen Hof "
+                "daraus ins gespeicherte Bild. Messungen und Erkennung nutzen weiter das "
+                "normale Bild.",
+                "en": "Experimental. When a bright moon burns out at night, the camera takes "
+                "four short exposures after each frame and blends the moon and its halo "
+                "from them into the stored picture. Measurements and detection keep using "
+                "the normal frame.",
             },
         },
         {

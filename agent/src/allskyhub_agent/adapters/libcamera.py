@@ -106,15 +106,12 @@ class LibcameraCamera:
             cmd += ["--width", str(c.width), "--height", str(c.height)]
         if c.awb_gains is not None:
             cmd += ["--awbgains", f"{c.awb_gains[0]:.3f},{c.awb_gains[1]:.3f}"]
-        if req.raw is not None:
-            cmd += ["--raw"]  # written next to the output, as frame.dng
         return cmd
 
     def capture(self, req: CaptureRequest) -> Frame:
         out, meta = self._tmp / "frame.png", self._tmp / "meta.json"
-        raw = out.with_suffix(".dng")
-        for old in (out, meta, raw):
-            old.unlink(missing_ok=True)
+        out.unlink(missing_ok=True)
+        meta.unlink(missing_ok=True)
         timeout = req.exposure_us / 1e6 * self._cfg.timeout_factor + self._cfg.timeout_extra_s
         try:
             res = subprocess.run(  # noqa: S603 - fixed binary, no shell
@@ -133,8 +130,6 @@ class LibcameraCamera:
         with PILImage.open(out) as im:
             rgb8 = im.convert("RGB")
             img: Image = np.asarray(rgb8, dtype=np.uint8)
-        if req.raw is not None and raw.is_file():
-            shutil.move(raw, req.raw)
 
         exposure_us, gain, temp = req.exposure_us, req.gain, None
         try:

@@ -25,6 +25,7 @@ from typing import Any, Literal, cast
 from zoneinfo import ZoneInfo
 
 import httpx
+import numpy as np
 
 from allskyhub_agent import __version__, settings_schema, system
 from allskyhub_agent.adapters import netinfo
@@ -76,7 +77,6 @@ from allskyhub_agent.mqtt import MqttConfig, MqttPublisher
 from allskyhub_agent.process.flat import FlatField
 from allskyhub_agent.process.hotpixels import HotPixels
 from allskyhub_agent.process.livestack import LiveStack
-from allskyhub_agent.process.moonhdr import MoonHdrTest
 from allskyhub_agent.process.skymask import SkyMask, parse_edits
 from allskyhub_agent.process.whitebalance import NightWhiteBalance
 from allskyhub_agent.products.build import (
@@ -141,7 +141,8 @@ from allskyhub_protocol import (
     Status,
     UpdateState,
 )
-from allskyhub_sky.astro import moon_altitude, moon_illumination
+from allskyhub_sky.astro import moon_altitude, moon_illumination, moon_radec
+from allskyhub_solve.solve import alt_az, sidereal_deg
 
 log = logging.getLogger(__name__)
 
@@ -1232,6 +1233,22 @@ def main(argv: list[str] | None = None) -> int:
         return (cells, mode) if cells is not None else None
 
     sky_meter.set_brightness(map_brightness)
+
+    def moon_pixel(at: datetime, width: int, height: int) -> tuple[float, float] | None:
+        """SPEC §4.13: where the moon stands in a frame of this size, from the orientation
+        (§4.8); None without one, on another frame size or with an untrusted clock."""
+        sol = orienter.solution
+        if (
+            sol is None
+            or not trusted()
+            or (sol.width and (width, height) != (sol.width, sol.height))
+        ):
+            return None
+        ra, dec = moon_radec(at)
+        alt, az = alt_az(np.array([ra]), np.array([dec]), sidereal_deg(at, here.lon), here.lat)
+        x, y = sol.project(alt, az)
+        return float(x[0]), float(y[0])
+
     day_cloud = DayCloud(Path(args.data) / "calibration" / DAY_CALIBRATION)
 
     def day_clouds(frame: FrameInfo, rgb: Rgb, sky: Mask) -> float | None:
@@ -1465,9 +1482,8 @@ def main(argv: list[str] | None = None) -> int:
         flip=tuned.image_flip,
         flat=flat,
         flat_min_gain=profile.exposure.day.min_gain,
-        moon_hdr=MoonHdrTest(Path(args.data) / "hdr-test", short_gain=profile.exposure.day.min_gain)
-        if tuned.moon_hdr_test
-        else None,
+        moon_hdr=tuned.moon_hdr == "on",
+        moon_pixel=moon_pixel,
         rotate=int(tuned.image_rotate),
         live_stack=LiveStack(LIVE_WIDTH) if tuned.live_stack == "auto" else None,
         white_balance=NightWhiteBalance(Path(args.data) / "calibration" / "whitebalance.json")

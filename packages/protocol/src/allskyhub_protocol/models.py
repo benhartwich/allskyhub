@@ -429,6 +429,15 @@ class Status(_Body):
     checks: list[CheckItem] | None = Field(default=None, max_length=30)
 
 
+class HdrInfo(BaseModel):
+    """What a frame was fused from (SPEC §4.4, §4.13 moon HDR)."""
+
+    model_config = ConfigDict(extra="ignore", frozen=True)
+    short_exposures_us: list[int]
+    short_gain: float = Field(ge=0)
+    region_px: int = Field(ge=0)
+
+
 class FrameInfo(_Body):
     """Metadata of one captured frame (SPEC §4.4)."""
 
@@ -445,6 +454,8 @@ class FrameInfo(_Body):
     profile: str
     # SPEC §4.9: a bad frame (too dark or too bright), left out of products and grids.
     bad: Literal["dark", "bright"] | None = None
+    # SPEC §4.13: fused with short exposures around the moon; None for every other frame.
+    hdr: HdrInfo | None = None
 
 
 class EventKind(StrEnum):

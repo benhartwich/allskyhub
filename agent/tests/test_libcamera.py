@@ -42,8 +42,6 @@ def arg(name):
     return args[args.index(name) + 1]
 if mode != "nooutput":
     Image.new("RGB", (64, 48), (200, 100, 10)).save(arg("--output"), format="PNG")
-    if "--raw" in args:  # rpicam-still: the DNG next to the output
-        open(os.path.splitext(arg("--output"))[0] + ".dng", "wb").write(b"DNG")
 json.dump({"ExposureTime": int(arg("--shutter")) // 2,
            "AnalogueGain": float(os.environ.get("FAKE_GAIN", arg("--gain"))),
            "SensorTemperature": 41.25}, open(arg("--metadata"), "w"))
@@ -63,19 +61,6 @@ def fake(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
 
 def _args(log: Path) -> list[list[str]]:
     return [json.loads(line) for line in log.read_text().splitlines()]
-
-
-def test_capture_keeps_the_raw_data_when_asked(fake: Path, tmp_path: Path) -> None:
-    """The moon HDR test (SPEC §4.13 draft): the DNG next to the PNG, moved to `raw`."""
-    cam = LibcameraCamera(LibcameraSettings(executable=str(fake)))
-    cam.capture(CaptureRequest(exposure_us=1000, gain=0.0))
-    raw = tmp_path / "set" / "short.dng"
-    raw.parent.mkdir()
-    cam.capture(CaptureRequest(exposure_us=1000, gain=0.0, raw=raw))
-    first, second = _args(tmp_path / "args.jsonl")
-    assert "--raw" not in first
-    assert "--raw" in second
-    assert raw.read_bytes() == b"DNG"
 
 
 def test_capture_reads_image_and_metadata(fake: Path, tmp_path: Path) -> None:

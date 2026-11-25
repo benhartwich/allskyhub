@@ -382,7 +382,8 @@ class _FrameViewerState extends State<FrameViewer> {
         '\nVorschau: das Vollbild holt der Hub von der Kamera, solange sie es hat.',
         '\nPreview: the hub fetches the full picture from the camera while it has it.',
       );
-      return '$mode · ${exposure(frame.exposureUs)}'
+      final hdr = frame.hdr ? ' · ${tr('Mond-HDR', 'Moon HDR')}' : '';
+      return '$mode$hdr · ${exposure(frame.exposureUs)}'
           ' · Gain ${frame.gain.round()} · ${tr('Sonne', 'Sun')} $sun°'
           '${frame.hasFull ? '' : previewOnly}';
     },

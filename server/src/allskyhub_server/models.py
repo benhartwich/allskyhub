@@ -454,6 +454,8 @@ class Frame(Base):
     sun_elevation: Mapped[float] = mapped_column(Float)
     has_full: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
     has_thumb: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
+    # SPEC §4.4 `hdr`: what the frame was fused from (§4.13 moon HDR); null for the others.
+    hdr: Mapped[dict[str, Any] | None] = mapped_column(JSONB)
     # Retention counts from here, not from the device clock (SPEC §4.4: it may be wrong).
     created_at: Mapped[dt.datetime] = mapped_column(_tz(), server_default=func.now(), index=True)
 

@@ -808,6 +808,7 @@ async def _on_frame(
                     gain=frame.gain,
                     mean=frame.mean,
                     sun_elevation=frame.sun_elevation,
+                    hdr=frame.hdr.model_dump(mode="json") if frame.hdr else None,
                 )
                 .on_conflict_do_nothing(index_elements=["device_id", "night_id", "name"])
             )

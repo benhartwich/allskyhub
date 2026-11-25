@@ -193,6 +193,7 @@ class FrameItem {
     required this.gain,
     required this.sunElevation,
     required this.hasFull,
+    this.hdr = false,
   });
 
   factory FrameItem.fromJson(Map<String, dynamic> json) => FrameItem(
@@ -203,6 +204,7 @@ class FrameItem {
     gain: (json['gain'] as num).toDouble(),
     sunElevation: (json['sun_elevation'] as num).toDouble(),
     hasFull: json['has_full'] as bool,
+    hdr: json['hdr'] as bool? ?? false,
   );
 
   final String name;
@@ -212,6 +214,9 @@ class FrameItem {
   final double gain;
   final double sunElevation;
   final bool hasFull;
+
+  /// SPEC §4.13: fused with short exposures around the moon (older hubs: false).
+  final bool hdr;
 }
 
 /// One sky measurement (SPEC §6.3): null where the camera could not judge (day, dusk).

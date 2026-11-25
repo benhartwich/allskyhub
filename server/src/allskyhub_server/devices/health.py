@@ -63,6 +63,19 @@ def reboot_required(device: Device) -> bool:
     return (device.last_status or {}).get("reboot_required") is True
 
 
+def waiting(device: Device) -> tuple[str, str | None] | None:
+    """SPEC §6.3 ``waiting``: (reason, message) while the camera takes no frames yet."""
+    raw = (device.last_status or {}).get("waiting")
+    if not isinstance(raw, dict):
+        return None
+    found = cast(dict[str, Any], raw)
+    reason = found.get("reason")
+    if reason not in ("location", "camera"):
+        return None
+    message = found.get("message")
+    return str(reason), str(message)[:200] if isinstance(message, str) else None
+
+
 def paused(device: Device) -> bool:
     """SPEC §4.1, §6.3 ``capture_paused``: the owner paused capture on the camera."""
     return (device.last_status or {}).get("capture_paused") is True
@@ -151,8 +164,43 @@ def check(device: Device, online: bool, now: dt.datetime) -> list[Problem]:
               if isinstance(v, int | float)]  # fmt: skip
     stale = max(STALE_FRAMES, dt.timedelta(seconds=3 * max(delays, default=0)))
     captured = _when((device.last_frame or {}).get("captured_at"))
+    found = waiting(device)
+    if found is not None:
+        # SPEC §6.3 `waiting`: say why there are no pictures and what to do, instead of
+        # "no new pictures".
+        reason, message = found
+        if reason == "location":
+            problems.append(
+                Problem(
+                    "waiting_location",
+                    "warn",
+                    tr(
+                        "Die Kamera wartet auf ihren Standort: Schließe die Einrichtung in "
+                        "der allskyhub-App ab (Standort vom Handy übernehmen). Dann nimmt "
+                        "sie innerhalb weniger Sekunden auf.",
+                        "The camera waits for its location: finish the setup in the "
+                        "allskyhub app (take the location from your phone). It then starts "
+                        "capturing within seconds.",
+                    ),
+                )
+            )
+        else:
+            problems.append(
+                Problem(
+                    "waiting_camera",
+                    "error",
+                    tr(
+                        f"Die Kamera meldet einen Fehler: {message or 'unbekannt'}. Prüfe das "
+                        "Kabel der Kamera (USB bzw. Flachbandkabel am Pi) und starte den Pi "
+                        "neu, wenn es bleibt.",
+                        f"The camera reports an error: {message or 'unknown'}. Check the "
+                        "camera's cable (USB or the ribbon cable at the Pi) and restart the Pi "
+                        "if it stays.",
+                    ),
+                )
+            )
     # SPEC §4.1: the owner paused capture; missing pictures are expected then.
-    if not paused(device) and (captured is None or now - captured > stale):
+    elif not paused(device) and (captured is None or now - captured > stale):
         since = f" {tr('seit', 'for')} {_age(now - captured)}" if captured else ""
         problems.append(
             Problem(

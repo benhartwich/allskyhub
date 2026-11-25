@@ -239,6 +239,20 @@ async def test_admin_sees_all_cameras_without_pictures(
     page = (await client.get("/admin")).text
     section = page.split('id="kameras"')[1].split("</section>")[0]
     assert "noch nichts gesendet" in section
+    # SPEC §6.3 `waiting`: the reason instead.
+    async with maker() as db:
+        device = await db.get(Device, dev.device_id)
+        assert device is not None
+        device.last_status = {"waiting": {"reason": "location", "since": "x"}}
+        await db.commit()
+    page = (await client.get("/admin")).text
+    section = page.split('id="kameras"')[1].split("</section>")[0]
+    assert "wartet auf Standort" in section
+    async with maker() as db:
+        device = await db.get(Device, dev.device_id)
+        assert device is not None
+        device.last_status = None
+        await db.commit()
     async with maker() as db:
         at = dt.datetime.now(dt.UTC) - dt.timedelta(minutes=5)
         db.add(SkySample(device_id=dev.device_id, night_id="20261124", at=at, stars=812))

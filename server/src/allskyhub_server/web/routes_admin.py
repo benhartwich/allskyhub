@@ -26,7 +26,7 @@ from allskyhub_server.auth import access_requests, ratelimit
 from allskyhub_server.auth.accounts import AccountError
 from allskyhub_server.auth.passwords import verify_secret_async
 from allskyhub_server.auth.sessions import SessionInfo
-from allskyhub_server.devices import sightings, youtube
+from allskyhub_server.devices import health, sightings, youtube
 from allskyhub_server.devices.connections import ConnectionRegistry
 from allskyhub_server.mail.send import Mail, Mailer
 from allskyhub_server.models import AuroraFlag, AuroraReport, Device, SkySample, User
@@ -85,6 +85,15 @@ class CameraRow:
         """The newest picture the hub has, full or preview."""
         times = [t for t in (self.device.latest_image_at, self.device.latest_thumb_at) if t]
         return max(times) if times else None
+
+    @property
+    def waiting(self) -> str | None:
+        """SPEC §6.3 ``waiting``, as the admin list names it."""
+        found = health.waiting(self.device)
+        if found is None:
+            return None
+        reason, message = found
+        return "wartet auf Standort" if reason == "location" else f"Kamerafehler: {message or '?'}"
 
     @property
     def silent(self) -> bool:

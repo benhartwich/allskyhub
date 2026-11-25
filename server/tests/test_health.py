@@ -224,3 +224,28 @@ async def test_all_well_only_says_connected_while_it_is(
     monkeypatch.setattr(app.state.connections, "is_online", online)
     page = (await client.get(f"/cameras/{dev.device_id}")).text
     assert "Alles in Ordnung: verbunden" in page
+
+
+def test_waiting_says_why_and_what_to_do() -> None:
+    """SPEC §6.3 `waiting`: instead of "no new pictures", the reason and the next step."""
+    status: dict[str, object] = {"time_trusted": True, "disk_free_pct": 50, "settings": {}}
+    place = _device(
+        last_status={**status, "waiting": {"reason": "location", "since": NOW.isoformat()}},
+        last_frame=None,
+    )
+    found = health.check(place, True, NOW)
+    assert [(p.key, p.level) for p in found] == [("waiting_location", "warn")]
+    assert "Einrichtung in der allskyhub-App" in found[0].text
+    broken = _device(
+        last_status={
+            **status,
+            "waiting": {"reason": "camera", "since": NOW.isoformat(), "message": "no camera found"},
+        },
+        last_frame=None,
+    )
+    found = health.check(broken, True, NOW)
+    assert [(p.key, p.level) for p in found] == [("waiting_camera", "error")]
+    assert "no camera found" in found[0].text
+    assert health.waiting(broken) == ("camera", "no camera found")
+    assert health.waiting(_device()) is None
+    assert health.waiting(_device(last_status={"waiting": {"reason": "other"}})) is None

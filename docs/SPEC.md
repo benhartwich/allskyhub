@@ -295,7 +295,7 @@ stored frames, detections, products and the sky values stay single frames.
 `live_stack` (§6.9): `auto` (default) or `off`. Timelapses are built from the stored
 single frames as before.
 
-### 4.13 Moon HDR (draft, Benjamin 2026-11-24, experimental)
+### 4.13 Moon HDR (experimental, Benjamin 2026-11-25)
 
 Near full moon the long night exposure burns out the moon and a wide halo around it,
 while the stars need that exposure. With `moon_hdr` (§6.9, `off` default, `on`) the agent

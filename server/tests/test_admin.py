@@ -198,7 +198,7 @@ async def test_admin_gifts_plus(
         assert dt.timedelta(days=364) < device.plus_gift_until - now < dt.timedelta(days=366)
         assert (await plus.state(db, device, now)).kind == "gift"
         later = now + dt.timedelta(days=400)
-        assert (await plus.state(db, device, later)).kind == "none"
+        assert (await plus.state(db, device, later)).kind == "ended"
 
 
 async def test_admin_sees_all_cameras_without_pictures(

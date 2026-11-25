@@ -97,8 +97,12 @@ async def state(db: AsyncSession, device: Device, now: dt.datetime) -> PlusState
     if device.plus_until is not None and device.plus_until > now:
         trial = device.plus_trial_until is not None and device.plus_until == device.plus_trial_until
         return PlusState("trial" if trial else "paid", until=device.plus_until)
-    if device.plus_until is not None:
-        return PlusState("ended", until=device.plus_until)
+    # A gift that ran out counts as ended too, so the owner sees it and the offer.
+    ends = [
+        t for t in (device.plus_until, device.plus_gift_until if device.plus_gift else None) if t
+    ]
+    if ends:
+        return PlusState("ended", until=max(ends))
     return PlusState("none")
 
 

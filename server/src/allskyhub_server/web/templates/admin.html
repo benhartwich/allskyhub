@@ -287,7 +287,7 @@
     <tr>
       <td>{{ device.name or device.id }}<br><code class="small">{{ device.id }}</code></td>
       <td>{{ email }}</td>
-      <td>{% if device.plus_gift %}geschenkt{% if device.plus_gift_until %} bis {{ device.plus_gift_until | localtime }}{% endif %}{% elif device.plus_until %}bis {{ device.plus_until | localtime }}{% endif %}</td>
+      <td>{% if device.plus_gift %}geschenkt{% if device.plus_gift_until %} bis {{ device.plus_gift_until | localtime }}{% if device.plus_gift_until <= now %} <span class="warn">abgelaufen</span>{% endif %}{% endif %}{% elif device.plus_until %}bis {{ device.plus_until | localtime }}{% endif %}</td>
       <td>{% if device.plus_gift %}
         <form method="post" action="/admin/plus" class="inline">
           <input type="hidden" name="csrf_token" value="{{ csrf_token }}">

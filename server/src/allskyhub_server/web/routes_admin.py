@@ -168,6 +168,7 @@ async def page(
                 select(func.count()).select_from(Device).where(Device.owner_id.is_not(None))
             ),
             "camera_rows": await all_cameras(db, request.app.state.connections),
+            "now": dt.datetime.now(dt.UTC),
             "update_states": UPDATE_STATES,
             "repo": settings.deploy_repo,
             "access_requests": await access_requests.open_requests(db),

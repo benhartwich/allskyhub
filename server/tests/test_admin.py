@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import datetime as dt
 from pathlib import Path
 
 import httpx
@@ -11,7 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from allskyhub_server.admin import deploy
 from allskyhub_server.mail.send import MemoryMailer
-from allskyhub_server.models import Device
+from allskyhub_server.models import Device, SkySample
 from allskyhub_server.settings import Settings
 from tests.fake_device import FakeDevice
 from tests.helpers import PASSWORD, app_state, csrf_from, make_account, owner_email
@@ -210,6 +211,26 @@ async def test_admin_sees_all_cameras_without_pictures(
     assert "Update fehlgeschlagen" in section
     assert "0 von 1 online" in section
     assert "<img" not in section
+    assert "Kamera · " in section
+    assert "1 allskyhub-Kamera, 0 SharedSky-Stationen" in section
+    assert "noch nichts gesendet" not in section  # it has a status
+
+    # 2026-11-25: paired, nothing sent: the list says so. With a sky sample: its stars.
+    async with maker() as db:
+        device = await db.get(Device, dev.device_id)
+        assert device is not None
+        device.last_status = None
+        await db.commit()
+    page = (await client.get("/admin")).text
+    section = page.split('id="kameras"')[1].split("</section>")[0]
+    assert "noch nichts gesendet" in section
+    async with maker() as db:
+        at = dt.datetime.now(dt.UTC) - dt.timedelta(minutes=5)
+        db.add(SkySample(device_id=dev.device_id, night_id="20261124", at=at, stars=812))
+        await db.commit()
+    page = (await client.get("/admin")).text
+    section = page.split('id="kameras"')[1].split("</section>")[0]
+    assert "812 <span" in section
 
 
 async def test_reloading_after_a_form_leads_back_to_the_page(client: httpx.AsyncClient) -> None:

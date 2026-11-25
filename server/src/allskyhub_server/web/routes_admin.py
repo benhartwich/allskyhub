@@ -7,6 +7,7 @@ exist. Starting a deploy needs the password again.
 from __future__ import annotations
 
 import asyncio
+import datetime as dt
 import logging
 import shutil
 import uuid
@@ -16,6 +17,7 @@ from typing import Annotated, Any, cast
 from fastapi import APIRouter, Depends, Form, HTTPException, Request
 from fastapi.responses import FileResponse, RedirectResponse, Response
 from sqlalchemy import delete, func, select
+from sqlalchemy.dialects.postgresql import distinct_on
 from starlette.routing import Match
 
 from allskyhub_server.admin import deploy, storage
@@ -27,7 +29,7 @@ from allskyhub_server.auth.sessions import SessionInfo
 from allskyhub_server.devices import sightings, youtube
 from allskyhub_server.devices.connections import ConnectionRegistry
 from allskyhub_server.mail.send import Mail, Mailer
-from allskyhub_server.models import AuroraFlag, AuroraReport, Device, User
+from allskyhub_server.models import AuroraFlag, AuroraReport, Device, SkySample, User
 from allskyhub_server.settings import Settings
 from allskyhub_server.version import full as running_version
 from allskyhub_server.web import flash
@@ -65,12 +67,30 @@ async def confirmed(request: Request, session: SessionInfo, password: str) -> bo
     return await verify_secret_async(session.user.password_hash, password)
 
 
+# The admin's camera list shows the newest star count of this many days.
+STARS_DAYS = 3
+
+
 @dataclass(frozen=True)
 class CameraRow:
     device: Device
     email: str
     online: bool
     update: str | None  # the updater's state unless it is up to date (SPEC §8)
+    stars: int | None = None  # the newest sky sample's star count (SPEC §6.3)
+    stars_at: dt.datetime | None = None
+
+    @property
+    def picture_at(self) -> dt.datetime | None:
+        """The newest picture the hub has, full or preview."""
+        times = [t for t in (self.device.latest_image_at, self.device.latest_thumb_at) if t]
+        return max(times) if times else None
+
+    @property
+    def silent(self) -> bool:
+        """Paired but nothing arrived yet: no status, no picture (2026-11-25: a Pi camera
+        paired, online for an evening, sent nothing, and nobody noticed)."""
+        return self.device.last_status is None and self.picture_at is None
 
 
 async def all_cameras(db: DbSession, registry: ConnectionRegistry) -> list[CameraRow]:
@@ -83,6 +103,13 @@ async def all_cameras(db: DbSession, registry: ConnectionRegistry) -> list[Camer
             .order_by(Device.last_seen_at.desc().nulls_last(), Device.name)
         )
     ).all()
+    newest = (
+        select(SkySample.device_id, SkySample.stars, SkySample.at)
+        .ext(distinct_on(SkySample.device_id))
+        .where(SkySample.at > dt.datetime.now(dt.UTC) - dt.timedelta(days=STARS_DAYS))
+        .order_by(SkySample.device_id, SkySample.at.desc())
+    )
+    stars = {d: (n, at) for d, n, at in (await db.execute(newest)).all()}
     cameras: list[CameraRow] = []
     for device, email in rows:
         update = cast(dict[str, Any], (device.last_status or {}).get("update") or {})
@@ -93,6 +120,7 @@ async def all_cameras(db: DbSession, registry: ConnectionRegistry) -> list[Camer
                 email,
                 registry.is_online(device.id),
                 state if isinstance(state, str) and state != "up_to_date" else None,
+                *stars.get(device.id, (None, None)),
             )
         )
     cameras.sort(key=lambda c: not c.online)  # stable: keeps last seen within each part

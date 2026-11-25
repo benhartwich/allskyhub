@@ -243,6 +243,10 @@ class Device(Base):
     tonight_night: Mapped[str | None] = mapped_column(String(8))
     # Roadmap #15: when the owner got an e-mail about this outage (long offline).
     offline_mailed_at: Mapped[dt.datetime | None] = mapped_column(_tz())
+    # Onboarding (push/notify.py, 2026-11-25): "one step left" when a paired camera sends
+    # nothing, and "how is it going" a week after its first clear night; once each.
+    onboard_mailed_at: Mapped[dt.datetime | None] = mapped_column(_tz())
+    checkin_mailed_at: Mapped[dt.datetime | None] = mapped_column(_tz())
     # Roadmap C14: health problems (devices/health.py keys) already reported to the owner.
     health_notified: Mapped[list[str]] = mapped_column(JSONB, default=list, server_default="[]")
     # SPEC §6.9: the settings schema from the newest valid `hello`; None for old agents.

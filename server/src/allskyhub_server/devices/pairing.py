@@ -273,6 +273,8 @@ async def unpair(db: AsyncSession, device: Device) -> None:
     device.latest_thumb_at = None
     device.last_frame = None
     device.last_status = None
+    device.onboard_mailed_at = None  # a new owner gets the onboarding mails again
+    device.checkin_mailed_at = None
     device.public_slug = None  # a new owner decides again
     # The owner's choices go with the pairing: a later owner's detections must never reach
     # the old owner's Discord, nor their place the map or start page unasked.

@@ -279,6 +279,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         app.state.notifier = Notifier(app.state.sessionmaker, sender)
         app.state.notifier.mailer = app.state.mailer
         app.state.notifier.base_url = settings.base_url
+        app.state.notifier.reply_to = settings.mail_reply_to
         app.state.notifier.admins = settings.admins
         app.state.notifier.forecast = app.state.forecast
         app.state.notifier.discord = Discord(

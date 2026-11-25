@@ -26,6 +26,8 @@ class Mail:
     to: str
     subject: str
     body: str
+    # Where a reply goes (the sender is a no-reply address); empty: no Reply-To.
+    reply_to: str = ""
 
 
 class Mailer(Protocol):
@@ -48,6 +50,8 @@ class SmtpMailer:
         msg["From"] = self._settings.mail_from
         msg["To"] = mail.to
         msg["Subject"] = mail.subject
+        if mail.reply_to:
+            msg["Reply-To"] = mail.reply_to
         msg["Date"] = formatdate(localtime=False)
         domain = self._settings.mail_from.rsplit("@", 1)[-1].rstrip(">") or None
         msg["Message-ID"] = make_msgid(domain=domain)

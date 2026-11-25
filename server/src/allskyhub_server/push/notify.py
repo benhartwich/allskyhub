@@ -15,7 +15,7 @@ import logging
 import uuid
 from typing import Any, Protocol, cast
 
-from sqlalchemy import delete, select, update
+from sqlalchemy import delete, func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from allskyhub_server.devices import (
@@ -33,6 +33,7 @@ from allskyhub_server.devices.connections import ConnectionRegistry
 from allskyhub_server.devices.discord import Discord
 from allskyhub_server.devices.event_text import EVENT_TITLES
 from allskyhub_server.devices.events import storm_key
+from allskyhub_server.devices.stats import CLEAR_NIGHT_HOURS
 from allskyhub_server.devices.tonight import ForecastCache
 from allskyhub_server.i18n import pick
 from allskyhub_server.mail.send import Mail, Mailer
@@ -41,6 +42,7 @@ from allskyhub_server.models import (
     Device,
     EventRecord,
     MeteorPair,
+    NightStat,
     PushToken,
     User,
 )
@@ -55,6 +57,12 @@ OFFLINE_AFTER = dt.timedelta(minutes=30)
 OFFLINE_CHECK = dt.timedelta(minutes=5)
 # Roadmap #15: a long outage also by e-mail, once.
 OFFLINE_MAIL_AFTER = dt.timedelta(hours=6)
+# Onboarding mails (check_onboarding, check_checkin; Benjamin, 2026-11-25).
+ONBOARD_AFTER = dt.timedelta(hours=2)
+ONBOARD_WINDOW = dt.timedelta(days=14)  # older pairings are given up, not greeted
+ONLINE_LATELY = dt.timedelta(hours=2)  # seen this recently: it waits rather than is gone
+CHECKIN_AFTER = dt.timedelta(days=8)  # the evening of the first clear night + a week
+CHECKIN_WINDOW = dt.timedelta(days=30)
 # Roadmap C2: at most one aurora alarm per camera in this time; the sky measurement must
 # be this fresh (status repeats the last one, SPEC §6.3).
 AURORA_QUIET = dt.timedelta(hours=6)
@@ -85,6 +93,12 @@ class PushSender(Protocol):
     async def send(self, tokens: list[str], message: Message) -> list[str]: ...
 
 
+def _both(lang: str, de: str, en: str, between: str = " · ") -> str:
+    """English alone for English accounts, else German and English: the account's
+    language is German by default and may never have been chosen (2026-11-25)."""
+    return en if lang == "en" else f"{de}{between}{en}"
+
+
 def _now() -> dt.datetime:
     return dt.datetime.now(dt.UTC)
 
@@ -100,6 +114,7 @@ class Notifier:
         # Set by the app: e-mail (roadmap #15, C14) and the hub's address for links in it.
         self.mailer: Mailer | None = None
         self.base_url = ""
+        self.reply_to = ""  # where replies to the "how is it going" mail go
         # Set by the app: the owner's Discord channel (roadmap H5).
         self.discord: Discord | None = None
         # Set by the app: who approves aurora photos (settings.admins).
@@ -831,12 +846,188 @@ class Notifier:
             ),
         )
 
+    async def check_onboarding(self, now: dt.datetime | None = None) -> None:
+        """2026-11-25: a camera paired ``ONBOARD_AFTER`` ago that has sent nothing (no
+        status, no picture), or reports what it waits for (SPEC §6.3 ``waiting``), gets
+        its owner one mail with what to do. Once per pairing; without mail it is tried
+        again."""
+        if self.mailer is None or not self._mail:
+            return
+        now = now or _now()
+        async with self._maker() as db:
+            rows = (
+                await db.execute(
+                    select(Device, User)
+                    .join(User, User.id == Device.owner_id)
+                    .where(
+                        Device.kind == "camera",
+                        Device.onboard_mailed_at.is_(None),
+                        Device.paired_at < now - ONBOARD_AFTER,
+                        Device.paired_at > now - ONBOARD_WINDOW,
+                        Device.latest_image_at.is_(None),
+                        Device.latest_thumb_at.is_(None),
+                    )
+                )
+            ).all()
+            for device, user in rows:
+                waiting = cast(dict[str, Any], (device.last_status or {}).get("waiting") or {})
+                if device.last_status is not None and not waiting:
+                    continue  # it reports and does not wait: frames are on their way
+                seen = device.last_seen_at
+                offline = seen is None or seen < now - ONLINE_LATELY
+                mail = self._onboarding(device, user, waiting, offline=offline and not waiting)
+                if not await self.mailer.send(mail):
+                    continue
+                device.onboard_mailed_at = now
+                await db.commit()
+
+    def _onboarding(
+        self, device: Device, user: User, waiting: dict[str, Any], *, offline: bool = False
+    ) -> Mail:
+        name = device.name or "Allsky-Kamera"
+        error = str(waiting.get("message") or "")[:200]
+        if offline:
+            de_step = (
+                "Sie hat sich seit der Kopplung aber nicht mehr beim Hub gemeldet. Meist "
+                "fehlt Strom oder WLAN: Ist der Pi eingeschaltet und im Netz? Nach dem "
+                "Einschalten meldet er sich innerhalb einer Minute; danach in der "
+                "allskyhub-App die Einrichtung abschließen (Standort)."
+            )
+            en_step = (
+                "But it has not been in touch with the hub since the pairing. Usually power "
+                "or Wi-Fi is missing: is the Pi switched on and on the network? Once on, it "
+                "connects within a minute; then finish the setup in the allskyhub app "
+                "(location)."
+            )
+        elif waiting.get("reason") == "camera":
+            de_step = (
+                f"Die Kamera meldet einen Fehler beim Aufnehmen:\n  {error}\n\nMeist hilft es, "
+                "das Kamerakabel am Pi zu prüfen und den Pi neu zu starten. Hilft das nicht, "
+                "antworte auf diese Mail mit der Fehlermeldung."
+            )
+            en_step = (
+                f"The camera reports an error when capturing:\n  {error}\n\nUsually it "
+                "helps to check the camera cable at the Pi and to restart the Pi. If that does "
+                "not help, reply to this mail with the error."
+            )
+        else:
+            de_step = (
+                "Ihr fehlen noch Standort und Zeitzone aus der Einrichtung; ohne den Standort "
+                "weiß sie nicht, wann es Nacht wird.\n\nSo geht es weiter: Öffne die "
+                "allskyhub-App, tippe auf deine Kamera und schließe die Einrichtung ab. Den "
+                "Standort kannst du vom Handy übernehmen. Danach nimmt die Kamera innerhalb "
+                "weniger Sekunden auf."
+            )
+            en_step = (
+                "It still needs its location and time zone from the setup; without the "
+                "location it does not know when night begins.\n\nWhat to do: open the "
+                "allskyhub app, tap your camera and finish the setup. You can take the "
+                "location from your phone. The camera then starts capturing within a few "
+                "seconds."
+            )
+        de = (
+            f"Hallo,\n\ndanke, dass du deine Kamera „{name}“ bei allskyhub gekoppelt hast! "
+            f"{'' if offline else 'Sie ist verbunden, nimmt aber noch keine Bilder auf. '}"
+            f"{de_step}\n\n"
+            "Fragen? Antworte einfach auf diese Mail.\n\nallskyhub\n"
+        )
+        en = (
+            f'Hello,\n\nthank you for pairing your camera "{name}" with allskyhub! '
+            f"{'' if offline else 'It is connected but not taking pictures yet. '}"
+            f"{en_step}\n\n"
+            "Questions? Just reply to this mail.\n\nallskyhub\n"
+        )
+        return Mail(
+            to=user.email,
+            subject=_both(
+                user.lang,
+                f"allskyhub: {name} – ein Schritt fehlt noch",
+                f"allskyhub: {name} – one step left",
+            ),
+            body=_both(user.lang, de, en, "\n---\n\n"),
+            reply_to=self.reply_to,
+        )
+
+    async def check_checkin(self, now: dt.datetime | None = None) -> None:
+        """2026-11-25: a week after a camera's first clear night (``CLEAR_NIGHT_HOURS``), its
+        owner hears how it went so far and is asked for feedback (replies go to
+        ``reply_to``). Once per pairing; only for first nights within ``CHECKIN_WINDOW``,
+        so cameras that were running long before this mail existed get none."""
+        if self.mailer is None or not self._mail:
+            return
+        now = now or _now()
+        async with self._maker() as db:
+            first = (
+                select(NightStat.device_id, func.min(NightStat.night_id).label("night"))
+                .where(NightStat.clear_hours >= CLEAR_NIGHT_HOURS)
+                .group_by(NightStat.device_id)
+                .subquery()
+            )
+            rows = (
+                await db.execute(
+                    select(Device, User)
+                    .join(User, User.id == Device.owner_id)
+                    .join(first, first.c.device_id == Device.id)
+                    .where(
+                        Device.kind == "camera",
+                        Device.checkin_mailed_at.is_(None),
+                        first.c.night > (now - CHECKIN_WINDOW).strftime("%Y%m%d"),
+                        first.c.night <= (now - CHECKIN_AFTER).strftime("%Y%m%d"),
+                    )
+                )
+            ).all()
+            for device, user in rows:
+                nights = list(
+                    await db.scalars(select(NightStat).where(NightStat.device_id == device.id))
+                )
+                if not await self.mailer.send(self._checkin(device, user, nights)):
+                    continue
+                device.checkin_mailed_at = now
+                await db.commit()
+
+    def _checkin(self, device: Device, user: User, nights: list[NightStat]) -> Mail:
+        name = device.name or "Allsky-Kamera"
+        clear = sum(1 for n in nights if (n.clear_hours or 0) >= CLEAR_NIGHT_HOURS)
+        meteors = sum(n.meteors for n in nights)
+        sqm = max((n.best_sqm for n in nights if n.best_sqm is not None), default=None)
+        link = f"{self.base_url.rstrip('/')}/cameras/{device.id}"
+        de_sqm = f", dunkelster Himmel {sqm:.2f} mag/arcsec²".replace(".", ",") if sqm else ""
+        en_sqm = f", darkest sky {sqm:.2f} mag/arcsec²" if sqm else ""
+        de = (
+            f"Hallo,\n\ndeine Kamera „{name}“ läuft jetzt seit gut einer Woche: "
+            f"{len(nights)} Nächte, davon {clear} klar, {meteors} Meteore{de_sqm}.\n{link}\n\n"
+            "Wie läuft es bei dir? Was klappt gut, was hakt, was fehlt dir? Antworte einfach "
+            "auf diese Mail, jede Rückmeldung hilft uns sehr.\n\nallskyhub\n"
+        )
+        en = (
+            f'Hello,\n\nyour camera "{name}" has now been running for a good week: '
+            f"{len(nights)} nights, {clear} of them clear, {meteors} meteors{en_sqm}.\n{link}\n\n"
+            "How is it going? What works well, what gets stuck, what do you miss? Just reply "
+            "to this mail, every answer helps us a lot.\n\nallskyhub\n"
+        )
+        return Mail(
+            to=user.email,
+            subject=_both(
+                user.lang, f"allskyhub: Wie läuft {name}?", f"allskyhub: how is {name} doing?"
+            ),
+            body=_both(user.lang, de, en, "\n---\n\n"),
+            reply_to=self.reply_to,
+        )
+
     async def run_offline_checks(self, registry: ConnectionRegistry) -> None:
         while True:
             try:
                 await self.check_offline_mail(registry)
             except Exception:
                 log.exception("mail: offline check failed")
+            try:
+                await self.check_onboarding()
+            except Exception:
+                log.exception("mail: onboarding check failed")
+            try:
+                await self.check_checkin()
+            except Exception:
+                log.exception("mail: check-in failed")
             try:
                 await self.check_station_notice()
             except Exception:

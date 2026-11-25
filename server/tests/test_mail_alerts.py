@@ -11,7 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from allskyhub_server.devices.tonight import Hour
 from allskyhub_server.mail.send import MemoryMailer
-from allskyhub_server.models import Device, User
+from allskyhub_server.models import Device, NightStat, User
 from allskyhub_server.push.notify import Notifier
 from tests.fake_device import FakeDevice
 from tests.helpers import csrf_from
@@ -132,3 +132,125 @@ async def test_account_form_without_push(app: FastAPI, client: httpx.AsyncClient
         assert user
         assert (user.notify_summary, user.notify_tonight, user.notify_by_mail) == (True,) * 3
         assert user.notify_events is False
+
+
+async def test_onboarding_mail_when_a_paired_camera_stays_silent(
+    app: FastAPI, client: httpx.AsyncClient
+) -> None:
+    """2026-11-25: paired, nothing sent for two hours: one mail with what to do, in German
+    and English (the account's language is German by default); a waiting camera that
+    reports its camera error gets that error."""
+    device_id, mailer, notifier = await _setup(app, client, notify_by_mail=False)
+    notifier.reply_to = "support@example.org"
+    maker: async_sessionmaker[AsyncSession] = app.state.sessionmaker
+    async with maker() as db:
+        device = await db.get(Device, device_id)
+        assert device
+        device.last_status = None
+        paired = device.paired_at
+        assert paired is not None
+        device.last_seen_at = paired + dt.timedelta(hours=2, minutes=30)  # online, waiting
+        await db.commit()
+    await notifier.check_onboarding(paired + dt.timedelta(hours=1))
+    assert mailer.sent == []  # too early
+    await notifier.check_onboarding(paired + dt.timedelta(hours=3))
+    assert len(mailer.sent) == 1
+    mail = mailer.sent[0]
+    assert "ein Schritt fehlt noch" in mail.subject
+    assert "one step left" in mail.subject
+    assert "Standort" in mail.body
+    assert "location" in mail.body
+    assert mail.reply_to == "support@example.org"
+    await notifier.check_onboarding(paired + dt.timedelta(hours=5))
+    assert len(mailer.sent) == 1  # once
+
+    # Waiting for a broken camera (SPEC §6.3 waiting), English account: English only.
+    device_id, mailer, notifier = await _setup(app, client, notify_by_mail=False)
+    async with maker() as db:
+        device = await db.get(Device, device_id)
+        assert device
+        device.last_status = {
+            "waiting": {"reason": "camera", "since": "x", "message": "no camera found"}
+        }
+        await db.execute(update(User).where(User.id == device.owner_id).values(lang="en"))
+        paired = device.paired_at
+        assert paired is not None
+        await db.commit()
+    await notifier.check_onboarding(paired + dt.timedelta(hours=3))
+    assert len(mailer.sent) == 1
+    assert "no camera found" in mailer.sent[0].body
+    assert "Hallo" not in mailer.sent[0].body
+
+    # A camera that reports without waiting (frames on their way) gets none.
+    device_id, mailer, notifier = await _setup(app, client, notify_by_mail=False)
+    async with maker() as db:
+        device = await db.get(Device, device_id)
+        assert device
+        paired = device.paired_at
+        assert paired is not None
+    await notifier.check_onboarding(paired + dt.timedelta(hours=3))
+    assert mailer.sent == []
+
+
+async def test_checkin_mail_a_week_after_the_first_clear_night(
+    app: FastAPI, client: httpx.AsyncClient
+) -> None:
+    """2026-11-25: a week after the first clear night, how it went and a request for
+    feedback; replies go to the contact address."""
+    device_id, mailer, notifier = await _setup(app, client, notify_by_mail=False)
+    notifier.reply_to = "support@example.org"
+    maker: async_sessionmaker[AsyncSession] = app.state.sessionmaker
+    async with maker() as db:
+        db.add_all(
+            [
+                NightStat(device_id=device_id, night_id="20261012", clear_hours=0.5,
+                          meteors=1, showers={}, aurora=0, storms=0),
+                NightStat(device_id=device_id, night_id="20261013", clear_hours=6.0,
+                          best_sqm=21.35, meteors=4, showers={}, aurora=0, storms=0),
+            ]
+        )  # fmt: skip
+        await db.commit()
+    await notifier.check_checkin(dt.datetime(2026, 10, 18, 12, tzinfo=dt.UTC))
+    assert mailer.sent == []  # not a week yet
+    await notifier.check_checkin(dt.datetime(2026, 10, 21, 12, tzinfo=dt.UTC))
+    assert len(mailer.sent) == 1
+    body = mailer.sent[0].body
+    assert "2 Nächte, davon 1 klar, 5 Meteore, dunkelster Himmel 21,35" in body
+    assert "2 nights, 1 of them clear, 5 meteors, darkest sky 21.35" in body
+    assert f"https://hub.example.org/cameras/{device_id}" in body
+    assert mailer.sent[0].reply_to == "support@example.org"
+    await notifier.check_checkin(dt.datetime(2026, 10, 22, 12, tzinfo=dt.UTC))
+    assert len(mailer.sent) == 1  # once
+    # A camera whose first clear night is long past (running before these mails) gets none.
+    device_id, mailer, notifier = await _setup(app, client, notify_by_mail=False)
+    async with maker() as db:
+        db.add(NightStat(device_id=device_id, night_id="20261013", clear_hours=6.0,
+                         meteors=0, showers={}, aurora=0, storms=0))  # fmt: skip
+        await db.commit()
+    await notifier.check_checkin(dt.datetime(2026, 11, 25, 12, tzinfo=dt.UTC))
+    assert mailer.sent == []
+
+
+async def test_onboarding_mail_window_and_offline_text(
+    app: FastAPI, client: httpx.AsyncClient
+) -> None:
+    """Review of #526: pairings older than two weeks get no greeting; a camera not seen
+    since its pairing hears about power and Wi-Fi, not about its location."""
+    device_id, mailer, notifier = await _setup(app, client, notify_by_mail=False)
+    maker: async_sessionmaker[AsyncSession] = app.state.sessionmaker
+    async with maker() as db:
+        device = await db.get(Device, device_id)
+        assert device
+        device.last_status = None
+        paired = device.paired_at
+        assert paired is not None
+        device.last_seen_at = paired
+        await db.commit()
+    await notifier.check_onboarding(paired + dt.timedelta(days=20))
+    assert mailer.sent == []  # given up long ago
+    await notifier.check_onboarding(paired + dt.timedelta(hours=5))
+    assert len(mailer.sent) == 1
+    body = mailer.sent[0].body
+    assert "WLAN" in body
+    assert "Wi-Fi" in body
+    assert "Sie ist verbunden" not in body

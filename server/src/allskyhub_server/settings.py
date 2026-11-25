@@ -62,6 +62,8 @@ class Settings(BaseSettings):
     smtp_user: str = ""
     smtp_password: str = ""
     mail_from: str = "allskyhub <noreply@allskyhub.org>"
+    # Replies to mails that ask for feedback (the contact address of the imprint).
+    mail_reply_to: str = "support@webinx.eu"
     max_image_mb: int = Field(default=25, ge=1)
     # Admin page (/admin): comma-separated e-mail addresses of accounts that may see the
     # server's state and start a deploy. Empty: no admin page.

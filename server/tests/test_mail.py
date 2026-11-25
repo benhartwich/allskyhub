@@ -102,3 +102,7 @@ def test_message_headers() -> None:
     assert msg["From"] == "allskyhub <noreply@allskyhub.org>"
     assert msg["Auto-Submitted"] == "auto-generated"
     assert msg["Message-ID"].endswith("@allskyhub.org>")
+    assert msg["Reply-To"] is None  # none unless a mail asks for replies
+    answer = Mail("a@example.org", "Betreff", "Text", reply_to="support@example.org")
+    msg = SmtpMailer(settings)._message(answer)  # pyright: ignore[reportPrivateUsage]
+    assert msg["Reply-To"] == "support@example.org"

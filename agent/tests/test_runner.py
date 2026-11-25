@@ -1,6 +1,5 @@
 """Capture loop end to end with the simulated camera (SPEC §4.1-§4.3)."""
 
-import json
 from datetime import UTC, datetime, timedelta
 from itertools import pairwise
 from pathlib import Path
@@ -8,7 +7,9 @@ from zoneinfo import ZoneInfo
 
 import numpy as np
 import pytest
+from PIL import Image as PILImage
 
+from allskyhub_agent.adapters.camera import CaptureRequest, Frame, Image
 from allskyhub_agent.adapters.sim import SimCamera, sky_radiance
 from allskyhub_agent.core.clock import SimClock
 from allskyhub_agent.core.exposure import AutoExposure
@@ -16,7 +17,6 @@ from allskyhub_agent.core.quality import FrameQuality
 from allskyhub_agent.core.sun import sun_elevation
 from allskyhub_agent.live import LiveState
 from allskyhub_agent.process.livestack import LiveStack
-from allskyhub_agent.process.moonhdr import MoonHdrTest
 from allskyhub_agent.profiles import get_profile
 from allskyhub_agent.runner import Location, LoopConfig, Runner
 from allskyhub_agent.store.images import ImageStore
@@ -30,7 +30,6 @@ def make_runner(
     start: datetime,
     quality: FrameQuality | None = None,
     moon_mode: bool = False,
-    moon_hdr: MoonHdrTest | None = None,
 ) -> tuple[Runner, SimClock]:
     clock = SimClock(start)
     profile = get_profile("sim")
@@ -49,7 +48,6 @@ def make_runner(
         mask_radius_frac=profile.image_circle_frac,
         quality=quality,
         moon_mode=moon_mode,
-        moon_hdr=moon_hdr,
     )
     return runner, clock
 
@@ -118,34 +116,74 @@ def test_moon_mode_follows_the_moon(tmp_path: Path) -> None:
     assert not runner.moon
 
 
-def test_moon_hdr_test_keeps_sets_under_a_bright_moon(tmp_path: Path) -> None:
-    """Experimental (SPEC §4.13 draft): every 10 min at night with a bright moon, the long
-    frame and four short ones at the lowest gain; the stored frames stay as they are."""
-    hdr = MoonHdrTest(tmp_path / "hdr-test")
-    runner, clock = make_runner(tmp_path, datetime(2026, 10, 25, 22, 0, tzinfo=UTC), moon_hdr=hdr)
-    for _ in range(25):  # 30 s apart: 12.5 min
-        runner.step()
-        clock.sleep(runner.delay())
-    sets = sorted((tmp_path / "hdr-test").glob("*/*"))
-    taken = [datetime.strptime(p.name + "+0000", "%Y%m%d-%H%M%S%z") for p in sets]
-    assert len(taken) >= 2
-    assert all(b - a >= timedelta(minutes=10) for a, b in pairwise(taken))
-    files = sorted(p.name for p in sets[0].iterdir())
-    assert files == [
-        "long.png", "set.json", "short-100000us.png", "short-10000us.png", "short-1000us.png",
-        "short-500000us.png",
-    ]  # fmt: skip
-    meta = json.loads((sets[0] / "set.json").read_text())
-    assert [s["exposure_us"] for s in meta["short"]] == [1000, 10_000, 100_000, 500_000]
-    assert meta["long"]["exposure_us"] > 500_000
-    assert meta["moon"]["altitude_deg"] > 0
-    assert "lat" not in json.dumps(meta)  # the place is private
-    hdr = MoonHdrTest(tmp_path / "new" / "hdr-test")
-    runner, _ = make_runner(
-        tmp_path / "new", datetime(2026, 10, 10, 22, 0, tzinfo=UTC), moon_hdr=hdr
+class _MoonCamera(SimCamera):
+    """The sim sky with a full moon and its halo at (120, 40), linear in exposure."""
+
+    def capture(self, req: CaptureRequest) -> Frame:
+        frame = super().capture(req)
+        scale = req.exposure_us / 1e6 * 10 ** (req.gain * 0.1 / 20.0)
+        yy, xx = np.mgrid[0:90, 0:160]
+        r = np.hypot(xx - 120.0, yy - 40.0)
+        moon = 5000.0 * np.exp(-((r / 1.5) ** 2)) + 40.0 * np.exp(-r / 4.0)
+        image = frame.image.astype(np.float32) + (moon * scale * 255.0)[..., None]
+        out: Image = np.minimum(image, 255.0).astype(np.uint8)
+        return Frame(out, frame.exposure_us, frame.gain, frame.sensor_temp_c)
+
+
+def test_moon_hdr_fuses_the_moon_into_the_stored_frame(tmp_path: Path) -> None:
+    """SPEC §4.13: after a night frame that burnt out around the moon, four short exposures
+    at the lowest gain; the stored frame is fused, the analyzers get the long one."""
+    clock = SimClock(datetime(2026, 10, 25, 22, 0, tzinfo=UTC))  # full moon up
+    profile = get_profile("sim")
+    seen: list[tuple[FrameInfo, Image]] = []
+    taken: list[CaptureRequest] = []
+    camera = _MoonCamera(lambda: 0.002, width=160, height=90, clock=clock)
+    capture = camera.capture
+
+    def logged(req: CaptureRequest) -> Frame:
+        taken.append(req)
+        return capture(req)
+
+    camera.capture = logged  # type: ignore[method-assign]
+    runner = Runner(
+        camera=camera,
+        auto_exposure=AutoExposure(profile.exposure),
+        store=ImageStore(tmp_path, ZoneInfo("Europe/Vienna")),
+        clock=clock,
+        location=LOC,
+        profile=profile.id,
+        mask_radius_frac=profile.image_circle_frac,
+        analyzers=[lambda info, image: seen.append((info, image))],
+        moon_hdr=True,
+        moon_pixel=lambda _at, _w, _h: (120.0, 40.0),
     )
+    first = runner.step()
+    assert first.hdr is None  # nothing known yet: no short exposures
+    assert len(taken) == 1
+    second = runner.step()
+    assert [r.exposure_us for r in taken[2:]] == [1000, 10_000, 100_000, 500_000]
+    assert all(r.gain == 0.0 for r in taken[2:])
+    assert second.hdr is not None
+    assert second.hdr.short_exposures_us == [1000, 10_000, 100_000, 500_000]
+    assert second.hdr.region_px > 0
+    long = seen[-1][1]
+    stored = np.asarray(
+        PILImage.open(tmp_path / "images" / second.night_id / second.name).convert("RGB")
+    )
+    assert long[40, 120].min() >= 245  # the analyzers: the long frame, burnt out
+    assert int(stored[40, 120].min()) > int(stored[40, 112].min())  # the disc over its halo
+    assert int(stored[40, 112].min()) < 245  # the halo is no longer white
+    assert np.abs(stored[80:, :40].astype(int) - long[80:, :40].astype(int)).max() <= 8  # JPEG
+    # Off: never a short exposure.
+    taken.clear()
+    runner = Runner(
+        camera=camera, auto_exposure=AutoExposure(profile.exposure),
+        store=ImageStore(tmp_path / "off", ZoneInfo("Europe/Vienna")), clock=clock,
+        location=LOC, profile=profile.id,
+    )  # fmt: skip
     runner.step()
-    assert not (tmp_path / "new" / "hdr-test").exists()
+    runner.step()
+    assert len(taken) == 2
 
 
 def test_turn() -> None:

@@ -1,104 +1,112 @@
-"""Moon HDR test (experimental, setting `moon_hdr_test`, default off).
+"""Moon HDR (SPEC §4.13, setting `moon_hdr`, default off).
 
-While a bright moon is up at night, every `interval_s` the long frame is kept as it came
-from the camera, together with a few short exposures at the lowest gain, as PNG and, where
-the camera can, as DNG. Nothing is merged: the sets are for trying the merge of SPEC §4.13
-(draft) offline. The stored frames, measurements and detections stay those of the long
-frame alone.
+Near full moon the long night frame burns out the moon and a wide halo around it. When
+the previous frame showed such a patch, a fixed ladder of short exposures is taken right
+after the long one and fused into the stored picture, only in the moon's region (Mertens
+exposure fusion). Measurements and detections keep using the long frame.
 """
 
 from __future__ import annotations
 
-import datetime as dt
-import json
-import logging
-import shutil
 from collections.abc import Sequence
-from pathlib import Path
+from dataclasses import dataclass
 
-from PIL import Image as PILImage
+import cv2
+import numpy as np
+import numpy.typing as npt
 
-from allskyhub_agent.adapters.camera import Camera, CameraError, CaptureRequest, Frame
+from allskyhub_agent.adapters.camera import Image
 
-log = logging.getLogger(__name__)
+# SPEC §4.13: a pixel is saturated when any channel reaches this.
+SATURATED = 245
+# ... and the patch counts from this share of the sky mask.
+MIN_PATCH = 0.0005
+# The ladder: 1 ms holds the disc, 500 ms the halo, the steps between the rest.
+SHORT_US = (1000, 10_000, 100_000, 500_000)
+GROW_PX = 40  # the region: the patch grown by this ...
+FEATHER_PX = 25.0  # ... and feathered (Gaussian sigma)
+PAD_PX = 80  # the fusion box around the grown patch
+# Mertens weights: contrast, saturation, well-exposedness.
+WEIGHTS = (1.0, 0.0, 3.0)
 
-# A set is about 25 MB of PNG (ZWO) or 90 MB with DNGs (HQ camera); below this much
-# free space it stops.
-MIN_FREE_BYTES = 5 * 1024**3
+Point = tuple[float, float]
+Mask = npt.NDArray[np.bool_]
 
 
-class MoonHdrTest:
-    def __init__(
-        self,
-        root: Path,
-        interval_s: float = 600.0,
-        # The disc at 1 ms, the halo around it up to 500 ms (first night, 2026-11-24: at
-        # 0.25-4 ms only the disc showed, the halo stayed black).
-        short_us: Sequence[int] = (1000, 10_000, 100_000, 500_000),
-        short_gain: float = 0.0,
-    ) -> None:
-        self._root = root
-        self._interval = dt.timedelta(seconds=interval_s)
-        self._short_us = tuple(short_us)
-        self._short_gain = short_gain
-        self._last: dt.datetime | None = None
+@dataclass(frozen=True)
+class Fused:
+    image: Image
+    region_px: int  # saturated pixels of the moon's patch
 
-    def due(self, now: dt.datetime, night_id: str) -> Path | None:
-        """The folder for a new set, or None when the last one is too recent or the disk
-        is getting full."""
-        if self._last is not None and now - self._last < self._interval:
+
+def moon_patch(long: Image, at: Point | None) -> npt.NDArray[np.bool_] | None:
+    """The saturated patch that holds the point `at` (the moon), or the largest one when
+    `at` is None; None when there is none there. Neighbours within 4 px join a patch."""
+    sat = (long.max(axis=2) >= SATURATED).astype(np.uint8)
+    if not sat.any():
+        return None
+    joined = cv2.dilate(sat, np.ones((9, 9), np.uint8))
+    count, found = cv2.connectedComponents(joined)
+    labels: npt.NDArray[np.int32] = np.asarray(found, dtype=np.int32)
+    if count < 2:
+        return None
+    if at is not None:
+        x, y = round(at[0]), round(at[1])
+        h, w = sat.shape
+        if not (0 <= x < w and 0 <= y < h):
             return None
-        self._root.mkdir(parents=True, exist_ok=True)
-        if shutil.disk_usage(self._root).free < MIN_FREE_BYTES:
+        label = int(labels[y, x])
+        if label == 0:
             return None
-        self._last = now
-        folder = self._root / night_id / now.strftime("%Y%m%d-%H%M%S")
-        folder.mkdir(parents=True, exist_ok=True)
-        return folder
-
-    def record(
-        self,
-        camera: Camera,
-        folder: Path,
-        long: Frame,
-        captured_at: dt.datetime,
-        moon_altitude: float,
-        moon_illumination: float,
-    ) -> None:
-        """Keep the long frame and take the short ones right after it. A failed short
-        exposure is logged and skipped; it never stops the capture loop."""
-        _png(long, folder / "long.png")
-        shorts: list[dict[str, object]] = []
-        for us in self._short_us:
-            name = f"short-{us}us"
-            try:
-                frame = camera.capture(
-                    CaptureRequest(us, self._short_gain, raw=folder / f"{name}.dng")
-                )
-            except CameraError as exc:
-                log.warning("moon HDR test: %s failed: %s", name, exc)
-                continue
-            _png(frame, folder / f"{name}.png")
-            shorts.append({"file": name, **_exposure(frame)})
-        meta = {
-            "captured_at": captured_at.isoformat(),
-            "long": {"file": "long", **_exposure(long)},
-            "short": shorts,
-            "moon": {
-                "altitude_deg": round(moon_altitude, 1),
-                "illumination": round(moon_illumination, 2),
-            },
-        }
-        (folder / "set.json").write_text(json.dumps(meta, indent=1))
+    else:
+        # No np.argmax: its numpy 2.5 stubs are partially unknown to pyright.
+        sizes = [int(n) for n in np.bincount(labels[sat > 0], minlength=count)]
+        label = max(range(1, count), key=lambda i: sizes[i])
+    return (labels == label) & (sat > 0)
 
 
-def _png(frame: Frame, path: Path) -> None:
-    PILImage.fromarray(frame.image).save(path, compress_level=1)
+def wanted(long: Image, sky: Mask | None, at: Point | None) -> bool:
+    """SPEC §4.13 "When": the moon's saturated patch is at least 0.05 % of the sky mask."""
+    patch = moon_patch(long, at)
+    if patch is None:
+        return False
+    area = int(sky.sum()) if sky is not None else long.shape[0] * long.shape[1]
+    return int(patch.sum()) >= MIN_PATCH * area
 
 
-def _exposure(frame: Frame) -> dict[str, object]:
-    return {
-        "exposure_us": frame.exposure_us,
-        "gain": frame.gain,
-        "sensor_temp_c": frame.sensor_temp_c,
-    }
+def brightest(image: Image) -> Point:
+    """The brightest pixel (the moon in a 1 ms frame), as (x, y)."""
+    _, _, _, (x, y) = cv2.minMaxLoc(np.ascontiguousarray(image.max(axis=2)))
+    return float(x), float(y)
+
+
+def fuse(long: Image, shorts: Sequence[Image], at: Point | None) -> Fused | None:
+    """The long frame with the moon's region fused from it and the short frames (longest
+    first). `at` is the moon's predicted pixel; without it the brightest point of the
+    shortest frame. None when the long frame has no saturated patch there."""
+    patch = moon_patch(long, at if at is not None else brightest(shorts[-1]))
+    if patch is None:
+        return None
+    h, w = patch.shape
+    disc = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (2 * GROW_PX + 1, 2 * GROW_PX + 1))
+    grown = cv2.dilate(patch.astype(np.uint8), disc)
+    ys, xs = np.nonzero(grown)
+    y0, y1 = max(int(ys.min()) - PAD_PX, 0), min(int(ys.max()) + PAD_PX + 1, h)
+    x0, x1 = max(int(xs.min()) - PAD_PX, 0), min(int(xs.max()) + PAD_PX + 1, w)
+    box = grown[y0:y1, x0:x1].astype(np.float32)
+    region = np.minimum(cv2.GaussianBlur(box, (0, 0), FEATHER_PX) * 1.5, 1.0)[..., None]
+    frames = [np.ascontiguousarray(f[y0:y1, x0:x1]) for f in (long, *shorts)]
+    mertens = cv2.createMergeMertens(*WEIGHTS)
+    merged: npt.NDArray[np.float32] = np.asarray(mertens.process(frames), dtype=np.float32)
+    fused = np.minimum(np.maximum(merged * 255.0, 0.0), 255.0)
+    near = long[y0:y1, x0:x1].astype(np.float32)
+    # SPEC §4.13: matched to the long frame at the region's edge by a power curve.
+    band = (region[..., 0] > 0.05) & (region[..., 0] < 0.6) & (near.max(axis=2) < 240)
+    if int(band.sum()) > 100:
+        f = min(max(float(np.median(fused[band])) / 255.0, 1e-3), 0.999)
+        lo = min(max(float(np.median(near[band])) / 255.0, 1e-3), 0.999)
+        fused = 255.0 * np.power(fused / 255.0, np.log(lo) / np.log(f))
+    out = long.copy()
+    blended = region * fused + (1.0 - region) * near + 0.5
+    out[y0:y1, x0:x1] = np.minimum(np.maximum(blended, 0.0), 255.0).astype(np.uint8)
+    return Fused(out, int(patch.sum()))

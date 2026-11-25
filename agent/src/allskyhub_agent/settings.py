@@ -26,6 +26,7 @@ DEFAULT_KEEP_PRODUCT_DAYS = 90  # SPEC §4.5: about 50 MB a night instead of 1�
 DAY_CAPTURE_CHOICES = ("save", "live", "off")
 # SPEC §4.12: the mean of the newest frames for the live image.
 LIVE_STACK_CHOICES = ("auto", "off")
+MOON_HDR_CHOICES = ("off", "on")  # SPEC §4.13
 # SPEC §4.11: white balance at night from the sky, or the fixed values.
 NIGHT_WB_CHOICES = ("auto", "fixed")
 # SPEC §4.10: the flat field.
@@ -48,6 +49,7 @@ LIGHT_SOURCE_CHOICES = ("label", "drop", "off")
 _CHOICES = {
     "day_capture": DAY_CAPTURE_CHOICES,
     "live_stack": LIVE_STACK_CHOICES,
+    "moon_hdr": MOON_HDR_CHOICES,
     "night_wb": NIGHT_WB_CHOICES,
     "flat_correction": FLAT_CHOICES,
     "image_flip": FLIP_CHOICES,
@@ -71,7 +73,6 @@ _PRODUCT_SWITCHES = (
     "alpaca_enabled",
     "bad_frames",
     "moon_mode",
-    "moon_hdr_test",
     "mqtt_tls",
     "https",
     "heater_active_low",
@@ -193,8 +194,7 @@ class AgentSettings:
     temperature_unit: str = "c"
     # Moon mode (SPEC §4.3, roadmap L20) and bad frames (SPEC §4.9, roadmap L19).
     moon_mode: bool = True
-    # Experimental: keep long and short frames under a bright moon (SPEC §4.13 draft).
-    moon_hdr_test: bool = False
+    moon_hdr: str = "off"  # SPEC §4.13
     bad_frames: bool = True
     bad_dark_pct: int = 2
     bad_bright_pct: int = 90

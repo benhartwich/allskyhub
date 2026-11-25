@@ -7,7 +7,6 @@ laptop and makes the capture loop testable.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from pathlib import Path
 from typing import Protocol
 
 import numpy as np
@@ -24,9 +23,6 @@ class CameraError(RuntimeError):
 class CaptureRequest:
     exposure_us: int
     gain: float
-    # Also keep the sensor's raw data here as DNG, where the camera can (the moon HDR
-    # test); other cameras ignore it.
-    raw: Path | None = None
 
 
 @dataclass(frozen=True)

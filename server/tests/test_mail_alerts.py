@@ -149,6 +149,7 @@ async def test_onboarding_mail_when_a_paired_camera_stays_silent(
         device.last_status = None
         paired = device.paired_at
         assert paired is not None
+        device.last_seen_at = paired + dt.timedelta(hours=2, minutes=30)  # online, waiting
         await db.commit()
     await notifier.check_onboarding(paired + dt.timedelta(hours=1))
     assert mailer.sent == []  # too early
@@ -228,3 +229,28 @@ async def test_checkin_mail_a_week_after_the_first_clear_night(
         await db.commit()
     await notifier.check_checkin(dt.datetime(2026, 11, 25, 12, tzinfo=dt.UTC))
     assert mailer.sent == []
+
+
+async def test_onboarding_mail_window_and_offline_text(
+    app: FastAPI, client: httpx.AsyncClient
+) -> None:
+    """Review of #526: pairings older than two weeks get no greeting; a camera not seen
+    since its pairing hears about power and Wi-Fi, not about its location."""
+    device_id, mailer, notifier = await _setup(app, client, notify_by_mail=False)
+    maker: async_sessionmaker[AsyncSession] = app.state.sessionmaker
+    async with maker() as db:
+        device = await db.get(Device, device_id)
+        assert device
+        device.last_status = None
+        paired = device.paired_at
+        assert paired is not None
+        device.last_seen_at = paired
+        await db.commit()
+    await notifier.check_onboarding(paired + dt.timedelta(days=20))
+    assert mailer.sent == []  # given up long ago
+    await notifier.check_onboarding(paired + dt.timedelta(hours=5))
+    assert len(mailer.sent) == 1
+    body = mailer.sent[0].body
+    assert "WLAN" in body
+    assert "Wi-Fi" in body
+    assert "Sie ist verbunden" not in body

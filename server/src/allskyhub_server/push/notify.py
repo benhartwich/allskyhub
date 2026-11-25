@@ -15,7 +15,7 @@ import logging
 import uuid
 from typing import Any, Protocol, cast
 
-from sqlalchemy import delete, select, update
+from sqlalchemy import delete, func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from allskyhub_server.devices import (
@@ -59,6 +59,8 @@ OFFLINE_CHECK = dt.timedelta(minutes=5)
 OFFLINE_MAIL_AFTER = dt.timedelta(hours=6)
 # Onboarding mails (check_onboarding, check_checkin; Benjamin, 2026-11-25).
 ONBOARD_AFTER = dt.timedelta(hours=2)
+ONBOARD_WINDOW = dt.timedelta(days=14)  # older pairings are given up, not greeted
+ONLINE_LATELY = dt.timedelta(hours=2)  # seen this recently: it waits rather than is gone
 CHECKIN_AFTER = dt.timedelta(days=8)  # the evening of the first clear night + a week
 CHECKIN_WINDOW = dt.timedelta(days=30)
 # Roadmap C2: at most one aurora alarm per camera in this time; the sky measurement must
@@ -861,6 +863,7 @@ class Notifier:
                         Device.kind == "camera",
                         Device.onboard_mailed_at.is_(None),
                         Device.paired_at < now - ONBOARD_AFTER,
+                        Device.paired_at > now - ONBOARD_WINDOW,
                         Device.latest_image_at.is_(None),
                         Device.latest_thumb_at.is_(None),
                     )
@@ -870,15 +873,33 @@ class Notifier:
                 waiting = cast(dict[str, Any], (device.last_status or {}).get("waiting") or {})
                 if device.last_status is not None and not waiting:
                     continue  # it reports and does not wait: frames are on their way
-                if not await self.mailer.send(self._onboarding(device, user, waiting)):
+                seen = device.last_seen_at
+                offline = seen is None or seen < now - ONLINE_LATELY
+                mail = self._onboarding(device, user, waiting, offline=offline and not waiting)
+                if not await self.mailer.send(mail):
                     continue
                 device.onboard_mailed_at = now
                 await db.commit()
 
-    def _onboarding(self, device: Device, user: User, waiting: dict[str, Any]) -> Mail:
+    def _onboarding(
+        self, device: Device, user: User, waiting: dict[str, Any], *, offline: bool = False
+    ) -> Mail:
         name = device.name or "Allsky-Kamera"
         error = str(waiting.get("message") or "")[:200]
-        if waiting.get("reason") == "camera":
+        if offline:
+            de_step = (
+                "Sie hat sich seit der Kopplung aber nicht mehr beim Hub gemeldet. Meist "
+                "fehlt Strom oder WLAN: Ist der Pi eingeschaltet und im Netz? Nach dem "
+                "Einschalten meldet er sich innerhalb einer Minute; danach in der "
+                "allskyhub-App die Einrichtung abschließen (Standort)."
+            )
+            en_step = (
+                "But it has not been in touch with the hub since the pairing. Usually power "
+                "or Wi-Fi is missing: is the Pi switched on and on the network? Once on, it "
+                "connects within a minute; then finish the setup in the allskyhub app "
+                "(location)."
+            )
+        elif waiting.get("reason") == "camera":
             de_step = (
                 f"Die Kamera meldet einen Fehler beim Aufnehmen:\n  {error}\n\nMeist hilft es, "
                 "das Kamerakabel am Pi zu prüfen und den Pi neu zu starten. Hilft das nicht, "
@@ -906,12 +927,14 @@ class Notifier:
             )
         de = (
             f"Hallo,\n\ndanke, dass du deine Kamera „{name}“ bei allskyhub gekoppelt hast! "
-            f"Sie ist verbunden, nimmt aber noch keine Bilder auf. {de_step}\n\n"
+            f"{'' if offline else 'Sie ist verbunden, nimmt aber noch keine Bilder auf. '}"
+            f"{de_step}\n\n"
             "Fragen? Antworte einfach auf diese Mail.\n\nallskyhub\n"
         )
         en = (
-            f'Hello,\n\nthank you for pairing your camera "{name}" with allskyhub! It is '
-            f"connected but not taking pictures yet. {en_step}\n\n"
+            f'Hello,\n\nthank you for pairing your camera "{name}" with allskyhub! '
+            f"{'' if offline else 'It is connected but not taking pictures yet. '}"
+            f"{en_step}\n\n"
             "Questions? Just reply to this mail.\n\nallskyhub\n"
         )
         return Mail(
@@ -934,27 +957,29 @@ class Notifier:
             return
         now = now or _now()
         async with self._maker() as db:
+            first = (
+                select(NightStat.device_id, func.min(NightStat.night_id).label("night"))
+                .where(NightStat.clear_hours >= CLEAR_NIGHT_HOURS)
+                .group_by(NightStat.device_id)
+                .subquery()
+            )
             rows = (
                 await db.execute(
                     select(Device, User)
                     .join(User, User.id == Device.owner_id)
-                    .where(Device.kind == "camera", Device.checkin_mailed_at.is_(None))
+                    .join(first, first.c.device_id == Device.id)
+                    .where(
+                        Device.kind == "camera",
+                        Device.checkin_mailed_at.is_(None),
+                        first.c.night > (now - CHECKIN_WINDOW).strftime("%Y%m%d"),
+                        first.c.night <= (now - CHECKIN_AFTER).strftime("%Y%m%d"),
+                    )
                 )
             ).all()
             for device, user in rows:
                 nights = list(
-                    await db.scalars(
-                        select(NightStat)
-                        .where(NightStat.device_id == device.id)
-                        .order_by(NightStat.night_id)
-                    )
+                    await db.scalars(select(NightStat).where(NightStat.device_id == device.id))
                 )
-                first = next((n for n in nights if (n.clear_hours or 0) >= CLEAR_NIGHT_HOURS), None)
-                if first is None:
-                    continue
-                evening = dt.datetime.strptime(first.night_id, "%Y%m%d").replace(tzinfo=dt.UTC)
-                if not evening + CHECKIN_AFTER <= now < evening + CHECKIN_WINDOW:
-                    continue
                 if not await self.mailer.send(self._checkin(device, user, nights)):
                     continue
                 device.checkin_mailed_at = now

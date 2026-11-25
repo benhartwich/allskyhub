@@ -2,7 +2,7 @@
   <summary><h2>Plus</h2></summary>
   {% if plus_message %}<p class="msg">{{ plus_message }}</p>{% endif %}
   {% if plus.kind == 'gift' %}
-  <p class="plus-state">Plus ist für diese Kamera freigeschaltet, dauerhaft.</p>
+  <p class="plus-state">Plus ist für diese Kamera freigeschaltet, {% if plus.until %}geschenkt bis {{ plus.until | localtime }}{% else %}dauerhaft{% endif %}.</p>
   {% elif plus.kind == 'paid' %}
   <p class="plus-state">Plus aktiv{% if plus.until %}, {{ 'verlängert sich am' if plus.renews else 'endet am' }} {{ plus.until | localtime }}{% endif %}.</p>
   {% if plus.past_due %}<p class="warn">Die letzte Zahlung ist nicht durchgegangen. Bitte unter „Abo verwalten“ die Zahlungsart prüfen.</p>{% endif %}

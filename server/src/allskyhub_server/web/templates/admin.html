@@ -287,7 +287,7 @@
     <tr>
       <td>{{ device.name or device.id }}<br><code class="small">{{ device.id }}</code></td>
       <td>{{ email }}</td>
-      <td>{% if device.plus_gift %}geschenkt{% elif device.plus_until %}bis {{ device.plus_until | localtime }}{% endif %}</td>
+      <td>{% if device.plus_gift %}geschenkt{% if device.plus_gift_until %} bis {{ device.plus_gift_until | localtime }}{% endif %}{% elif device.plus_until %}bis {{ device.plus_until | localtime }}{% endif %}</td>
       <td>{% if device.plus_gift %}
         <form method="post" action="/admin/plus" class="inline">
           <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
@@ -305,7 +305,8 @@
     <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
     <input type="hidden" name="gift" value="true">
     <label>Kamera-ID<input name="device_id" required maxlength="26" autocomplete="off"></label>
-    <p class="muted small">Plus als Geschenk endet nie: 90 Tage Vollbilder und Zeitraffer, ein Jahr Vorschaubilder und Nachtprodukte. Die ID steht in der Adresse der Kameraseite.</p>
+    <label>Laufzeit<select name="days"><option value="365">1 Jahr</option><option value="0">unbefristet</option></select></label>
+    <p class="muted small">Plus als Geschenk, ein Jahr oder ohne Ende: 90 Tage Vollbilder und Zeitraffer, ein Jahr Vorschaubilder und Nachtprodukte. Die ID steht in der Adresse der Kameraseite.</p>
     <button type="submit" class="secondary">Plus schenken</button>
   </form>
 </section>

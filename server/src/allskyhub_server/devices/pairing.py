@@ -285,6 +285,7 @@ async def unpair(db: AsyncSession, device: Device) -> None:
     # (billing/paddle.py) once it has no camera.
     device.plus_until = None
     device.plus_gift = False
+    device.plus_gift_until = None
     device.plus_trial_until = None
     await db.execute(
         update(Subscription).where(Subscription.device_id == device.id).values(device_id=None)

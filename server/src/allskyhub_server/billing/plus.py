@@ -83,8 +83,8 @@ async def refresh(db: AsyncSession, device: Device) -> None:
 
 
 async def state(db: AsyncSession, device: Device, now: dt.datetime) -> PlusState:
-    if device.plus_gift:
-        return PlusState("gift")
+    if device.plus_gift and (device.plus_gift_until is None or device.plus_gift_until > now):
+        return PlusState("gift", until=device.plus_gift_until)
     sub = await running_subscription(db, device.id)
     if sub is not None:
         return PlusState(

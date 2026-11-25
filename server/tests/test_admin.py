@@ -185,6 +185,21 @@ async def test_admin_gifts_plus(
     assert "Geschenk" in r.text
     assert "Noch keine Kamera mit Plus" in r.text
 
+    # 2026-11-25: a year for feedback, then it ends by itself.
+    r = await client.post(follow_redirects=True, url="/admin/plus", data={**gift, "days": "365"})
+    assert "geschenkt bis" in r.text
+    from allskyhub_server.billing import plus
+
+    async with maker() as db:
+        device = await db.get(Device, dev.device_id)
+        assert device is not None
+        assert device.plus_gift_until is not None
+        now = dt.datetime.now(dt.UTC)
+        assert dt.timedelta(days=364) < device.plus_gift_until - now < dt.timedelta(days=366)
+        assert (await plus.state(db, device, now)).kind == "gift"
+        later = now + dt.timedelta(days=400)
+        assert (await plus.state(db, device, later)).kind == "none"
+
 
 async def test_admin_sees_all_cameras_without_pictures(
     app: FastAPI, client: httpx.AsyncClient, settings: Settings, monkeypatch: pytest.MonkeyPatch

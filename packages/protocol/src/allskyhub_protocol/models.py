@@ -390,6 +390,15 @@ class CheckItem(BaseModel):
     detail: str = Field(max_length=300)  # German, what to do about it
 
 
+class Waiting(BaseModel):
+    """Why the camera takes no frames yet (SPEC §6.3 `waiting`)."""
+
+    model_config = ConfigDict(extra="ignore", frozen=True)
+    reason: Literal["location", "camera"]
+    since: AwareDatetime
+    message: str | None = Field(default=None, max_length=200)
+
+
 class Status(_Body):
     """Periodic device status (SPEC §6.3)."""
 
@@ -427,6 +436,8 @@ class Status(_Body):
     lightning_sensor: LightningSensorStatus | None = None
     # SPEC §6.3: the camera check (§7) without the hub's own light; null on older agents.
     checks: list[CheckItem] | None = Field(default=None, max_length=30)
+    # SPEC §6.3: why no frames come yet (no place from setup, or the camera fails).
+    waiting: Waiting | None = None
 
 
 class HdrInfo(BaseModel):

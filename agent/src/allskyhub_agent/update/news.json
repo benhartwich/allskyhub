@@ -1,5 +1,16 @@
 [
   {
+    "version": "0.1.14",
+    "de": [
+      "Mond-HDR (experimentell, Einstellungen → Aufnahme): Brennt der Mond nachts aus, rechnet die Kamera ihn und seinen Hof aus vier kurzen Belichtungen ins gespeicherte Bild. Der frühere Mond-HDR-Test entfällt.",
+      "Wartet die Kamera auf den Standort aus der Einrichtung oder lässt sich die Kamera nicht öffnen, sagen App und allskyhub.org das jetzt, statt dass sie einfach still bleibt."
+    ],
+    "en": [
+      "Moon HDR (experimental, settings → Capture): when the moon burns out at night, the camera blends it and its halo from four short exposures into the stored picture. The earlier moon HDR test is gone.",
+      "When the camera waits for its location from the setup or cannot open the camera, the app and allskyhub.org now say so instead of it just staying silent."
+    ]
+  },
+  {
     "version": "0.1.13",
     "de": [
       "Mond-HDR-Test: Die kurzen Belichtungen reichen jetzt von 1 bis 500 ms, damit auch der helle Hof um den Mond erfasst wird.",

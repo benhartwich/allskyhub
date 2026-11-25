@@ -190,12 +190,12 @@ def check(device: Device, online: bool, now: dt.datetime) -> list[Problem]:
                     "waiting_camera",
                     "error",
                     tr(
-                        f"Die Kamera lässt sich nicht öffnen: {message or 'unbekannter Fehler'}"
-                        ". Prüfe das Kamerakabel am Pi; der Pi versucht es weiter und startet "
-                        "den Dienst nach einigen Versuchen neu.",
-                        f"The camera cannot be opened: {message or 'unknown error'}. Check "
-                        "the camera cable at the Pi; it keeps trying and restarts the service "
-                        "after a few attempts.",
+                        f"Die Kamera meldet einen Fehler: {message or 'unbekannt'}. Prüfe das "
+                        "Kabel der Kamera (USB bzw. Flachbandkabel am Pi) und starte den Pi "
+                        "neu, wenn es bleibt.",
+                        f"The camera reports an error: {message or 'unknown'}. Check the "
+                        "camera's cable (USB or the ribbon cable at the Pi) and restart the Pi "
+                        "if it stays.",
                     ),
                 )
             )

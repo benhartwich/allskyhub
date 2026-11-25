@@ -122,6 +122,8 @@ out of moon mode only moves the target; the damping above makes the change gradu
 Every frame carries: capture time (UTC), mode, exposure (µs), gain, measured mean,
 sun elevation, sensor temperature if available, the profile id, and `bad` (§4.9; null
 for a good frame, missing from older agents).
+Frames fused with short exposures (§4.13) also carry `hdr`
+`{short_exposures_us: [..], short_gain, region_px}`; missing for every other frame.
 
 Timestamps come from the system clock, synchronized by NTP. A Pi has no real-time clock,
 so after a boot without network the clock can be wrong: the agent reports
@@ -292,6 +294,45 @@ only feeds the local live image (§7); the hub's latest image is the stored fram
 stored frames, detections, products and the sky values stay single frames.
 `live_stack` (§6.9): `auto` (default) or `off`. Timelapses are built from the stored
 single frames as before.
+
+### 4.13 Moon HDR (experimental, Benjamin 2026-11-25)
+
+Near full moon the long night exposure burns out the moon and a wide halo around it,
+while the stars need that exposure. With `moon_hdr` (§6.9, `off` default, `on`) the agent
+takes a few short exposures right after each night frame and fuses them into the stored
+picture around the moon. Measured on 2026-11-24 with a ZWO ASI678MC (8-bit frames, full
+moon at 9° to 68°, agent 0.1.13 test sets):
+
+- **When.** Night mode, the moon above the horizon and at least half lit (as moon mode,
+  §4.3), and the previous long frame has a saturated patch (any channel at least 245 of
+  255) of at least 0.05 % of the sky mask that contains the moon's predicted position
+  (orientation §4.8; without one, the largest saturated patch). Otherwise no short
+  exposure is taken.
+- **Short exposures.** Gain at the profile's lowest, a fixed ladder of 1, 10, 100 and
+  500 ms. 1 ms holds the moon's disc (brightest value about 190–230 of 255); 500 ms holds
+  the halo the long frame saturates; the steps between keep every part of it in one
+  frame's usable range (8-bit spans about a factor of 30). They are not computed by the
+  auto exposure (§4.3): fixed values, the long frame is untouched. Cost: about 0.6 s of
+  exposure plus four readouts per frame.
+- **Fusion.** Exposure fusion (Mertens: per-pixel weights from contrast and good exposure,
+  saturation weight 0, exposure weight 3, blended in a Laplacian pyramid) of the long
+  frame and the four short ones, on the frames as stored (after hot pixels and flat), no
+  radiance and no tone curve. Only the moon's region takes part: the saturated patch,
+  grown by 40 px and feathered (Gaussian, σ 25 px); outside it the stored frame is the
+  long frame exactly. Inside, the fused values are matched to the long frame at the
+  region's edge by a power curve (`255 · (v/255)^γ`, γ from the medians of the band where
+  the long frame is not saturated), so no ring shows.
+- **What uses which.** The stored frame, thumbnail, live image, the hub's latest image and
+  the timelapse show the fused picture. The auto exposure, bad frames (§4.9), sky values
+  (§6.3), star sizes, clouds, sky brightness and every detection run on the long frame,
+  so measurements do not change with the setting. The short frames are not stored;
+  `hdr` in the frame metadata (§4.4) says what was fused.
+- **What it gives.** Through an all-sky lens the full moon is only 10–15 px wide: the
+  result is a bright core with its spikes and a darker, smooth halo instead of a white
+  blot, not a moon with craters. Glare inside the lens and the dome (ghosts, reflections,
+  the veil around the moon) is not saturation and stays. Tried and dropped: merging on
+  linear values with a highlight roll-off (the halo became a flat grey disc, the disc a
+  point) and logarithmic tone curves (visible steps in the halo).
 
 ## 5. Products (M4)
 

@@ -281,6 +281,8 @@ class Device(Base):
     # (``plus_gift``, set by an admin) never ends. Paid and trial periods come from Paddle.
     plus_until: Mapped[dt.datetime | None] = mapped_column(_tz())
     plus_gift: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
+    # A gift for a term ends here (2026-11-25: a year for feedback); null: it never ends.
+    plus_gift_until: Mapped[dt.datetime | None] = mapped_column(_tz())
     # The free trial month (billing/plus.py), once per account; ``plus_until`` covers it too.
     plus_trial_until: Mapped[dt.datetime | None] = mapped_column(_tz())
     # Roadmap H5: Discord webhook and what goes there (devices/discord.py), and the night

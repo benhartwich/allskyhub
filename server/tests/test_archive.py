@@ -278,3 +278,29 @@ async def test_a_gift_never_ends(
             db, store, settings, now=dt.datetime.now(dt.UTC) + dt.timedelta(days=300)
         )
     assert thumb.exists()
+
+
+async def test_a_gift_for_a_term_ends(
+    app: FastAPI, settings: Settings, client: httpx.AsyncClient, live_app: str
+) -> None:
+    """2026-11-25: Plus for a year; afterwards (and its grace) the short archive again."""
+    dev = FakeDevice()
+    token = await paired_token(client, dev)
+    async with device_ws(live_app, token) as ws:
+        await send(ws, frame_info("old.jpg"))
+        await _upload_requested(live_app, token, ws, 2)
+    store: ImageStore = app.state.images
+    maker: async_sessionmaker[AsyncSession] = app.state.sessionmaker
+    thumb = store.frame_path(dev.device_id, "20261006", "old.jpg", FrameVariant.THUMB)
+    now = dt.datetime.now(dt.UTC)
+    async with maker() as db:
+        await db.execute(
+            update(Device)
+            .where(Device.id == dev.device_id)
+            .values(plus_gift=True, plus_gift_until=now + dt.timedelta(days=365))
+        )
+        await maintenance.purge(db, store, settings, now=now + dt.timedelta(days=300))
+    assert thumb.exists()  # within the year
+    async with maker() as db:
+        await maintenance.purge(db, store, settings, now=now + dt.timedelta(days=500))
+    assert not thumb.exists()  # the year and its grace are over

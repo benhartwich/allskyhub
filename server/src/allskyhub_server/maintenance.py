@@ -65,7 +65,13 @@ def _expired(
 ) -> ColumnElement[bool]:
     """Older than ``days``, or than ``plus_days`` for a camera with Plus (or in its grace)."""
     plus = select(Device.id).where(
-        or_(Device.plus_gift.is_(True), Device.plus_until > now - PLUS_GRACE)
+        or_(
+            and_(
+                Device.plus_gift.is_(True),
+                or_(Device.plus_gift_until.is_(None), Device.plus_gift_until > now - PLUS_GRACE),
+            ),
+            Device.plus_until > now - PLUS_GRACE,
+        )
     )
     return or_(
         and_(device_id.not_in(plus), created < now - dt.timedelta(days=days)),

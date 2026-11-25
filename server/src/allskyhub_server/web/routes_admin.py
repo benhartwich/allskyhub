@@ -168,6 +168,7 @@ async def page(
                 select(func.count()).select_from(Device).where(Device.owner_id.is_not(None))
             ),
             "camera_rows": await all_cameras(db, request.app.state.connections),
+            "now": dt.datetime.now(dt.UTC),
             "update_states": UPDATE_STATES,
             "repo": settings.deploy_repo,
             "access_requests": await access_requests.open_requests(db),
@@ -298,16 +299,24 @@ async def gift_plus(
     settings: SettingsDep,
     device_id: Annotated[str, Form(max_length=26)],
     gift: Annotated[bool, Form()] = False,
+    days: Annotated[int, Form(ge=0, le=3650)] = 0,
 ) -> Response:
-    """Roadmap N7: Plus as a gift (it never ends), or taking the gift back."""
+    """Roadmap N7: Plus as a gift, for ``days`` or (0) without end, or taking it back."""
     admin_only(session, settings)
     device = await db.get(Device, device_id.strip().lower())
     if device is None or device.owner_id is None:
         return await page(request, db, session, 400, error="Keine gekoppelte Kamera mit dieser ID.")
     device.plus_gift = gift
+    until = dt.datetime.now(dt.UTC) + dt.timedelta(days=days) if gift and days else None
+    device.plus_gift_until = until
     await db.commit()
     name = device.name or device.id
-    notice = f"Plus für „{name}“ geschenkt." if gift else f"Plus-Geschenk für „{name}“ beendet."
+    if not gift:
+        notice = f"Plus-Geschenk für „{name}“ beendet."
+    elif until is not None:
+        notice = f"Plus für „{name}“ geschenkt bis {until:%d.%m.%Y}."
+    else:
+        notice = f"Plus für „{name}“ geschenkt."
     return await page(request, db, session, notice=notice)
 
 

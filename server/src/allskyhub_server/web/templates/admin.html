@@ -93,7 +93,7 @@
       <td>{% if c.device.kind == 'station' %}Station · {{ c.device.software or '–' }}{% else %}Kamera · {{ c.device.profile }}{% endif %}</td>
       <td>{{ c.device.agent_version }}{% if c.update %}<br><span class="small {{ 'warn' if c.update in ('failed', 'rolled_back') }}">{{ update_states.get(c.update, c.update) }}</span>{% endif %}</td>
       <td>{% if c.online %}online{% elif c.device.last_seen_at %}<span class="warn">{{ c.device.last_seen_at | localtime }}</span>{% else %}<span class="muted">nie</span>{% endif %}</td>
-      <td>{% if c.silent %}<span class="warn">noch nichts gesendet</span>{% elif c.picture_at %}{{ c.picture_at | age }}{% else %}<span class="muted">–</span>{% endif %}</td>
+      <td>{% if c.waiting %}<span class="warn">{{ c.waiting }}</span>{% elif c.silent %}<span class="warn">noch nichts gesendet</span>{% elif c.picture_at %}{{ c.picture_at | age }}{% else %}<span class="muted">–</span>{% endif %}</td>
       <td>{% if c.stars is not none %}{{ c.stars }} <span class="muted small">{{ c.stars_at | age }}</span>{% else %}<span class="muted">–</span>{% endif %}</td>
     </tr>
     {% endfor %}

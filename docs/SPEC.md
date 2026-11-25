@@ -621,6 +621,16 @@ base64url-encoded without padding.
   server could not start, §7.5).
   `capture_paused` (optional, default false): the owner paused capture (§4.1).
   `reboot_required` (optional, default false): system updates wait for a reboot (§8).
+  `waiting` (optional, null or missing while the camera captures): why it takes no frames
+  yet, `{reason, since, message}`: `reason` `location` (setup has not given its place and
+  time zone yet, §4.2) or `camera` (the camera fails to open or to capture), `since` when
+  that began, `message` the camera's error text for `camera` (at most 200 characters),
+  else null. While waiting the device still sends `status` at its usual interval, with
+  what it knows (`settings`, `time_trusted`, disk, uptime) and the rest null, so the hub
+  can tell a camera that waits from one that is gone (Benjamin, 2026-11-25: a newly
+  paired camera without a place stayed silent for hours). The hub shows the owner what to
+  do (`location`: finish the setup in the app; `camera`: the error) and the admin's
+  camera list the reason.
   `adsb` (optional, null unless `adsb_url` is set): the owner's ADS-B receiver (§7.8).
   `update` (null until the updater ran, §8): `{state, version, at, code}` with `state`
   one of `up_to_date`, `downloading`, `waiting` (downloaded, waits for the day),

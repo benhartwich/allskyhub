@@ -59,9 +59,9 @@ def moon_patch(long: Image, at: Point | None) -> npt.NDArray[np.bool_] | None:
         if label == 0:
             return None
     else:
-        sizes = np.bincount(labels[sat > 0], minlength=count)
-        sizes[0] = 0
-        label = int(np.argmax(sizes))
+        # No np.argmax: its numpy 2.5 stubs are partially unknown to pyright.
+        sizes = [int(n) for n in np.bincount(labels[sat > 0], minlength=count)]
+        label = max(range(1, count), key=lambda i: sizes[i])
     return (labels == label) & (sat > 0)
 
 
@@ -76,8 +76,7 @@ def wanted(long: Image, sky: Mask | None, at: Point | None) -> bool:
 
 def brightest(image: Image) -> Point:
     """The brightest pixel (the moon in a 1 ms frame), as (x, y)."""
-    peak = image.max(axis=2)
-    y, x = np.unravel_index(int(np.argmax(peak)), peak.shape)
+    _, _, _, (x, y) = cv2.minMaxLoc(np.ascontiguousarray(image.max(axis=2)))
     return float(x), float(y)
 
 

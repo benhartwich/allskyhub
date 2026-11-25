@@ -108,6 +108,7 @@ from allskyhub_agent.update.reboot import STATE_NAME as SECURITY_REBOOT_NAME
 from allskyhub_agent.update.reboot import SecurityReboot
 from allskyhub_agent.update.status import STATE_FILE, update_status
 from allskyhub_agent.update.system import SystemSync
+from allskyhub_agent.waiting import WaitState
 from allskyhub_agent.watchdog import (
     Heartbeat,
     WatchState,
@@ -145,6 +146,8 @@ from allskyhub_sky.astro import moon_altitude, moon_illumination, moon_radec
 from allskyhub_solve.solve import alt_az, sidereal_deg
 
 log = logging.getLogger(__name__)
+# A camera that does not open is tried this often, 30 s apart, before systemd restarts us.
+OPEN_TRIES = 10
 
 # Written by the agent, read by the root updater (roadmap L14).
 UPDATE_REQUEST = Path("/var/lib/allskyhub-agent/update-request")
@@ -817,6 +820,10 @@ def main(argv: list[str] | None = None) -> int:
     # Plate-solved image orientation (SPEC §4.8), created with the detection worker.
     orienter: Orienter | None = None
     identity: DeviceIdentity | None = None
+    # SPEC §6.3: what the camera waits for, told in `status` before the first frame. The
+    # place is declared here, as `status` may run before it is known.
+    wait = WaitState()
+    loc: Location | None = None
     profile_id = {"auto": "zwo-asi678mc"}.get(profile_hint, profile_hint)
     if hub_url:
         identity = DeviceIdentity.load_or_create(args.key)
@@ -827,10 +834,11 @@ def main(argv: list[str] | None = None) -> int:
 
         def status() -> Status | None:
             f = live.last_frame()
-            if f is None and not live.paused:
+            waiting = wait.current
+            if f is None and not live.paused and waiting is None:
                 return None
-            # Paused since before a restart (SPEC §4.1): no frame yet, the hub must still
-            # learn about the pause.
+            # Paused since before a restart (SPEC §4.1), or waiting for the place or the
+            # camera (SPEC §6.3): no frame yet, the hub must still learn about it.
             mode = f.mode if f is not None else (
                 Mode.NIGHT if loc is not None and sun_elevation(datetime.now(UTC), loc.lat,
                                                                 loc.lon) < -6 else Mode.DAY
@@ -859,6 +867,7 @@ def main(argv: list[str] | None = None) -> int:
                 heater=weather_box[0].heater_status if weather_box[0] is not None else None,
                 lightning_sensor=lightning_box[0].status if lightning_box[0] is not None else None,
                 checks=status_checks(),
+                waiting=waiting,
             )
 
         def status_checks() -> list[CheckItem] | None:
@@ -1105,7 +1114,6 @@ def main(argv: list[str] | None = None) -> int:
 
     # Location and time zone: the command line wins; in product mode they come from setup
     # (SPEC §7.1, §7.3) and capture waits until they are known (SPEC §4.2).
-    loc: Location | None = None
     if args.lat is not None and args.lon is not None:
         loc = Location(args.lat, args.lon)
     try:
@@ -1122,10 +1130,12 @@ def main(argv: list[str] | None = None) -> int:
                 shutdown()
                 return 2
             log.info("waiting for the camera's location from setup")
+            wait.waiting_for_location(True)  # SPEC §6.3: told to the hub meanwhile
             time.sleep(5)
     except KeyboardInterrupt:
         shutdown()
         return 0
+    wait.waiting_for_location(False)
 
     clock: Clock
     camera: Camera | None = None
@@ -1153,25 +1163,40 @@ def main(argv: list[str] | None = None) -> int:
             shutdown()
             return 2
         clock = SystemClock()
+        open_failures = 0
         try:
             while camera is None:
                 cur = load_settings()
                 zwo = ZwoSettings(wb_r=cur.wb_r, wb_b=cur.wb_b)
-                camera, profile = open_camera(profile_hint, args.asi_sdk, zwo)
+                try:
+                    camera, profile = open_camera(profile_hint, args.asi_sdk, zwo)
+                except (OSError, AsiError, CameraError) as exc:
+                    if settings_path is None:  # on a laptop: say so and end
+                        print(f"cannot open camera: {exc}", file=sys.stderr)
+                        shutdown()
+                        return 1
+                    # SPEC §6.3: on a device keep trying, and tell the hub from the third;
+                    # after 5 min a restart by systemd, which also reloads the camera driver.
+                    wait.camera_failed(f"cannot open camera: {exc}")
+                    open_failures += 1
+                    if open_failures >= OPEN_TRIES:
+                        print(f"cannot open camera: {exc}", file=sys.stderr)
+                        shutdown()
+                        return 1
+                    log.warning("cannot open camera: %s; trying again in 30 s", exc)
+                    time.sleep(30)
+                    continue
                 if camera is None:
-                    if profile_hint != "auto":
+                    if profile_hint != "auto" and settings_path is None:
                         print(f"camera {profile_hint!r} not found", file=sys.stderr)
                         shutdown()
                         return 1
                     log.warning("no camera found; looking again in 30 s")
+                    wait.camera_failed("no camera found")
                     time.sleep(30)
         except KeyboardInterrupt:
             shutdown()
             return 0
-        except (OSError, AsiError, CameraError) as exc:
-            print(f"cannot open camera: {exc}", file=sys.stderr)
-            shutdown()
-            return 1
 
     schema_box[0] = build_schema(profile)
     profile = with_night_limits(profile, load_settings())
@@ -1484,6 +1509,7 @@ def main(argv: list[str] | None = None) -> int:
         flat_min_gain=profile.exposure.day.min_gain,
         moon_hdr=tuned.moon_hdr == "on",
         moon_pixel=moon_pixel,
+        waiting=wait,
         rotate=int(tuned.image_rotate),
         live_stack=LiveStack(LIVE_WIDTH) if tuned.live_stack == "auto" else None,
         white_balance=NightWhiteBalance(Path(args.data) / "calibration" / "whitebalance.json")

@@ -31,6 +31,7 @@ from allskyhub_agent.process.whitebalance import (
     inner_sky,
 )
 from allskyhub_agent.store.images import ImageStore, night_id
+from allskyhub_agent.waiting import WaitState
 from allskyhub_protocol import FrameInfo, HdrInfo, Mode
 from allskyhub_sky.astro import bright_moon_up
 
@@ -89,6 +90,7 @@ class Runner:
         flat_min_gain: float = 0.0,
         moon_hdr: bool = False,
         moon_pixel: Callable[[datetime, int, int], moonhdr.Point | None] | None = None,
+        waiting: WaitState | None = None,
     ) -> None:
         self._cam = camera
         self._ae = auto_exposure
@@ -127,6 +129,7 @@ class Runner:
         self._hdr = moon_hdr
         self._moon_pixel = moon_pixel or _unknown_moon
         self._hdr_next = False
+        self._waiting = waiting  # SPEC §6.3: failures in a row, for `status.waiting`
 
     @property
     def mode(self) -> Mode | None:
@@ -313,6 +316,8 @@ class Runner:
             try:
                 info = self.step()
             except (CameraError, OSError) as exc:
+                if self._waiting is not None:
+                    self._waiting.camera_failed(exc)
                 failures += 1
                 wait = min(300.0, 5.0 * 2 ** (failures - 1))
                 log.warning(
@@ -321,6 +326,8 @@ class Runner:
                 self._clock.sleep(wait)
                 continue
             failures = 0
+            if self._waiting is not None:
+                self._waiting.camera_ok()
             n += 1
             if on_frame is not None:
                 on_frame(info)

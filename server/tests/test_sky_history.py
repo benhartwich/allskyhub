@@ -98,7 +98,6 @@ async def test_page_and_frame_json(app: FastAPI, client: httpx.AsyncClient) -> N
     english_names = {n["text"] for n in english["names"]}
     assert len(english_names) == len(german_names)
     assert not {"Großer Bär", "Fuhrmann", "Schwan", "Kassiopeia"} & english_names
-    await client.get(f"/cameras/{device_id}/himmel/{NIGHT}/f0.jpg.json?lang=de")  # back
     # The first frame was taken while north was at 90° in the image: N on the right.
     n_first = next(c for c in first["cardinals"] if c["text"] == "N")
     n_second = next(c for c in second["cardinals"] if c["text"] == "N")

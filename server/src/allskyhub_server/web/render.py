@@ -65,6 +65,11 @@ def render(
     response = templates.TemplateResponse(request, template, data, status_code=status_code)
     if (chosen := lang.asked(request)) is not None:
         lang.remember(request, response, chosen)
+    # A page differs by language (cookie) and by who is signed in: browsers and proxies
+    # must ask again rather than show a stored copy in the other language (2026-11-27,
+    # a visitor saw English and German mixed after switching on a phone).
+    response.headers.setdefault("Cache-Control", "private, no-cache")
+    response.headers["Vary"] = "Cookie"
     if anon_token and request.cookies.get(csrf.ANON_COOKIE) != anon_token:
         response.set_cookie(
             csrf.ANON_COOKIE,

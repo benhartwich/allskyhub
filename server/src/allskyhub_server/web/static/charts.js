@@ -5,9 +5,12 @@
 (() => {
   const root = document.querySelector("[data-charts]");
   if (!root) return;
+  // The page's language (<html lang>, like copy.js): the public pages also speak English.
+  const EN = document.documentElement.lang === "en";
+  const tr = (de, en) => (EN ? en : de);
   if (!window.uPlot) {
     const note = root.querySelector("[data-chart-meta]");
-    if (note) note.textContent = "Die Diagramme konnten in diesem Browser nicht geladen werden.";
+    if (note) note.textContent = tr("Die Diagramme konnten in diesem Browser nicht geladen werden.", "The charts could not be loaded in this browser.");
     return;
   }
   const uPlot = window.uPlot;
@@ -18,59 +21,60 @@
   const meta = root.querySelector("[data-chart-meta]");
   const resetButton = root.querySelector("[data-reset-zoom]");
   const nightPick = root.querySelector("[data-night-pick]");
-  const DE = "de-DE";
-  const WEEKDAYS = ["So", "Mo", "Di", "Mi", "Do", "Fr", "Sa"];
+  const DE = EN ? "en-GB" : "de-DE";
+  const SUN_LABEL = tr("Sonnenhöhe (°)", "Sun altitude (°)");
+  const MOON_LABEL = tr("Mondhöhe (°)", "Moon altitude (°)");
 
   // What to draw. `source` is the table in the answer; scales with `log` are logarithmic.
   const PANELS = [
     {
-      id: "sqm", title: "Himmelshelligkeit", source: "sky", height: 260, ephemeris: true,
-      series: [{ key: "sqm", label: "Himmelshelligkeit", unit: "mag/⁠″²", color: "--chart-sqm", scale: "sqm", digits: 2 }],
-      axes: [{ scale: "sqm", label: "mag/⁠″² (↑ dunkler)" }],
+      id: "sqm", title: tr("Himmelshelligkeit", "Sky brightness"), source: "sky", height: 260, ephemeris: true,
+      series: [{ key: "sqm", label: tr("Himmelshelligkeit", "Sky brightness"), unit: "mag/⁠″²", color: "--chart-sqm", scale: "sqm", digits: 2 }],
+      axes: [{ scale: "sqm", label: tr("mag/⁠″² (↑ dunkler)", "mag/⁠″² (↑ darker)") }],
     },
     {
-      id: "clouds", title: "Bewölkung und Sterne", source: "sky", height: 200,
+      id: "clouds", title: tr("Bewölkung und Sterne", "Cloud cover and stars"), source: "sky", height: 200,
       series: [
-        { key: "cloud", label: "Bewölkung", unit: "%", color: "--chart-clouds", scale: "pct", digits: 0, fill: true },
-        { key: "stars", label: "Sterne", unit: "", color: "--chart-stars", scale: "n", digits: 0 },
+        { key: "cloud", label: tr("Bewölkung", "Cloud cover"), unit: "%", color: "--chart-clouds", scale: "pct", digits: 0, fill: true },
+        { key: "stars", label: tr("Sterne", "Stars"), unit: "", color: "--chart-stars", scale: "n", digits: 0 },
       ],
-      axes: [{ scale: "pct", label: "Bewölkung %" }, { scale: "n", label: "Sterne", side: 1 }],
+      axes: [{ scale: "pct", label: tr("Bewölkung %", "Cloud cover %") }, { scale: "n", label: tr("Sterne", "Stars"), side: 1 }],
     },
     {
       // Draft E: the star size, only in the camera's own data (devices/series.py) and left
       // out where there is none. Upside down, so sharper is up like a darker sky; the
       // dashed line is the camera's usual value (`hfr_usual`).
-      id: "hfr", title: "Sternschärfe", source: "sky", height: 200, optional: true, usual: "hfr_usual",
-      series: [{ key: "hfr", label: "Sternschärfe", unit: "px", color: "--chart-hfr", scale: "hfr", digits: 1 }],
-      axes: [{ scale: "hfr", label: "px (↑ schärfer)" }],
+      id: "hfr", title: tr("Sternschärfe", "Star sharpness"), source: "sky", height: 200, optional: true, usual: "hfr_usual",
+      series: [{ key: "hfr", label: tr("Sternschärfe", "Star sharpness"), unit: "px", color: "--chart-hfr", scale: "hfr", digits: 1 }],
+      axes: [{ scale: "hfr", label: tr("px (↑ schärfer)", "px (↑ sharper)") }],
     },
     {
-      id: "exposure", title: "Belichtung und Gain", source: "status", height: 200, status: true,
+      id: "exposure", title: tr("Belichtung und Gain", "Exposure and gain"), source: "status", height: 200, status: true,
       series: [
-        { key: "exposure", label: "Belichtung", unit: "s", color: "--chart-exposure", scale: "s", digits: 3 },
+        { key: "exposure", label: tr("Belichtung", "Exposure"), unit: "s", color: "--chart-exposure", scale: "s", digits: 3 },
         { key: "gain", label: "Gain", unit: "", color: "--chart-gain", scale: "gain", digits: 0, step: true },
       ],
-      axes: [{ scale: "s", label: "Belichtung s (log)", log: true }, { scale: "gain", label: "Gain", side: 1 }],
+      axes: [{ scale: "s", label: tr("Belichtung s (log)", "Exposure s (log)"), log: true }, { scale: "gain", label: "Gain", side: 1 }],
     },
     {
-      id: "temps", title: "Temperaturen und Speicher", source: "status", height: 200, status: true,
+      id: "temps", title: tr("Temperaturen und Speicher", "Temperatures and storage"), source: "status", height: 200, status: true,
       series: [
         { key: "sensor", label: "Sensor", unit: "°C", color: "--chart-temp", scale: "c", digits: 1 },
-        { key: "cpu", label: "Prozessor", unit: "°C", color: "--chart-cpu", scale: "c", digits: 0 },
-        { key: "disk", label: "Speicher frei", unit: "%", color: "--chart-disk", scale: "pct", digits: 0 },
+        { key: "cpu", label: tr("Prozessor", "Processor"), unit: "°C", color: "--chart-cpu", scale: "c", digits: 0 },
+        { key: "disk", label: tr("Speicher frei", "Free storage"), unit: "%", color: "--chart-disk", scale: "pct", digits: 0 },
       ],
-      axes: [{ scale: "c", label: "°C" }, { scale: "pct", label: "Speicher frei %", side: 1 }],
+      axes: [{ scale: "c", label: "°C" }, { scale: "pct", label: tr("Speicher frei %", "Free storage %"), side: 1 }],
     },
     {
       // SPEC §7.11 (roadmap L30): only for cameras with a weather sensor or dew heater.
-      id: "weather", title: "Wetter am Gehäuse", source: "status", height: 200, status: true,
+      id: "weather", title: tr("Wetter am Gehäuse", "Weather at the housing"), source: "status", height: 200, status: true,
       series: [
-        { key: "air_temp", label: "Lufttemperatur", unit: "°C", color: "--chart-air", scale: "c", digits: 1 },
-        { key: "dewpoint", label: "Taupunkt", unit: "°C", color: "--chart-dew", scale: "c", digits: 1 },
-        { key: "humidity", label: "Luftfeuchte", unit: "%", color: "--chart-humidity", scale: "pct", digits: 0 },
-        { key: "heater", label: "Kuppelheizung", unit: "", color: "--chart-heater", scale: "onoff", digits: 0, step: true, fill: true },
+        { key: "air_temp", label: tr("Lufttemperatur", "Air temperature"), unit: "°C", color: "--chart-air", scale: "c", digits: 1 },
+        { key: "dewpoint", label: tr("Taupunkt", "Dew point"), unit: "°C", color: "--chart-dew", scale: "c", digits: 1 },
+        { key: "humidity", label: tr("Luftfeuchte", "Humidity"), unit: "%", color: "--chart-humidity", scale: "pct", digits: 0 },
+        { key: "heater", label: tr("Kuppelheizung", "Dome heater"), unit: "", color: "--chart-heater", scale: "onoff", digits: 0, step: true, fill: true },
       ],
-      axes: [{ scale: "c", label: "°C" }, { scale: "pct", label: "Luftfeuchte %", side: 1 }],
+      axes: [{ scale: "c", label: "°C" }, { scale: "pct", label: tr("Luftfeuchte %", "Humidity %"), side: 1 }],
     },
   ];
   const SCALES = {
@@ -132,8 +136,8 @@
     return `${p.hour}:${p.minute}`;
   };
   const day = (ts) => {
-    const p = parts(ts, { day: "numeric", month: "numeric", weekday: "short" });
-    return `${p.weekday.replace(".", "")} ${p.day}.${p.month}.`;
+    const p = parts(ts, { day: "numeric", month: EN ? "short" : "numeric", weekday: "short" });
+    return EN ? `${p.weekday} ${p.day} ${p.month}` : `${p.weekday.replace(".", "")} ${p.day}.${p.month}.`;
   };
   const stamp = (ts) => `${day(ts)} ${clock(ts)}`;
   const midnight = (ts) => {
@@ -158,6 +162,11 @@
     const b = new Date(a);
     b.setUTCDate(b.getUTCDate() + 1);
     const m = (d) => d.toLocaleDateString(DE, { month: "long", timeZone: "UTC" });
+    if (EN) {
+      return a.getUTCMonth() === b.getUTCMonth()
+        ? `Night ${a.getUTCDate()}/${b.getUTCDate()} ${m(b)} ${b.getUTCFullYear()}`
+        : `Night ${a.getUTCDate()} ${m(a)}/${b.getUTCDate()} ${m(b)} ${b.getUTCFullYear()}`;
+    }
     return a.getUTCMonth() === b.getUTCMonth()
       ? `Nacht ${a.getUTCDate()}./${b.getUTCDate()}. ${m(b)} ${b.getUTCFullYear()}`
       : `Nacht ${a.getUTCDate()}. ${m(a)}/${b.getUTCDate()}. ${m(b)} ${b.getUTCFullYear()}`;
@@ -228,7 +237,7 @@
     ctx.stroke();
     ctx.font = `${11 * ratio}px ${getComputedStyle(document.body).fontFamily}`;
     ctx.textAlign = "right";
-    ctx.fillText(`üblich ${num(value, s.digits)} ${s.unit}`, left + width - 4 * ratio, y - 4 * ratio);
+    ctx.fillText(`${tr("üblich", "usual")} ${num(value, s.digits)} ${s.unit}`, left + width - 4 * ratio, y - 4 * ratio);
     ctx.restore();
   };
 
@@ -239,7 +248,7 @@
     box.innerHTML = `<figcaption><strong>${panel.title}</strong></figcaption>`;
     panelsBox.append(box);
     if (!t) {
-      box.insertAdjacentHTML("beforeend", '<p class="muted small chart-empty">Keine Messwerte in diesem Zeitraum.</p>');
+      box.insertAdjacentHTML("beforeend", `<p class="muted small chart-empty">${tr("Keine Messwerte in diesem Zeitraum.", "No measurements in this period.")}</p>`);
       return null;
     }
     const grid = { stroke: css("--chart-grid"), width: 1 };
@@ -247,7 +256,7 @@
     const axisFont = `12px ${getComputedStyle(document.body).fontFamily}`;
     const axisColor = css("--chart-axis");
     const series = [
-      { value: (u, v) => (v == null ? "–" : stamp(v)), label: "Zeit" },
+      { value: (u, v) => (v == null ? "–" : stamp(v)), label: tr("Zeit", "Time") },
       ...panel.series.map((s) => ({
         label: s.unit ? `${s.label} (${s.unit})` : s.label,
         scale: s.scale,
@@ -273,10 +282,10 @@
     ];
     if (t.extra) {
       series.push(
-        { label: "Sonnenhöhe (°)", scale: "deg", stroke: css("--chart-sun"), width: 1.2, dash: [2, 4], show: overlays.sun, value: (u, v) => num(v, 1), points: { show: false } },
-        { label: "Mondhöhe (°)", scale: "deg", stroke: css("--chart-moon"), width: 1.2, dash: [6, 4], show: overlays.moon, value: (u, v) => num(v, 1), points: { show: false } },
+        { label: SUN_LABEL, scale: "deg", stroke: css("--chart-sun"), width: 1.2, dash: [2, 4], show: overlays.sun, value: (u, v) => num(v, 1), points: { show: false } },
+        { label: MOON_LABEL, scale: "deg", stroke: css("--chart-moon"), width: 1.2, dash: [6, 4], show: overlays.moon, value: (u, v) => num(v, 1), points: { show: false } },
       );
-      axes.push({ scale: "deg", side: 1, label: "Höhe °", labelSize: 18, labelFont: axisFont, stroke: axisColor, font: axisFont, size: 44, grid: { show: false }, ticks, values: (u, vals) => vals.map((v) => `${v}°`), splits: () => [-18, 0, 30, 60, 90] });
+      axes.push({ scale: "deg", side: 1, label: tr("Höhe °", "Altitude °"), labelSize: 18, labelFont: axisFont, stroke: axisColor, font: axisFont, size: 44, grid: { show: false }, ticks, values: (u, vals) => vals.map((v) => `${v}°`), splits: () => [-18, 0, 30, 60, 90] });
     }
     const opts = {
       width,
@@ -327,11 +336,15 @@
 
   const describe = () => {
     const bits = [data.night ? nightTitle(data.night) : `${stamp(data.from)} – ${stamp(data.to)}`];
-    bits.push(data.tz_assumed ? `Ortszeit ${data.tz} (angenommen)` : `Ortszeit ${data.tz}`);
-    if (data.ephemeris) bits.push(`Mond ${num(data.ephemeris.moon_illumination[0] * 100, 0)} % beleuchtet`);
-    if (data.bucket_s) bits.push(`Mittelwerte über ${Math.round(data.bucket_s / 60)} min`);
+    const local = tr("Ortszeit", "Local time");
+    bits.push(data.tz_assumed ? `${local} ${data.tz} (${tr("angenommen", "assumed")})` : `${local} ${data.tz}`);
+    if (data.ephemeris) {
+      const lit = num(data.ephemeris.moon_illumination[0] * 100, 0);
+      bits.push(EN ? `Moon ${lit} % lit` : `Mond ${lit} % beleuchtet`);
+    }
+    if (data.bucket_s) bits.push(`${tr("Mittelwerte über", "Averages over")} ${Math.round(data.bucket_s / 60)} min`);
     meta.textContent = bits.join(" · ");
-    const tzText = data.tz_assumed ? `${data.tz}, angenommen` : data.tz;
+    const tzText = data.tz_assumed ? `${data.tz}, ${tr("angenommen", "assumed")}` : data.tz;
     document.querySelectorAll("[data-chart-tz]").forEach((n) => (n.textContent = tzText));
     root.querySelectorAll("[data-range]").forEach((b) => {
       const on = b.dataset.range === "night" ? !!data.night : +b.dataset.range === data.hours;
@@ -347,14 +360,14 @@
   const load = async (query) => {
     request?.abort();
     request = new AbortController();
-    meta.textContent = "Lade Messdaten …";
+    meta.textContent = tr("Lade Messdaten …", "Loading measurements …");
     try {
       const res = await fetch(`${root.dataset.src}?${new URLSearchParams(query)}`, { signal: request.signal, credentials: "same-origin" });
       if (!res.ok) throw new Error(res.status);
       data = await res.json();
     } catch (e) {
       if (e.name === "AbortError") return;
-      meta.textContent = "Die Messdaten konnten nicht geladen werden.";
+      meta.textContent = tr("Die Messdaten konnten nicht geladen werden.", "The measurements could not be loaded.");
       return;
     }
     if (!compact) {
@@ -394,8 +407,8 @@
       overlays[box.dataset.overlay] = box.checked;
       for (const p of plots) {
         p.series.forEach((s, i) => {
-          if (s.label === "Sonnenhöhe (°)") p.setSeries(i, { show: overlays.sun });
-          if (s.label === "Mondhöhe (°)") p.setSeries(i, { show: overlays.moon });
+          if (s.label === SUN_LABEL) p.setSeries(i, { show: overlays.sun });
+          if (s.label === MOON_LABEL) p.setSeries(i, { show: overlays.moon });
         });
         p.redraw(false);
       }
@@ -429,7 +442,7 @@
     const tables = ["sky", "status"].filter((k) => data[k]).map((k) => [data[k].t, ...cols.filter((c) => c.source === k).map((c) => data[k][c.key])]);
     const order = ["sky", "status"].filter((k) => data[k]).flatMap((k) => cols.filter((c) => c.source === k));
     const joined = tables.length > 1 ? uPlot.join(tables) : tables[0];
-    const head = ["utc", `ortszeit (${data.tz})`, ...order.map((c) => (c.unit ? `${c.key} [${c.unit}]` : c.key))];
+    const head = ["utc", `${tr("ortszeit", "local time")} (${data.tz})`, ...order.map((c) => (c.unit ? `${c.key} [${c.unit}]` : c.key))];
     const lines = [head.join(",")];
     for (let i = 0; i < joined[0].length; i++) {
       const ts = joined[0][i];
@@ -438,7 +451,7 @@
       if (row.every((v) => v === "")) continue;
       lines.push([new Date(ts * 1000).toISOString(), `${day(ts)} ${clock(ts)}`, ...row].join(","));
     }
-    if (data.bucket_s) lines.unshift(`# Mittelwerte über ${data.bucket_s} s`);
+    if (data.bucket_s) lines.unshift(`# ${tr("Mittelwerte über", "Averages over")} ${data.bucket_s} s`);
     download(new Blob([lines.join("\n") + "\n"], { type: "text/csv" }), `${fileStem()}.csv`);
   };
 
@@ -491,7 +504,7 @@
     let yearPlot = null;
     const nav = document.createElement("div");
     nav.className = "actions";
-    nav.innerHTML = '<button type="button" class="secondary small" data-year="-1" aria-label="Jahr davor">‹</button><strong data-year-label></strong><button type="button" class="secondary small" data-year="1" aria-label="Jahr danach">›</button>';
+    nav.innerHTML = `<button type="button" class="secondary small" data-year="-1" aria-label="${tr("Jahr davor", "Year before")}">‹</button><strong data-year-label></strong><button type="button" class="secondary small" data-year="1" aria-label="${tr("Jahr danach", "Year after")}">›</button>`;
     yearBox.insertBefore(nav, panel);
     const draw = async () => {
       nav.querySelector("[data-year-label]").textContent = year;
@@ -503,7 +516,7 @@
       panel.replaceChildren();
       const n = d.nights;
       if (!n.t.length) {
-        panel.innerHTML = '<p class="muted small chart-empty">Für dieses Jahr gibt es noch keine Nächte.</p>';
+        panel.innerHTML = `<p class="muted small chart-empty">${tr("Für dieses Jahr gibt es noch keine Nächte.", "There are no nights for this year yet.")}</p>`;
         return;
       }
       const axisFont = `12px ${getComputedStyle(document.body).fontFamily}`;
@@ -520,15 +533,15 @@
           pct: { auto: false, range: [0, 100] },
         },
         series: [
-          { value: (u, v) => (v == null ? "–" : new Date(v * 1000).toLocaleDateString(DE, { timeZone: tz })), label: "Nacht" },
-          { label: "Klare Stunden", scale: "h", stroke: css("--chart-clouds"), fill: `${css("--chart-clouds")}55`, paths: uPlot.paths.bars({ size: [0.7, 12] }), points: { show: false }, value: (u, v) => num(v, 1) },
-          { label: "Dunkelster Himmel (mag/⁠″²)", scale: "sqm", stroke: css("--chart-sqm"), paths: () => null, points: { show: true, size: 6, fill: css("--chart-sqm") }, value: (u, v) => num(v, 2) },
-          { label: "Mond beleuchtet (%)", scale: "pct", stroke: css("--chart-moon"), width: 1, dash: [6, 4], points: { show: false }, value: (u, v) => num(v, 0) },
+          { value: (u, v) => (v == null ? "–" : new Date(v * 1000).toLocaleDateString(DE, { timeZone: tz })), label: tr("Nacht", "Night") },
+          { label: tr("Klare Stunden", "Clear hours"), scale: "h", stroke: css("--chart-clouds"), fill: `${css("--chart-clouds")}55`, paths: uPlot.paths.bars({ size: [0.7, 12] }), points: { show: false }, value: (u, v) => num(v, 1) },
+          { label: tr("Dunkelster Himmel (mag/⁠″²)", "Darkest sky (mag/⁠″²)"), scale: "sqm", stroke: css("--chart-sqm"), paths: () => null, points: { show: true, size: 6, fill: css("--chart-sqm") }, value: (u, v) => num(v, 2) },
+          { label: tr("Mond beleuchtet (%)", "Moon lit (%)"), scale: "pct", stroke: css("--chart-moon"), width: 1, dash: [6, 4], points: { show: false }, value: (u, v) => num(v, 0) },
         ],
         axes: [
           { stroke: css("--chart-axis"), grid, font: axisFont, values: (u, splits) => splits.map((ts) => new Date(ts * 1000).toLocaleDateString(DE, { month: "short", timeZone: tz })) },
-          { scale: "sqm", label: "mag/⁠″² (↑ dunkler)", labelSize: 18, labelFont: axisFont, stroke: css("--chart-axis"), font: axisFont, grid, size: 52, values: (u, vals) => vals.map(axisNum) },
-          { scale: "h", side: 1, label: "klare Stunden", labelSize: 18, labelFont: axisFont, stroke: css("--chart-axis"), font: axisFont, grid: { show: false }, size: 44 },
+          { scale: "sqm", label: tr("mag/⁠″² (↑ dunkler)", "mag/⁠″² (↑ darker)"), labelSize: 18, labelFont: axisFont, stroke: css("--chart-axis"), font: axisFont, grid, size: 52, values: (u, vals) => vals.map(axisNum) },
+          { scale: "h", side: 1, label: tr("klare Stunden", "clear hours"), labelSize: 18, labelFont: axisFont, stroke: css("--chart-axis"), font: axisFont, grid: { show: false }, size: 44 },
         ],
         legend: { live: true },
       }, [n.t, n.clear_hours, n.best_sqm, n.moon], panel);

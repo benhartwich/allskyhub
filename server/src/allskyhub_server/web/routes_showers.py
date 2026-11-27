@@ -25,6 +25,15 @@ def dec_text(dec: float) -> str:
     return f"{dec:+.0f}°".replace("-", "\u2212")  # a real minus sign
 
 
+MONTHS_EN = ("Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec")
+
+
+def day_text(month_day: tuple[int, int]) -> str:
+    """A shower's (month, day) on the English page: "17 Nov"."""
+    month, day = month_day
+    return f"{day} {MONTHS_EN[month - 1]}"
+
+
 @router.get("/meteorstroeme")
 async def meteor_showers(request: Request, db: DbSession, session: OptionalSession) -> Response:
     live = await showers.live(db)
@@ -53,6 +62,7 @@ async def meteor_showers(request: Request, db: DbSession, session: OptionalSessi
             "peak": peak,
             "ra_text": ra_text,
             "dec_text": dec_text,
+            "day_text": day_text,
         },
         session=session,
     )

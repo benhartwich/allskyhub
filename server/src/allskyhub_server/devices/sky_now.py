@@ -15,6 +15,7 @@ from dataclasses import dataclass, field
 from typing import Any, Literal, cast
 
 from allskyhub_server.devices import star_size
+from allskyhub_server.i18n import tr
 
 # The agent accepts a solve up to 0.6° RMS (SPEC §4.8); below these it is good or usable.
 RMS_GOOD = 0.2
@@ -24,6 +25,11 @@ LEVEL_TEXT: dict[Level, str] = {
     "good": "gut eingemessen",
     "usable": "brauchbar eingemessen",
     "rough": "ungenau eingemessen",
+}
+LEVEL_TEXT_EN: dict[Level, str] = {
+    "good": "well calibrated",
+    "usable": "adequately calibrated",
+    "rough": "roughly calibrated",
 }
 
 
@@ -37,7 +43,7 @@ class Orientation:
 
     @property
     def text(self) -> str:
-        return LEVEL_TEXT[self.level]
+        return tr(LEVEL_TEXT[self.level], LEVEL_TEXT_EN[self.level])
 
 
 def orientation(status: dict[str, Any] | None) -> Orientation | None:

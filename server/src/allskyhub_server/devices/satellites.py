@@ -20,10 +20,15 @@ import sgp4.api  # pyright: ignore[reportMissingTypeStubs]
 
 from allskyhub_server.devices import astro
 from allskyhub_server.devices.refresh import Refreshing
+from allskyhub_server.i18n import tr
 from allskyhub_sky import astro as sky_astro
 
 # NORAD id → German name; the brightest objects people look for.
 SATELLITES = {25544: "Raumstation ISS", 48274: "Raumstation Tiangong", 20580: "Hubble"}
+NAMES_EN = {
+    "Raumstation ISS": "ISS space station",
+    "Raumstation Tiangong": "Tiangong space station",
+}
 TLE_URL = "https://celestrak.org/NORAD/elements/gp.php?CATNR={id}&FORMAT=TLE"
 TLE_MAX_AGE_S = 12 * 3600
 TIMEOUT_S = 4.0
@@ -58,6 +63,11 @@ class Pass:
     start_azimuth: float
     end_azimuth: float
     top_azimuth: float
+
+    @property
+    def label(self) -> str:
+        """The name in the language of the request."""
+        return tr(self.name, NAMES_EN.get(self.name, self.name))
 
 
 def _observer_ecef(lat: float, lon: float) -> tuple[float, float, float]:

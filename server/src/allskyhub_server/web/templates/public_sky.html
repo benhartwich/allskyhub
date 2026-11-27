@@ -1,5 +1,6 @@
 {% extends "base.html" %}
-{% block title %}{{ title }} · Himmel live{% endblock %}
+{% block lang %}{{ 'en' if en else 'de' }}{% endblock %}
+{% block title %}{{ title }} · {{ t('Himmel live', 'Live sky') }}{% endblock %}
 {% block head %}
   <link rel="stylesheet" href="{{ asset('uplot.min.css') }}">
   <script src="{{ asset('locale_guard.js') }}" defer></script>
@@ -7,26 +8,26 @@
   <script src="{{ asset('charts.js') }}" defer></script>
   <link rel="stylesheet" href="{{ asset('public.css') }}">
   <script src="{{ asset('public.js') }}" defer></script>
-  <meta property="og:title" content="{{ title }} · Himmel live">
-  <meta property="og:description" content="{{ profile.location_label or 'Allsky-Kamera' }}: der ganze Himmel, live.">
+  <meta property="og:title" content="{{ title }} · {{ t('Himmel live', 'Live sky') }}">
+  <meta property="og:description" content="{{ profile.location_label or t('Allsky-Kamera', 'All-sky camera') }}: {{ t('der ganze Himmel, live.', 'the whole sky, live.') }}">
   <meta property="og:type" content="website">
   <meta property="og:url" content="{{ base_url }}/sky/{{ slug }}">
   {% if device.latest_image_at and profile.sections.live %}<meta property="og:image" content="{{ base_url }}/sky/{{ slug }}/latest.jpg">{% endif %}
   <meta name="twitter:card" content="summary_large_image">
-  {% if profile.sections.events %}<link rel="alternate" type="application/atom+xml" title="{{ title }}: Ereignisse" href="/sky/{{ slug }}/events.atom">{% endif %}
+  {% if profile.sections.events %}<link rel="alternate" type="application/atom+xml" title="{{ title }}: {{ t('Ereignisse', 'Events') }}" href="/sky/{{ slug }}/events.atom">{% endif %}
 {% endblock %}
 {% block content %}
 <header class="sky-head">
   <div>
-    <p class="eyebrow">{% if station %}SharedSky-Station · {{ station.software }}{% else %}Allsky-Kamera{% endif %}{% if profile.location_label %} · {{ profile.location_label }}{% endif %}</p>
+    <p class="eyebrow">{% if station %}SharedSky-Station · {{ station.software }}{% else %}{{ t('Allsky-Kamera', 'All-sky camera') }}{% endif %}{% if profile.location_label %} · {{ profile.location_label }}{% endif %}</p>
     <h1>{{ title }}</h1>
     {% if coordinates %}<p class="muted">{{ coords(coordinates[0], coordinates[1]) }}</p>{% endif %}
   </div>
   {% if kp and kp.days %}
-  <div class="kp-strip" aria-label="Polarlicht-Vorhersage (Kp-Index)">
+  <div class="kp-strip" aria-label="{{ t('Polarlicht-Vorhersage (Kp-Index)', 'Aurora forecast (Kp index)') }}">
     {% for d in kp.days %}
-    <span class="kp {{ 'kp-high' if d.kp >= 5 else ('kp-mid' if d.kp >= 4 else 'kp-low') }}" title="höchster Kp-Wert des Tages{{ ' (Vorhersage)' if d.predicted }}">
-      <small>{{ 'Heute' if d.day == today else ['Mo','Di','Mi','Do','Fr','Sa','So'][d.day.weekday()] }}</small>{{ '%.1f' | format(d.kp) | replace('.', ',') }}
+    <span class="kp {{ 'kp-high' if d.kp >= 5 else ('kp-mid' if d.kp >= 4 else 'kp-low') }}" title="{{ t('höchster Kp-Wert des Tages', 'highest Kp of the day') }}{{ t(' (Vorhersage)', ' (forecast)') if d.predicted }}">
+      <small>{{ t('Heute', 'Today') if d.day == today else (['Mon','Tue','Wed','Thu','Fri','Sat','Sun'] if en else ['Mo','Di','Mi','Do','Fr','Sa','So'])[d.day.weekday()] }}</small>{{ '%.1f' | format(d.kp) if en else '%.1f' | format(d.kp) | replace('.', ',') }}
     </span>
     {% endfor %}
   </div>
@@ -37,14 +38,14 @@
   <section class="sky-main">
     {% if station %}
     <div class="card">
-      <h2>Heute Nacht</h2>
+      <h2>{{ t('Heute Nacht', 'Tonight') }}</h2>
       <dl class="facts">
-        <dt>Bilder</dt><dd>{{ station.frames }}</dd>
-        <dt>Meteore</dt><dd>{{ station.meteors }}{% if station.meteors %} <span class="badge warn" title="Meteore von SharedSky-Stationen zählen für Ströme und die Nacht, noch nicht für gemeinsame Bahnen.">Probe</span>{% endif %}</dd>
-        <dt>Ausrichtung</dt><dd>{% if station.oriented %}an den Sternen gelöst{% else %}wartet auf eine klare Nacht{% endif %}</dd>
-        <dt>Uhr</dt><dd>{% if station.clock_trusted %}gestellt{% else %}wird noch geprüft{% endif %}</dd>
+        <dt>{{ t('Bilder', 'Images') }}</dt><dd>{{ station.frames }}</dd>
+        <dt>{{ t('Meteore', 'Meteors') }}</dt><dd>{{ station.meteors }}{% if station.meteors %} <span class="badge warn" title="{{ t('Meteore von SharedSky-Stationen zählen für Ströme und die Nacht, noch nicht für gemeinsame Bahnen.', 'Meteors from SharedSky stations count for the showers and the night, not yet for joint paths.') }}">{{ t('Probe', 'Trial') }}</span>{% endif %}</dd>
+        <dt>{{ t('Ausrichtung', 'Orientation') }}</dt><dd>{% if station.oriented %}{{ t('an den Sternen gelöst', 'solved from the stars') }}{% else %}{{ t('wartet auf eine klare Nacht', 'waiting for a clear night') }}{% endif %}</dd>
+        <dt>{{ t('Uhr', 'Clock') }}</dt><dd>{% if station.clock_trusted %}{{ t('gestellt', 'set') }}{% else %}{{ t('wird noch geprüft', 'still being checked') }}{% endif %}</dd>
       </dl>
-      {% if station.since %}<p class="muted small">Seit {{ station.since | when | truncate(10, true, '') }} im SharedSky-Netz.</p>{% endif %}
+      {% if station.since %}<p class="muted small">{{ t('Seit', 'In the SharedSky network since') }} {{ station.since | when | truncate(10, true, '') }}{{ '.' if en else ' im SharedSky-Netz.' }}</p>{% endif %}
     </div>
     {# A station has no live parts: its part in the network fills this column. #}
     {% if part %}{% include "_network_part.html" %}{% endif %}
@@ -57,13 +58,13 @@
     {% endif %}
     {% if loop_frames %}
     <div class="card loop-card">
-      <div class="cam-meta"><h2>Die letzte Stunde</h2><button type="button" class="secondary small-btn" data-loop-toggle aria-pressed="false">▶ Abspielen</button></div>
+      <div class="cam-meta"><h2>{{ t('Die letzte Stunde', 'The last hour') }}</h2><button type="button" class="secondary small-btn" data-loop-toggle aria-pressed="false">▶ {{ t('Abspielen', 'Play') }}</button></div>
       <div class="loop" data-loop>
         {% for f in loop_frames %}
         <img {% if loop.last %}src{% else %}data-src{% endif %}="/sky/{{ slug }}/frames/{{ f.night_id }}/{{ f.name }}" alt="" data-time="{{ f.captured_at | clock }}"{% if loop.last %} class="on"{% endif %}>
         {% endfor %}
       </div>
-      <p class="muted" data-loop-label>{{ loop_frames | length }} Bilder, {{ loop_frames[0].captured_at | clock }}–{{ loop_frames[-1].captured_at | clock }} Uhr</p>
+      <p class="muted" data-loop-label>{{ loop_frames | length }} {{ t('Bilder', 'images') }}, {{ loop_frames[0].captured_at | clock }}–{{ loop_frames[-1].captured_at | clock }}{{ '' if en else ' Uhr' }}</p>
     </div>
     {% endif %}
   </section>
@@ -72,12 +73,12 @@
     {% set p = profile %}
     {% if p.camera or p.lens or p.computer or p.owner or p.notes %}
     <div class="card">
-      <h2>Über diese Kamera</h2>
+      <h2>{{ t('Über diese Kamera', 'About this camera') }}</h2>
       <dl class="facts">
-        {% if p.camera %}<dt>Kamera</dt><dd>{{ p.camera }}</dd>{% endif %}
-        {% if p.lens %}<dt>Objektiv</dt><dd>{{ p.lens }}</dd>{% endif %}
-        {% if p.computer %}<dt>Rechner</dt><dd>{{ p.computer }}</dd>{% endif %}
-        {% if p.owner %}<dt>Betrieben von</dt><dd>{{ p.owner }}</dd>{% endif %}
+        {% if p.camera %}<dt>{{ t('Kamera', 'Camera') }}</dt><dd>{{ p.camera }}</dd>{% endif %}
+        {% if p.lens %}<dt>{{ t('Objektiv', 'Lens') }}</dt><dd>{{ p.lens }}</dd>{% endif %}
+        {% if p.computer %}<dt>{{ t('Rechner', 'Computer') }}</dt><dd>{{ p.computer }}</dd>{% endif %}
+        {% if p.owner %}<dt>{{ t('Betrieben von', 'Run by') }}</dt><dd>{{ p.owner }}</dd>{% endif %}
       </dl>
       {% if p.notes %}<p class="notes">{{ p.notes }}</p>{% endif %}
     </div>
@@ -86,11 +87,11 @@
     {% if tonight %}{% include "_tonight.html" %}{% endif %}
     {% if kp %}
     <div class="card">
-      <h2>Polarlicht-Aussichten</h2>
-      {% if kp.now is not none %}<p>Aktueller Kp-Index: <strong>{{ '%.1f' | format(kp.now) | replace('.', ',') }}</strong></p>{% endif %}
-      {% if kp_needed is not none %}<p class="muted">Faustregel für diesen Standort: ab etwa Kp {{ '%.0f' | format(kp_needed) }} können Polarlichter tief am Horizont sichtbar werden, in einer klaren, dunklen Nacht.</p>{% endif %}
-      <a href="/space-weather/ovation/{{ hemisphere }}.jpg" data-lightbox data-caption="Polarlicht-Vorhersage (NOAA OVATION)"><img class="ovation" src="/space-weather/ovation/{{ hemisphere }}.jpg" alt="Vorhersage der Polarlicht-Zone (NOAA OVATION)" loading="lazy"></a>
-      <p class="muted small">Daten und Karte: NOAA Space Weather Prediction Center.</p>
+      <h2>{{ t('Polarlicht-Aussichten', 'Aurora outlook') }}</h2>
+      {% if kp.now is not none %}<p>{{ t('Aktueller Kp-Index', 'Current Kp index') }}: <strong>{{ '%.1f' | format(kp.now) if en else '%.1f' | format(kp.now) | replace('.', ',') }}</strong></p>{% endif %}
+      {% if kp_needed is not none %}<p class="muted">{% if en %}Rule of thumb for this place: from about Kp {{ '%.0f' | format(kp_needed) }}, aurora can become visible low on the horizon on a clear, dark night.{% else %}Faustregel für diesen Standort: ab etwa Kp {{ '%.0f' | format(kp_needed) }} können Polarlichter tief am Horizont sichtbar werden, in einer klaren, dunklen Nacht.{% endif %}</p>{% endif %}
+      <a href="/space-weather/ovation/{{ hemisphere }}.jpg" data-lightbox data-caption="{{ t('Polarlicht-Vorhersage (NOAA OVATION)', 'Aurora forecast (NOAA OVATION)') }}"><img class="ovation" src="/space-weather/ovation/{{ hemisphere }}.jpg" alt="{{ t('Vorhersage der Polarlicht-Zone (NOAA OVATION)', 'Forecast of the aurora oval (NOAA OVATION)') }}" loading="lazy"></a>
+      <p class="muted small">{{ t('Daten und Karte', 'Data and map') }}: NOAA Space Weather Prediction Center.</p>
     </div>
     {% endif %}
   </aside>
@@ -106,14 +107,14 @@
 
 {% if sky_charts %}
 <section class="stack">
-  <h2>Himmelsqualität</h2>
+  <h2>{{ t('Himmelsqualität', 'Sky quality') }}</h2>
   {% with data_url = "/sky/" ~ slug ~ "/charts/data", with_status = false, compact = true, default_range = "night", full_url = "/sky/" ~ slug ~ "/charts" %}{% include "_chart_viewer.html" %}{% endwith %}
 </section>
 {% endif %}
 
 {% if events %}
 <section class="stack">
-  <h2>Zuletzt am Himmel</h2>
+  <h2>{{ t('Zuletzt am Himmel', 'Recently in the sky') }}</h2>
   <div class="event-strip">
     {% for e in events %}
     <a class="event-thumb" href="/sky/{{ slug }}/nights/{{ e.night_id }}">
@@ -127,16 +128,17 @@
 
 {% if products or video %}
 <section class="card">
-  <div class="cam-meta"><h2>Letzte Nacht</h2><a href="/sky/{{ slug }}/nights/{{ night_id }}">{{ night_id | night_title }}</a></div>
+  <div class="cam-meta"><h2>{{ t('Letzte Nacht', 'Last night') }}</h2><a href="/sky/{{ slug }}/nights/{{ night_id }}">{{ night_id | night_title }}</a></div>
   {% if video %}
-  <video class="product-video public-video" src="/sky/{{ slug }}/nights/{{ night_id }}/timelapse.mp4" controls loop playsinline preload="metadata" aria-label="Zeitraffer der Nacht"></video>
-  <p class="muted small">Zeitraffer der Nacht{% if video.duration_s %} · {{ video.duration_s | mmss }}{% endif %}</p>
+  <video class="product-video public-video" src="/sky/{{ slug }}/nights/{{ night_id }}/timelapse.mp4" controls loop playsinline preload="metadata" aria-label="{{ t('Zeitraffer der Nacht', 'Timelapse of the night') }}"></video>
+  <p class="muted small">{{ t('Zeitraffer der Nacht', 'Timelapse of the night') }}{% if video.duration_s %} · {{ video.duration_s | mmss }}{% endif %}</p>
   {% endif %}
   <div class="public-products">
     {% for product in products %}
-    <a href="/sky/{{ slug }}/products/{{ night_id }}/{{ product.name }}?full={{ 'true' if product.has_full else 'false' }}" data-lightbox="products" data-caption="{{ 'Keogramm' if product.kind == 'keogram' else 'Sternspuren' }} · {{ night_id | night_title }}">
-      <img src="/sky/{{ slug }}/products/{{ night_id }}/{{ product.name }}" alt="{{ 'Keogramm' if product.kind == 'keogram' else 'Sternspuren' }} der Nacht" loading="lazy">
-      <span class="muted">{{ 'Keogramm' if product.kind == 'keogram' else 'Sternspuren' }}</span>
+    {% set product_name = t('Keogramm', 'Keogram') if product.kind == 'keogram' else t('Sternspuren', 'Startrails') %}
+    <a href="/sky/{{ slug }}/products/{{ night_id }}/{{ product.name }}?full={{ 'true' if product.has_full else 'false' }}" data-lightbox="products" data-caption="{{ product_name }} · {{ night_id | night_title }}">
+      <img src="/sky/{{ slug }}/products/{{ night_id }}/{{ product.name }}" alt="{{ t(product_name ~ ' der Nacht', product_name ~ ' of the night') }}" loading="lazy">
+      <span class="muted">{{ product_name }}</span>
     </a>
     {% endfor %}
   </div>
@@ -145,20 +147,20 @@
 
 {% if nights %}
 <section class="stack">
-  <h2>Archiv</h2>
+  <h2>{{ t('Archiv', 'Archive') }}</h2>
   <ul class="night-list">
     {% for n in nights %}
     <li><a class="card" href="/sky/{{ slug }}/nights/{{ n.night_id }}">
       <strong>{{ n.night_id | night_title }}</strong>
-      <span class="muted">{{ n.frames }} Bilder{% if n.events %} · {{ n.events }} Ereignis{{ 'se' if n.events != 1 }}{% endif %}</span>
+      <span class="muted">{{ n.frames }} {{ t('Bilder', 'images') }}{% if n.events %} · {{ n.events }} {{ t('Ereignis', 'event') }}{{ t('se', 's') if n.events != 1 }}{% endif %}</span>
     </a></li>
     {% endfor %}
   </ul>
 </section>
 {% endif %}
 {% if station %}
-<p class="muted center">Eine Station im <a href="/mitmachen">SharedSky-Netz</a> von allskyhub. Ihre Messwerte stehen unter CC BY 4.0 mit dem Namen der Station; die Bilder gehören ihrem Besitzer.</p>
+{% if en %}<p class="muted center">A station in the <a href="/mitmachen">SharedSky network</a> of allskyhub. Its measurements are under CC BY 4.0, crediting the station; the images belong to its owner.</p>{% else %}<p class="muted center">Eine Station im <a href="/mitmachen">SharedSky-Netz</a> von allskyhub. Ihre Messwerte stehen unter CC BY 4.0 mit dem Namen der Station; die Bilder gehören ihrem Besitzer.</p>{% endif %}
 {% else %}
-<p class="muted center">Eine Allsky-Kamera mit <a href="/">allskyhub</a> – freie Software für den ganzen Himmel.</p>
+{% if en %}<p class="muted center">An all-sky camera with <a href="/">allskyhub</a> – free software for the whole sky.</p>{% else %}<p class="muted center">Eine Allsky-Kamera mit <a href="/">allskyhub</a> – freie Software für den ganzen Himmel.</p>{% endif %}
 {% endif %}
 {% endblock %}

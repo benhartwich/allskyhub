@@ -112,3 +112,7 @@ async def test_winds_for_a_fireball_and_its_page(app: FastAPI, client: httpx.Asy
     assert "Mit dem Wind in der Höhe (NOAA GFS 0,25°, Lauf 2026-11-05 06 UTC + 0 h)" in page
     assert "<dt>10 kg</dt>" in page
     assert '"landings": [[' in page
+    english = (await client.get(f"/feuerkugeln/{pair_id}", params={"lang": "en"})).text
+    assert "With the winds aloft (NOAA GFS 0.25°, run 2026-11-05 06 UTC + 0 h)" in english
+    assert "Lauf" not in english
+    assert any(f"km {way}" in english for way in ("north", "east", "south", "west"))

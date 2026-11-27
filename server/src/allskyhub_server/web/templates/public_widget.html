@@ -1,9 +1,9 @@
 <!doctype html>
-<html lang="de">
+<html lang="{{ 'en' if en else 'de' }}">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>{{ title }} · Himmel live</title>
+  <title>{{ title }} · {{ t('Himmel live', 'Live sky') }}</title>
   <link rel="stylesheet" href="{{ asset('design/tokens.css') }}">
   <link rel="stylesheet" href="{{ asset('design/base.css') }}">
   <link rel="stylesheet" href="{{ asset('app.css') }}">
@@ -13,8 +13,8 @@
 <body class="widget">
   <a class="widget-link" href="/sky/{{ slug }}" target="_blank" rel="noopener">
     {% if device.latest_image_at %}
-    <img class="widget-img" src="/sky/{{ slug }}/latest.jpg?t={{ device.latest_image_at.timestamp() | int }}" alt="Aktuelles Himmelsbild">
-    <span class="muted">Aufgenommen {{ device.latest_image_at | clock }} Uhr</span>
+    <img class="widget-img" src="/sky/{{ slug }}/latest.jpg?t={{ device.latest_image_at.timestamp() | int }}" alt="{{ t('Aktuelles Himmelsbild', 'Latest sky image') }}">
+    <span class="muted">{{ t('Aufgenommen', 'Taken') }} {{ device.latest_image_at | clock }}{{ '' if en else ' Uhr' }}</span>
     {% else %}
     <div class="sky-ph" aria-hidden="true"></div>
     {% endif %}

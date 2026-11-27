@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import datetime as dt
 import hashlib
+from collections.abc import Callable
 from functools import cache
 from pathlib import Path
 from typing import Any, cast
@@ -49,48 +50,61 @@ def asset(path: str) -> str:
 UI_ZONE = ZoneInfo("Europe/Berlin")
 
 
-def localtime(value: dt.datetime | None) -> str:
+def localtime(value: dt.datetime | None, en: bool = False) -> str:
     if value is None:
         return "–"
-    return value.astimezone(UI_ZONE).strftime("%d.%m.%Y %H:%M")
+    return value.astimezone(UI_ZONE).strftime("%Y-%m-%d %H:%M" if en else "%d.%m.%Y %H:%M")
 
 
-def age(value: dt.datetime | None) -> str:
-    """Age for status lines: "vor 3 Min."."""
+def age(value: dt.datetime | None, en: bool = False) -> str:
+    """Age for status lines: "vor 3 Min." ("3 min ago")."""
     if value is None:
-        return "nie"
+        return "never" if en else "nie"
     seconds = int((dt.datetime.now(dt.UTC) - value).total_seconds())
     if seconds < 60:
-        return "gerade eben"
+        return "just now" if en else "gerade eben"
     if seconds < 3600:
-        return f"vor {seconds // 60} Min."
+        return f"{seconds // 60} min ago" if en else f"vor {seconds // 60} Min."
     if seconds < 86400:
-        return f"vor {seconds // 3600} Std."
-    return f"vor {seconds // 86400} Tagen"
+        return f"{seconds // 3600} h ago" if en else f"vor {seconds // 3600} Std."
+    days = seconds // 86400
+    return (f"{days} day{'s' if days != 1 else ''} ago") if en else f"vor {days} Tagen"
 
 
 _WEEKDAYS = ("Mo", "Di", "Mi", "Do", "Fr", "Sa", "So")
+WEEKDAYS_EN = ("Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun")
+MONTHS_EN = ("Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec")
 
 
-def night_title(night_id: str) -> str:
-    """ "Di 06.10. → Mi 07.10.": a night spans two dates (SPEC §4.5, id = evening)."""
+def day_month(day: dt.date, en: bool = False) -> str:
+    """ "07.10." ("7 Oct")."""
+    return f"{day.day} {MONTHS_EN[day.month - 1]}" if en else f"{day.day:02d}.{day.month:02d}."
+
+
+def night_title(night_id: str, en: bool = False) -> str:
+    """ "Di 06.10. → Mi 07.10." ("Tue 6 Oct → Wed 7 Oct"): a night spans two dates
+    (SPEC §4.5, id = evening)."""
     evening = dt.date(int(night_id[:4]), int(night_id[4:6]), int(night_id[6:8]))
     morning = evening + dt.timedelta(days=1)
-    return " → ".join(
-        f"{_WEEKDAYS[d.weekday()]} {d.day:02d}.{d.month:02d}." for d in (evening, morning)
-    )
+    names = WEEKDAYS_EN if en else _WEEKDAYS
+    return " → ".join(f"{names[d.weekday()]} {day_month(d, en)}" for d in (evening, morning))
+
+
+def night_day(night_id: str, en: bool = False) -> str:
+    """The evening of a night alone: "06.10." ("6 Oct")."""
+    return day_month(dt.date(int(night_id[:4]), int(night_id[4:6]), int(night_id[6:8])), en)
 
 
 def clock(value: dt.datetime | None) -> str:
     return "–" if value is None else value.astimezone(UI_ZONE).strftime("%H:%M")
 
 
-def when(value: dt.datetime) -> str:
-    """ "14.10.2026, 22:14" in the hub's time zone."""
-    return value.astimezone(UI_ZONE).strftime("%d.%m.%Y, %H:%M")
+def when(value: dt.datetime, en: bool = False) -> str:
+    """ "14.10.2026, 22:14" ("2026-10-14, 22:14") in the hub's time zone."""
+    return value.astimezone(UI_ZONE).strftime("%Y-%m-%d, %H:%M" if en else "%d.%m.%Y, %H:%M")
 
 
-def stamp(value: str | dt.datetime | None) -> str:
+def stamp(value: str | dt.datetime | None, en: bool = False) -> str:
     """ "heute 14:02", "gestern 22:10" or "05.11. 14:02" in the hub's time zone; an ISO
     text too (the apps page keeps its times as text)."""
     if not value:
@@ -106,10 +120,10 @@ def stamp(value: str | dt.datetime | None) -> str:
     today = dt.datetime.now(UI_ZONE).date()
     day = local.date()
     if day == today:
-        return f"heute {local:%H:%M}"
+        return f"{'today' if en else 'heute'} {local:%H:%M}"
     if day == today - dt.timedelta(days=1):
-        return f"gestern {local:%H:%M}"
-    return f"{local:%d.%m.} {local:%H:%M}"
+        return f"{'yesterday' if en else 'gestern'} {local:%H:%M}"
+    return f"{day_month(day, en)} {local:%H:%M}"
 
 
 def mmss(seconds: float | None) -> str:
@@ -119,18 +133,34 @@ def mmss(seconds: float | None) -> str:
     return f"{s // 60}:{s % 60:02d}"
 
 
-def filesize(size: int) -> str:
+def filesize(size: int, en: bool = False) -> str:
     if size >= 1024 * 1024:
-        return f"{size / (1024 * 1024):.1f} MB".replace(".", ",")
+        text = f"{size / (1024 * 1024):.1f} MB"
+        return text if en else text.replace(".", ",")
     return f"{-(-size // 1024)} KB"
 
 
-def sky_overlay(device: Any) -> Any:
-    """Roadmap H1: constellations for the device's latest image, None without a lens."""
+def _by_page_language(
+    function: Callable[..., str],
+) -> Callable[..., str]:
+    """The filter in the page's language (``en`` from web/render.py)."""
+
+    @pass_context
+    def filtered(context: Context, value: Any, *args: Any) -> str:
+        return function(value, *args, en=bool(context.get("en")))
+
+    return filtered
+
+
+@pass_context
+def sky_overlay(context: Context, device: Any) -> Any:
+    """Roadmap H1: constellations for the device's latest image, None without a lens;
+    IAU names on a page in English."""
     if device.latest_image_at is None:
         return None
     at = overlay.image_time(device.last_frame, device.latest_image_at)
-    return overlay.build(device.last_status, at)
+    found = overlay.build(device.last_status, at)
+    return overlay.in_english(found) if found is not None and context.get("en") else found
 
 
 def air_overlay(device: Any) -> Any:
@@ -158,7 +188,8 @@ def flat_line(device: Any) -> Any:
     return sky_now_module.flat(device.last_status)
 
 
-def sky_layers(device: Any, satellites: bool = True) -> Any:
+@pass_context
+def sky_layers(context: Context, device: Any, satellites: bool = True) -> Any:
     """Draft 1: stars, grid, moon and planets, satellites over the latest image; None
     without a lens. Satellites only once their elements are loaded (live_fragment), and
     never on public pages: a satellite's place in the sky moves about 1.4° per 10 km of
@@ -175,7 +206,8 @@ def sky_layers(device: Any, satellites: bool = True) -> Any:
     where = bright_satellites.location(device.last_status)
     sondes = radiosondes.current
     balloons = sondes.near(*where) if satellites and sondes and where else None
-    return layers.build(device.last_status, at, catalogue, balloons)
+    found = layers.build(device.last_status, at, catalogue, balloons)
+    return layers.in_english(found) if found is not None and context.get("en") else found
 
 
 # SPEC §7.11 status.heater reasons.
@@ -234,12 +266,13 @@ cast(dict[str, Any], templates.env.globals)["sky_now"] = sky_now
 cast(dict[str, Any], templates.env.globals)["orientation_badge"] = orientation_badge
 cast(dict[str, Any], templates.env.globals)["flat_line"] = flat_line
 _filters = cast(dict[str, Any], templates.env.filters)
-_filters["age"] = age
-_filters["night_title"] = night_title
+_filters["age"] = _by_page_language(age)
+_filters["night_title"] = _by_page_language(night_title)
+_filters["night_day"] = _by_page_language(night_day)
 _filters["clock"] = clock
-_filters["when"] = when
-_filters["stamp"] = stamp
-_filters["compass"] = compass
+_filters["when"] = _by_page_language(when)
+_filters["stamp"] = _by_page_language(stamp)
+_filters["compass"] = _by_page_language(compass)
 _filters["mmss"] = mmss
-_filters["filesize"] = filesize
-cast(dict[str, Any], templates.env.filters)["localtime"] = localtime
+_filters["filesize"] = _by_page_language(filesize)
+_filters["localtime"] = _by_page_language(localtime)

@@ -10,6 +10,8 @@
   const FETCH_FOR_MS = 120000;
   let shown = 0; // which show() is current, so a late answer never swaps another picture
   const icon = (d) => `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="${d}"/></svg>`;
+  // The page's language (<html lang>, like copy.js); German unless the page is in English.
+  const tr = (de, en) => (document.documentElement.lang === "en" ? en : de);
   let box = null;
   let img = null;
   let caption = null;
@@ -26,20 +28,24 @@
   const build = () => {
     box = document.createElement("dialog");
     box.className = "lightbox";
-    box.setAttribute("aria-label", "Bildansicht");
+    box.setAttribute("aria-label", tr("Bildansicht", "Image viewer"));
+    const zoomOut = tr("Verkleinern", "Zoom out");
+    const zoomIn = tr("Vergrößern", "Zoom in");
+    const openOriginal = tr("Original öffnen", "Open original");
+    const close = tr("Schließen", "Close");
     box.innerHTML = `
       <div class="lb-stage"><img alt=""><p class="lb-status" role="status"></p></div>
       <div class="lb-bar">
         <p class="lb-caption"><span class="lb-counter"></span><span class="lb-text"></span></p>
         <div class="lb-tools">
-          <button type="button" data-lb="out" aria-label="Verkleinern" title="Verkleinern (−)">${icon("M5 12h14")}</button>
-          <button type="button" data-lb="in" aria-label="Vergrößern" title="Vergrößern (+)">${icon("M12 5v14M5 12h14")}</button>
-          <a class="lb-original" target="_blank" rel="noopener" aria-label="Original öffnen" title="Original öffnen">${icon("M14 4h6v6M20 4l-9 9M18 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h5")}</a>
-          <button type="button" data-lb="close" autofocus aria-label="Schließen" title="Schließen (Esc)">${icon("M6 6l12 12M18 6L6 18")}</button>
+          <button type="button" data-lb="out" aria-label="${zoomOut}" title="${zoomOut} (−)">${icon("M5 12h14")}</button>
+          <button type="button" data-lb="in" aria-label="${zoomIn}" title="${zoomIn} (+)">${icon("M12 5v14M5 12h14")}</button>
+          <a class="lb-original" target="_blank" rel="noopener" aria-label="${openOriginal}" title="${openOriginal}">${icon("M14 4h6v6M20 4l-9 9M18 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h5")}</a>
+          <button type="button" data-lb="close" autofocus aria-label="${close}" title="${close} (Esc)">${icon("M6 6l12 12M18 6L6 18")}</button>
         </div>
       </div>
-      <button type="button" class="lb-nav lb-prev" data-lb="prev" aria-label="Vorheriges Bild">${icon("M15 5l-7 7 7 7")}</button>
-      <button type="button" class="lb-nav lb-next" data-lb="next" aria-label="Nächstes Bild">${icon("M9 5l7 7-7 7")}</button>`;
+      <button type="button" class="lb-nav lb-prev" data-lb="prev" aria-label="${tr("Vorheriges Bild", "Previous image")}">${icon("M15 5l-7 7 7 7")}</button>
+      <button type="button" class="lb-nav lb-next" data-lb="next" aria-label="${tr("Nächstes Bild", "Next image")}">${icon("M9 5l7 7-7 7")}</button>`;
     document.body.append(box);
     img = box.querySelector(".lb-stage img");
     caption = box.querySelector(".lb-text");
@@ -76,7 +82,7 @@
     });
     img.addEventListener("error", () => {
       box.classList.remove("lb-loading");
-      status.textContent = "Das Bild konnte nicht geladen werden.";
+      status.textContent = tr("Das Bild konnte nicht geladen werden.", "The image could not be loaded.");
     });
 
     stage.addEventListener("wheel", (e) => {
@@ -278,7 +284,10 @@
   // Ask the hub until it has the full picture; the preview stays meanwhile.
   const fetchFull = async (url, current) => {
     box.classList.add("lb-fetching");
-    status.textContent = "Vorschau – das Vollbild wird von der Kamera geholt …";
+    status.textContent = tr(
+      "Vorschau – das Vollbild wird von der Kamera geholt …",
+      "Preview – fetching the full image from the camera …",
+    );
     const until = Date.now() + FETCH_FOR_MS;
     let found = false;
     // Not box.open here: open() calls show() before showModal() (review of #515).
@@ -305,7 +314,10 @@
       img.src = url;
       original.href = url;
     } else {
-      status.textContent = "Nur Vorschau: die Kamera hat das Vollbild nicht mehr oder ist nicht erreichbar.";
+      status.textContent = tr(
+        "Nur Vorschau: die Kamera hat das Vollbild nicht mehr oder ist nicht erreichbar.",
+        "Preview only: the camera no longer has the full image or cannot be reached.",
+      );
     }
   };
 

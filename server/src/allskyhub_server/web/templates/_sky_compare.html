@@ -5,7 +5,7 @@
   <div class="cam-meta"><h2>{{ heading or t('Himmel im Vergleich', 'Sky compared') }}</h2><span class="muted small">{{ t('letzte 30 Nächte, mag/⁠″², höher ist dunkler', 'last 30 nights, mag/⁠″², higher is darker') }}</span></div>
   <svg viewBox="0 0 {{ c.width }} {{ c.height }}" role="img" aria-label="{{ t('Himmelshelligkeit und die Spanne der Nachbarn über 30 Nächte', 'Sky brightness and the range of the neighbours over 30 nights') }}">
     {% for tk in c.ticks %}<line class="grid" x1="{{ c.left }}" x2="{{ c.right }}" y1="{{ tk.y }}" y2="{{ tk.y }}"/><text class="tick" x="{{ c.left - 8 }}" y="{{ tk.y + 4 }}" text-anchor="end">{{ tk.label if en else tk.label | replace('.', ',') }}</text>{% endfor %}
-    {% for d in c.days %}<text class="tick" x="{{ d.x }}" y="{{ c.height - 8 }}" text-anchor="{{ 'start' if loop.first else ('end' if loop.last else 'middle') }}">{{ d.night_id[6:8] }}.{{ d.night_id[4:6] }}.</text>{% endfor %}
+    {% for d in c.days %}<text class="tick" x="{{ d.x }}" y="{{ c.height - 8 }}" text-anchor="{{ 'start' if loop.first else ('end' if loop.last else 'middle') }}">{{ d.night_id | night_day }}</text>{% endfor %}
     {% for b in c.bars %}<rect class="range" x="{{ b.x }}" y="{{ b.y }}" width="8" height="{{ b.h }}" rx="3"/>{% endfor %}
     {% if c.path %}<path class="own" d="{{ c.path }}"/>{% endif %}
     {% if c.last %}<circle class="own-dot" cx="{{ c.last.x }}" cy="{{ c.last.y }}" r="5"/>{% endif %}

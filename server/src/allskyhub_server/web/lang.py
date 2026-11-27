@@ -6,8 +6,14 @@ signing up and confirming, signing in, a forgotten password, the way in (/start)
 connecting a camera with its station pages. ``?lang=en`` or ``?lang=de`` picks the
 language and remembers it in the ``ash_lang`` cookie; the menu's switch goes through
 ``/sprache/{code}`` and, when signed in, also keeps it as the account's language for its
-mails (``User.lang``). Every other page stays German; templates say ``{{ t('…', '…') }}``,
-Python ``i18n.tr`` (the request's language, i18n.LanguageMiddleware).
+mails (``User.lang``). Since 2026-11-27 also every public page a visitor without an account
+sees: the sky pages (/sky/…, their nights and measurements), the map, Plus, hardware,
+fireballs, meteor showers and the imprint; their scripts read ``<html lang>``. Benjamin,
+2026-11-27: every page has both languages, the signed-in pages, the admin pages and the
+legal texts too (their English versions follow in their own change; until then parts
+shared with the public pages already show English there). Templates say
+``{{ t('…', '…') }}``, Python ``i18n.tr`` (the request's language,
+i18n.LanguageMiddleware).
 """
 
 from __future__ import annotations

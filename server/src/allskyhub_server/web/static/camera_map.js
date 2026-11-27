@@ -7,6 +7,9 @@
   const config = JSON.parse(raw.textContent);
   const sqm = config.layer === "sqm";
   const KEY = "ash-map-base";
+  // German or English like the page (<html lang>, web/lang.py).
+  const en = document.documentElement.lang === "en";
+  const t = (de, english) => (en ? english : de);
 
   // The zoom at which the whole world fits the map's width (2026-11-24: cameras in
   // Germany, Nevada and New Zealand did not fit at the old fixed minimum of 2).
@@ -71,7 +74,7 @@
     if (c.image) {
       const img = node("img");
       img.src = `/sky/${encodeURIComponent(c.slug)}/latest.jpg`;
-      img.alt = `Himmel über ${c.title}`;
+      img.alt = `${t("Himmel über", "Sky over")} ${c.title}`;
       img.loading = "lazy";
       box.append(img);
     }
@@ -80,7 +83,7 @@
     if (sqm || c.sqm !== null) box.append(node("span", "map-sqm", c.sqm_text));
     // On /netz a station can be on the map without a page of its own.
     if (c.slug) {
-      const link = node("a", "button small", c.kind === "station" ? "Zur Station →" : "Zur Kamera →");
+      const link = node("a", "button small", c.kind === "station" ? t("Zur Station →", "To the station →") : t("Zur Kamera →", "To the camera →"));
       link.href = `/sky/${encodeURIComponent(c.slug)}`;
       box.append(link);
     }
@@ -101,7 +104,7 @@
   // Reports by eye from the app: small squares, coloured like the cameras.
   for (const r of config.reports || []) {
     const box = node("div", "map-popup");
-    box.append(node("strong", "", "Gemeldet mit bloßem Auge"));
+    box.append(node("strong", "", t("Gemeldet mit bloßem Auge", "Reported by naked eye")));
     box.append(node("span", "map-sqm", r.sqm_text));
     L.circleMarker([r.lat, r.lon], { radius: 5, weight: 1, className: `map-report ${r.sqm_class}` })
       .bindPopup(box, { maxWidth: 240 })
@@ -129,22 +132,22 @@
     e.preventDefault();
     const q = form.q.value.trim();
     if (q.length < 2) return;
-    results.replaceChildren(node("li", "muted", "Suche …"));
+    results.replaceChildren(node("li", "muted", t("Suche …", "Searching …")));
     results.hidden = false;
     let places = [];
     try {
       const r = await fetch(`/karte/suche?q=${encodeURIComponent(q)}`);
       places = r.ok ? await r.json() : [];
       if (!r.ok) {
-        results.replaceChildren(node("li", "muted", r.status === 429 ? "Zu viele Suchen, bitte kurz warten." : "Die Suche geht gerade nicht."));
+        results.replaceChildren(node("li", "muted", r.status === 429 ? t("Zu viele Suchen, bitte kurz warten.", "Too many searches, please wait a moment.") : t("Die Suche geht gerade nicht.", "Search is not working right now.")));
         return;
       }
     } catch {
-      results.replaceChildren(node("li", "muted", "Die Suche geht gerade nicht."));
+      results.replaceChildren(node("li", "muted", t("Die Suche geht gerade nicht.", "Search is not working right now.")));
       return;
     }
     if (!places.length) {
-      results.replaceChildren(node("li", "muted", "Nichts gefunden."));
+      results.replaceChildren(node("li", "muted", t("Nichts gefunden.", "Nothing found.")));
       return;
     }
     if (places.length === 1) {

@@ -20,6 +20,7 @@ from allskyhub_server.auth.sessions import SessionInfo
 from allskyhub_server.billing import paddle, plus
 from allskyhub_server.billing.paddle import Paddle, PaddleError
 from allskyhub_server.devices import queries
+from allskyhub_server.i18n import english
 from allskyhub_server.models import Device, Subscription
 from allskyhub_server.settings import Settings
 from allskyhub_server.web.deps import (
@@ -61,14 +62,19 @@ async def _own(db: DbSession, user_id: uuid.UUID, device_id: str) -> Device:
     return device
 
 
+def _price(text: str) -> str:
+    """ "4,99 €" in German, "€4.99" in English."""
+    return f"€{text.removesuffix(' €').replace(',', '.')}" if english() else text
+
+
 @router.get("/plus")
 async def offer(request: Request, session: OptionalSession, settings: SettingsDep) -> Response:
     return render(
         request,
         "plus.html",
         {
-            "price_month": plus.PRICE_MONTH,
-            "price_year": plus.PRICE_YEAR,
+            "price_month": _price(plus.PRICE_MONTH),
+            "price_year": _price(plus.PRICE_YEAR),
             "billing": settings.billing,
         },
         session=session,

@@ -1,31 +1,36 @@
 {% extends "base.html" %}
-{% block title %}Impressum · allskyhub{% endblock %}
+{% block lang %}{{ 'en' if en else 'de' }}{% endblock %}
+{% block title %}{{ t('Impressum', 'Imprint') }} · allskyhub{% endblock %}
 {% block content %}
 <article class="legal stack">
-  <h1>Impressum</h1>
-  <p class="muted">Informationspflicht laut § 5 E-Commerce-Gesetz, § 14 Unternehmensgesetzbuch, § 63 Gewerbeordnung und Offenlegungspflicht laut § 25 Mediengesetz.</p>
+  <h1>{{ t('Impressum', 'Imprint') }}</h1>
+  <p class="muted">{{ t('Informationspflicht laut § 5 E-Commerce-Gesetz, § 14 Unternehmensgesetzbuch, § 63 Gewerbeordnung und Offenlegungspflicht laut § 25 Mediengesetz.', 'Information required by § 5 E-Commerce-Gesetz, § 14 Unternehmensgesetzbuch and § 63 Gewerbeordnung, and disclosure under § 25 Mediengesetz (Austrian law).') }}</p>
   <section class="card">
-    <h2>Betreiber</h2>
+    <h2>{{ t('Betreiber', 'Operator') }}</h2>
     <p>WebInx<br>Benjamin Hartwich<br>Lanzenberg 10<br>4492 Hofkirchen im Traunkreis<br>Österreich</p>
     <dl class="facts">
-      <dt>E-Mail</dt><dd><a href="mailto:support@webinx.eu">support@webinx.eu</a></dd>
-      <dt>Telefon</dt><dd><a href="tel:+436649700666">+43 664 9700666</a></dd>
-      <dt>Unternehmensgegenstand</dt><dd>IT-Dienstleistungen</dd>
-      <dt>UID-Nummer</dt><dd>ATU73183324</dd>
-      <dt>Mitglied bei</dt><dd>WKO Oberösterreich</dd>
-      <dt>Berufsrecht</dt><dd>Gewerbeordnung: <a href="https://www.ris.bka.gv.at">www.ris.bka.gv.at</a></dd>
-      <dt>Aufsichtsbehörde/Gewerbebehörde</dt><dd>Bezirkshauptmannschaft Linz-Land</dd>
-      <dt>Berufsbezeichnung</dt><dd>Webdesigner, Grafiker</dd>
-      <dt>Verleihungsstaat</dt><dd>Österreich</dd>
+      <dt>{{ t('E-Mail', 'Email') }}</dt><dd><a href="mailto:support@webinx.eu">support@webinx.eu</a></dd>
+      <dt>{{ t('Telefon', 'Phone') }}</dt><dd><a href="tel:+436649700666">+43 664 9700666</a></dd>
+      <dt>{{ t('Unternehmensgegenstand', 'Business activity') }}</dt><dd>{{ t('IT-Dienstleistungen', 'IT services') }}</dd>
+      <dt>{{ t('UID-Nummer', 'VAT number') }}</dt><dd>ATU73183324</dd>
+      <dt>{{ t('Mitglied bei', 'Member of') }}</dt><dd>{{ t('WKO Oberösterreich', 'WKO Oberösterreich (Upper Austrian Chamber of Commerce)') }}</dd>
+      <dt>{{ t('Berufsrecht', 'Professional law') }}</dt><dd>{{ t('Gewerbeordnung', 'Gewerbeordnung (Trade Regulation Act)') }}: <a href="https://www.ris.bka.gv.at">www.ris.bka.gv.at</a></dd>
+      <dt>{{ t('Aufsichtsbehörde/Gewerbebehörde', 'Supervisory and trade authority') }}</dt><dd>Bezirkshauptmannschaft Linz-Land</dd>
+      <dt>{{ t('Berufsbezeichnung', 'Professional title') }}</dt><dd>{{ t('Webdesigner, Grafiker', 'Web designer, graphic designer') }}</dd>
+      <dt>{{ t('Verleihungsstaat', 'Awarded in') }}</dt><dd>{{ t('Österreich', 'Austria') }}</dd>
     </dl>
   </section>
   <section class="card">
-    <h2>Haftung für Inhalte und Links</h2>
-    <p>Wir entwickeln allskyhub ständig weiter und bemühen uns um korrekte und aktuelle Informationen, können aber keine Haftung für die Richtigkeit aller Inhalte übernehmen. Für Inhalte verlinkter Seiten sind deren Betreiber verantwortlich. Fallen dir problematische oder rechtswidrige Inhalte oder Links auf, schreib uns bitte an die oben genannte Adresse.</p>
+    <h2>{{ t('Haftung für Inhalte und Links', 'Liability for content and links') }}</h2>
+    <p>{{ t('Wir entwickeln allskyhub ständig weiter und bemühen uns um korrekte und aktuelle Informationen, können aber keine Haftung für die Richtigkeit aller Inhalte übernehmen. Für Inhalte verlinkter Seiten sind deren Betreiber verantwortlich. Fallen dir problematische oder rechtswidrige Inhalte oder Links auf, schreib uns bitte an die oben genannte Adresse.', 'We keep developing allskyhub and strive for correct and up-to-date information, but cannot accept liability for the accuracy of all content. The operators of linked pages are responsible for their content. If you notice problematic or unlawful content or links, please write to us at the address above.') }}</p>
   </section>
   <section class="card">
-    <h2>Quelltext und Urheberrecht</h2>
+    <h2>{{ t('Quelltext und Urheberrecht', 'Source code and copyright') }}</h2>
+    {% if en %}
+    <p>allskyhub is open source. The source code of this service is available under the AGPL-3.0 on <a href="https://github.com/benhartwich/allskyhub">GitHub</a>. Sky images belong to the operators of the respective cameras.</p>
+    {% else %}
     <p>allskyhub ist Open Source. Der Quelltext dieses Dienstes steht unter der AGPL-3.0 auf <a href="https://github.com/benhartwich/allskyhub">GitHub</a>. Himmelsbilder gehören den Betreibern der jeweiligen Kameras.</p>
+    {% endif %}
   </section>
 </article>
 {% endblock %}

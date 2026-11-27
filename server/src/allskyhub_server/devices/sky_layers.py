@@ -9,6 +9,7 @@ the lens's frame, like the constellations.
 
 from __future__ import annotations
 
+import dataclasses
 import datetime as dt
 import json
 import math
@@ -19,10 +20,10 @@ from typing import Any, cast
 from allskyhub_server.devices import bright_satellites, radiosondes
 from allskyhub_server.devices.satellite_match import Catalogue, epoch, look_all
 from allskyhub_server.devices.satellites import MIN_ALTITUDE
-from allskyhub_server.devices.sky_overlay import orientation
+from allskyhub_server.devices.sky_overlay import CARDINALS_EN, orientation
 from allskyhub_sky import alt_az, precess, project, sidereal_deg
 from allskyhub_sky.astro import moon_illumination, moon_radec
-from allskyhub_sky.objects import PLANETS, planet_radec
+from allskyhub_sky.objects import PLANETS, PLANETS_EN, planet_radec
 from allskyhub_solve.solve import CATALOGUE as STAR_CATALOGUE
 
 STAR_MIN_ALT = 8.0
@@ -130,6 +131,25 @@ def build(
     if balloons:
         result.balloons.extend(_balloons(balloons, status, lat, lon, at, pixel))
     return result
+
+
+def in_english(found: Layers) -> Layers:
+    """The layers with English labels (planets, moon, E for east), for the public pages
+    in English. Satellites and balloons are never shown there."""
+    planets_en = {PLANETS[key]: PLANETS_EN[key] for key in PLANETS}
+
+    def planet(text: str) -> str:
+        if text.startswith("Mond "):
+            return "Moon " + text.removeprefix("Mond ")
+        return planets_en.get(text, text)
+
+    return dataclasses.replace(
+        found,
+        cardinals=[
+            dataclasses.replace(m, text=CARDINALS_EN.get(m.text, m.text)) for m in found.cardinals
+        ],
+        planets=[dataclasses.replace(m, text=planet(m.text)) for m in found.planets],
+    )
 
 
 def _balloons(

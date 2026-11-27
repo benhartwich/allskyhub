@@ -1,11 +1,23 @@
 {% extends "base.html" %}
+{% block lang %}{{ 'en' if en else 'de' }}{% endblock %}
 {% block title %}Hardware · allskyhub{% endblock %}
 {% block content %}
+{% if en %}
+<div class="page-head"><h1>What you need for a camera</h1></div>
+<p class="lead">An allskyhub camera is a Raspberry Pi with an all-sky camera in a weatherproof housing, connected by a single network cable. Altogether it costs {{ total_hq }} with the Raspberry Pi camera or {{ total_zwo }} with the ZWO ASI678MC.</p>
+{% else %}
 <div class="page-head"><h1>Was du für eine Kamera brauchst</h1></div>
 <p class="lead">Eine allskyhub-Kamera ist ein Raspberry Pi mit Allsky-Kamera in einem wetterfesten Gehäuse, verbunden über ein einziges Netzwerkkabel. Alles zusammen kostet {{ total_hq }} mit der Raspberry-Pi-Kamera oder {{ total_zwo }} mit der ZWO ASI678MC.</p>
+{% endif %}
 {% include "_daniel.html" %}
 {% include "_hardware_list.html" %}
+{% if en %}
+<p>Already running a camera with Allsky? Then you need nothing new: <a href="/allsky">install allskyhub next to Allsky</a>.</p>
+<p class="muted small">Prices are rough guides (October 2026). The links go to other shops that allskyhub has no ties with; you can buy the parts anywhere. Other Raspberry Pi cameras and ZWO models may work; the list above is what has been tested.</p>
+<p>{% if user %}<a class="button" href="/start">First steps</a>{% else %}<a class="button" href="/zugang">Ask for access</a>{% endif %}</p>
+{% else %}
 <p>Läuft bei dir schon eine Kamera mit Allsky? Dann brauchst du nichts Neues: <a href="/allsky">allskyhub neben Allsky installieren</a> (<a href="/allsky?lang=en" hreflang="en" lang="en">English</a>).</p>
 <p class="muted small">Preise sind grobe Richtwerte (Oktober 2026). Die Links führen zu fremden Shops, mit denen allskyhub nicht verbunden ist; du kannst die Teile überall kaufen. Andere Raspberry-Pi-Kameras und ZWO-Modelle können funktionieren, getestet ist die Liste oben.</p>
 <p>{% if user %}<a class="button" href="/start">Erste Schritte</a>{% else %}<a class="button" href="/zugang">Zugang beantragen</a>{% endif %}</p>
+{% endif %}
 {% endblock %}

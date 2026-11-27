@@ -110,8 +110,8 @@ async def test_allsky_joins_with_its_module(client: httpx.AsyncClient) -> None:
     assert "allsky-modules/tree/master/allsky_sharedsky" in r.text
     assert "v2026.10.01_01" in r.text  # its Module Manager has no SharedSky yet
     assert "myFiles/modules" in r.text
-    # The readable v1.0.1 until AllskyTeam/allsky-modules#439 is merged (master: v1.0.0).
-    assert "benhartwich/allskyhub/main/integrations/allsky_sharedsky/allsky_sharedsky.py" in r.text
+    # The file to copy comes from AllskyTeam's master (allsky-modules#439 merged).
+    assert "AllskyTeam/allsky-modules/master/allsky_sharedsky/allsky_sharedsky.py" in r.text
     assert "wartet auf Prüfung" not in r.text
     join = await client.get("/mitmachen")
     assert "Das Modul <strong>SharedSky</strong>" in join.text

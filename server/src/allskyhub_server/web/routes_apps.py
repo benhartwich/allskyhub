@@ -198,11 +198,10 @@ async def apps_action(
             withdrawn = any(x.title == appstore.WITHDRAWN for x in report.steps)
             # The waiting version now takes the new build.
             if withdrawn and not appstore.start(stores, by, other):
-                report.add(titles()["appstore"], "warn", tr(
+                # Stored with the run (apps.save_review): run reports stay German.
+                report.add(TITLES["appstore"], "warn",
                     "Eine Übertragung läuft noch; danach „App Store übertragen“ noch einmal "
-                    "drücken.",
-                    'A transfer is still running; then press "Send to App Store" '
-                    "again."))  # fmt: skip
+                    "drücken.")  # fmt: skip
             apps.save_review(stores, other.key if other else "allskyhub", store, by, report)
             log.info(
                 "review %s %s submitted by %s: %s", store, name, by,

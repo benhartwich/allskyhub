@@ -153,4 +153,7 @@ async def test_matched_and_shown(app: FastAPI, client: httpx.AsyncClient) -> Non
     english = await client.get(f"/feuerkugeln/{pair_id}", params={"lang": "en"})
     assert "Measured by the Global Meteor Network" in english.text
     assert "28.4 km/s at entry" in english.text
+    # Review of #535: the shower by its IMO name, not its code.
+    assert "Southern Taurids" in english.text
+    assert "<dd>STA</dd>" not in english.text
     await client.get(f"/feuerkugeln/{pair_id}", params={"lang": "de"})  # back to German

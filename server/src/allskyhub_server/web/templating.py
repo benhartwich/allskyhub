@@ -19,7 +19,10 @@ from allskyhub_server import i18n
 from allskyhub_server.devices import radiosondes as radiosondes_module
 from allskyhub_server.devices import sky_now as sky_now_module
 from allskyhub_server.devices import sky_overlay as overlay
-from allskyhub_server.devices.event_text import EVENT_TITLES, compass
+from allskyhub_server.devices.event_text import compass
+
+# Event kind → title in the request's language; kept importable from here.
+from allskyhub_server.devices.event_text import event_titles as event_titles
 
 TEMPLATE_DIR = Path(__file__).parent / "templates"
 STATIC_DIR = Path(__file__).parent / "static"
@@ -230,21 +233,6 @@ def heater_text(heater: object) -> str:
     reasons = HEATER_REASONS_EN if i18n.english() else HEATER_REASONS
     text = reasons.get(reason) if isinstance(reason, str) else None
     return text or (i18n.tr("an", "on") if h.get("on") else i18n.tr("aus", "off"))
-
-
-# English next to devices/event_text.py EVENT_TITLES (that module is German so far).
-EVENT_TITLES_EN = {
-    "meteor": "Meteor", "lightning": "Lightning", "aurora": "Aurora",
-    "nlc": "Noctilucent clouds", "satellite": "Satellite", "clouds": "Clouds",
-    "sky_quality": "Sky quality",
-}  # fmt: skip
-
-
-def event_titles() -> dict[str, str]:
-    """Event kind → title in the request's language, for the ``event_titles`` context."""
-    if not i18n.english():
-        return EVENT_TITLES
-    return {kind: EVENT_TITLES_EN.get(kind, title) for kind, title in EVENT_TITLES.items()}
 
 
 @pass_context

@@ -1,23 +1,24 @@
 {% extends "base.html" %}
-{% block title %}Lokale Anmeldung · {{ device.name }}{% endblock %}
+{% block lang %}{{ 'en' if en else 'de' }}{% endblock %}
+{% block title %}{{ t('Lokale Anmeldung', 'Local sign-in') }} · {{ device.name }}{% endblock %}
 {% block content %}
 <div class="auth">
-  <h1>An der Kamera anmelden</h1>
+  <h1>{{ t('An der Kamera anmelden', 'Sign in at the camera') }}</h1>
   <div class="card stack">
-    <p>Die lokale Seite deiner Kamera <strong>{{ device.name }}</strong> möchte dich mit deinem allskyhub-Konto anmelden.</p>
+    <p>{% if en %}The local page of your camera <strong>{{ device.name }}</strong> wants to sign you in with your allskyhub account.{% else %}Die lokale Seite deiner Kamera <strong>{{ device.name }}</strong> möchte dich mit deinem allskyhub-Konto anmelden.{% endif %}</p>
     <p class="target-host"><code>{{ host }}</code></p>
     <dl class="facts">
-      <dt>Adresse</dt><dd><code>{{ origin }}</code></dd>
+      <dt>{{ t('Adresse', 'Address') }}</dt><dd><code>{{ origin }}</code></dd>
     </dl>
-    {% if not local %}<p class="warn">Diese Adresse liegt nicht in einem Heimnetz. Die lokale Seite deiner Kamera erreichst du normalerweise unter einer Adresse wie <code>allskyhub.local</code> oder <code>192.168.…</code>. Hat dir jemand diesen Link geschickt, brich ab.</p>{% endif %}
-    <p class="muted">Bestätige nur, wenn du gerade selbst auf diese Adresse zugreifst. Danach bist du dort 30 Tage angemeldet.</p>
+    {% if not local %}<p class="warn">{% if en %}This address is not in a home network. You normally reach your camera’s local page at an address like <code>allskyhub.local</code> or <code>192.168.…</code>. If someone sent you this link, cancel.{% else %}Diese Adresse liegt nicht in einem Heimnetz. Die lokale Seite deiner Kamera erreichst du normalerweise unter einer Adresse wie <code>allskyhub.local</code> oder <code>192.168.…</code>. Hat dir jemand diesen Link geschickt, brich ab.{% endif %}</p>{% endif %}
+    <p class="muted">{{ t('Bestätige nur, wenn du gerade selbst auf diese Adresse zugreifst. Danach bist du dort 30 Tage angemeldet.', 'Confirm only if you are opening this address yourself right now. You then stay signed in there for 30 days.') }}</p>
     <form method="post" action="/cameras/{{ device.id }}/local-login" class="stack">
       <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
       <input type="hidden" name="return" value="{{ base }}">
       <input type="hidden" name="nonce" value="{{ nonce }}">
-      <button type="submit">Anmelden bei {{ origin }}</button>
+      <button type="submit">{{ t('Anmelden bei', 'Sign in at') }} {{ origin }}</button>
     </form>
-    <a class="back" href="/cameras/{{ device.id }}">Abbrechen</a>
+    <a class="back" href="/cameras/{{ device.id }}">{{ t('Abbrechen', 'Cancel') }}</a>
   </div>
 </div>
 {% endblock %}

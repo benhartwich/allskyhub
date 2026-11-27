@@ -47,7 +47,7 @@ from cryptography.x509.oid import NameOID
 
 from allskyhub_server.admin.deploy import github_headers
 from allskyhub_server.devices.images import jpeg_size
-from allskyhub_server.i18n import english
+from allskyhub_server.i18n import english, tr
 
 log = logging.getLogger(__name__)
 
@@ -433,7 +433,28 @@ TOKEN = re.compile(r"^[A-Za-z0-9._~+/=-]{16,512}$")
 
 
 class StoreError(Exception):
-    """German message for the page; never contains a secret."""
+    """A message for the page; never contains a secret. Where it is shown right away
+    (uploads, starting a build) it is in the admin's language (``tr``); where it ends up
+    in a run report (Report steps, kept in the vault) it stays German."""
+
+
+def _no_json() -> str:
+    return tr("Das ist keine JSON-Datei.", "This is no JSON file.")
+
+
+def _set_up_first() -> str:
+    return tr("Erst „Prüfen und einrichten“, dann bauen.", 'First "Check and set up", then build.')
+
+
+def _android_busy() -> str:
+    return tr("Es läuft schon ein Android-Build.", "An Android build is already running.")
+
+
+def _test_apk_only(app: OtherApp) -> str:
+    return tr(
+        f"{app.title} kommt nicht in die Stores, nur die Test-APK.",
+        f"{app.title} does not go to the stores, only the test APK.",
+    )
 
 
 # --- The vault -------------------------------------------------------------------------
@@ -558,21 +579,31 @@ def parse_play(raw: bytes) -> tuple[bytes, dict[str, Any]]:
     try:
         data = json.loads(raw)
     except ValueError:
-        raise StoreError("Das ist keine JSON-Datei.") from None
+        raise StoreError(_no_json()) from None
     if not isinstance(data, dict):
-        raise StoreError("Das ist kein Dienstkonto-Schlüssel.")
+        raise StoreError(
+            tr("Das ist kein Dienstkonto-Schlüssel.", "This is no service account key.")
+        )
     key = cast(dict[str, Any], data)
     if key.get("type") != "service_account" or not all(
         isinstance(key.get(k), str) and key[k]
         for k in ("client_email", "private_key", "token_uri", "project_id")
     ):
         raise StoreError(
-            "Das ist kein Dienstkonto-Schlüssel (type service_account mit private_key)."
+            tr(
+                "Das ist kein Dienstkonto-Schlüssel (type service_account mit private_key).",
+                "This is no service account key (type service_account with private_key).",
+            )
         )
     try:
         _rsa_key(key["private_key"].encode())
     except StoreError:
-        raise StoreError("Der private Schlüssel in der Datei lässt sich nicht lesen.") from None
+        raise StoreError(
+            tr(
+                "Der private Schlüssel in der Datei lässt sich nicht lesen.",
+                "The private key in the file cannot be read.",
+            )
+        ) from None
     return raw, {"client_email": key["client_email"], "project_id": key["project_id"]}
 
 
@@ -580,15 +611,32 @@ def parse_asc(p8: bytes, key_id: str, issuer_id: str) -> tuple[bytes, dict[str, 
     """An App Store Connect team API key: the .p8 file, its key id and the issuer id."""
     key_id, issuer_id = key_id.strip().upper(), issuer_id.strip().lower()
     if not KEY_ID.match(key_id):
-        raise StoreError("Die Key-ID hat zehn Zeichen, z. B. 2X9R4HXF34.")
+        raise StoreError(
+            tr(
+                "Die Key-ID hat zehn Zeichen, z. B. 2X9R4HXF34.",
+                "The key ID has ten characters, e.g. 2X9R4HXF34.",
+            )
+        )
     if not ISSUER_ID.match(issuer_id):
-        raise StoreError("Die Issuer-ID ist eine UUID, sie steht über der Schlüsselliste.")
+        raise StoreError(
+            tr(
+                "Die Issuer-ID ist eine UUID, sie steht über der Schlüsselliste.",
+                "The issuer ID is a UUID; it is shown above the list of keys.",
+            )
+        )
     try:
         key = serialization.load_pem_private_key(p8.strip(), password=None)
     except (ValueError, TypeError):
-        raise StoreError("Die .p8-Datei lässt sich nicht lesen.") from None
+        raise StoreError(
+            tr("Die .p8-Datei lässt sich nicht lesen.", "The .p8 file cannot be read.")
+        ) from None
     if not isinstance(key, ec.EllipticCurvePrivateKey):
-        raise StoreError("Die .p8-Datei enthält keinen App-Store-Connect-Schlüssel.")
+        raise StoreError(
+            tr(
+                "Die .p8-Datei enthält keinen App-Store-Connect-Schlüssel.",
+                "The .p8 file holds no App Store Connect key.",
+            )
+        )
     return p8.strip() + b"\n", {"key_id": key_id, "issuer_id": issuer_id}
 
 
@@ -597,16 +645,24 @@ def parse_fcm(raw: bytes) -> tuple[bytes, dict[str, Any]]:
     try:
         info = json.loads(raw)
     except ValueError:
-        raise StoreError("Das ist keine JSON-Datei.") from None
+        raise StoreError(_no_json()) from None
     data = cast(dict[str, Any], info) if isinstance(info, dict) else {}
     if data.get("type") != "service_account":
-        raise StoreError("Bitte den JSON-Schlüssel eines Dienstkontos hochladen.")
+        raise StoreError(
+            tr(
+                "Bitte den JSON-Schlüssel eines Dienstkontos hochladen.",
+                "Please upload the JSON key of a service account.",
+            )
+        )
     try:
         _rsa_key(str(data["private_key"]).encode())
         project, email = str(data["project_id"]), str(data["client_email"])
     except (KeyError, StoreError, ValueError):
         raise StoreError(
-            "Im Schlüssel fehlt etwas (project_id, client_email, private_key)."
+            tr(
+                "Im Schlüssel fehlt etwas (project_id, client_email, private_key).",
+                "Something is missing in the key (project_id, client_email, private_key).",
+            )
         ) from None
     return raw, {"project_id": project, "client_email": email}
 
@@ -614,7 +670,12 @@ def parse_fcm(raw: bytes) -> tuple[bytes, dict[str, Any]]:
 def parse_turnstile(site_key: str, secret: str) -> tuple[bytes, dict[str, Any]]:
     site_key, secret = site_key.strip(), secret.strip()
     if not TURNSTILE_KEY.match(site_key) or not TURNSTILE_KEY.match(secret):
-        raise StoreError("Site-Key und Secret-Key bitte aus dem Turnstile-Widget kopieren.")
+        raise StoreError(
+            tr(
+                "Site-Key und Secret-Key bitte aus dem Turnstile-Widget kopieren.",
+                "Please copy the site key and the secret key from the Turnstile widget.",
+            )
+        )
     return secret.encode(), {"site_key": site_key}
 
 
@@ -622,9 +683,9 @@ def parse_fcm_app(fields: dict[str, str]) -> dict[str, str]:
     out = {k: fields.get(k, "").strip() for k in FCM_APP_FIELDS}
     for key, value in out.items():
         if value and not FCM_ID.match(value):
-            raise StoreError(f"{key} sieht nicht richtig aus.")
+            raise StoreError(tr(f"{key} sieht nicht richtig aus.", f"{key} does not look right."))
     if not out["sender_id"]:
-        raise StoreError("Die Sender-ID fehlt.")
+        raise StoreError(tr("Die Sender-ID fehlt.", "The sender ID is missing."))
     return out
 
 
@@ -635,7 +696,12 @@ def parse_google_services(raw: bytes, package: str = PACKAGE) -> dict[str, str]:
     try:
         data = json.loads(raw)
     except ValueError:
-        raise StoreError("google-services.json ist keine JSON-Datei.") from None
+        raise StoreError(
+            tr(
+                "google-services.json ist keine JSON-Datei.",
+                "google-services.json is no JSON file.",
+            )
+        ) from None
     root = cast(dict[str, Any], data) if isinstance(data, dict) else {}
     sender = str(_dict(root.get("project_info")).get("project_number", ""))
     for c in _list(root.get("client")):
@@ -650,7 +716,12 @@ def parse_google_services(raw: bytes, package: str = PACKAGE) -> dict[str, str]:
             "android_app_id": str(info.get("mobilesdk_app_id", "")),
             "android_api_key": str(key),
         }
-    raise StoreError(f"In google-services.json fehlt die Android-App {package}.")
+    raise StoreError(
+        tr(
+            f"In google-services.json fehlt die Android-App {package}.",
+            f"The Android app {package} is missing in google-services.json.",
+        )
+    )
 
 
 def parse_service_info(raw: bytes, package: str = PACKAGE) -> dict[str, str]:
@@ -658,10 +729,20 @@ def parse_service_info(raw: bytes, package: str = PACKAGE) -> dict[str, str]:
     try:
         data: object = plistlib.loads(raw)
     except (plistlib.InvalidFileException, ValueError, ExpatError):
-        raise StoreError("GoogleService-Info.plist ist keine Plist-Datei.") from None
+        raise StoreError(
+            tr(
+                "GoogleService-Info.plist ist keine Plist-Datei.",
+                "GoogleService-Info.plist is no plist file.",
+            )
+        ) from None
     info = _dict(data)
     if info.get("BUNDLE_ID") != package:
-        raise StoreError(f"GoogleService-Info.plist gehört nicht zur iOS-App {package}.")
+        raise StoreError(
+            tr(
+                f"GoogleService-Info.plist gehört nicht zur iOS-App {package}.",
+                f"GoogleService-Info.plist does not belong to the iOS app {package}.",
+            )
+        )
     return {
         "project_id": str(info.get("PROJECT_ID", "")),
         "sender_id": str(info.get("GCM_SENDER_ID", "")),
@@ -693,7 +774,12 @@ def parse_github(token: str) -> tuple[bytes, dict[str, Any]]:
     """A read-only GitHub token: 5000 API requests an hour instead of 60 per address."""
     token = token.strip()
     if not GITHUB_TOKEN.match(token):
-        raise StoreError("Das sieht nicht wie ein GitHub-Token aus (github_pat_… oder ghp_…).")
+        raise StoreError(
+            tr(
+                "Das sieht nicht wie ein GitHub-Token aus (github_pat_… oder ghp_…).",
+                "This does not look like a GitHub token (github_pat_… or ghp_…).",
+            )
+        )
     return token.encode(), {}
 
 
@@ -707,16 +793,28 @@ def parse_review(login: str, password: str) -> tuple[bytes, dict[str, Any]]:
     """A demo account for the screenshot runs: login and password, as entered."""
     login = login.strip()
     if not 3 <= len(login) <= 254 or any(c in login for c in "\r\n\t "):
-        raise StoreError("Bitte die Anmeldung des Demo-Kontos (E-Mail oder Name).")
+        raise StoreError(
+            tr(
+                "Bitte die Anmeldung des Demo-Kontos (E-Mail oder Name).",
+                "Please enter the demo account's sign-in (email or name).",
+            )
+        )
     if not 1 <= len(password) <= 256 or any(c in password for c in "\r\n"):
-        raise StoreError("Bitte das Passwort des Demo-Kontos.")
+        raise StoreError(
+            tr("Bitte das Passwort des Demo-Kontos.", "Please enter the demo account's password.")
+        )
     return json.dumps({"login": login, "password": password}).encode(), {"login": login}
 
 
 def parse_codemagic(token: str) -> tuple[bytes, dict[str, Any]]:
     token = token.strip()
     if not TOKEN.match(token):
-        raise StoreError("Das sieht nicht wie ein Codemagic-API-Token aus.")
+        raise StoreError(
+            tr(
+                "Das sieht nicht wie ein Codemagic-API-Token aus.",
+                "This does not look like a Codemagic API token.",
+            )
+        )
     return token.encode(), {}
 
 
@@ -726,22 +824,35 @@ def parse_youtube(raw: bytes, redirect_uri: str) -> tuple[bytes, dict[str, Any]]
     try:
         data = json.loads(raw)
     except ValueError:
-        raise StoreError("Das ist keine JSON-Datei.") from None
+        raise StoreError(_no_json()) from None
     web: object = cast(dict[str, Any], data).get("web") if isinstance(data, dict) else None
     if not isinstance(web, dict):
         raise StoreError(
-            "Das ist kein OAuth-Client vom Typ „Webanwendung“ (in der Datei fehlt „web“)."
+            tr(
+                "Das ist kein OAuth-Client vom Typ „Webanwendung“ (in der Datei fehlt „web“).",
+                'This is no OAuth client of the type "Web application" ("web" is missing in '
+                "the file).",
+            )
         )
     client = cast(dict[str, Any], web)
     if not all(
         isinstance(client.get(k), str) and client[k] for k in ("client_id", "client_secret")
     ):
-        raise StoreError("In der Datei fehlen client_id oder client_secret.")
+        raise StoreError(
+            tr(
+                "In der Datei fehlen client_id oder client_secret.",
+                "client_id or client_secret is missing in the file.",
+            )
+        )
     uris: object = client.get("redirect_uris") or []
     if not isinstance(uris, list) or redirect_uri not in cast(list[object], uris):
         raise StoreError(
-            f"Beim OAuth-Client fehlt der autorisierte Weiterleitungs-URI {redirect_uri}. "
-            "Bitte in Google Cloud eintragen und die JSON-Datei neu herunterladen."
+            tr(
+                f"Beim OAuth-Client fehlt der autorisierte Weiterleitungs-URI {redirect_uri}. "
+                "Bitte in Google Cloud eintragen und die JSON-Datei neu herunterladen.",
+                f"The OAuth client lacks the authorised redirect URI {redirect_uri}. Please "
+                "add it in Google Cloud and download the JSON file again.",
+            )
         )
     return raw, {"client_id": client["client_id"], "project_id": client.get("project_id")}
 
@@ -1511,16 +1622,21 @@ class Stores:
     ) -> str:
         """Start a release build; the build id (Codemagic's, or "local")."""
         if app is not None and not app.stores:
-            raise StoreError(f"{app.title} kommt nicht in die Stores, nur die Test-APK.")
+            raise StoreError(_test_apk_only(app))
         if platform == "screenshots" and app is not None and not app.screenshots:
-            raise StoreError("Diese App macht noch keine Screenshots bei Codemagic.")
+            raise StoreError(
+                tr(
+                    "Diese App macht noch keine Screenshots bei Codemagic.",
+                    "This app takes no screenshots at Codemagic yet.",
+                )
+            )
         if platform == "android":
             self.request_android(by, app)
             return "local"
         meta = self.vault.meta("codemagic") or {}
         app_id = self.other_app_id(app) if app else meta.get("app_id")
         if not isinstance(app_id, str):
-            raise StoreError("Erst „Prüfen und einrichten“, dann bauen.")
+            raise StoreError(_set_up_first())
         if platform == "screenshots":
             workflow = SCREENSHOT_WORKFLOW
         else:
@@ -1533,12 +1649,22 @@ class Stores:
                 headers=self._cm_auth(f"Build {platform}"),
             )
         except httpx.HTTPError as exc:
-            raise StoreError(f"Codemagic nicht erreichbar ({type(exc).__name__}).") from None
+            raise StoreError(
+                tr(
+                    f"Codemagic nicht erreichbar ({type(exc).__name__}).",
+                    f"Codemagic cannot be reached ({type(exc).__name__}).",
+                )
+            ) from None
         finally:
             await self._close(client)
         build_id = _dict(_dict(r.json()).get("data")).get("id") if r.status_code < 300 else None
         if not isinstance(build_id, str):
-            raise StoreError(f"Codemagic startet den Build nicht ({_message(r)}).")
+            raise StoreError(
+                tr(
+                    f"Codemagic startet den Build nicht ({_message(r)}).",
+                    f"Codemagic does not start the build ({_message(r)}).",
+                )
+            )
         self.vault.add_build(
             {"id": build_id, "app_id": app_id, "platform": platform, "at": _now(), "by": by}
             | ({"app": app.key} if app else {})
@@ -1683,11 +1809,11 @@ class Stores:
         further app its first line is ``app=<key>``. One build at a time."""
         if app is not None and not app.stores:
             # The build script knows no store build of it and would build allskyhub's.
-            raise StoreError(f"{app.title} kommt nicht in die Stores, nur die Test-APK.")
+            raise StoreError(_test_apk_only(app))
         if not self.vault.has(app.android_upload if app else "android_upload"):
-            raise StoreError("Erst „Prüfen und einrichten“, dann bauen.")
+            raise StoreError(_set_up_first())
         if self.android_busy():
-            raise StoreError("Es läuft schon ein Android-Build.")
+            raise StoreError(_android_busy())
         self.release_dir.mkdir(mode=0o750, parents=True, exist_ok=True)
         (self.release_dir / "request").write_text((f"app={app.key}\n" if app else "") + f"{by}\n")
         self.vault.add_build(
@@ -1699,9 +1825,11 @@ class Stores:
     def request_test_apk(self, by: str, app: OtherApp) -> None:
         """Leave a request for the app's test APK (first line ``app=<key>-test``)."""
         if not app.test_apk:
-            raise StoreError("Für diese App gibt es keine Test-APK.")
+            raise StoreError(
+                tr("Für diese App gibt es keine Test-APK.", "This app has no test APK.")
+            )
         if self.android_busy():
-            raise StoreError("Es läuft schon ein Android-Build.")
+            raise StoreError(_android_busy())
         self.release_dir.mkdir(mode=0o750, parents=True, exist_ok=True)
         (self.release_dir / "request").write_text(f"app={app.key}-test\n{by}\n")
         log.info("test apk of %s requested by %s", app.key, by)
@@ -2142,17 +2270,28 @@ class Stores:
         """Replace the phone screenshots (2 to 8, PNG or JPEG, as Play takes them)."""
         low, high = SCREENSHOTS
         if not low <= len(files) <= high:
-            raise StoreError(f"Google Play nimmt {low} bis {high} Screenshots.")
+            raise StoreError(
+                tr(
+                    f"Google Play nimmt {low} bis {high} Screenshots.",
+                    f"Google Play takes {low} to {high} screenshots.",
+                )
+            )
         named: list[tuple[str, bytes]] = []
         for i, data in enumerate(files, 1):
             size, suffix = image_size(data)
             if size is None:
-                raise StoreError(f"Bild {i} ist kein PNG oder JPEG.")
+                raise StoreError(
+                    tr(f"Bild {i} ist kein PNG oder JPEG.", f"Image {i} is no PNG or JPEG.")
+                )
             short, long = sorted(size)
             if len(data) > SCREENSHOT_MAX or short < 320 or long > 3840 or long > 2 * short:
                 raise StoreError(
-                    f"Bild {i} passt nicht: 320 bis 3840 Pixel, die lange Seite höchstens "
-                    "doppelt so lang wie die kurze, bis 8 MB."
+                    tr(
+                        f"Bild {i} passt nicht: 320 bis 3840 Pixel, die lange Seite höchstens "
+                        "doppelt so lang wie die kurze, bis 8 MB.",
+                        f"Image {i} does not fit: 320 to 3840 pixels, the long side at most "
+                        "twice the short one, up to 8 MB.",
+                    )
                 )
             named.append((f"{i:02d}{suffix}", data))
         self.screenshot_dir.mkdir(mode=0o700, parents=True, exist_ok=True)

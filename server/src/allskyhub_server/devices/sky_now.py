@@ -89,7 +89,7 @@ def flat(status: dict[str, Any] | None) -> FlatLine | None:
         isinstance(settings, dict)
         and cast(dict[str, Any], settings).get("flat_correction") == "off"
     ):
-        return FlatLine("off", "Flat aus", "", None, None)
+        return FlatLine("off", tr("Flat aus", "Flat off"), "", None, None)
     f = (status or {}).get("flat")
     if not isinstance(f, dict):
         return None
@@ -98,12 +98,17 @@ def flat(status: dict[str, Any] | None) -> FlatLine | None:
     gain = float(gain) if isinstance(gain, int | float) and math.isfinite(gain) else None
     at = _time(f.get("at"))
     if f.get("source") == "twilight":
-        return FlatLine("good", "Flat gemessen", "Dämmerung", gain, at)
-    if f.get("source") == "night":
-        return FlatLine("usable", "Flat geschätzt", "aus den Nachtbildern, nur fürs Bild",
+        return FlatLine("good", tr("Flat gemessen", "Flat measured"), tr("Dämmerung", "twilight"),
                         gain, at)  # fmt: skip
+    if f.get("source") == "night":
+        return FlatLine("usable", tr("Flat geschätzt", "Flat estimated"),
+                        tr("aus den Nachtbildern, nur fürs Bild",
+                           "from the night images, for the picture only"), gain, at)  # fmt: skip
+    # The agent's reason is its own German text (SPEC §6.3), shown as it comes.
     reason = f.get("reason")
-    return FlatLine("off", "kein Flat", reason if isinstance(reason, str) else "", None, None)
+    return FlatLine(
+        "off", tr("kein Flat", "no flat"), reason if isinstance(reason, str) else "", None, None
+    )
 
 
 @dataclass(frozen=True)
@@ -141,6 +146,7 @@ class SkyNow:
 
 
 SECTORS = ("N", "NO", "O", "SO", "S", "SW", "W", "NW")
+SECTORS_EN = ("N", "NE", "E", "SE", "S", "SW", "W", "NW")
 BANDS = ("15–40°", "40–65°", "65–90°")
 # Outer and inner radius of the three altitude bands in the drawing (horizon at 80).
 RADII = ((80.0, 53.0), (53.0, 27.0), (27.0, 0.0))
@@ -166,12 +172,14 @@ def sky_now(status: dict[str, Any] | None) -> SkyNow | None:
         hfr=hfr,
         hfr_cloudy=hfr_cloudy,
         cells=cells,
-        compass=[(letter, *_xy(91.0, view.angle(az))) for letter, az in COMPASS] if cells else [],
+        compass=[(tr(letter, en), *_xy(91.0, view.angle(az))) for letter, en, az in COMPASS]
+        if cells
+        else [],
     )
     return None if now.empty else now
 
 
-COMPASS = (("N", 0.0), ("O", 90.0), ("S", 180.0), ("W", 270.0))
+COMPASS = (("N", "N", 0.0), ("O", "E", 90.0), ("S", "S", 180.0), ("W", "W", 270.0))
 
 
 @dataclass(frozen=True)
@@ -214,8 +222,11 @@ def _cells(raw: Any, view: _View) -> list[Cell]:
         shade = None if value is None else round(min(max(value, 0.0), 1.0) * 10)
         outer, inner = RADII[band]
         a0, a1 = view.angle(sector * 45.0 - 22.5), view.angle(sector * 45.0 + 22.5)
-        where = f"{SECTORS[sector]}, {BANDS[band]}"
-        what = "nicht beurteilbar" if shade is None else f"{shade * 10} % bewölkt"
+        where = f"{tr(SECTORS[sector], SECTORS_EN[sector])}, {BANDS[band]}"
+        if shade is None:
+            what = tr("nicht beurteilbar", "cannot be judged")
+        else:
+            what = tr(f"{shade * 10} % bewölkt", f"{shade * 10} % cloudy")
         cells.append(Cell(_sector_path(outer, inner, a0, a1), shade, f"{where}: {what}"))
     return cells if any(c.shade is not None for c in cells) else []
 

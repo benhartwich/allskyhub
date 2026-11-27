@@ -39,7 +39,7 @@ from allskyhub_server.devices import (
     tonight,
 )
 from allskyhub_server.devices.connections import ConnectionRegistry
-from allskyhub_server.devices.event_text import event_rows, meteor_summary
+from allskyhub_server.devices.event_text import event_rows, event_titles, meteor_summary
 from allskyhub_server.devices.images import ImageStore
 from allskyhub_server.devices.queries import Role
 from allskyhub_server.devices.tonight import ForecastCache
@@ -47,7 +47,7 @@ from allskyhub_server.i18n import english, tr
 from allskyhub_server.models import AircraftPass, Device, EventRecord, Frame, RenderJob
 from allskyhub_server.web.deps import CurrentSession, DbSession, csrf_protect
 from allskyhub_server.web.render import render
-from allskyhub_server.web.templating import UI_ZONE, event_titles
+from allskyhub_server.web.templating import UI_ZONE
 from allskyhub_sky.objects import catalogue
 
 router = APIRouter(dependencies=[Depends(csrf_protect)])
@@ -55,6 +55,9 @@ router = APIRouter(dependencies=[Depends(csrf_protect)])
 NightId = Annotated[str, Path(pattern=archive.NIGHT_ID)]
 ProductName = Annotated[str, Path(pattern=archive.PRODUCT_NAME)]
 EventId = Annotated[str, Path(pattern=EVENT_ID_PATTERN)]
+# The sky layers' names follow the page's language (the ash_lang cookie, web/lang.py),
+# which the URL does not carry: a stored copy only for the same cookies.
+SKY_HEADERS = {"Cache-Control": "private, max-age=300", "Vary": "Cookie"}
 PRODUCT_TITLES = {
     "keogram": "Keogramm",
     "startrails": "Sternspuren",
@@ -215,7 +218,7 @@ async def sky_history_frame(
     satellites = request.app.state.bright_satellites.loaded()
     night_events = await events.events(db, device.id, night_id=night_id, limit=2000)
     drawn = await sky_history.frame_sky(db, device, frame.captured_at, satellites, night_events)
-    return JSONResponse(drawn or {}, headers={"Cache-Control": "private, max-age=300"})
+    return JSONResponse(drawn or {}, headers=SKY_HEADERS)
 
 
 def sky_history_place(device: Device) -> tuple[float, float] | None:
@@ -257,7 +260,7 @@ async def sky_history_time(
     satellites = request.app.state.bright_satellites.loaded()
     night_events = await events.events(db, device.id, night_id=night_id, limit=2000)
     drawn = await sky_history.frame_sky(db, device, at, satellites, night_events)
-    return JSONResponse(drawn or {}, headers={"Cache-Control": "private, max-age=300"})
+    return JSONResponse(drawn or {}, headers=SKY_HEADERS)
 
 
 @router.get("/cameras/{device_id}/frames/{night_id}/{name}/{variant}.jpg")

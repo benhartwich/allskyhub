@@ -1,24 +1,25 @@
 {% extends "base.html" %}
-{% block title %}Melder-Konto · allskyhub{% endblock %}
+{% block lang %}{{ 'en' if en else 'de' }}{% endblock %}
+{% block title %}{{ t('Melder-Konto', 'Reporter account') }} · allskyhub{% endblock %}
 {% block content %}
 <div class="auth">
   {% if ask %}
-  <h1>Melder-Konto bestätigen</h1>
+  <h1>{{ t('Melder-Konto bestätigen', 'Confirm your reporter account') }}</h1>
   <form method="post" action="/melden/bestaetigen" class="card stack">
     <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
     <input type="hidden" name="token" value="{{ token }}">
-    <p>Ein Klick noch, dann kannst du in der allskyhub-App melden.</p>
-    <button type="submit">Konto bestätigen</button>
+    <p>{{ t('Ein Klick noch, dann kannst du in der allskyhub-App melden.', 'One more click, then you can report in the allskyhub app.') }}</p>
+    <button type="submit">{{ t('Konto bestätigen', 'Confirm account') }}</button>
   </form>
   {% elif ok %}
-  <h1>Konto bestätigt</h1>
+  <h1>{{ t('Konto bestätigt', 'Account confirmed') }}</h1>
   <div class="card stack">
-    <p>Danke! Melde dich jetzt in der allskyhub-App unter „Mitmachen → Himmelshelligkeit melden“ an.</p>
+    <p>{{ t('Danke! Melde dich jetzt in der allskyhub-App unter „Mitmachen → Himmelshelligkeit melden“ an.', 'Thank you! Now sign in in the allskyhub app under “Take part → Report the sky brightness”.') }}</p>
   </div>
   {% else %}
-  <h1>Link ungültig</h1>
+  <h1>{{ t('Link ungültig', 'Invalid link') }}</h1>
   <div class="card stack">
-    <p>Der Link ist abgelaufen oder wurde schon benutzt. <a href="/melden/konto">Neu anlegen</a></p>
+    <p>{{ t('Der Link ist abgelaufen oder wurde schon benutzt.', 'The link has expired or was already used.') }} <a href="/melden/konto">{{ t('Neu anlegen', 'Create again') }}</a></p>
   </div>
   {% endif %}
 </div>

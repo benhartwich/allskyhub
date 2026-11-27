@@ -34,6 +34,12 @@ def is_en(request: Request) -> bool:
     return (asked(request) or request.cookies.get(COOKIE)) == "en"
 
 
+def original(request: Request) -> bool:
+    """``?original=1`` on the privacy policy and the terms: the binding German text for
+    this one view, without changing the remembered language (unlike ``?lang=de``)."""
+    return request.query_params.get("original") == "1"
+
+
 def remember(request: Request, response: Response, lang: str) -> None:
     if request.cookies.get(COOKIE) != lang:
         response.set_cookie(

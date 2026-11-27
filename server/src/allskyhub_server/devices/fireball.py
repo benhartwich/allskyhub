@@ -117,8 +117,14 @@ COMPASS = (
 )  # fmt: skip
 
 
-def compass(azimuth: float) -> str:
-    return COMPASS[round(azimuth / 45) % 8]
+# English for both: "3 km north", "flew north" (the public pages in English).
+POINTS_EN = (
+    "north", "northeast", "east", "southeast", "south", "southwest", "west", "northwest",
+)  # fmt: skip
+
+
+def compass(azimuth: float, en: bool = False) -> str:
+    return (POINTS_EN if en else COMPASS)[round(azimuth / 45) % 8]
 
 
 HEADINGS = (
@@ -133,5 +139,5 @@ HEADINGS = (
 )
 
 
-def heading(azimuth: float) -> str:
-    return HEADINGS[round(azimuth / 45) % 8]
+def heading(azimuth: float, en: bool = False) -> str:
+    return (POINTS_EN if en else HEADINGS)[round(azimuth / 45) % 8]

@@ -135,7 +135,10 @@ class Tonight:
     @property
     def moon_events(self) -> list[tuple[str, dt.datetime]]:
         """Moonrise and moonset of this night in the order they happen."""
-        events = [("auf", self.night.moonrise), ("unter", self.night.moonset)]
+        events = [
+            (tr("auf", "rises"), self.night.moonrise),
+            (tr("unter", "sets"), self.night.moonset),
+        ]
         return sorted(((name, t) for name, t in events if t is not None), key=lambda e: e[1])
 
     @property

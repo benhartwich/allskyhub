@@ -1,5 +1,6 @@
 // Loop of the last hour on public sky pages: thumbnails load on first play, then cycle.
 document.addEventListener("DOMContentLoaded", () => {
+  const en = document.documentElement.lang === "en"; // the page's language, like copy.js
   const box = document.querySelector("[data-loop]");
   const button = document.querySelector("[data-loop-toggle]");
   const label = document.querySelector("[data-loop-label]");
@@ -11,13 +12,13 @@ document.addEventListener("DOMContentLoaded", () => {
     frames[index].classList.remove("on");
     index = i;
     frames[index].classList.add("on");
-    if (label) label.textContent = `${frames[index].dataset.time} Uhr`;
+    if (label) label.textContent = en ? frames[index].dataset.time : `${frames[index].dataset.time} Uhr`;
   };
   button.addEventListener("click", () => {
     if (timer) {
       clearInterval(timer);
       timer = null;
-      button.textContent = "▶ Abspielen";
+      button.textContent = en ? "▶ Play" : "▶ Abspielen";
       button.setAttribute("aria-pressed", "false");
       return;
     }
@@ -27,7 +28,7 @@ document.addEventListener("DOMContentLoaded", () => {
         delete img.dataset.src;
       }
     }
-    button.textContent = "❚❚ Anhalten";
+    button.textContent = en ? "❚❚ Pause" : "❚❚ Anhalten";
     button.setAttribute("aria-pressed", "true");
     timer = setInterval(() => show((index + 1) % frames.length), 250);
   });

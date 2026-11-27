@@ -17,6 +17,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from allskyhub_server.auth.sessions import SessionInfo
 from allskyhub_server.devices import fireball, gmn, map_tiles, public, queries, science
+from allskyhub_server.devices.event_text import SHOWER_NAMES
+from allskyhub_server.i18n import english
 from allskyhub_server.models import Device, GmnMeteor, MeteorPair
 from allskyhub_server.web.deps import DbSession, OptionalSession
 from allskyhub_server.web.render import render
@@ -59,7 +61,8 @@ async def _gmn(db: AsyncSession, pair: MeteorPair) -> GmnMeteor | None:
 
 def _item(pair: MeteorPair) -> dict[str, Any]:
     azimuth = fireball.bearing_deg(pair.high_lat, pair.high_lon, pair.low_lat, pair.low_lon)
-    return {"pair": pair, "area": fireball.fall_area(pair), "heading": fireball.heading(azimuth)}
+    return {"pair": pair, "area": fireball.fall_area(pair),
+            "heading": fireball.heading(azimuth, english())}  # fmt: skip
 
 
 MASS_NAMES = {0.01: "10 g", 0.1: "100 g", 1.0: "1 kg", 10.0: "10 kg"}
@@ -77,9 +80,19 @@ def _strewn(pair: MeteorPair) -> list[dict[str, str]]:
         kms = sorted(float(x["km_from_end"]) for x in mine)
         span = f"{kms[0]:.1f}" if kms[-1] - kms[0] < 0.1 else f"{kms[0]:.1f}–{kms[-1]:.1f}"
         mid = sum(float(x["azimuth_deg"]) for x in mine) / len(mine)
-        rows.append({"mass": name, "km": span.replace(".", ","),
-                     "where": fireball.compass(mid)})  # fmt: skip
+        rows.append({"mass": name, "km": span if english() else span.replace(".", ","),
+                     "where": fireball.compass(mid, english())})  # fmt: skip
     return rows
+
+
+_SHOWERS_EN = {german: imo for imo, german in SHOWER_NAMES.items()}
+
+
+def _gmn_shower(code: str | None) -> str:
+    """GMN's shower in the page's language: the IMO's English name in English."""
+    if english():
+        return _SHOWERS_EN.get(gmn.shower_name(code), code) if code else "sporadic (no shower)"
+    return gmn.shower_name(code)
 
 
 def _map_config(pair: MeteorPair, area: fireball.FallArea | None) -> dict[str, Any]:
@@ -88,7 +101,8 @@ def _map_config(pair: MeteorPair, area: fireball.FallArea | None) -> dict[str, A
     return {
         "maxZoom": map_tiles.MAX_ZOOM,
         "layers": {
-            key: {"maxZoom": t.max_zoom, "credit": t.credit} for key, t in map_tiles.LAYERS.items()
+            key: {"maxZoom": t.max_zoom, "credit": t.shown_credit()}
+            for key, t in map_tiles.LAYERS.items()
         },
         "path": [[pair.high_lat, pair.high_lon], [pair.low_lat, pair.low_lon]],
         "heights": [round(pair.high_km), round(pair.low_km)],
@@ -161,7 +175,7 @@ async def fireball_page(
             "strewn": _strewn(pair),
             "wind": pair.wind,
             "gmn_source": gmn.SOURCE,
-            "gmn_shower": gmn.shower_name,
+            "gmn_shower": _gmn_shower,
         },
         session=session,
     )

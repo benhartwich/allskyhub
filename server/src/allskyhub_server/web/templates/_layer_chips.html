@@ -1,12 +1,12 @@
 {# Draft 1: one switch per layer over the live image (overlay.js); needs `ov`, `air`, `lay`. #}
-<div class="layer-chips" role="group" aria-label="Ebenen über dem Bild">
-  {% if ov %}<button type="button" class="layer-chip" data-overlay-toggle aria-pressed="false">Sternbilder</button>{% endif %}
+<div class="layer-chips" role="group" aria-label="{{ t('Ebenen über dem Bild', 'Layers over the image') }}">
+  {% if ov %}<button type="button" class="layer-chip" data-overlay-toggle aria-pressed="false">{{ t('Sternbilder', 'Constellations') }}</button>{% endif %}
   {% if lay %}
-  <button type="button" class="layer-chip" data-overlay-toggle="stars" aria-pressed="false">Sternnamen</button>
-  <button type="button" class="layer-chip" data-overlay-toggle="grid" aria-pressed="false">Raster</button>
-  <button type="button" class="layer-chip" data-overlay-toggle="planets" aria-pressed="false">Mond &amp; Planeten</button>
+  <button type="button" class="layer-chip" data-overlay-toggle="stars" aria-pressed="false">{{ t('Sternnamen', 'Star names') }}</button>
+  <button type="button" class="layer-chip" data-overlay-toggle="grid" aria-pressed="false">{{ t('Raster', 'Grid') }}</button>
+  <button type="button" class="layer-chip" data-overlay-toggle="planets" aria-pressed="false">{{ t('Mond & Planeten', 'Moon & planets') }}</button>
   {% endif %}
-  {% if air %}<button type="button" class="layer-chip" data-overlay-toggle="air" aria-pressed="false">Flugzeuge</button>{% endif %}
-  {% if lay and not no_satellites %}<button type="button" class="layer-chip" data-overlay-toggle="sats" aria-pressed="false">Satelliten</button>
-  <button type="button" class="layer-chip" data-overlay-toggle="balloons" aria-pressed="false">Wetterballons</button>{% endif %}
+  {% if air %}<button type="button" class="layer-chip" data-overlay-toggle="air" aria-pressed="false">{{ t('Flugzeuge', 'Aircraft') }}</button>{% endif %}
+  {% if lay and not no_satellites %}<button type="button" class="layer-chip" data-overlay-toggle="sats" aria-pressed="false">{{ t('Satelliten', 'Satellites') }}</button>
+  <button type="button" class="layer-chip" data-overlay-toggle="balloons" aria-pressed="false">{{ t('Wetterballons', 'Weather balloons') }}</button>{% endif %}
 </div>

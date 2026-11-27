@@ -122,7 +122,7 @@ def state(device: Device, base_url: str) -> PublicState:
 def title(device: Device) -> str:
     if device.kind == "station" and not device.named:
         return tr("Eine Station im Netz", "A station in the network")
-    return profile(device).title or device.name or "Allsky-Kamera"
+    return profile(device).title or device.name or tr("Allsky-Kamera", "All-sky camera")
 
 
 @dataclass(frozen=True)

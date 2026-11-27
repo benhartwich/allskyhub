@@ -20,6 +20,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from allskyhub_server.devices import public
+from allskyhub_server.i18n import english, tr
 from allskyhub_server.models import Device, NightStat, SkyReport
 
 # The unit of sky brightness, never broken across lines (a no-break space before it,
@@ -38,6 +39,27 @@ SQM_CLASSES = (
     (19.0, "sqm-5", "Vorstadt (19,0–20,0)"),
     (0.0, "sqm-6", "Stadt (< 19,0)"),
 )
+SQM_LABELS_EN = {
+    "sqm-1": "very dark (≥ 21.7)",
+    "sqm-2": "dark (21.3–21.7)",
+    "sqm-3": "rural (20.8–21.3)",
+    "sqm-4": "suburban edge (20.0–20.8)",
+    "sqm-5": "suburban (19.0–20.0)",
+    "sqm-6": "city (< 19.0)",
+}
+
+
+def sqm_classes() -> tuple[tuple[float, str, str], ...]:
+    """SQM_CLASSES with their labels in the language of the request."""
+    if not english():
+        return SQM_CLASSES
+    return tuple((low, name, SQM_LABELS_EN[name]) for low, name, _ in SQM_CLASSES)
+
+
+def _number(value: float, digits: int) -> str:
+    text = f"{value:.{digits}f}"
+    return text if english() else text.replace(".", ",")
+
 
 # Name → (title, centre latitude, longitude, zoom): where the map opens.
 REGIONS = {
@@ -68,14 +90,14 @@ class MapCamera:
     def sqm_text(self) -> str:
         """What the light-pollution view says about this camera."""
         if self.sqm is not None:
-            label = next(label for low, _, label in SQM_CLASSES if self.sqm >= low)
-            value = f"{self.sqm:.2f}".replace(".", ",")
-            return f"{value}{SQM_UNIT} · {label.split(' (')[0]}"
+            label = next(label for low, _, label in sqm_classes() if self.sqm >= low)
+            return f"{_number(self.sqm, 2)}{SQM_UNIT} · {label.split(' (')[0]}"
         if not self.shows_sky:
-            return "Himmelsqualität nicht öffentlich"
-        return (
+            return tr("Himmelsqualität nicht öffentlich", "Sky quality not public")
+        return tr(
             f"Noch zu wenige klare Nächte gemessen (mindestens {SQM_MIN_NIGHTS} "
-            f"in {SQM_DAYS} Tagen)"
+            f"in {SQM_DAYS} Tagen)",
+            f"Too few clear nights measured yet (at least {SQM_MIN_NIGHTS} in {SQM_DAYS} days)",
         )
 
     def as_json(self) -> dict[str, object]:
@@ -148,11 +170,16 @@ class ReportCell:
 
     def as_json(self) -> dict[str, object]:
         cls = next(name for low, name, _ in SQM_CLASSES if self.sqm >= low)
-        value = f"{self.sqm:.1f}".replace(".", ",")
-        people = "1 Meldung" if self.count == 1 else f"{self.count} Meldungen"
+        value = _number(self.sqm, 1)
+        if english():
+            people = "1 report" if self.count == 1 else f"{self.count} reports"
+            text = f"about {value}{SQM_UNIT} · {people} by eye"
+        else:
+            people = "1 Meldung" if self.count == 1 else f"{self.count} Meldungen"
+            text = f"etwa {value}{SQM_UNIT} · {people} mit bloßem Auge"
         return {
             "lat": self.lat, "lon": self.lon, "sqm": self.sqm, "sqm_class": cls,
-            "sqm_text": f"etwa {value}{SQM_UNIT} · {people} mit bloßem Auge",
+            "sqm_text": text,
         }  # fmt: skip
 
 

@@ -8,25 +8,25 @@
   {% set lay = sky_layers(device, false) %}
   {% set no_satellites = true %}
   <div class="sky-frame">
-  <a href="/sky/{{ slug }}/latest.jpg?t={{ device.latest_image_at.timestamp() | int }}" title="Vollbild" data-lightbox data-caption="Aktuelles Himmelsbild · {{ device.latest_image_at | clock }} Uhr"><img src="/sky/{{ slug }}/latest.jpg?t={{ device.latest_image_at.timestamp() | int }}" alt="Aktuelles Himmelsbild"></a>
+  <a href="/sky/{{ slug }}/latest.jpg?t={{ device.latest_image_at.timestamp() | int }}" title="{{ t('Vollbild', 'Full size') }}" data-lightbox data-caption="{{ t('Aktuelles Himmelsbild', 'Latest sky image') }} · {{ device.latest_image_at | clock }}{{ '' if en else ' Uhr' }}"><img src="/sky/{{ slug }}/latest.jpg?t={{ device.latest_image_at.timestamp() | int }}" alt="{{ t('Aktuelles Himmelsbild', 'Latest sky image') }}"></a>
   {% if ov %}{% include "_sky_overlay.html" %}{% endif %}
   {% if air %}{% include "_air_overlay.html" %}{% endif %}
   {% if lay %}{% include "_sky_layers.html" %}{% endif %}
   </div>
   {% if ov or air or lay %}{% include "_layer_chips.html" %}{% if air %}<p class="air-credit muted small">{{ air.credit }}</p>{% endif %}{% endif %}
   <figcaption class="now-facts">
-    <span class="fact"><small>Aufgenommen</small>{{ device.latest_image_at | clock }} Uhr · {{ device.latest_image_at | age }}</span>
-    {% if fr.mode is defined %}<span class="fact"><small>Modus</small>{{ 'Nacht' if fr.mode == 'night' else 'Tag' }}</span>{% endif %}
-    {% if fr.sun_elevation is defined %}<span class="fact"><small>Sonne</small>{{ fr.sun_elevation | round | int }}°</span>{% endif %}
-    {% if fr.exposure_us is defined %}<span class="fact"><small>Belichtung</small>{{ '%.3g' | format(fr.exposure_us / 1e6) | replace('.', ',') }} s</span>{% endif %}
+    <span class="fact"><small>{{ t('Aufgenommen', 'Taken') }}</small>{{ device.latest_image_at | clock }}{{ '' if en else ' Uhr' }} · {{ device.latest_image_at | age }}</span>
+    {% if fr.mode is defined %}<span class="fact"><small>{{ t('Modus', 'Mode') }}</small>{{ t('Nacht', 'night') if fr.mode == 'night' else t('Tag', 'day') }}</span>{% endif %}
+    {% if fr.sun_elevation is defined %}<span class="fact"><small>{{ t('Sonne', 'Sun') }}</small>{{ fr.sun_elevation | round | int }}°</span>{% endif %}
+    {% if fr.exposure_us is defined %}<span class="fact"><small>{{ t('Belichtung', 'Exposure') }}</small>{{ '%.3g' | format(fr.exposure_us / 1e6) if en else '%.3g' | format(fr.exposure_us / 1e6) | replace('.', ',') }} s</span>{% endif %}
     {% if fr.gain is defined %}<span class="fact"><small>Gain</small>{{ fr.gain | round | int }}</span>{% endif %}
-    {% if sky.cloud_cover is number %}<span class="fact"><small>Bewölkung</small>{{ (sky.cloud_cover * 100) | round | int }} %</span>{% endif %}
-    {% if sky.sqm_mag is number %}<span class="fact"><small>Himmelshelligkeit</small>{{ '%.2f' | format(sky.sqm_mag) | replace('.', ',') }} mag/⁠″²</span>{% endif %}
-    {% if sky.stars is number %}<span class="fact"><small>Sterne</small>{{ sky.stars }}</span>{% endif %}
-    {% set ob = orientation_badge(device) %}{% if ob %}<span class="fact"><small>Ausrichtung</small><span class="pill {{ ob.level }}">{{ ob.text }}</span></span>{% endif %}
+    {% if sky.cloud_cover is number %}<span class="fact"><small>{{ t('Bewölkung', 'Cloud cover') }}</small>{{ (sky.cloud_cover * 100) | round | int }} %</span>{% endif %}
+    {% if sky.sqm_mag is number %}<span class="fact"><small>{{ t('Himmelshelligkeit', 'Sky brightness') }}</small>{{ '%.2f' | format(sky.sqm_mag) if en else '%.2f' | format(sky.sqm_mag) | replace('.', ',') }} mag/⁠″²</span>{% endif %}
+    {% if sky.stars is number %}<span class="fact"><small>{{ t('Sterne', 'Stars') }}</small>{{ sky.stars }}</span>{% endif %}
+    {% set ob = orientation_badge(device) %}{% if ob %}<span class="fact"><small>{{ t('Ausrichtung', 'Orientation') }}</small><span class="pill {{ ob.level }}">{{ ob.text }}</span></span>{% endif %}
   </figcaption>
   {% else %}
   <div class="sky-ph" aria-hidden="true"></div>
-  <figcaption class="muted">Noch kein Bild.</figcaption>
+  <figcaption class="muted">{{ t('Noch kein Bild.', 'No image yet.') }}</figcaption>
   {% endif %}
 </figure>

@@ -1,7 +1,42 @@
 {% extends "base.html" %}
+{% block lang %}{{ 'en' if en else 'de' }}{% endblock %}
 {% block title %}Plus · allskyhub{% endblock %}
 {% block content %}
 <div class="page-head"><h1>allskyhub Plus</h1></div>
+{% if en %}
+<p class="lead">A long memory for your camera: Plus keeps its images much longer. Everything else, including the camera network with fireballs, aurora alerts and cloud forecast, stays free for everyone.</p>
+
+<div class="grid-2">
+  <section class="card stack">
+    <h2>Free</h2>
+    <ul class="features">
+      <li>Full images and timelapse videos for 7 days</li>
+      <li>Thumbnails, keograms and startrails for 30 days</li>
+      <li>Live image, gallery, events, statistics, app</li>
+      <li>Camera network, notifications, public page</li>
+    </ul>
+  </section>
+  <section class="card stack">
+    <h2>Plus</h2>
+    <p><strong>{{ price_month }} a month</strong> or <strong>{{ price_year }} a year</strong> per camera, VAT included.</p>
+    <ul class="features">
+      <li>Full images and timelapse videos for <strong>90 days</strong></li>
+      <li>Thumbnails, keograms and startrails for <strong>a year</strong></li>
+      <li>Everything in “Free”</li>
+      <li>The first month is free, without payment details</li>
+    </ul>
+  </section>
+</div>
+
+<section class="card stack">
+  <h2>How it works</h2>
+  <p>On your camera’s page, under “Plus”, you start the free trial month. It ends by itself; nothing renews unless you buy. After that you buy Plus there, monthly or yearly.</p>
+  <p>Payment is handled by our reseller <strong>Paddle</strong>: card, PayPal and other payment methods; the invoice with VAT comes from Paddle by email. You can cancel at any time, effective at the end of the paid period, with “Manage subscription” on the camera page.</p>
+  <p>When Plus ends, we keep the long archive for another 30 days; after that the free retention periods apply again. Download beforehand whatever you want to keep.</p>
+  {% if not billing %}<p class="muted">Buying is not open yet; you can already start the trial month.</p>{% endif %}
+  <p class="muted small"><a href="/agb">Terms and cancellation policy (German)</a> · <a href="/datenschutz">Privacy (German)</a></p>
+</section>
+{% else %}
 <p class="lead">Ein langes Gedächtnis für deine Kamera: Plus behält ihre Bilder viel länger. Alles andere, auch das Kameranetz mit Feuerkugeln, Polarlicht-Alarm und Wolkenvorhersage, bleibt für alle kostenlos.</p>
 
 <div class="grid-2">
@@ -34,4 +69,5 @@
   {% if not billing %}<p class="muted">Der Kauf ist noch nicht freigeschaltet; den Probemonat kannst du schon starten.</p>{% endif %}
   <p class="muted small"><a href="/agb">AGB und Widerrufsbelehrung</a> · <a href="/datenschutz">Datenschutz</a></p>
 </section>
+{% endif %}
 {% endblock %}

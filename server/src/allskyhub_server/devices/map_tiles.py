@@ -21,6 +21,8 @@ from typing import Any, cast
 
 import httpx
 
+from allskyhub_server.i18n import english
+
 log = logging.getLogger(__name__)
 
 MAX_AGE_S = 30 * 86400
@@ -35,24 +37,33 @@ class Layer:
     max_zoom: int
     media_type: str
     credit: str
+    credit_en: str  # the same in English, for the pages in English
+
+    def shown_credit(self) -> str:
+        """The credit in the language of the request."""
+        return self.credit_en if english() else self.credit
 
 
 LAYERS = {
     "karte": Layer(
         "https://tile.openstreetmap.org/{z}/{x}/{y}.png", 11, "image/png",
         '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>-Mitwirkende',
+        '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
     ),
     "satellit": Layer(
         "https://tiles.maps.eox.at/wmts/1.0.0/s2cloudless_3857/default/g/{z}/{y}/{x}.jpg",
         11, "image/jpeg",
         '<a href="https://s2maps.eu">Sentinel-2 cloudless</a> von EOX (CC BY 4.0, '
         "enthält Copernicus-Sentinel-Daten 2016)",
+        '<a href="https://s2maps.eu">Sentinel-2 cloudless</a> by EOX (CC BY 4.0, '
+        "contains modified Copernicus Sentinel data 2016)",
     ),
     "nacht": Layer(
         "https://gibs.earthdata.nasa.gov/wmts/epsg3857/best/VIIRS_Black_Marble/default/"
         "2016-01-01/GoogleMapsCompatible_Level8/{z}/{y}/{x}.png",
         8, "image/png",
         "Nachtlichter: NASA Black Marble 2016 (VIIRS)",
+        "Night lights: NASA Black Marble 2016 (VIIRS)",
     ),
 }  # fmt: skip
 MAX_ZOOM = max(layer.max_zoom for layer in LAYERS.values())

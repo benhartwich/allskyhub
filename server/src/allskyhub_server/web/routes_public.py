@@ -25,12 +25,12 @@ from allskyhub_server.devices import (
     tonight,
 )
 from allskyhub_server.devices import camera_map as camera_map_mod
-from allskyhub_server.devices.event_text import EVENT_TITLES, meteor_summary
+from allskyhub_server.devices.event_text import EVENT_TITLES, event_titles, meteor_summary
 from allskyhub_server.devices.images import ImageStore
 from allskyhub_server.devices.map_tiles import MapTiles
 from allskyhub_server.devices.space_weather import KpCache, OvationCache
 from allskyhub_server.devices.tonight import ForecastCache
-from allskyhub_server.i18n import english
+from allskyhub_server.i18n import english, tr
 from allskyhub_server.models import Device
 from allskyhub_server.web.deps import DbSession, OptionalSession, SettingsDep, client_ip
 from allskyhub_server.web.render import render
@@ -68,7 +68,6 @@ STATION_SOFTWARE = {
     "allsky": "Allsky",
     "image-url": "Allsky",
     "zenivo": "Zenivo",
-    "other": "eigene Software",
 }
 
 
@@ -78,7 +77,8 @@ async def _station(db: DbSession, device: Device) -> dict[str, object] | None:
         return None
     frames, meteors = await station_flow.today(db, device)
     return {
-        "software": STATION_SOFTWARE.get(device.software or "", "eigene Software"),
+        "software": STATION_SOFTWARE.get(device.software or "")
+        or tr("eigene Software", "own software"),
         "since": device.terms_accepted_at,
         "frames": frames,
         "meteors": meteors,
@@ -94,7 +94,7 @@ def _base(device: Device, slug: str) -> dict[str, object]:
         "profile": public.profile(device),
         "title": public.title(device),
         "coordinates": public.coordinates(device),
-        "event_titles": EVENT_TITLES,
+        "event_titles": event_titles(),
     }
 
 
@@ -345,7 +345,7 @@ async def sky_events_feed(request: Request, db: DbSession, slug: str) -> Respons
     events = await public.recent_events(db, device, limit=30)
     base = str(request.base_url).rstrip("/")
     body = templates.get_template("public_events.atom.xml").render(
-        {**_base(device, slug), "events": events, "base_url": base,
+        {**_base(device, slug), "event_titles": EVENT_TITLES, "events": events, "base_url": base,
          "updated": events[0].start if events else device.paired_at or dt.datetime.now(dt.UTC)}
     )  # fmt: skip
     return Response(
@@ -391,7 +391,15 @@ async def map_search(request: Request, settings: SettingsDep, q: str = "") -> Re
             ratelimit.MAP_SEARCH_PER_IP,
         )
     except ratelimit.RateLimitedError:
-        return JSONResponse({"detail": "Zu viele Suchen. Bitte kurz warten."}, status_code=429)
+        return JSONResponse(
+            {
+                "detail": tr(
+                    "Zu viele Suchen. Bitte kurz warten.",
+                    "Too many searches. Please wait a moment.",
+                )
+            },
+            status_code=429,
+        )
     tiles: MapTiles = request.app.state.map_tiles
     return JSONResponse(await tiles.search(q))
 
@@ -415,7 +423,8 @@ async def camera_map(
         "layer": "sqm" if layer == "sqm" else "",
         "maxZoom": map_tiles.MAX_ZOOM,
         "layers": {
-            key: {"maxZoom": t.max_zoom, "credit": t.credit} for key, t in map_tiles.LAYERS.items()
+            key: {"maxZoom": t.max_zoom, "credit": t.shown_credit()}
+            for key, t in map_tiles.LAYERS.items()
         },
         "cameras": [c.as_json() for c in cameras],
         "reports": [r.as_json() for r in await camera_map_mod.report_cells(db)]
@@ -430,7 +439,7 @@ async def camera_map(
             "regions": camera_map_mod.REGIONS,
             "region": region,
             "layer": config["layer"],
-            "sqm_classes": camera_map_mod.SQM_CLASSES,
+            "sqm_classes": camera_map_mod.sqm_classes(),
             "map_config": config,
         },
         session=session,

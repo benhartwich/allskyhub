@@ -19,6 +19,22 @@ EVENT_TITLES = {
     "clouds": "Wolken",
     "sky_quality": "Himmelsqualität",
 }
+EVENT_TITLES_EN = {
+    "meteor": "Meteor",
+    "lightning": "Lightning",
+    "aurora": "Aurora",
+    "nlc": "Noctilucent clouds",
+    "satellite": "Satellite",
+    "clouds": "Clouds",
+    "sky_quality": "Sky quality",
+}
+
+
+def event_titles() -> dict[str, str]:
+    """The titles in the language of the request."""
+    return EVENT_TITLES_EN if english() else EVENT_TITLES
+
+
 # SPEC §6.4: direction_deg is the trail's axis in the image (0..180, 0 = up), no sense of travel.
 _AXES = (
     "senkrecht",
@@ -97,11 +113,13 @@ def meteor_summary(events: list[EventRecord]) -> str | None:
 
 
 COMPASS = ("N", "NO", "O", "SO", "S", "SW", "W", "NW")
+COMPASS_EN = ("N", "NE", "E", "SE", "S", "SW", "W", "NW")
 
 
-def compass(azimuth: float) -> str:
-    """Azimuth (0 = north, clockwise) as one of eight German compass points."""
-    return COMPASS[round((azimuth % 360) / 45) % 8]
+def compass(azimuth: float, en: bool = False) -> str:
+    """Azimuth (0 = north, clockwise) as one of eight compass points, German unless
+    ``en`` (the public pages' filter, web/templating.py)."""
+    return (COMPASS_EN if en else COMPASS)[round((azimuth % 360) / 45) % 8]
 
 
 def orientation_line(status: dict[str, Any] | None) -> str | None:

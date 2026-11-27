@@ -4,8 +4,10 @@ place from the camera's status; the drawing itself is shared with the camera
 
 from __future__ import annotations
 
+import dataclasses
 import datetime as dt
 from dataclasses import dataclass, field
+from functools import cache
 from typing import Any
 
 from pydantic import ValidationError
@@ -13,7 +15,7 @@ from pydantic import ValidationError
 from allskyhub_protocol import Orientation
 from allskyhub_server.devices.aircraft import CREDIT, TRAIL, Tracks
 from allskyhub_server.models import AircraftPass
-from allskyhub_sky import Overlay, overlay, project, usable
+from allskyhub_sky import Overlay, constellations, overlay, project, usable
 
 
 def orientation(status: dict[str, Any] | None) -> Orientation | None:
@@ -37,6 +39,29 @@ def build(status: dict[str, Any] | None, at: dt.datetime) -> Overlay | None:
     if not isinstance(lat, int | float) or not isinstance(lon, int | float):
         return None
     return overlay(found.lens, found.north_deg, found.mirrored, float(lat), float(lon), at)
+
+
+# English: the IAU names of the constellations and E for east.
+CARDINALS_EN = {"O": "E"}
+
+
+@cache
+def latin_names() -> dict[str, str]:
+    """German constellation name → IAU name (Fuhrmann → Auriga)."""
+    german, latin = constellations(), constellations(latin=True)
+    return {name: latin[key][0] for key, (name, _ra, _dec) in german.items()}
+
+
+def in_english(found: Overlay) -> Overlay:
+    """The overlay with English labels, for the public pages in English."""
+    names = latin_names()
+    return dataclasses.replace(
+        found,
+        names=[dataclasses.replace(n, text=names.get(n.text, n.text)) for n in found.names],
+        cardinals=[
+            dataclasses.replace(c, text=CARDINALS_EN.get(c.text, c.text)) for c in found.cardinals
+        ],
+    )
 
 
 def image_time(device_last_frame: dict[str, Any] | None, fallback: dt.datetime) -> dt.datetime:

@@ -1,32 +1,32 @@
 {# The measurement viewer (charts.js); needs data_url, with_status, optional compact and full_url. #}
 <div class="chart-viewer{{ ' compact' if compact }}" data-charts data-src="{{ data_url }}"{% if default_range %} data-default="{{ default_range }}"{% endif %}{% if with_status %} data-status{% endif %}{% if compact %} data-compact{% endif %}>
   <div class="card chart-controls">
-    <div class="chart-range" role="group" aria-label="Zeitraum">
+    <div class="chart-range" role="group" aria-label="{{ t('Zeitraum', 'Time range') }}">
       <span class="chart-night">
-        <button type="button" class="secondary small" data-night-step="-1" aria-label="Nacht davor">‹</button>
-        <button type="button" class="small" data-range="night">Nacht</button>
-        <button type="button" class="secondary small" data-night-step="1" aria-label="Nacht danach">›</button>
-        <input type="date" data-night-pick aria-label="Nacht wählen">
+        <button type="button" class="secondary small" data-night-step="-1" aria-label="{{ t('Nacht davor', 'Night before') }}">‹</button>
+        <button type="button" class="small" data-range="night">{{ t('Nacht', 'Night') }}</button>
+        <button type="button" class="secondary small" data-night-step="1" aria-label="{{ t('Nacht danach', 'Night after') }}">›</button>
+        <input type="date" data-night-pick aria-label="{{ t('Nacht wählen', 'Pick a night') }}">
       </span>
       <button type="button" class="secondary small" data-range="24">24 h</button>
-      <button type="button" class="secondary small" data-range="72">3 Tage</button>
-      <button type="button" class="secondary small" data-range="168">7 Tage</button>
-      <button type="button" class="secondary small" data-range="720">30 Tage</button>
+      <button type="button" class="secondary small" data-range="72">{{ t('3 Tage', '3 days') }}</button>
+      <button type="button" class="secondary small" data-range="168">{{ t('7 Tage', '7 days') }}</button>
+      <button type="button" class="secondary small" data-range="720">{{ t('30 Tage', '30 days') }}</button>
     </div>
     <div class="chart-options">
-      <label class="check"><input type="checkbox" data-overlay="twilight" checked> Dämmerung</label>
-      <label class="check"><input type="checkbox" data-overlay="moon" checked> Mond</label>
-      <label class="check"><input type="checkbox" data-overlay="sun"> Sonne</label>
-      <button type="button" class="secondary small" data-reset-zoom hidden>Zoom zurücksetzen</button>
+      <label class="check"><input type="checkbox" data-overlay="twilight" checked> {{ t('Dämmerung', 'Twilight') }}</label>
+      <label class="check"><input type="checkbox" data-overlay="moon" checked> {{ t('Mond', 'Moon') }}</label>
+      <label class="check"><input type="checkbox" data-overlay="sun"> {{ t('Sonne', 'Sun') }}</label>
+      <button type="button" class="secondary small" data-reset-zoom hidden>{{ t('Zoom zurücksetzen', 'Reset zoom') }}</button>
       {% if compact %}
-      {% if full_url %}<a class="button small secondary" href="{{ full_url }}">Alle Messdaten</a>{% endif %}
+      {% if full_url %}<a class="button small secondary" href="{{ full_url }}">{{ t('Alle Messdaten', 'All measurements') }}</a>{% endif %}
       {% else %}
       <button type="button" class="secondary small" data-export="csv">CSV</button>
       <button type="button" class="secondary small" data-export="png">PNG</button>
       {% endif %}
     </div>
-    <p class="chart-meta muted small" data-chart-meta aria-live="polite">Lade Messdaten …</p>
+    <p class="chart-meta muted small" data-chart-meta aria-live="polite">{{ t('Lade Messdaten …', 'Loading measurements …') }}</p>
   </div>
   <div class="chart-panels" data-panels></div>
-  <noscript><p class="card muted">Die Messdaten brauchen JavaScript.</p></noscript>
+  <noscript><p class="card muted">{{ t('Die Messdaten brauchen JavaScript.', 'The measurements need JavaScript.') }}</p></noscript>
 </div>

@@ -44,11 +44,14 @@ def _hardware_context() -> dict[str, object]:
         "shop": hardware.SHOP,
         "housing": hardware.HOUSING,
         "videos": hardware.VIDEOS,
-        "total_hq": hardware.TOTAL_HQ,
-        "total_zwo": hardware.TOTAL_ZWO,
+        "total_hq": hardware.euro(hardware.TOTAL_HQ),
+        "total_zwo": hardware.euro(hardware.TOTAL_ZWO),
         "voucher": hardware.VOUCHER,
-        "voucher_from": hardware.VOUCHER_FROM,
+        "voucher_from": hardware.euro(hardware.VOUCHER_FROM),
         "voucher_off": hardware.VOUCHER_OFF,
+        # The parts list in the page's language (hardware.ENGLISH).
+        "hw_text": hardware.text,
+        "euro": hardware.euro,
     }
 
 

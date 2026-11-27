@@ -28,7 +28,8 @@ async def network_page(request: Request, db: DbSession, session: OptionalSession
         "layer": "",
         "maxZoom": map_tiles.MAX_ZOOM,
         "layers": {
-            key: {"maxZoom": t.max_zoom, "credit": t.credit} for key, t in map_tiles.LAYERS.items()
+            key: {"maxZoom": t.max_zoom, "credit": t.shown_credit()}
+            for key, t in map_tiles.LAYERS.items()
         },
         "cameras": [p.as_json() for p in view.points],
         "reports": [],

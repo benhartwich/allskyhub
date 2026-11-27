@@ -1,20 +1,25 @@
 {% extends "base.html" %}
-{% block title %}Feuerkugeln · allskyhub{% endblock %}
+{% block lang %}{{ 'en' if en else 'de' }}{% endblock %}
+{% block title %}{{ t('Feuerkugeln', 'Fireballs') }} · allskyhub{% endblock %}
 {% block content %}
-<div class="page-head"><h1>Feuerkugeln</h1></div>
+<div class="page-head"><h1>{{ t('Feuerkugeln', 'Fireballs') }}</h1></div>
+{% if en %}
+<p class="lead">Bright meteors that two cameras in the allskyhub camera network saw at the same time. The two viewpoints give the path and the height. If the glow ends below {{ end_km | round | int }} km, meteorites may have reached the ground.</p>
+{% else %}
 <p class="lead">Helle Meteore, die zwei Kameras im allskyhub-Kameranetz gleichzeitig gesehen haben. Aus beiden Blickwinkeln ergeben sich Bahn und Höhe. Endet das Leuchten unter {{ end_km | round | int }} km, können Meteoriten den Boden erreicht haben.</p>
+{% endif %}
 {% if items %}
 <ul class="list fireballs">
   {% for i in items %}{% set p = i.pair %}
   <li><a class="card fireball-row" href="/feuerkugeln/{{ p.id }}">
-    <strong>{{ p.at | when }} Uhr</strong>
-    <span class="muted">{{ '%.0f' | format(p.high_km) }} km → {{ '%.0f' | format(p.low_km) }} km Höhe, flog nach {{ i.heading }}</span>
-    {% if i.area %}<span class="badge warn">Meteoritenfall möglich</span>{% endif %}
-    {% if p.late %}<span class="badge">nachgereicht</span>{% endif %}
+    <strong>{{ p.at | when }}{{ '' if en else ' Uhr' }}</strong>
+    <span class="muted">{% if en %}{{ '%.0f' | format(p.high_km) }} km → {{ '%.0f' | format(p.low_km) }} km high, heading {{ i.heading }}{% else %}{{ '%.0f' | format(p.high_km) }} km → {{ '%.0f' | format(p.low_km) }} km Höhe, flog nach {{ i.heading }}{% endif %}</span>
+    {% if i.area %}<span class="badge warn">{{ t('Meteoritenfall möglich', 'Meteorite fall possible') }}</span>{% endif %}
+    {% if p.late %}<span class="badge">{{ t('nachgereicht', 'added later') }}</span>{% endif %}
   </a></li>
   {% endfor %}
 </ul>
 {% else %}
-<div class="card empty"><h2>Noch keine Feuerkugel</h2><p class="muted">Sobald zwei Kameras im Kameranetz dieselbe Feuerkugel sehen, erscheint sie hier. Besitzer schalten das Kameranetz auf der Seite ihrer Kamera ein.</p></div>
+<div class="card empty"><h2>{{ t('Noch keine Feuerkugel', 'No fireball yet') }}</h2><p class="muted">{{ t('Sobald zwei Kameras im Kameranetz dieselbe Feuerkugel sehen, erscheint sie hier. Besitzer schalten das Kameranetz auf der Seite ihrer Kamera ein.', 'As soon as two cameras in the camera network see the same fireball, it appears here. Owners switch on the camera network on their camera’s page.') }}</p></div>
 {% endif %}
 {% endblock %}

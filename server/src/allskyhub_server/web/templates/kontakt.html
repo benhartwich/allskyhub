@@ -1,0 +1,25 @@
+{% extends "base.html" %}
+{% block lang %}{{ 'en' if en else 'de' }}{% endblock %}
+{% block title %}{{ t('Kontakt', 'Contact') }} · allskyhub{% endblock %}
+{% block content %}
+<article class="legal stack">
+  <h1>{{ t('Kontakt', 'Contact') }}</h1>
+  <section class="card stack">
+    <h2>{{ t('Fragen, Probleme, Rückmeldungen', 'Questions, problems, feedback') }}</h2>
+    <p>{{ t('Schreib uns eine E-Mail:', 'Send us an email:') }}</p>
+    <p><a class="button" href="mailto:support@webinx.eu?subject=allskyhub">support@webinx.eu</a></p>
+    <p>{{ t('Damit wir schnell helfen können, schreib bitte dazu:', 'So we can help quickly, please include:') }}</p>
+    <ul>
+      <li>{{ t('den Namen deiner Kamera oder die Stations-ID (steht auf der Seite deiner Kamera bzw. Station),', 'the name of your camera or the station ID (shown on the page of your camera or station),') }}</li>
+      <li>{{ t('was du gemacht hast und was passiert ist,', 'what you did and what happened,') }}</li>
+      <li>{{ t('wenn möglich einen Screenshot.', 'a screenshot if you can.') }}</li>
+    </ul>
+    <p class="warn">{{ t('Das Geheimnis deiner Station oder Kamera nie mitschicken – wir fragen nie danach.', "Never send your station's or camera's secret – we never ask for it.") }}</p>
+  </section>
+  <section class="card stack">
+    <h2>{{ t('Fehler und Wünsche', 'Bugs and wishes') }}</h2>
+    <p>{{ t('allskyhub ist Open Source. Fehler und Ideen kannst du auch direkt auf GitHub melden:', 'allskyhub is open source. You can also report bugs and ideas directly on GitHub:') }} <a href="https://github.com/benhartwich/allskyhub/issues">github.com/benhartwich/allskyhub/issues</a></p>
+  </section>
+  <p class="muted small">{{ t('Anschrift und weitere Angaben:', 'Postal address and further details:') }} <a href="/impressum">{{ t('Impressum', 'Imprint') }}</a></p>
+</article>
+{% endblock %}

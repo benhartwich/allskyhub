@@ -1,4 +1,4 @@
-"""Imprint and privacy policy (public)."""
+"""Contact, imprint and privacy policy (public)."""
 
 from __future__ import annotations
 
@@ -10,6 +10,12 @@ from allskyhub_server.web.deps import OptionalSession
 from allskyhub_server.web.render import render
 
 router = APIRouter()
+
+
+@router.get("/kontakt")
+async def contact(request: Request, session: OptionalSession) -> Response:
+    """Where to write (Benjamin, 2026-11-27: the site had no contact anywhere)."""
+    return render(request, "kontakt.html", session=session)
 
 
 @router.get("/impressum")

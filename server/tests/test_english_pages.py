@@ -138,3 +138,19 @@ async def test_fireballs_and_showers_in_english(
     assert '<html lang="de">' in german
     assert "Mögliches Fallgebiet" in german
     assert "flog nach Südosten" in german
+
+
+async def test_contact_page_in_both_languages(client: httpx.AsyncClient) -> None:
+    """Benjamin, 2026-11-27: the site had no contact anywhere; every page links it."""
+    de = await client.get("/kontakt?lang=de")
+    assert de.status_code == 200
+    assert "support@webinx.eu" in de.text
+    assert "Fragen, Probleme, Rückmeldungen" in de.text
+    assert 'href="/kontakt">Kontakt</a>' in de.text  # the footer
+    en = await client.get("/kontakt?lang=en")
+    assert '<html lang="en">' in en.text
+    assert "Questions, problems, feedback" in en.text
+    assert "Fragen" not in en.text
+    assert 'href="/kontakt">Contact</a>' in en.text
+    assert 'href="/kontakt"' in (await client.get("/mitmachen?lang=en")).text
+    await client.get("/kontakt?lang=de")

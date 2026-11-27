@@ -249,8 +249,11 @@ async def store_frame(
 ) -> bool:
     """SPEC §10.2: a thumbnail at most once a minute; the clock is judged on every frame.
     A full frame (the station's ``width`` by ``height``) while the hub wants one is kept and
-    solved in the background (§10.1); otherwise a full frame is refused, unless the sender
-    always sends full ones (``full_always``, indi-allsky). Returns ``want_full_frame``."""
+    solved in the background (§10.1). A full frame the hub no longer wants is taken like a
+    thumbnail and answered with ``want_full_frame: false``: the station sent it because the
+    last answer asked for it, and the solve may have finished since. Any other frame above
+    the thumbnail size is refused, unless the sender always sends full ones
+    (``full_always``, indi-allsky). Returns ``want_full_frame``."""
     now = dt.datetime.now(dt.UTC)
     stations.check_clock(device, meta.time, meta.exposure_s, now)
     device.last_seen_at = now
@@ -278,8 +281,8 @@ async def store_frame(
         await db.commit()  # the solve writes the orientation after this request's data
         station_solve.start(maker, device.id, data, meta.time)
         return station_solve.want_full_frame(device, now)
-    if len(data) > THUMB_MAX and not full_always:
-        raise StationError(413, "too_large")  # a full frame the hub did not ask for
+    if len(data) > THUMB_MAX and not full_always and not full:
+        raise StationError(413, "too_large")  # a big frame that isn't the full frame
     if device.latest_thumb_at is not None and now - device.latest_thumb_at < stations.FRAME_EVERY:
         return wanted
     await _keep(db, store, device, meta, pic, now, None)

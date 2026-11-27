@@ -2,23 +2,23 @@
 {% set d = images_disk %}
 <dl class="facts">
   {% if d %}
-  <dt>Belegt</dt><dd class="{{ 'warn' if d.used_pct >= 70 }}">{{ '%.0f' | format(d.used_bytes / 1e9) }} GB von {{ '%.0f' | format(d.fs_bytes / 1e9) }} GB ({{ d.used_pct | round | int }} %)</dd>
-  <dt>Platte</dt><dd><code>/dev/{{ d.device }}</code>{% if d.disk_bytes %}, {{ '%.0f' | format(d.disk_bytes / 1e9) }} GB{% endif %}{% if d.growable %} <span class="warn">größer als das Dateisystem</span>{% endif %}</dd>
+  <dt>{{ t('Belegt', 'Used') }}</dt><dd class="{{ 'warn' if d.used_pct >= 70 }}">{{ '%.0f' | format(d.used_bytes / 1e9) }} GB {{ t('von', 'of') }} {{ '%.0f' | format(d.fs_bytes / 1e9) }} GB ({{ d.used_pct | round | int }} %)</dd>
+  <dt>{{ t('Platte', 'Disk') }}</dt><dd><code>/dev/{{ d.device }}</code>{% if d.disk_bytes %}, {{ '%.0f' | format(d.disk_bytes / 1e9) }} GB{% endif %}{% if d.growable %} <span class="warn">{{ t('größer als das Dateisystem', 'larger than the file system') }}</span>{% endif %}</dd>
   {% else %}
-  <dt>Platte</dt><dd class="warn">Die Bilder liegen auf keiner eigenen Platte (nicht eingehängt?).</dd>
+  <dt>{{ t('Platte', 'Disk') }}</dt><dd class="warn">{{ t('Die Bilder liegen auf keiner eigenen Platte (nicht eingehängt?).', 'The images are not on a disk of their own (not mounted?).') }}</dd>
   {% endif %}
 </dl>
 {% set j = storage_job %}
 {% if j.state != 'idle' %}
 <div class="deploy-job"{% if j.busy %} hx-get="/admin/storage/job" hx-trigger="every 3s" hx-target="#storage-job" hx-swap="innerHTML"{% endif %}>
   <p class="deploy-state {{ j.state }}">
-    {% if j.state == 'requested' %}Vergrößern angefordert, wartet auf den Server …
-    {% elif j.state == 'running' %}Das Dateisystem wird vergrößert …
-    {% elif j.state == 'ok' %}Zuletzt erfolgreich vergrößert.
-    {% elif j.state == 'failed' %}Das letzte Vergrößern ist fehlgeschlagen; das Dateisystem ist unverändert.
+    {% if j.state == 'requested' %}{{ t('Vergrößern angefordert, wartet auf den Server …', 'Growing requested, waiting for the server …') }}
+    {% elif j.state == 'running' %}{{ t('Das Dateisystem wird vergrößert …', 'The file system is being grown …') }}
+    {% elif j.state == 'ok' %}{{ t('Zuletzt erfolgreich vergrößert.', 'Last grown successfully.') }}
+    {% elif j.state == 'failed' %}{{ t('Das letzte Vergrößern ist fehlgeschlagen; das Dateisystem ist unverändert.', 'The last growing failed; the file system is unchanged.') }}
     {% endif %}
     {% if j.changed_at %}<span class="muted small">· {{ j.changed_at | localtime }}</span>{% endif %}
   </p>
-  {% if j.log %}<details{% if j.state == 'failed' %} open{% endif %}><summary>Protokoll</summary><pre class="deploy-log">{{ j.log }}</pre></details>{% endif %}
+  {% if j.log %}<details{% if j.state == 'failed' %} open{% endif %}><summary>{{ t('Protokoll', 'Log') }}</summary><pre class="deploy-log">{{ j.log }}</pre></details>{% endif %}
 </div>
 {% endif %}

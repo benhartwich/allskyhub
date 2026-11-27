@@ -47,6 +47,7 @@ from cryptography.x509.oid import NameOID
 
 from allskyhub_server.admin.deploy import github_headers
 from allskyhub_server.devices.images import jpeg_size
+from allskyhub_server.i18n import english
 
 log = logging.getLogger(__name__)
 
@@ -134,6 +135,30 @@ TITLES = {
     "bortle_review": "bortle: Demo-Konto für Screenshots",
     "vinventory_review": "Vinventory: Demo-Konto für Screenshots",
 }
+TITLES_EN = {
+    "play": "Google Play service account",
+    "asc": "App Store Connect API key",
+    "codemagic": "Codemagic API token",
+    "station_key": "SharedSky: key for the secrets of the indi-allsky stations",
+    "android_upload": "Android upload key",
+    "ios_certificate": "Key of the iOS certificate",
+    "youtube": "YouTube OAuth client",
+    "fcm": "Firebase service account (push)",
+    "turnstile": "Cloudflare Turnstile",
+    "github": "GitHub token (read only)",
+    "bortle_android_upload": "bortle: Android upload key",
+    "vinventory_android_upload": "Vinventory: Android upload key",
+    "currywursttest_android_upload": "Currywurst Test: Android upload key",
+    "bortle_review": "bortle: demo account for screenshots",
+    "vinventory_review": "Vinventory: demo account for screenshots",
+}
+
+
+def titles() -> dict[str, str]:
+    """TITLES in the request's language, for the admin pages (reports stay German)."""
+    return TITLES_EN if english() else TITLES
+
+
 # Apple capabilities the hub switches on for a bundle id, with their report titles.
 CAPABILITIES = {
     "PUSH_NOTIFICATIONS": "Push-Benachrichtigungen",
@@ -489,7 +514,7 @@ class Vault:
         return (self.root / f"{kind}.secret").read_bytes()
 
     def entries(self) -> list[Entry]:
-        return [Entry(kind, title, self.meta(kind)) for kind, title in TITLES.items()]
+        return [Entry(kind, title, self.meta(kind)) for kind, title in titles().items()]
 
     def write_json(self, name: str, data: dict[str, Any]) -> None:
         self._write(name, json.dumps(data).encode())

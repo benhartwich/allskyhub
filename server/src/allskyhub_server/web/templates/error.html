@@ -1,9 +1,10 @@
 {% extends "base.html" %}
-{% block title %}Fehler · allskyhub{% endblock %}
+{% block lang %}{{ 'en' if en else 'de' }}{% endblock %}
+{% block title %}{{ t('Fehler', 'Error') }} · allskyhub{% endblock %}
 {% block content %}
 <div class="auth">
-  <p class="muted">Fehler {{ status }}</p>
+  <p class="muted">{{ t('Fehler', 'Error') }} {{ status }}</p>
   <h1>{{ message }}</h1>
-  <p><a class="button" href="/">Zur Startseite</a></p>
+  <p><a class="button" href="/">{{ t('Zur Startseite', 'To the start page') }}</a></p>
 </div>
 {% endblock %}

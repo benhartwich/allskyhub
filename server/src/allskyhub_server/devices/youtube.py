@@ -31,6 +31,7 @@ from allskyhub_server.admin.stores import Vault
 from allskyhub_server.devices import night_summary
 from allskyhub_server.devices.connections import ConnectionRegistry
 from allskyhub_server.devices.images import ImageStore
+from allskyhub_server.i18n import tr
 from allskyhub_server.models import Device, Product
 
 log = logging.getLogger(__name__)
@@ -53,6 +54,11 @@ PRIVACY = {
     "unlisted": "Nicht gelistet (nur mit Link)",
     "private": "Privat",
     "public": "Öffentlich",
+}
+PRIVACY_EN = {
+    "unlisted": "Unlisted (link only)",
+    "private": "Private",
+    "public": "Public",
 }
 Privacy = Literal["unlisted", "private", "public"]
 KINDS = {
@@ -222,7 +228,10 @@ class YouTube:
             )
         except httpx.HTTPError:
             raise YouTubeError(
-                "Google war nicht erreichbar. Bitte noch einmal versuchen."
+                tr(
+                    "Google war nicht erreichbar. Bitte noch einmal versuchen.",
+                    "Google could not be reached. Please try again.",
+                )
             ) from None
         finally:
             await self._close(http)
@@ -231,12 +240,19 @@ class YouTube:
         if not r.is_success or not isinstance(token, str):
             log.info("youtube: code exchange failed", extra={"status": r.status_code})
             raise YouTubeError(
-                "Google hat die Verbindung nicht bestätigt. Bitte noch einmal versuchen."
+                tr(
+                    "Google hat die Verbindung nicht bestätigt. Bitte noch einmal versuchen.",
+                    "Google did not confirm the connection. Please try again.",
+                )
             )
         if SCOPE not in str(body.get("scope", "")).split():
             raise YouTubeError(
-                "Ohne die Erlaubnis zum Hochladen geht es nicht. Bitte beim Verbinden das "
-                "Häkchen bei YouTube setzen."
+                tr(
+                    "Ohne die Erlaubnis zum Hochladen geht es nicht. Bitte beim Verbinden das "
+                    "Häkchen bei YouTube setzen.",
+                    "It does not work without permission to upload. Please tick YouTube when "
+                    "connecting.",
+                )
             )
         return token
 

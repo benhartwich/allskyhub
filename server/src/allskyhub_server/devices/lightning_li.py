@@ -353,14 +353,29 @@ class StormCheck:
     def text(self) -> str:
         total = self.unchecked + self.clear + len(self.confirmed)
         if self.unchecked == total:
-            return "Noch nicht geprüft."
+            return tr("Noch nicht geprüft.", "Not checked yet.")
         parts: list[str] = []
         if self.confirmed:
-            parts.append(f"{len(self.confirmed)} von {total} bestätigt")
+            parts.append(
+                tr(
+                    f"{len(self.confirmed)} von {total} bestätigt",
+                    f"{len(self.confirmed)} of {total} confirmed",
+                )
+            )
         if self.clear:
-            parts.append(f"{self.clear} ohne Blitz in ihrer Richtung")
+            parts.append(
+                tr(
+                    f"{self.clear} ohne Blitz in ihrer Richtung",
+                    f"{self.clear} without lightning in their direction",
+                )
+            )
         if self.unchecked:
-            parts.append(f"{self.unchecked} ungeprüft (Satellitendaten fehlen)")
+            parts.append(
+                tr(
+                    f"{self.unchecked} ungeprüft (Satellitendaten fehlen)",
+                    f"{self.unchecked} not checked (satellite data missing)",
+                )
+            )
         return ", ".join(parts) + "."
 
 

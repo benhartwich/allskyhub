@@ -1,21 +1,21 @@
 {# Drafts 2 and 4 (2026-11-13): the camera's own measurement of the sky, SPEC §6.3 status.sky
    (devices/sky_now.py); needs `sn`, optionally `hfr_usual` (draft E, devices/star_size). #}
 <section class="card sky-now" aria-labelledby="sky-now-h">
-  <div class="cam-meta"><h2 id="sky-now-h">Himmel jetzt</h2>{% if sn.at %}<span class="muted small">gemessen {{ sn.at | age }}</span>{% endif %}</div>
+  <div class="cam-meta"><h2 id="sky-now-h">{{ t('Himmel jetzt', 'Sky now') }}</h2>{% if sn.at %}<span class="muted small">{{ t('gemessen', 'measured') }} {{ sn.at | age }}</span>{% endif %}</div>
   <div class="sky-tiles">
-    {% if sn.stars is not none %}<div class="sky-tile"><small>Sterne gesehen</small><strong>{{ sn.stars }}</strong><span>im neuesten Nachtbild</span></div>{% endif %}
-    {% if sn.cloud_pct is not none %}<div class="sky-tile"><small>Bewölkung</small><strong>{{ sn.cloud_pct }} %</strong><span>{{ 'aus den Sternen' if sn.stars is not none else 'aus der Himmelsfarbe' }}</span></div>{% endif %}
+    {% if sn.stars is not none %}<div class="sky-tile"><small>{{ t('Sterne gesehen', 'Stars seen') }}</small><strong>{{ sn.stars }}</strong><span>{{ t('im neuesten Nachtbild', 'in the latest night image') }}</span></div>{% endif %}
+    {% if sn.cloud_pct is not none %}<div class="sky-tile"><small>{{ t('Bewölkung', 'Cloud cover') }}</small><strong>{{ sn.cloud_pct }} %</strong><span>{{ t('aus den Sternen', 'from the stars') if sn.stars is not none else t('aus der Himmelsfarbe', 'from the sky colour') }}</span></div>{% endif %}
     {% if sn.cells %}
-    <div class="sky-tile cloud-tile"><small>Wolken je Richtung</small>
-      <svg class="cloud-map" viewBox="-100 -100 200 200" role="img" aria-label="Wolken je Himmelsrichtung, ausgerichtet wie das Bild">
+    <div class="sky-tile cloud-tile"><small>{{ t('Wolken je Richtung', 'Clouds by direction') }}</small>
+      <svg class="cloud-map" viewBox="-100 -100 200 200" role="img" aria-label="{{ t('Wolken je Himmelsrichtung, ausgerichtet wie das Bild', 'Clouds by direction, turned like the image') }}">
         {% for c in sn.cells %}<path class="{{ 'cm-na' if c.shade is none else 'cm-' ~ c.shade }}" d="{{ c.path }}"><title>{{ c.title }}</title></path>{% endfor %}
         {% for letter, x, y in sn.compass %}<text x="{{ x }}" y="{{ y + 5 }}">{{ letter }}</text>{% endfor %}
       </svg>
-      <span>gedreht wie das Bild; hell = Wolken</span>
+      <span>{{ t('gedreht wie das Bild; hell = Wolken', 'turned like the image; bright = clouds') }}</span>
     </div>
     {% endif %}
-    {% if sn.sqm is not none %}<div class="sky-tile"><small>Himmelshelligkeit</small><strong>{{ '%.1f' | format(sn.sqm) | replace('.', ',') }}</strong><span>mag/⁠″², ungefähr; höher ist dunkler</span></div>{% endif %}
-    {% if sn.hfr is not none %}<div class="sky-tile"><small>Sternschärfe</small><strong>{{ '%.1f' | format(sn.hfr) | replace('.', ',') }} px</strong><span>{% if hfr_usual is defined and hfr_usual is not none %}üblich {{ '%.1f' | format(hfr_usual) | replace('.', ',') }} px; {% endif %}kleiner ist schärfer</span></div>{% elif sn.hfr_cloudy %}<div class="sky-tile"><small>Sternschärfe</small><strong>–</strong><span>bewölkt, nicht messbar</span></div>{% endif %}
-    {% if sn.transparency is not none %}<div class="sky-tile"><small>Transparenz</small><strong>{{ '%.2f' | format(sn.transparency) | replace('.', ',') }}</strong><span>mag gedämpft über 40°, 0 = klarste Nächte</span></div>{% endif %}
+    {% if sn.sqm is not none %}<div class="sky-tile"><small>{{ t('Himmelshelligkeit', 'Sky brightness') }}</small><strong>{{ '%.1f' | format(sn.sqm) | replace('.', '.' if en else ',') }}</strong><span>{{ t('mag/⁠″², ungefähr; höher ist dunkler', 'mag/⁠″², approximate; higher is darker') }}</span></div>{% endif %}
+    {% if sn.hfr is not none %}<div class="sky-tile"><small>{{ t('Sternschärfe', 'Star sharpness') }}</small><strong>{{ '%.1f' | format(sn.hfr) | replace('.', '.' if en else ',') }} px</strong><span>{% if hfr_usual is defined and hfr_usual is not none %}{{ t('üblich', 'usually') }} {{ '%.1f' | format(hfr_usual) | replace('.', '.' if en else ',') }} px; {% endif %}{{ t('kleiner ist schärfer', 'smaller is sharper') }}</span></div>{% elif sn.hfr_cloudy %}<div class="sky-tile"><small>{{ t('Sternschärfe', 'Star sharpness') }}</small><strong>–</strong><span>{{ t('bewölkt, nicht messbar', 'cloudy, not measurable') }}</span></div>{% endif %}
+    {% if sn.transparency is not none %}<div class="sky-tile"><small>{{ t('Transparenz', 'Transparency') }}</small><strong>{{ '%.2f' | format(sn.transparency) | replace('.', '.' if en else ',') }}</strong><span>{{ t('mag gedämpft über 40°, 0 = klarste Nächte', 'mag dimmed above 40°, 0 = clearest nights') }}</span></div>{% endif %}
   </div>
 </section>

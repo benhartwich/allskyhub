@@ -21,6 +21,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from allskyhub_protocol import FrameVariant
 from allskyhub_server.devices.images import ImageStore
+from allskyhub_server.i18n import tr
 from allskyhub_server.models import Device, Frame, Product, RenderJob
 from allskyhub_server.settings import Settings
 
@@ -63,15 +64,22 @@ async def request(
 ) -> RenderJob:
     """Queue a render after checking the request; the caller commits."""
     if kind not in SUFFIX:
-        raise RenderError("Unbekannte Art.")
+        raise RenderError(tr("Unbekannte Art.", "Unknown kind."))
     if end <= start:
-        raise RenderError("Das Ende muss nach dem Anfang liegen.")
+        raise RenderError(
+            tr("Das Ende muss nach dem Anfang liegen.", "The end must come after the start.")
+        )
     if end - start > MAX_SPAN:
-        raise RenderError("Höchstens 31 Tage auf einmal.")
+        raise RenderError(tr("Höchstens 31 Tage auf einmal.", "At most 31 days at a time."))
     if not 5 <= fps <= 60:
-        raise RenderError("Bilder pro Sekunde: 5 bis 60.")
+        raise RenderError(tr("Bilder pro Sekunde: 5 bis 60.", "Frames per second: 5 to 60."))
     if await _open_jobs(db, device.id) >= MAX_OPEN_JOBS:
-        raise RenderError("Es laufen schon zwei Aufträge für diese Kamera.")
+        raise RenderError(
+            tr(
+                "Es laufen schon zwei Aufträge für diese Kamera.",
+                "Two jobs are already running for this camera.",
+            )
+        )
     job = RenderJob(device_id=device.id, kind=kind, start=start, end=end, fps=fps)
     db.add(job)
     await db.flush()

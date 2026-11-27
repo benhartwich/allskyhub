@@ -1,46 +1,47 @@
 {% extends "base.html" %}
-{% block title %}Für Streams · {{ device.name }} · allskyhub{% endblock %}
+{% block lang %}{{ 'en' if en else 'de' }}{% endblock %}
+{% block title %}{{ t('Für Streams', 'For streams') }} · {{ device.name }} · allskyhub{% endblock %}
 {% block head %}<script src="{{ asset('copy.js') }}" defer></script>
 <script src="{{ asset('obs_settings.js') }}" defer></script>{% endblock %}
 {% block content %}
-{% set names = {'sternbilder': 'Sternbilder', 'namen': 'Sternnamen', 'raster': 'Raster', 'planeten': 'Mond & Planeten', 'satelliten': 'Satelliten', 'ballons': 'Wetterballons'} %}
-<div class="page-head"><h1>Für Streams (OBS)</h1><p class="muted"><a href="/cameras/{{ device.id }}">{{ device.name }}</a> › Für Streams</p></div>
-<p class="muted">Eine Seite nur mit dem Himmelsbild, zum Einbinden in OBS als „Browserquelle“, zum Beispiel für einen YouTube-Livestream. Sie funktioniert auch, wenn deine Kamera nicht öffentlich ist. Wer die Adresse kennt, sieht das Bild; du kannst sie jederzeit widerrufen.</p>
+{% if en %}{% set names = {'sternbilder': 'Constellations', 'namen': 'Star names', 'raster': 'Grid', 'planeten': 'Moon & planets', 'satelliten': 'Satellites', 'ballons': 'Weather balloons'} %}{% else %}{% set names = {'sternbilder': 'Sternbilder', 'namen': 'Sternnamen', 'raster': 'Raster', 'planeten': 'Mond & Planeten', 'satelliten': 'Satelliten', 'ballons': 'Wetterballons'} %}{% endif %}
+<div class="page-head"><h1>{{ t('Für Streams (OBS)', 'For streams (OBS)') }}</h1><p class="muted"><a href="/cameras/{{ device.id }}">{{ device.name }}</a> › {{ t('Für Streams', 'For streams') }}</p></div>
+<p class="muted">{{ t('Eine Seite nur mit dem Himmelsbild, zum Einbinden in OBS als „Browserquelle“, zum Beispiel für einen YouTube-Livestream. Sie funktioniert auch, wenn deine Kamera nicht öffentlich ist. Wer die Adresse kennt, sieht das Bild; du kannst sie jederzeit widerrufen.', 'A page with just the sky image, to add to OBS as a “Browser source”, for a YouTube live stream for example. It works even when your camera is not public. Anyone who knows the address sees the image; you can revoke it at any time.') }}</p>
 
 {% if token %}
 {% set address = base ~ '/obs/' ~ token %}
 <section class="card stack" data-obs-builder data-base="{{ address }}">
-  <h2>Deine Adresse</h2>
-  <p class="msg warn">Die Adresse wird nur jetzt angezeigt. Kopier sie dir; sonst erzeugst du unten eine neue.</p>
+  <h2>{{ t('Deine Adresse', 'Your address') }}</h2>
+  <p class="msg warn">{{ t('Die Adresse wird nur jetzt angezeigt. Kopier sie dir; sonst erzeugst du unten eine neue.', 'The address is shown only now. Copy it; otherwise create a new one below.') }}</p>
   <fieldset class="stack">
-    <legend>Ebenen</legend>
+    <legend>{{ t('Ebenen', 'Layers') }}</legend>
     {% for name in layers %}{% if obs_key and (obs_key.place_layers or name not in tells_place) %}
-    <label class="check"><input type="checkbox" name="ebene" value="{{ name }}" {% if name in defaults %}checked{% endif %}> <span>{{ names[name] }}{% if name in tells_place %} <span class="muted small">– verrät den genauen Ort deiner Kamera</span>{% endif %}</span></label>
+    <label class="check"><input type="checkbox" name="ebene" value="{{ name }}" {% if name in defaults %}checked{% endif %}> <span>{{ names[name] }}{% if name in tells_place %} <span class="muted small">– {{ t('verrät den genauen Ort deiner Kamera', 'gives away the exact place of your camera') }}</span>{% endif %}</span></label>
     {% endif %}{% endfor %}
-    <label class="check"><input type="checkbox" name="text" value="aus"> <span>Ohne Textzeile (Name, Uhrzeit, Belichtung)</span></label>
-    <label class="check"><input type="checkbox" name="rotlicht" value="1"> <span>Rotlicht</span></label>
+    <label class="check"><input type="checkbox" name="text" value="aus"> <span>{{ t('Ohne Textzeile (Name, Uhrzeit, Belichtung)', 'Without the line of text (name, time, exposure)') }}</span></label>
+    <label class="check"><input type="checkbox" name="rotlicht" value="1"> <span>{{ t('Rotlicht', 'Red light') }}</span></label>
   </fieldset>
-  <label>Adresse für OBS<input class="embed-code" data-obs-address readonly value="{{ address }}?ebenen=sternbilder"></label>
-  <p><button type="button" class="secondary small" data-copy="{{ address }}?ebenen=sternbilder" data-obs-copy>Kopieren</button></p>
-  <p class="muted small">In OBS: Quelle hinzufügen → Browser → diese Adresse, Breite 1920, Höhe 1080. Das Bild wechselt von selbst, sobald die Kamera ein neues schickt. Koordinaten werden nie eingeblendet{% if not obs_key.place_layers %}, und Satelliten und Wetterballons, die den Ort verraten würden, zeigt diese Adresse nicht{% endif %}.</p>
+  <label>{{ t('Adresse für OBS', 'Address for OBS') }}<input class="embed-code" data-obs-address readonly value="{{ address }}?ebenen=sternbilder"></label>
+  <p><button type="button" class="secondary small" data-copy="{{ address }}?ebenen=sternbilder" data-obs-copy>{{ t('Kopieren', 'Copy') }}</button></p>
+  <p class="muted small">{% if en %}In OBS: add a source → Browser → this address, width 1920, height 1080. The image changes by itself as soon as the camera sends a new one. Coordinates are never shown{% if not obs_key.place_layers %}, and this address does not show satellites and weather balloons, which would give the place away{% endif %}.{% else %}In OBS: Quelle hinzufügen → Browser → diese Adresse, Breite 1920, Höhe 1080. Das Bild wechselt von selbst, sobald die Kamera ein neues schickt. Koordinaten werden nie eingeblendet{% if not obs_key.place_layers %}, und Satelliten und Wetterballons, die den Ort verraten würden, zeigt diese Adresse nicht{% endif %}.{% endif %}</p>
 </section>
 {% endif %}
 
 <section class="card stack">
   {% if obs_key %}
-  <h2>Aktive Adresse</h2>
-  <p>Eine Adresse für Streams ist aktiv, erzeugt {{ obs_key.created_at | when }}{% if obs_key.place_layers %}, mit Satelliten und Wetterballons{% endif %}.{% if not token %} Hast du sie nicht mehr, erzeuge eine neue: Die alte hört dann sofort auf zu funktionieren.{% endif %}</p>
+  <h2>{{ t('Aktive Adresse', 'Active address') }}</h2>
+  <p>{% if en %}An address for streams is active, created {{ obs_key.created_at | when }}{% if obs_key.place_layers %}, with satellites and weather balloons{% endif %}.{% if not token %} If you no longer have it, create a new one: the old one then stops working at once.{% endif %}{% else %}Eine Adresse für Streams ist aktiv, erzeugt {{ obs_key.created_at | when }}{% if obs_key.place_layers %}, mit Satelliten und Wetterballons{% endif %}.{% if not token %} Hast du sie nicht mehr, erzeuge eine neue: Die alte hört dann sofort auf zu funktionieren.{% endif %}{% endif %}</p>
   <form method="post" action="/cameras/{{ device.id }}/stream/loeschen">
     <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-    <button type="submit" class="secondary">Adresse widerrufen</button>
+    <button type="submit" class="secondary">{{ t('Adresse widerrufen', 'Revoke the address') }}</button>
   </form>
   {% else %}
-  <h2>Noch keine Adresse</h2>
+  <h2>{{ t('Noch keine Adresse', 'No address yet') }}</h2>
   {% endif %}
   <form method="post" action="/cameras/{{ device.id }}/stream" class="stack">
     <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-    <label class="check"><input type="checkbox" name="place_layers" value="true"> <span>Satelliten und Wetterballons erlauben <span class="muted small">– sie verraten den genauen Ort deiner Kamera; ohne das Häkchen kann die Adresse sie nie zeigen</span></span></label>
-    <button type="submit">{{ 'Neue Adresse erzeugen' if obs_key else 'Adresse erzeugen' }}</button>
+    <label class="check"><input type="checkbox" name="place_layers" value="true"> <span>{{ t('Satelliten und Wetterballons erlauben', 'Allow satellites and weather balloons') }} <span class="muted small">– {{ t('sie verraten den genauen Ort deiner Kamera; ohne das Häkchen kann die Adresse sie nie zeigen', 'they give away the exact place of your camera; without the tick the address can never show them') }}</span></span></label>
+    <button type="submit">{{ t('Neue Adresse erzeugen', 'Create a new address') if obs_key else t('Adresse erzeugen', 'Create an address') }}</button>
   </form>
 </section>
 {% endblock %}

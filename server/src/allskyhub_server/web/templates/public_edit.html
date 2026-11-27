@@ -1,51 +1,52 @@
 {% extends "base.html" %}
-{% block title %}Öffentliche Seite · {{ device.name }}{% endblock %}
+{% block lang %}{{ 'en' if en else 'de' }}{% endblock %}
+{% block title %}{{ t('Öffentliche Seite', 'Public page') }} · {{ device.name }}{% endblock %}
 {% block head %}<link rel="stylesheet" href="{{ asset('public.css') }}">{% endblock %}
 {% block content %}
 <a class="back" href="/cameras/{{ device.id }}">← {{ device.name }}</a>
-<h1>Öffentliche Seite</h1>
+<h1>{{ t('Öffentliche Seite', 'Public page') }}</h1>
 <form method="post" action="/cameras/{{ device.id }}/public/edit" class="stack">
   <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
   <div class="card stack">
-    <h2>Texte</h2>
-    <label>Titel<input name="title" maxlength="100" value="{{ profile.title }}" placeholder="{{ device.name }}"></label>
-    <label>Ort<input name="location_label" maxlength="200" value="{{ profile.location_label }}" placeholder="z. B. Musterdorf, Österreich"></label>
+    <h2>{{ t('Texte', 'Texts') }}</h2>
+    <label>{{ t('Titel', 'Title') }}<input name="title" maxlength="100" value="{{ profile.title }}" placeholder="{{ device.name }}"></label>
+    <label>{{ t('Ort', 'Place') }}<input name="location_label" maxlength="200" value="{{ profile.location_label }}" placeholder="{{ t('z. B. Musterdorf, Österreich', 'e.g. Sampleton, Austria') }}"></label>
     {% include "_public_visibility.html" %}
     <div class="grid-2">
-      <label>Kamera<input name="camera" maxlength="200" value="{{ profile.camera }}" placeholder="ZWO ASI678MC"></label>
-      <label>Objektiv<input name="lens" maxlength="200" value="{{ profile.lens }}" placeholder="2,5 mm f/1.2"></label>
+      <label>{{ t('Kamera', 'Camera') }}<input name="camera" maxlength="200" value="{{ profile.camera }}" placeholder="ZWO ASI678MC"></label>
+      <label>{{ t('Objektiv', 'Lens') }}<input name="lens" maxlength="200" value="{{ profile.lens }}" placeholder="{{ t('2,5 mm f/1.2', '2.5 mm f/1.2') }}"></label>
     </div>
     <div class="grid-2">
-      <label>Rechner<input name="computer" maxlength="200" value="{{ profile.computer }}" placeholder="Raspberry Pi 4, 8 GB"></label>
-      <label>Betrieben von<input name="owner" maxlength="200" value="{{ profile.owner }}"></label>
+      <label>{{ t('Rechner', 'Computer') }}<input name="computer" maxlength="200" value="{{ profile.computer }}" placeholder="Raspberry Pi 4, 8 GB"></label>
+      <label>{{ t('Betrieben von', 'Run by') }}<input name="owner" maxlength="200" value="{{ profile.owner }}"></label>
     </div>
-    <label>Notizen<textarea name="notes" maxlength="2000" rows="4">{{ profile.notes }}</textarea></label>
+    <label>{{ t('Notizen', 'Notes') }}<textarea name="notes" maxlength="2000" rows="4">{{ profile.notes }}</textarea></label>
   </div>
   <div class="card stack">
-    <h2>Abschnitte</h2>
+    <h2>{{ t('Abschnitte', 'Sections') }}</h2>
     {% for key, label in sections.items() %}
     <label class="check"><input type="checkbox" name="section_{{ key }}"{% if profile.sections[key] %} checked{% endif %}> {{ label }}</label>
     {% endfor %}
-    <p class="muted">Vollbilder aus dem Archiv und Zeitraffer bleiben privat; sie müssten erst von deiner Kamera geholt werden.</p>
+    <p class="muted">{{ t('Vollbilder aus dem Archiv und Zeitraffer bleiben privat; sie müssten erst von deiner Kamera geholt werden.', 'Full images from the archive and timelapses stay private; they would first have to be fetched from your camera.') }}</p>
   </div>
-  <button type="submit">Speichern</button>
+  <button type="submit">{{ t('Speichern', 'Save') }}</button>
 </form>
 {% if device.public_slug %}
 <div class="card stack" id="domain">
-  <h2>Eigene Domain</h2>
-  <p class="muted">Zeige diese Seite unter deiner eigenen Adresse, z. B. <code>himmel.example.org</code>. Lege dafür im DNS deiner Domain einen <strong>CNAME</strong>-Eintrag auf <code>{{ request.base_url.hostname }}</code> an und drücke dann „Domain übernehmen“. Das Zertifikat holen wir automatisch.</p>
+  <h2>{{ t('Eigene Domain', 'Your own domain') }}</h2>
+  <p class="muted">{% if en %}Show this page under your own address, e.g. <code>sky.example.org</code>. Create a <strong>CNAME</strong> record pointing to <code>{{ request.base_url.hostname }}</code> in your domain’s DNS, then press “Use domain”. We get the certificate automatically.{% else %}Zeige diese Seite unter deiner eigenen Adresse, z. B. <code>himmel.example.org</code>. Lege dafür im DNS deiner Domain einen <strong>CNAME</strong>-Eintrag auf <code>{{ request.base_url.hostname }}</code> an und drücke dann „Domain übernehmen“. Das Zertifikat holen wir automatisch.{% endif %}</p>
   {% if device.custom_domain %}
   <p>
     <code>{{ device.custom_domain }}</code> ·
-    {% if device.custom_domain_state == 'active' %}<span class="badge ok">aktiv</span> <a href="https://{{ device.custom_domain }}/">öffnen</a>
-    {% elif device.custom_domain_state == 'pending' %}<span class="badge">wird eingerichtet</span> <span class="muted small">(Zertifikat wird geholt, dauert ein paar Minuten)</span>
-    {% elif device.custom_domain_state == 'removing' %}<span class="badge">wird entfernt</span>
-    {% else %}<span class="badge">fehlgeschlagen</span> <span class="warn small">{{ device.custom_domain_error }}</span>{% endif %}
+    {% if device.custom_domain_state == 'active' %}<span class="badge ok">{{ t('aktiv', 'active') }}</span> <a href="https://{{ device.custom_domain }}/">{{ t('öffnen', 'open') }}</a>
+    {% elif device.custom_domain_state == 'pending' %}<span class="badge">{{ t('wird eingerichtet', 'being set up') }}</span> <span class="muted small">({{ t('Zertifikat wird geholt, dauert ein paar Minuten', 'getting the certificate, takes a few minutes') }})</span>
+    {% elif device.custom_domain_state == 'removing' %}<span class="badge">{{ t('wird entfernt', 'being removed') }}</span>
+    {% else %}<span class="badge">{{ t('fehlgeschlagen', 'failed') }}</span> <span class="warn small">{{ device.custom_domain_error }}</span>{% endif %}
   </p>
   {% if device.custom_domain_state != 'removing' %}
   <form method="post" action="/cameras/{{ device.id }}/public/domain/remove" class="inline">
     <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-    <button type="submit" class="danger">Domain entfernen</button>
+    <button type="submit" class="danger">{{ t('Domain entfernen', 'Remove domain') }}</button>
   </form>
   {% endif %}
   {% endif %}
@@ -53,8 +54,8 @@
   <form method="post" action="/cameras/{{ device.id }}/public/domain" class="stack">
     <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
     {% if domain_error %}<p class="msg error">{{ domain_error }}</p>{% endif %}
-    <label>Domain<input name="domain" value="{{ domain_value or device.custom_domain or '' }}" placeholder="himmel.example.org" autocomplete="off"></label>
-    <button type="submit" class="secondary">Domain übernehmen</button>
+    <label>Domain<input name="domain" value="{{ domain_value or device.custom_domain or '' }}" placeholder="{{ t('himmel.example.org', 'sky.example.org') }}" autocomplete="off"></label>
+    <button type="submit" class="secondary">{{ t('Domain übernehmen', 'Use domain') }}</button>
   </form>
   {% endif %}
 </div>
@@ -62,12 +63,12 @@
 {% if device.public_slug %}
 {% set base = request.base_url ~ "sky/" ~ device.public_slug %}
 <div class="card stack">
-  <h2>Auf der eigenen Website</h2>
-  <label>Bild mit Link als Widget
+  <h2>{{ t('Auf der eigenen Website', 'On your own website') }}</h2>
+  <label>{{ t('Bild mit Link als Widget', 'Image with link as a widget') }}
     <textarea class="embed-code" rows="3" readonly>&lt;iframe src="{{ base }}/widget" width="480" height="340" style="border:0" title="{{ device.name }}"&gt;&lt;/iframe&gt;</textarea>
   </label>
-  <label>Nur das aktuelle Bild<input class="embed-code" readonly value="{{ base }}/latest.jpg"></label>
-  {% if profile.sections.events %}<label>Ereignisse als Feed (Atom)<input class="embed-code" readonly value="{{ base }}/events.atom"></label>{% endif %}
+  <label>{{ t('Nur das aktuelle Bild', 'Only the current image') }}<input class="embed-code" readonly value="{{ base }}/latest.jpg"></label>
+  {% if profile.sections.events %}<label>{{ t('Ereignisse als Feed (Atom)', 'Events as a feed (Atom)') }}<input class="embed-code" readonly value="{{ base }}/events.atom"></label>{% endif %}
 </div>
 {% endif %}
 {% endblock %}

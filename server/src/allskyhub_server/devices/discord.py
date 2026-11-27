@@ -27,6 +27,7 @@ from allskyhub_server.devices import astro, events, night_summary, tonight
 from allskyhub_server.devices.event_text import EVENT_TITLES
 from allskyhub_server.devices.events import storm_key
 from allskyhub_server.devices.images import ImageStore
+from allskyhub_server.i18n import english
 from allskyhub_server.models import Device, EventRecord
 
 log = logging.getLogger(__name__)
@@ -42,6 +43,19 @@ KINDS = {
     "nlc": "Leuchtende Nachtwolken",
     "lightning": "Gewitter (einmal pro Gewitter)",
 }
+KINDS_EN = {
+    "meteor": "Meteors",
+    "aurora": "Aurora",
+    "nlc": "Noctilucent clouds",
+    "lightning": "Thunderstorms (once per storm)",
+}
+
+
+def kinds() -> dict[str, str]:
+    """``KINDS`` in the request's language, for the camera page."""
+    return KINDS_EN if english() else KINDS
+
+
 Kind = Literal["meteor", "aurora", "nlc", "lightning"]
 # Detections older than this are history, not news (an import, a camera that was offline).
 TOO_OLD = dt.timedelta(hours=6)

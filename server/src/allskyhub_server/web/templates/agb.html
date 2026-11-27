@@ -1,6 +1,61 @@
 {% extends "base.html" %}
-{% block title %}AGB · allskyhub{% endblock %}
-{% block content %}
+{% block lang %}{{ 'en' if en else 'de' }}{% endblock %}
+{% block title %}{{ t('AGB', 'Terms') }} · allskyhub{% endblock %}
+{% block content %}{% if en %}
+<article class="legal stack">
+  <h1>Terms and conditions for allskyhub Plus</h1>
+  <p class="msg">This is a translation; the German version is binding. <a href="/agb?lang=de" lang="de">Allgemeine Geschäftsbedingungen (Deutsch)</a></p>
+  <p class="muted">As of: October 2026</p>
+
+  <section class="card">
+    <h2>1. Provider and scope</h2>
+    <p>allskyhub is operated by WebInx, Benjamin Hartwich, Lanzenberg 10, 4492 Hofkirchen im Traunkreis, Austria (<a href="/impressum">imprint</a>). These terms apply to the paid add-on “Plus” and the free trial month. Using allskyhub without Plus remains free of charge.</p>
+  </section>
+
+  <section class="card">
+    <h2>2. Purchase through Paddle</h2>
+    <p>You buy Plus from our reseller Paddle.com Market Limited, Judd House, 18–29 Mora Street, London EC1V 8BT, United Kingdom (“Paddle”). Paddle is your contractual partner for the purchase and payment, charges the VAT and sends the invoice; in addition, the <a href="https://www.paddle.com/legal/checkout-buyer-terms" rel="noopener">Paddle buyer terms</a> apply. We provide the Plus service.</p>
+  </section>
+
+  <section class="card">
+    <h2>3. Service</h2>
+    <p>Plus applies to one camera. While Plus is running, we keep its full images and timelapse videos for 90 days and its thumbnails with capture data, keograms and star trails for one year, each counted from their arrival on the server. All other features can be used in the same way without Plus.</p>
+    <p>We run allskyhub with care but cannot promise uninterrupted availability. Short interruptions for maintenance and updates are possible. Plus is an archive for viewing, not a backup: please download images that matter to you yourself.</p>
+  </section>
+
+  <section class="card">
+    <h2>4. Trial month</h2>
+    <p>Each account can start a free trial month for one camera once. It needs no payment details and ends by itself after 30 days, without creating a subscription.</p>
+  </section>
+
+  <section class="card">
+    <h2>5. Prices, term, cancellation</h2>
+    <p>Plus costs {{ price_month }} a month or {{ price_year }} a year per camera, including VAT. The subscription renews for the chosen period each time and is paid through Paddle at the start of each period.</p>
+    <p>You can cancel at any time with effect from the end of the paid period: on your camera’s page with “Manage subscription” or through the link in Paddle’s emails. If you remove the camera from your account, we cancel its Plus at the end of the paid period. We announce price changes by email at least 30 days in advance; they only apply from the next period, and you can cancel until then.</p>
+  </section>
+
+  <section class="card">
+    <h2>6. After the end</h2>
+    <p>When Plus ends, we keep the long archive for another 30 days. After that we delete what is older than the free periods (full images 7 days, thumbnails 30 days).</p>
+  </section>
+
+  <section class="card" id="widerruf">
+    <h2>7. Right of withdrawal for consumers</h2>
+    <p>As a consumer you can withdraw from the purchase within 14 days without giving reasons. The period begins on the day the contract is concluded. A clear statement is enough for the withdrawal, for example by email, to Paddle through <a href="https://paddle.net" rel="noopener">paddle.net</a> or to us: <a href="mailto:support@webinx.eu">support@webinx.eu</a>. To meet the deadline, it is enough to send the statement before the period ends.</p>
+    <p><strong>Consequences of withdrawal:</strong> We or Paddle refund all payments to you without undue delay, at the latest within 14 days of receiving the withdrawal, using the same means of payment. If you asked for Plus to begin during the withdrawal period, you pay a pro-rata amount for the time until the withdrawal.</p>
+    <p>When buying, you expressly confirm that Plus is to begin at once and that, if you withdraw, you pay pro rata for the time used until then.</p>
+  </section>
+
+  <section class="card">
+    <h2>8. Liability</h2>
+    <p>We are liable without limitation for intent and gross negligence and for personal injury. In the case of slight negligence we are liable only for the breach of essential contractual obligations, limited to the foreseeable damage typical for the contract. Mandatory consumer rights remain unaffected.</p>
+  </section>
+
+  <section class="card">
+    <h2>9. Final provisions</h2>
+    <p>Austrian law applies, excluding the UN Convention on Contracts for the International Sale of Goods; mandatory consumer protection rules of your country of residence remain applicable. If we change these terms, we tell you by email at least 30 days in advance; you can cancel until then.</p>
+  </section>
+</article>{% else %}
 <article class="legal stack">
   <h1>Allgemeine Geschäftsbedingungen für allskyhub Plus</h1>
   <p class="muted">Stand: Oktober 2026</p>
@@ -53,5 +108,5 @@
     <h2>9. Schluss</h2>
     <p>Es gilt österreichisches Recht unter Ausschluss des UN-Kaufrechts; zwingende Verbraucherschutzvorschriften deines Wohnsitzstaats bleiben anwendbar. Ändern wir diese Bedingungen, teilen wir dir das mindestens 30 Tage vorher per E-Mail mit; du kannst bis dahin kündigen.</p>
   </section>
-</article>
+</article>{% endif %}
 {% endblock %}

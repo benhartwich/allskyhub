@@ -1,61 +1,62 @@
 {% extends "base.html" %}
-{% block title %}Konto · allskyhub{% endblock %}
+{% block lang %}{{ 'en' if en else 'de' }}{% endblock %}
+{% block title %}{{ t('Konto', 'Account') }} · allskyhub{% endblock %}
 {% block content %}
-<a class="back" href="/">← Meine Kameras</a>
-<h1>Konto</h1>
-<p class="muted">Angemeldet als {{ user.email }}</p>
+<a class="back" href="/">← {{ t('Meine Kameras', 'My cameras') }}</a>
+<h1>{{ t('Konto', 'Account') }}</h1>
+<p class="muted">{{ t('Angemeldet als', 'Signed in as') }} {{ user.email }}</p>
 
 <form method="post" action="/account/events" class="card stack">
-  <h2>Ereignisse aufbewahren</h2>
-  <p class="muted">Wie lange erkannte Meteore und andere Ereignisse deiner Kameras gespeichert bleiben. Bei mehr als 30 Tagen sichern wir auch jedes Bild in voller Größe.</p>
+  <h2>{{ t('Ereignisse aufbewahren', 'Keeping events') }}</h2>
+  <p class="muted">{{ t('Wie lange erkannte Meteore und andere Ereignisse deiner Kameras gespeichert bleiben. Bei mehr als 30 Tagen sichern wir auch jedes Bild in voller Größe.', 'How long detected meteors and other events of your cameras are kept. For more than 30 days we also keep every image in full size.') }}</p>
   <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
   {% for days in keep_choices %}
   <label class="check"><input type="radio" name="keep_days" value="{{ days }}" {% if user.event_keep_days == days %}checked{% endif %}>
-    {{ '1 Jahr' if days == 365 else days ~ ' Tage' }}{% if days == 30 %} (Standard){% endif %}</label>
+    {% if en %}{{ '1 year' if days == 365 else days ~ ' days' }}{% if days == 30 %} (default){% endif %}{% else %}{{ '1 Jahr' if days == 365 else days ~ ' Tage' }}{% if days == 30 %} (Standard){% endif %}{% endif %}</label>
   {% endfor %}
-  <button type="submit">Speichern</button>
+  <button type="submit">{{ t('Speichern', 'Save') }}</button>
 </form>
 
 {% if push_available or mail_enabled %}
 <form method="post" action="/account/notifications" class="card stack">
-  <h2>Benachrichtigungen</h2>
-  <p class="muted small">{% if push_available %}In der App, sobald sie dort erlaubt sind{% if mail_enabled %}, und auf Wunsch per E-Mail{% endif %}.{% else %}Per E-Mail an {{ user.email }}, wenn du das unten einschaltest.{% endif %}</p>
+  <h2>{{ t('Benachrichtigungen', 'Notifications') }}</h2>
+  <p class="muted small">{% if en %}{% if push_available %}In the app, once they are allowed there{% if mail_enabled %}, and by email if you like{% endif %}.{% else %}By email to {{ user.email }}, if you switch that on below.{% endif %}{% else %}{% if push_available %}In der App, sobald sie dort erlaubt sind{% if mail_enabled %}, und auf Wunsch per E-Mail{% endif %}.{% else %}Per E-Mail an {{ user.email }}, wenn du das unten einschaltest.{% endif %}{% endif %}</p>
   <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-  {% if push_available %}<label class="check"><input type="checkbox" name="notify_events" value="true" {% if user.notify_events %}checked{% endif %}> Bei neuen Ereignissen (z. B. Meteor), höchstens alle 10 Minuten pro Kamera <span class="muted">(nur in der App)</span></label>{% endif %}
-  <label class="check"><input type="checkbox" name="notify_offline" value="true" {% if user.notify_offline %}checked{% endif %}> Wenn mit einer Kamera etwas nicht stimmt: offline, keine neuen Bilder, Speicher fast voll, zu heiß, Uhr oder Update fehlerhaft{% if mail_enabled %} <span class="muted">(offline per E-Mail erst nach 6 Stunden)</span>{% endif %}</label>
-  <label class="check"><input type="checkbox" name="notify_aurora" value="true" {% if user.notify_aurora %}checked{% endif %}> Polarlicht: Kp-Index hoch genug für den Standort, oder eine Kamera im Kameranetz bis 800 km entfernt sieht gerade Polarlicht, und der Himmel über deiner Kamera ist klar</label>
-  <label class="check"><input type="checkbox" name="notify_summary" value="true" {% if user.notify_summary %}checked{% endif %}> Morgens eine Zusammenfassung der Nacht</label>
-  <label class="check"><input type="checkbox" name="notify_tonight" value="true" {% if user.notify_tonight %}checked{% endif %}> Abends, wenn die Nacht klar wird (mindestens 2 Stunden klar und dunkel laut Vorhersage)</label>
-  <label class="check"><input type="checkbox" name="notify_fireball" value="true" {% if user.notify_fireball %}checked{% endif %}> Feuerkugel mit möglichem Meteoritenfall: von zwei Kameras gesehen, bei dir in der Nähe (300 km) oder von deiner Kamera</label>
-  {% if mail_enabled %}<label class="check"><input type="checkbox" name="notify_by_mail" value="true" {% if user.notify_by_mail %}checked{% endif %}> <strong>Auch per E-Mail</strong> an {{ user.email }}</label>{% endif %}
-  <button type="submit">Speichern</button>
+  {% if push_available %}<label class="check"><input type="checkbox" name="notify_events" value="true" {% if user.notify_events %}checked{% endif %}> {{ t('Bei neuen Ereignissen (z. B. Meteor), höchstens alle 10 Minuten pro Kamera', 'On new events (a meteor, for example), at most every 10 minutes per camera') }} <span class="muted">({{ t('nur in der App', 'in the app only') }})</span></label>{% endif %}
+  <label class="check"><input type="checkbox" name="notify_offline" value="true" {% if user.notify_offline %}checked{% endif %}> {{ t('Wenn mit einer Kamera etwas nicht stimmt: offline, keine neuen Bilder, Speicher fast voll, zu heiß, Uhr oder Update fehlerhaft', 'When something is wrong with a camera: offline, no new images, storage almost full, too hot, clock or update failing') }}{% if mail_enabled %} <span class="muted">({{ t('offline per E-Mail erst nach 6 Stunden', 'offline by email only after 6 hours') }})</span>{% endif %}</label>
+  <label class="check"><input type="checkbox" name="notify_aurora" value="true" {% if user.notify_aurora %}checked{% endif %}> {{ t('Polarlicht: Kp-Index hoch genug für den Standort, oder eine Kamera im Kameranetz bis 800 km entfernt sieht gerade Polarlicht, und der Himmel über deiner Kamera ist klar', 'Aurora: the Kp index is high enough for the location, or a camera in the network up to 800 km away sees aurora right now, and the sky above your camera is clear') }}</label>
+  <label class="check"><input type="checkbox" name="notify_summary" value="true" {% if user.notify_summary %}checked{% endif %}> {{ t('Morgens eine Zusammenfassung der Nacht', 'A summary of the night in the morning') }}</label>
+  <label class="check"><input type="checkbox" name="notify_tonight" value="true" {% if user.notify_tonight %}checked{% endif %}> {{ t('Abends, wenn die Nacht klar wird (mindestens 2 Stunden klar und dunkel laut Vorhersage)', 'In the evening, when the night will be clear (at least 2 hours clear and dark by the forecast)') }}</label>
+  <label class="check"><input type="checkbox" name="notify_fireball" value="true" {% if user.notify_fireball %}checked{% endif %}> {{ t('Feuerkugel mit möglichem Meteoritenfall: von zwei Kameras gesehen, bei dir in der Nähe (300 km) oder von deiner Kamera', 'Fireball with a possible meteorite fall: seen by two cameras, near you (300 km) or by your camera') }}</label>
+  {% if mail_enabled %}<label class="check"><input type="checkbox" name="notify_by_mail" value="true" {% if user.notify_by_mail %}checked{% endif %}> <strong>{{ t('Auch per E-Mail', 'By email too') }}</strong> {{ t('an', 'to') }} {{ user.email }}</label>{% endif %}
+  <button type="submit">{{ t('Speichern', 'Save') }}</button>
 </form>
 {% endif %}
 
 <form method="post" action="/account/password" class="card stack">
-  <h2>Passwort ändern</h2>
+  <h2>{{ t('Passwort ändern', 'Change password') }}</h2>
   <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
   <input type="email" value="{{ user.email }}" autocomplete="username" hidden readonly>
-  <label>Aktuelles Passwort
+  <label>{{ t('Aktuelles Passwort', 'Current password') }}
     <input type="password" name="current" autocomplete="current-password" required>
   </label>
-  <label>Neues Passwort (mindestens 10 Zeichen)
+  <label>{{ t('Neues Passwort (mindestens 10 Zeichen)', 'New password (at least 10 characters)') }}
     <input type="password" name="password" autocomplete="new-password" minlength="10" required>
   </label>
-  <label>Neues Passwort wiederholen
+  <label>{{ t('Neues Passwort wiederholen', 'Repeat the new password') }}
     <input type="password" name="password2" autocomplete="new-password" minlength="10" required>
   </label>
-  <button type="submit">Passwort ändern</button>
+  <button type="submit">{{ t('Passwort ändern', 'Change password') }}</button>
 </form>
 
 <form method="post" action="/account/delete" class="card stack danger">
-  <h2>Konto löschen</h2>
-  <p class="muted">Löscht dein Konto sofort. Deine Kameras werden entkoppelt, alle ihre Bilder, Nachtprodukte und öffentlichen Seiten gelöscht. Das lässt sich nicht rückgängig machen.</p>
+  <h2>{{ t('Konto löschen', 'Delete account') }}</h2>
+  <p class="muted">{{ t('Löscht dein Konto sofort. Deine Kameras werden entkoppelt, alle ihre Bilder, Nachtprodukte und öffentlichen Seiten gelöscht. Das lässt sich nicht rückgängig machen.', 'Deletes your account at once. Your cameras are unpaired, and all their images, night products and public pages are deleted. This cannot be undone.') }}</p>
   <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-  <label>Passwort
+  <label>{{ t('Passwort', 'Password') }}
     <input type="password" name="current" autocomplete="current-password" required>
   </label>
-  <label class="check"><input type="checkbox" name="confirm" value="true" required> Ja, mein Konto endgültig löschen</label>
-  <button type="submit" class="danger">Konto löschen</button>
+  <label class="check"><input type="checkbox" name="confirm" value="true" required> {{ t('Ja, mein Konto endgültig löschen', 'Yes, delete my account for good') }}</label>
+  <button type="submit" class="danger">{{ t('Konto löschen', 'Delete account') }}</button>
 </form>
 {% endblock %}

@@ -23,6 +23,7 @@ from typing import TYPE_CHECKING, Any, Literal, cast
 from allskyhub_server.devices import astro
 from allskyhub_server.devices.satellite_match import Catalogue, look_all
 from allskyhub_server.devices.satellites import EARTH_RADIUS_KM, MIN_ALTITUDE, SATELLITES, SKY_DARK
+from allskyhub_server.i18n import tr
 
 if TYPE_CHECKING:
     from allskyhub_server.devices.satellite_match import SatelliteCatalogue
@@ -36,15 +37,18 @@ NIGHT_MIN_TOP = 30.0
 NIGHT_MAX = 20
 
 
+SATELLITES_EN = {25544: "ISS space station", 48274: "Tiangong space station"}
+
+
 def german_name(norad: int, name: str) -> str:
     """CelesTrak's name, with the German one for the famous few and a word for what
     rocket bodies and debris are."""
     if norad in SATELLITES:
-        return SATELLITES[norad]
+        return tr(SATELLITES[norad], SATELLITES_EN.get(norad, SATELLITES[norad]))
     if "R/B" in name:
-        return f"{name} (Raketenstufe)"
+        return tr(f"{name} (Raketenstufe)", f"{name} (rocket body)")
     if " DEB" in name:
-        return f"{name} (Trümmerteil)"
+        return tr(f"{name} (Trümmerteil)", f"{name} (debris)")
     return name
 
 

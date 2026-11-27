@@ -1,12 +1,13 @@
 {% extends "base.html" %}
-{% block title %}Ereignisse · {{ device.name }} · allskyhub{% endblock %}
+{% block lang %}{{ 'en' if en else 'de' }}{% endblock %}
+{% block title %}{{ t('Ereignisse', 'Events') }} · {{ device.name }} · allskyhub{% endblock %}
 {% block content %}
 <a class="back" href="/cameras/{{ device.id }}">← {{ device.name }}</a>
 <div class="page-head">
-  <h1>Ereignisse</h1>
-  <span class="row-links"><a href="/cameras/{{ device.id }}/ueberfluege">Überflüge</a> <a href="/cameras/{{ device.id }}/events.json" class="muted">Export (JSON)</a></span>
+  <h1>{{ t('Ereignisse', 'Events') }}</h1>
+  <span class="row-links"><a href="/cameras/{{ device.id }}/ueberfluege">{{ t('Überflüge', 'Overflights') }}</a> <a href="/cameras/{{ device.id }}/events.json" class="muted">Export (JSON)</a></span>
 </div>
-<p class="muted">{% if show_all %}Alle Ereignisse, auch aussortierte. <a href="?">Aussortierte ausblenden</a>{% else %}Als „kein Meteor“ markierte sind ausgeblendet. <a href="?all=true">Alle zeigen</a>{% endif %}</p>
+<p class="muted">{% if show_all %}{{ t('Alle Ereignisse, auch aussortierte.', 'All events, including dismissed ones.') }} <a href="?">{{ t('Aussortierte ausblenden', 'Hide dismissed') }}</a>{% else %}{{ t('Als „kein Meteor“ markierte sind ausgeblendet.', 'Events marked “not a meteor” are hidden.') }} <a href="?all=true">{{ t('Alle zeigen', 'Show all') }}</a>{% endif %}</p>
 {% if events %}
 <ul class="card list">
   {% for e in events %}
@@ -15,16 +16,16 @@
     {% if e.is_storm is defined %}
     <span class="muted">{{ e.start | localtime }} – {{ e.end | clock }}</span>
     {% else %}
-    <span class="muted">{{ e.start | localtime }} · {{ (e.confidence * 100) | round | int }} %{% if e.label == "false_positive" and e.label_auto %} · {{ e.label_detail or "aussortiert" }}{% elif e.label == "false_positive" %} · aussortiert{% elif e.label == "confirmed" %} · bestätigt{% endif %}</span>
+    <span class="muted">{{ e.start | localtime }} · {{ (e.confidence * 100) | round | int }} %{% if e.label == "false_positive" and e.label_auto %} · {{ e.label_detail or t("aussortiert", "dismissed") }}{% elif e.label == "false_positive" %} · {{ t('aussortiert', 'dismissed') }}{% elif e.label == "confirmed" %} · {{ t('bestätigt', 'confirmed') }}{% endif %}</span>
     {% endif %}
   </li>
   {% endfor %}
 </ul>
 <p class="row-links">
-  {% if page > 1 %}<a href="?page={{ page - 1 }}{{ '&all=true' if show_all }}">← Neuere</a>{% endif %}
-  {% if more %}<a href="?page={{ page + 1 }}{{ '&all=true' if show_all }}">Ältere →</a>{% endif %}
+  {% if page > 1 %}<a href="?page={{ page - 1 }}{{ '&all=true' if show_all }}">← {{ t('Neuere', 'Newer') }}</a>{% endif %}
+  {% if more %}<a href="?page={{ page + 1 }}{{ '&all=true' if show_all }}">{{ t('Ältere', 'Older') }} →</a>{% endif %}
 </p>
 {% else %}
-<div class="card empty"><p class="muted">Noch keine Ereignisse. Erkennt die Kamera einen Meteor, erscheint er hier.</p></div>
+<div class="card empty"><p class="muted">{{ t('Noch keine Ereignisse. Erkennt die Kamera einen Meteor, erscheint er hier.', 'No events yet. When the camera detects a meteor, it shows up here.') }}</p></div>
 {% endif %}
 {% endblock %}

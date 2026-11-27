@@ -1,9 +1,10 @@
 {% extends "base.html" %}
-{% block title %}{{ device.name }} · Station entfernt · allskyhub{% endblock %}
+{% block lang %}{{ 'en' if en else 'de' }}{% endblock %}
+{% block title %}{{ device.name }} · {{ t('Station entfernt', 'Station removed') }} · allskyhub{% endblock %}
 {% block content %}
-<div class="page-head"><h1>{{ device.name }}</h1><p class="muted"><a href="/admin">Admin</a> › <a href="/admin/stationen">Stationen</a> › entfernt</p></div>
+<div class="page-head"><h1>{{ device.name }}</h1><p class="muted"><a href="/admin">Admin</a> › <a href="/admin/stationen">{{ t('Stationen', 'Stations') }}</a> › {{ t('entfernt', 'removed') }}</p></div>
 <section class="card stack">
-  <p>Der Besitzer hat diese Station entfernt. Ihre Bild-Adresse, die Bilder und der Nachweis sind gelöscht, es gibt nichts mehr zu prüfen.</p>
-  <p><a class="button" href="/admin/stationen">Zu den Stationen</a></p>
+  <p>{{ t('Der Besitzer hat diese Station entfernt. Ihre Bild-Adresse, die Bilder und der Nachweis sind gelöscht, es gibt nichts mehr zu prüfen.', 'The owner removed this station. Its image address, the images and the proof are deleted; there is nothing left to review.') }}</p>
+  <p><a class="button" href="/admin/stationen">{{ t('Zu den Stationen', 'To the stations') }}</a></p>
 </section>
 {% endblock %}

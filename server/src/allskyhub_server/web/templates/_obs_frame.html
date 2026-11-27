@@ -6,15 +6,15 @@
 {%- set ov = sky_overlay(device) -%}
 {%- set lay = sky_layers(device, satellites) -%}
 <div class="obs-frame" data-t="{{ device.latest_image_at.timestamp() | int }}">
-  <img class="obs-img" src="/obs/{{ token }}/bild.jpg?t={{ device.latest_image_at.timestamp() | int }}" alt="Himmel über {{ device.name }}">
+  <img class="obs-img" src="/obs/{{ token }}/bild.jpg?t={{ device.latest_image_at.timestamp() | int }}" alt="{{ t('Himmel über', 'Sky above') }} {{ device.name }}">
   {% if ov %}{% include "_sky_overlay.html" %}{% endif %}
   {% if lay %}{% include "_sky_layers.html" %}{% endif %}
 </div>
 {% if text %}
 <p class="obs-text"><strong>{{ device.name }}</strong>
-  <span>{{ device.latest_image_at | clock }} Uhr{% if st.exposure_us is defined %} · {{ '%.3g' | format(st.exposure_us / 1e6) | replace('.', ',') }} s{% endif %}{% if cover is not none %} · {{ 'klar' if cover < 0.2 else 'teils bewölkt' if cover < 0.7 else 'bewölkt' }}{% endif %}</span>
+  <span>{{ device.latest_image_at | clock }}{{ t(' Uhr', '') }}{% if st.exposure_us is defined %} · {{ '%.3g' | format(st.exposure_us / 1e6) | replace('.', '.' if en else ',') }} s{% endif %}{% if cover is not none %} · {{ t('klar', 'clear') if cover < 0.2 else t('teils bewölkt', 'partly cloudy') if cover < 0.7 else t('bewölkt', 'cloudy') }}{% endif %}</span>
   <span class="obs-brand">allskyhub.org</span></p>
 {% endif %}
 {%- else -%}
-<p class="obs-wait">Noch kein Bild von {{ device.name }}.</p>
+<p class="obs-wait">{{ t('Noch kein Bild von', 'No image yet from') }} {{ device.name }}.</p>
 {%- endif -%}

@@ -26,6 +26,7 @@ from allskyhub_server.auth.accounts import AccountError
 from allskyhub_server.auth.passwords import hash_secret_async
 from allskyhub_server.auth.sessions import SessionInfo
 from allskyhub_server.devices import sharing, sightings
+from allskyhub_server.i18n import english, tr
 from allskyhub_server.mail.send import Mail, Mailer
 from allskyhub_server.models import AppToken, CameraMember, Device, User, WebSession
 from allskyhub_server.settings import Settings
@@ -33,7 +34,14 @@ from allskyhub_server.web import flash
 from allskyhub_server.web.deps import CurrentSession, DbSession, SettingsDep, csrf_protect
 from allskyhub_server.web.render import render
 from allskyhub_server.web.routes_account import finish_deletion
-from allskyhub_server.web.routes_admin import admin_only, confirmed
+from allskyhub_server.web.routes_admin import (
+    admin_only,
+    confirmed,
+    invite_sent,
+    mail_not_sent,
+    mail_refused,
+    your_password_wrong,
+)
 
 log = logging.getLogger(__name__)
 
@@ -41,6 +49,10 @@ router = APIRouter(dependencies=[Depends(csrf_protect)])
 
 KINDS = {"owner": "Kamera-Konto", "reporter": "Melder"}
 FILTERS = {"": "alle", "owner": "Kamera-Konten", "reporter": "Melder", "locked": "gesperrt"}
+KINDS_EN = {"owner": "camera account", "reporter": "reporter"}
+FILTERS_EN = {"": "all", "owner": "camera accounts", "reporter": "reporters", "locked": "locked"}
+# sharing.ROLES in English, for the admin's account page.
+ROLES_EN = {"viewer": "view", "admin": "manage"}
 PAGE_SIZE = 200
 INVITE_DAYS = 7
 
@@ -89,7 +101,13 @@ async def _user(db: AsyncSession, user_id: uuid.UUID) -> User:
 
 def _not_self(session: SessionInfo, user: User) -> None:
     if user.id == session.user.id:
-        raise HTTPException(400, "Das eigene Konto bitte unter „Konto“ ändern.")
+        raise HTTPException(
+            400,
+            tr(
+                "Das eigene Konto bitte unter „Konto“ ändern.",
+                'Change your own account under "Account".',
+            ),
+        )
 
 
 def _audit(session: SessionInfo, action: str, user: User, **extra: object) -> None:
@@ -129,8 +147,8 @@ async def users(
             "rows": rows,
             "q": q,
             "kind": kind,
-            "kinds": KINDS,
-            "filters": FILTERS,
+            "kinds": KINDS_EN if english() else KINDS,
+            "filters": FILTERS_EN if english() else FILTERS,
             "totals": totals,
             "admins": settings.admins,
             "limit": PAGE_SIZE,
@@ -169,13 +187,8 @@ async def invite(
     )
     log.info("admin invited", extra={"admin": session.user.email, "account": address})
     if mailer.enabled and await mailer.send(mail):
-        return _back(
-            request, session, "/admin/users", 200, notice=f"Einladung an {address} ist raus."
-        )
-    return _back(
-        request, session, "/admin/users", 200,
-        notice=f"Die Mail an {address} ging nicht raus. Schick den Link selbst: {link}",
-    )  # fmt: skip
+        return _back(request, session, "/admin/users", 200, notice=invite_sent(address))
+    return _back(request, session, "/admin/users", 200, notice=mail_not_sent(address, link))
 
 
 @router.get("/admin/users/{user_id}")
@@ -221,7 +234,7 @@ async def user_page(
         "admin_user.html",
         {
             "account": user,
-            "kinds": KINDS,
+            "kinds": KINDS_EN if english() else KINDS,
             "is_admin_account": user.email.lower() in settings.admins,
             "is_self": user.id == session.user.id,
             "own": own,
@@ -231,7 +244,7 @@ async def user_page(
             "web_seen": web_seen,
             "app_seen": app_seen,
             "cameras": cameras,
-            "roles": sharing.ROLES,
+            "roles": ROLES_EN if english() else sharing.ROLES,
             "min_password": accounts.MIN_PASSWORD_LENGTH,
             **kept,
         },
@@ -249,7 +262,7 @@ async def _checked(
     user = await _user(db, user_id)
     url = f"/admin/users/{user.id}"
     if not await confirmed(request, session, password):
-        return _back(request, session, url, 403, error="Dein Passwort stimmt nicht.")
+        return _back(request, session, url, 403, error=your_password_wrong())
     return user, url
 
 
@@ -277,7 +290,8 @@ async def share(
     user, url = checked
     device = await db.get(Device, device_id)
     if device is None or device.owner_id is None:
-        return _back(request, session, url, 404, error="Diese Kamera gibt es nicht.")
+        error = tr("Diese Kamera gibt es nicht.", "This camera does not exist.")
+        return _back(request, session, url, 404, error=error)
     try:
         await sharing.add(db, device, user.email, role)
     except sharing.SharingError as exc:
@@ -285,8 +299,10 @@ async def share(
     await db.commit()
     _audit(session, "share", user, device_id=device.id, role=role)
     return _back(
-        request, session, url, 200, notice=f"{device.name} ist für {user.email} freigegeben."
-    )
+        request, session, url, 200,
+        notice=tr(f"{device.name} ist für {user.email} freigegeben.",
+                  f"{device.name} is shared with {user.email}."),
+    )  # fmt: skip
 
 
 @router.post("/admin/users/{user_id}/unshare")
@@ -306,7 +322,7 @@ async def unshare(
     await sharing.remove(db, device_id, user.id)
     await db.commit()
     _audit(session, "unshare", user, device_id=device_id)
-    return _back(request, session, url, 200, notice="Freigabe entfernt.")
+    return _back(request, session, url, 200, notice=tr("Freigabe entfernt.", "Sharing removed."))
 
 
 @router.post("/admin/users/{user_id}/reset-link")
@@ -324,7 +340,8 @@ async def reset_link(
     user, url = checked
     mailer: Mailer = request.app.state.mailer
     if not mailer.enabled:
-        return _back(request, session, url, 409, error="E-Mail ist auf diesem Hub aus.")
+        error = tr("E-Mail ist auf diesem Hub aus.", "Email is off on this hub.")
+        return _back(request, session, url, 409, error=error)
     created = await password_reset.create(db, user.email)
     await db.commit()
     if created is None:  # pragma: no cover - the account was just read
@@ -344,12 +361,12 @@ async def reset_link(
     )
     _audit(session, "reset_link", user)
     if not sent:
-        return _back(
-            request, session, url, 502, error="Der Mailserver hat die Mail nicht angenommen."
-        )
+        return _back(request, session, url, 502, error=mail_refused())
     return _back(
-        request, session, url, 200, notice=f"Link an {user.email} ist raus (1 Stunde gültig)."
-    )
+        request, session, url, 200,
+        notice=tr(f"Link an {user.email} ist raus (1 Stunde gültig).",
+                  f"Link sent to {user.email} (valid for 1 hour)."),
+    )  # fmt: skip
 
 
 @router.post("/admin/users/{user_id}/sign-out")
@@ -369,7 +386,9 @@ async def sign_out(
     await _sign_out(db, user)
     await db.commit()
     _audit(session, "sign_out", user)
-    return _back(request, session, url, 200, notice="Überall abgemeldet.")
+    return _back(
+        request, session, url, 200, notice=tr("Überall abgemeldet.", "Signed out everywhere.")
+    )
 
 
 @router.post("/admin/users/{user_id}/lock")
@@ -393,7 +412,8 @@ async def lock(
         await _sign_out(db, user)
     await db.commit()
     _audit(session, "lock" if locked else "unlock", user)
-    return _back(request, session, url, 200, notice="Gesperrt." if locked else "Entsperrt.")
+    notice = tr("Gesperrt.", "Locked.") if locked else tr("Entsperrt.", "Unlocked.")
+    return _back(request, session, url, 200, notice=notice)
 
 
 @router.post("/admin/users/{user_id}/password")
@@ -416,13 +436,21 @@ async def set_password(
     if len(new_password) < accounts.MIN_PASSWORD_LENGTH:
         return _back(
             request, session, url, 400,
-            error=f"Das neue Passwort braucht mindestens {accounts.MIN_PASSWORD_LENGTH} Zeichen.",
+            error=tr(f"Das neue Passwort braucht mindestens {accounts.MIN_PASSWORD_LENGTH} "
+                     "Zeichen.",
+                     f"The new password needs at least {accounts.MIN_PASSWORD_LENGTH} characters."),
         )  # fmt: skip
     user.password_hash = await hash_secret_async(new_password)
     await _sign_out(db, user)
     await db.commit()
     _audit(session, "set_password", user)
-    return _back(request, session, url, 200, notice="Passwort gesetzt, überall abgemeldet.")
+    return _back(
+        request,
+        session,
+        url,
+        200,
+        notice=tr("Passwort gesetzt, überall abgemeldet.", "Password set, signed out everywhere."),
+    )
 
 
 @router.post("/admin/users/{user_id}/delete")
@@ -441,7 +469,8 @@ async def delete_user(
     user, url = checked
     _not_self(session, user)
     if accounts.normalize_email(confirm_email) != user.email:
-        return _back(request, session, url, 400, error="Die E-Mail-Adresse stimmt nicht.")
+        error = tr("Die E-Mail-Adresse stimmt nicht.", "The email address does not match.")
+        return _back(request, session, url, 400, error=error)
     email = user.email
     photos = await sightings.photo_ids(db, user.id)
     device_ids = await accounts.delete_account(db, user)
@@ -454,5 +483,6 @@ async def delete_user(
     )  # fmt: skip
     return _back(
         request, session, "/admin/users", 200,
-        notice=f"{email} gelöscht, {len(device_ids)} Kamera(s) entkoppelt.",
+        notice=tr(f"{email} gelöscht, {len(device_ids)} Kamera(s) entkoppelt.",
+                  f"{email} deleted, {len(device_ids)} camera(s) unpaired."),
     )  # fmt: skip

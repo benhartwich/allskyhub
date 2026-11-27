@@ -15,6 +15,7 @@ from allskyhub_server.auth.passwords import verify_secret_async
 from allskyhub_server.devices import sightings
 from allskyhub_server.devices.connections import ConnectionRegistry
 from allskyhub_server.devices.images import ImageStore
+from allskyhub_server.i18n import tr
 from allskyhub_server.settings import Settings
 from allskyhub_server.web.deps import CurrentSession, DbSession, SettingsDep, csrf_protect
 from allskyhub_server.web.render import render
@@ -30,7 +31,9 @@ async def _limit(request: Request, user_id: object) -> None:
         )
     except ratelimit.RateLimitedError as exc:
         raise HTTPException(
-            429, "Zu viele Versuche.", {"Retry-After": str(exc.retry_after)}
+            429,
+            tr("Zu viele Versuche.", "Too many attempts."),
+            {"Retry-After": str(exc.retry_after)},
         ) from None
 
 
@@ -83,7 +86,7 @@ async def event_retention(
     except accounts.AccountError as exc:
         return _page(request, session, 400, error=exc.message)
     await db.commit()
-    return _page(request, session, notice="Gespeichert.")
+    return _page(request, session, notice=tr("Gespeichert.", "Saved."))
 
 
 @router.post("/account/password")
@@ -99,7 +102,9 @@ async def change_password(
     user = session.user
     try:
         if password != password2:
-            raise accounts.AccountError("Die neuen Passwörter stimmen nicht überein.")
+            raise accounts.AccountError(
+                tr("Die neuen Passwörter stimmen nicht überein.", "The new passwords do not match.")
+            )
         await accounts.change_password(db, user, current, password, keep_session=session.session_id)
     except accounts.AccountError as exc:
         # change_password checks everything before it changes anything; no rollback needed
@@ -107,7 +112,12 @@ async def change_password(
         return _page(request, session, 400, error=exc.message)
     await db.commit()
     return _page(
-        request, session, notice="Passwort geändert. Andere Geräte und die App sind abgemeldet."
+        request,
+        session,
+        notice=tr(
+            "Passwort geändert. Andere Geräte und die App sind abgemeldet.",
+            "Password changed. Other devices and the app are signed out.",
+        ),
     )
 
 
@@ -123,7 +133,13 @@ async def delete_account(
     await _limit(request, session.user.id)
     if not confirm or not await verify_secret_async(session.user.password_hash, current):
         return _page(
-            request, session, 400, error="Bitte das Passwort eingeben und das Löschen bestätigen."
+            request,
+            session,
+            400,
+            error=tr(
+                "Bitte das Passwort eingeben und das Löschen bestätigen.",
+                "Please enter the password and confirm the deletion.",
+            ),
         )
     photos = await sightings.photo_ids(db, session.user.id)
     device_ids = await accounts.delete_account(db, session.user)
@@ -159,4 +175,4 @@ async def notifications(
     user.notify_fireball = notify_fireball
     user.notify_by_mail = notify_by_mail
     await db.commit()
-    return _page(request, session, notice="Gespeichert.")
+    return _page(request, session, notice=tr("Gespeichert.", "Saved."))

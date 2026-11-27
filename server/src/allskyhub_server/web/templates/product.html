@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% block lang %}{{ 'en' if en else 'de' }}{% endblock %}
 {% block title %}{{ titles[product.kind] }} · {{ device.name }} · allskyhub{% endblock %}
 {% block content %}
 <a class="back" href="/cameras/{{ device.id }}/nights/{{ night_id }}">← {{ night_id | night_title }}</a>

@@ -1,42 +1,43 @@
 {% extends "base.html" %}
-{% block title %}Ziel frei? · {{ device.name }}{% endblock %}
+{% block lang %}{{ 'en' if en else 'de' }}{% endblock %}
+{% block title %}{{ t('Ziel frei?', 'Target clear?') }} · {{ device.name }}{% endblock %}
 {% block content %}
 <a class="back" href="/cameras/{{ device.id }}">← {{ device.name }}</a>
-<div class="page-head"><h1>Ziel frei?</h1></div>
-<p class="lead">Steht ein Objekt jetzt und in den nächsten Stunden hoch genug, im Dunkeln und ohne Wolken? Aus dem, was die Kamera sieht, und der Wolkenvorhersage.</p>
+<div class="page-head"><h1>{{ t('Ziel frei?', 'Target clear?') }}</h1></div>
+<p class="lead">{{ t('Steht ein Objekt jetzt und in den nächsten Stunden hoch genug, im Dunkeln und ohne Wolken? Aus dem, was die Kamera sieht, und der Wolkenvorhersage.', 'Is an object high enough, in the dark and free of clouds, now and in the next hours? From what the camera sees and the cloud forecast.') }}</p>
 <form method="get" class="card stack" action="/cameras/{{ device.id }}/ziel">
-  <label>Objekt
+  <label>{{ t('Objekt', 'Object') }}
     <select name="objekt" onchange="this.form.submit()">
-      <option value="">Bitte wählen …</option>
-      <optgroup label="Planeten">{% for o in objects if o.kind == 'planet' %}<option value="{{ o.key }}"{% if chosen and chosen.key == o.key %} selected{% endif %}>{{ o.label }}</option>{% endfor %}</optgroup>
+      <option value="">{{ t('Bitte wählen …', 'Please choose …') }}</option>
+      <optgroup label="{{ t('Planeten', 'Planets') }}">{% for o in objects if o.kind == 'planet' %}<option value="{{ o.key }}"{% if chosen and chosen.key == o.key %} selected{% endif %}>{{ o.label }}</option>{% endfor %}</optgroup>
       <optgroup label="Messier">{% for o in objects if o.kind != 'planet' %}<option value="{{ o.key }}"{% if chosen and chosen.key == o.key %} selected{% endif %}>{{ o.label }}</option>{% endfor %}</optgroup>
     </select>
   </label>
-  <noscript><button type="submit" class="secondary">Anzeigen</button></noscript>
+  <noscript><button type="submit" class="secondary">{{ t('Anzeigen', 'Show') }}</button></noscript>
 </form>
-{% if unknown %}<p class="msg error">Dieses Objekt kenne ich nicht.</p>{% endif %}
+{% if unknown %}<p class="msg error">{{ t('Dieses Objekt kenne ich nicht.', 'I do not know this object.') }}</p>{% endif %}
 {% if chosen and not plan %}
-<div class="card empty"><h2>Standort fehlt</h2><p class="muted">Die Kamera kennt ihren Standort noch nicht. Trag ihn in den Einstellungen ein.</p></div>
+<div class="card empty"><h2>{{ t('Standort fehlt', 'Location missing') }}</h2><p class="muted">{{ t('Die Kamera kennt ihren Standort noch nicht. Trag ihn in den Einstellungen ein.', 'The camera does not know its location yet. Enter it in the settings.') }}</p></div>
 {% elif plan %}
 {% set n = plan.now %}
 <section class="card target-now verdict-{{ n.verdict }}">
   <h2>{{ plan.summary() }}</h2>
-  <p>Jetzt: {{ n.alt | round | int }}° hoch im {{ n.direction }}{% if n.cloud_cover is not none %} · die Kamera sieht {{ '%.0f' | format(n.cloud_cover * 100) }} % Wolken ({{ n.source }}){% endif %} · <strong>{{ verdicts[n.verdict] }}</strong></p>
-  {% if n.cloud_cover is none %}<p class="muted small">Die Kamera hat gerade keinen frischen Wolkenwert; „jetzt“ beruht auf der Vorhersage.</p>{% endif %}
+  {% if en %}<p>Now: {{ n.alt | round | int }}° up in the {{ n.direction }}{% if n.cloud_cover is not none %} · the camera sees {{ '%.0f' | format(n.cloud_cover * 100) }} % clouds ({{ n.source }}){% endif %} · <strong>{{ verdicts[n.verdict] }}</strong></p>{% else %}<p>Jetzt: {{ n.alt | round | int }}° hoch im {{ n.direction }}{% if n.cloud_cover is not none %} · die Kamera sieht {{ '%.0f' | format(n.cloud_cover * 100) }} % Wolken ({{ n.source }}){% endif %} · <strong>{{ verdicts[n.verdict] }}</strong></p>{% endif %}
+  {% if n.cloud_cover is none %}<p class="muted small">{{ t('Die Kamera hat gerade keinen frischen Wolkenwert; „jetzt“ beruht auf der Vorhersage.', 'The camera has no fresh cloud reading right now; “now” is based on the forecast.') }}</p>{% endif %}
 </section>
 <section class="card">
-  <h2>Die nächsten Stunden</h2>
+  <h2>{{ t('Die nächsten Stunden', 'The next hours') }}</h2>
   <div class="table-scroll">
   <table class="stats target-hours">
-    <thead><tr><th>Uhrzeit</th><th>Bewertung</th><th>Höhe</th><th>Richtung</th><th>Wolken</th></tr></thead>
+    <thead><tr><th>{{ t('Uhrzeit', 'Time') }}</th><th>{{ t('Bewertung', 'Verdict') }}</th><th>{{ t('Höhe', 'Altitude') }}</th><th>{{ t('Richtung', 'Direction') }}</th><th>{{ t('Wolken', 'Clouds') }}</th></tr></thead>
     <tbody>
     {% for h in plan.hours %}
-    <tr class="verdict-{{ h.verdict }}"><td>{{ plan.clock(h.at) }}</td><td class="verdict">{{ verdicts[h.verdict] }}{% if h.moon_near %} · Mond nah{% endif %}</td><td>{{ h.alt | round | int }}°</td><td>{{ h.direction }}</td><td>{{ (h.clouds ~ ' %') if h.clouds is not none else '–' }}</td></tr>
+    <tr class="verdict-{{ h.verdict }}"><td>{{ plan.clock(h.at) }}</td><td class="verdict">{{ verdicts[h.verdict] }}{% if h.moon_near %} · {{ t('Mond nah', 'moon near') }}{% endif %}</td><td>{{ h.alt | round | int }}°</td><td>{{ h.direction }}</td><td>{{ (h.clouds ~ ' %') if h.clouds is not none else '–' }}</td></tr>
     {% endfor %}
     </tbody>
   </table>
   </div>
-  <p class="muted small">„Zu tief“: unter 20° Höhe. „Zu hell“: die Sonne steht höher als 12° unter dem Horizont. „Mond nah“: heller Mond weniger als 15° entfernt. Wolken: Vorhersage von Open-Meteo für den Standort der Kamera.</p>
+  <p class="muted small">{{ t('„Zu tief“: unter 20° Höhe. „Zu hell“: die Sonne steht höher als 12° unter dem Horizont. „Mond nah“: heller Mond weniger als 15° entfernt. Wolken: Vorhersage von Open-Meteo für den Standort der Kamera.', '“Too low”: below 20° altitude. “Too bright”: the Sun is less than 12° below the horizon. “Moon near”: a bright moon less than 15° away. Clouds: Open-Meteo forecast for the camera’s location.') }}</p>
 </section>
 {% endif %}
 {% endblock %}

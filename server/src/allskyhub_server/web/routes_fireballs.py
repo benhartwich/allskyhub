@@ -17,7 +17,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from allskyhub_server.auth.sessions import SessionInfo
 from allskyhub_server.devices import fireball, gmn, map_tiles, public, queries, science
-from allskyhub_server.devices.event_text import SHOWER_NAMES
 from allskyhub_server.i18n import english
 from allskyhub_server.models import Device, GmnMeteor, MeteorPair
 from allskyhub_server.web.deps import DbSession, OptionalSession
@@ -85,13 +84,8 @@ def _strewn(pair: MeteorPair) -> list[dict[str, str]]:
     return rows
 
 
-_SHOWERS_EN = {german: imo for imo, german in SHOWER_NAMES.items()}
-
-
 def _gmn_shower(code: str | None) -> str:
-    """GMN's shower in the page's language: the IMO's English name in English."""
-    if english():
-        return _SHOWERS_EN.get(gmn.shower_name(code), code) if code else "sporadic (no shower)"
+    """GMN's shower in the page's language (gmn.shower_name reads it already)."""
     return gmn.shower_name(code)
 
 

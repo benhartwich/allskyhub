@@ -15,6 +15,7 @@ from typing import Literal
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from allskyhub_server.i18n import tr
 from allskyhub_server.models import Device, Subscription, User
 
 TRIAL = dt.timedelta(days=30)
@@ -22,6 +23,8 @@ TRIAL = dt.timedelta(days=30)
 RENEWAL_SLACK = dt.timedelta(days=1)
 PRICE_MONTH = "4,99 €"
 PRICE_YEAR = "49 €"
+PRICE_MONTH_EN = "€4.99"
+PRICE_YEAR_EN = "€49"
 # Subscriptions that still pay for the current period.
 RUNNING = ("trialing", "active", "past_due")
 
@@ -32,6 +35,18 @@ MESSAGES = {
     "trial_used": "Den kostenlosen Probemonat hat dein Konto schon genutzt.",
     "has_plus": "Diese Kamera hat Plus schon.",
 }
+MESSAGES_EN = {
+    "danke": "Thank you! Plus is active in a few seconds, once Paddle confirms the payment.",
+    "trial_used": "Your account has already used the free trial month.",
+    "has_plus": "This camera already has Plus.",
+}
+
+
+def message(code: str) -> str | None:
+    """A ``MESSAGES`` text in the request's language, None for an unknown code."""
+    if code not in MESSAGES:
+        return None
+    return tr(MESSAGES[code], MESSAGES_EN[code])
 
 
 class PlusError(Exception):

@@ -2,12 +2,12 @@
 <section class="card stack" id="app-{{ card.key }}"{% if card.waiting or android_busy %} hx-get="/admin/apps/card/{{ card.key }}" hx-trigger="every 10s" hx-swap="outerHTML"{% endif %}>
   <h2>{{ card.title }} <span class="muted small">· Version {{ card.version }}</span></h2>
   {% if card.stores %}
-  <p class="muted small">{% if card.live_at %}Stand bei Apple und Google: {{ card.live_at[:16] | replace('T', ' ') }} UTC (alle zehn Minuten neu){% else %}Apple und Google werden gerade gefragt; Seite gleich neu laden.{% endif %}</p>
+  <p class="muted small">{% if card.live_at %}{{ t('Stand bei Apple und Google:', 'State at Apple and Google:') }} {{ card.live_at[:16] | replace('T', ' ') }} UTC ({{ t('alle zehn Minuten neu', 'renewed every ten minutes') }}){% else %}{{ t('Apple und Google werden gerade gefragt; Seite gleich neu laden.', 'Apple and Google are being asked right now; reload the page shortly.') }}{% endif %}</p>
   {% from "_pending.html" import pending %}
-  <p class="small">Seit dem letzten Build: {{ pending(card) }}</p>
+  <p class="small">{{ t('Seit dem letzten Build:', 'Since the last build:') }} {{ pending(card, en) }}</p>
   {% else %}
   {% set n = card.pending.get('test') %}
-  <p class="small">Nur Test-APK, nicht in den Stores. Seit dem letzten Build: <span class="{{ 'muted' if n is none else ('tone-done' if n == 0 else 'tone-todo') }}">{% if n is none %}unbekannt{% elif n == 0 %}✓ aktuell{% else %}→ {{ n }}{% if n >= 100 %}+{% endif %} neue{% if n == 1 %}r{% endif %} Commit{% if n != 1 %}s{% endif %}{% endif %}</span></p>
+  <p class="small">{{ t('Nur Test-APK, nicht in den Stores. Seit dem letzten Build:', 'Test APK only, not in the stores. Since the last build:') }} <span class="{{ 'muted' if n is none else ('tone-done' if n == 0 else 'tone-todo') }}">{% if n is none %}{{ t('unbekannt', 'unknown') }}{% elif n == 0 %}✓ {{ t('aktuell', 'up to date') }}{% elif en %}→ {{ n }}{% if n >= 100 %}+{% endif %} new commit{% if n != 1 %}s{% endif %}{% else %}→ {{ n }}{% if n >= 100 %}+{% endif %} neue{% if n == 1 %}r{% endif %} Commit{% if n != 1 %}s{% endif %}{% endif %}</span></p>
   {% endif %}
   {# Each platform's way as steps (admin/apps.py Steps): ✓ done, ● the next thing to do
      with its one button, ⏳ busy, ✕ failed, ○ later. #}
@@ -19,7 +19,7 @@
         {% for st in way.steps %}
         <li class="step step-{{ st.state }}"{% if st.state in ('current', 'wait', 'fail') %} aria-current="step"{% endif %}>
           <span class="step-icon" aria-hidden="true">{{ {'done': '✓', 'current': '●', 'wait': '⏳', 'store': '⏳', 'fail': '✕', 'todo': '○'}[st.state] }}</span>
-          <span class="step-name">{{ st.name }}</span>
+          <span class="step-name">{{ {'Gebaut': 'Built', 'Interner Test': 'Internal test', 'Eingereicht': 'Submitted', 'Übertragen': 'Sent', 'Bei Apple': 'At Apple'}.get(st.name, st.name) if en else st.name }}</span>
           <span class="step-text">{{ st.text }}{% if st.at %} <span class="muted">· {{ st.at | stamp }}</span>{% endif %}{% if st.link %} · <a href="{{ st.link }}"{% if st.link.startswith('http') %} rel="noopener" target="_blank"{% endif %}>{{ st.link_label }}</a>{% endif %}</span>
           {% if st.action and not (st.action == 'build-android' and android_busy) %}
           <form method="post" action="/admin/apps" class="inline step-action">
@@ -36,17 +36,17 @@
     {% endfor %}
   </div>
   {% if android_busy and not (card.android and card.android.busy) %}
-  <p class="muted small">⏳ Android bauen geht gerade nicht: der Server baut {{ android_busy }}, immer nur ein Build zur Zeit. Die Knöpfe kommen zurück, sobald er fertig ist.</p>
+  <p class="muted small">⏳ {{ t('Android bauen geht gerade nicht: der Server baut', 'Building Android is not possible right now: the server is building') }} {{ android_busy }}{{ t(', immer nur ein Build zur Zeit. Die Knöpfe kommen zurück, sobald er fertig ist.', ', only one build at a time. The buttons come back once it is done.') }}</p>
   {% endif %}
   {% if card.test %}
-  {% set t = card.test %}
+  {% set tapk = card.test %}
   <div class="store-rows">
     <div class="store-row">
-      <strong>Test-APK</strong>
-      <span class="tone-{{ 'wait' if t.busy else ('fail' if t.state == 'failed' else ('done' if t.latest else 'todo')) }}">
-        {% if t.state == 'requested' %}⏳ angefordert, wartet auf den Server …{% elif t.state == 'running' %}⏳ wird gebaut …{% elif t.state == 'failed' %}✕ Bauen fehlgeschlagen (Protokoll unter „Mehr“){% elif not t.latest %}→ noch nicht gebaut{% endif %}
-        {% if t.latest and not t.busy %}✓ Build {{ t.latest.build }} (Version {{ t.latest.version }}, {{ t.latest.commit }}){% endif %}
-        {% if t.latest %} <a href="/download/{{ card.key }}-test.apk">{{ request.base_url }}download/{{ card.key }}-test.apk</a>{% endif %}
+      <strong>{{ t('Test-APK', 'Test APK') }}</strong>
+      <span class="tone-{{ 'wait' if tapk.busy else ('fail' if tapk.state == 'failed' else ('done' if tapk.latest else 'todo')) }}">
+        {% if tapk.state == 'requested' %}⏳ {{ t('angefordert, wartet auf den Server …', 'requested, waiting for the server …') }}{% elif tapk.state == 'running' %}⏳ {{ t('wird gebaut …', 'building …') }}{% elif tapk.state == 'failed' %}✕ {{ t('Bauen fehlgeschlagen (Protokoll unter „Mehr“)', 'Build failed (log under "More")') }}{% elif not tapk.latest %}→ {{ t('noch nicht gebaut', 'not built yet') }}{% endif %}
+        {% if tapk.latest and not tapk.busy %}✓ Build {{ tapk.latest.build }} (Version {{ tapk.latest.version }}, {{ tapk.latest.commit }}){% endif %}
+        {% if tapk.latest %} <a href="/download/{{ card.key }}-test.apk">{{ request.base_url }}download/{{ card.key }}-test.apk</a>{% endif %}
       </span>
       {% if not android_busy %}
       <form method="post" action="/admin/apps" class="inline">
@@ -58,18 +58,23 @@
       {% else %}<span></span>{% endif %}
     </div>
   </div>
+  {% if en %}
+  <p class="muted small">A separate app "{{ card.title }} Test" ({{ card.package }}.test){% if card.stores %} next to the store version{% endif %}, signed by the server, without push. The link is public{% if not card.stores %}; the app asks <code>/download/{{ card.key }}-test.json</code> for new builds{% endif %}.</p>
+  {% else %}
   <p class="muted small">Eigene App „{{ card.title }} Test“ ({{ card.package }}.test){% if card.stores %} neben der Store-Version{% endif %}, vom Server signiert, ohne Push. Der Link ist öffentlich{% if not card.stores %}; die App fragt <code>/download/{{ card.key }}-test.json</code> nach neuen Builds{% endif %}.</p>
   {% endif %}
+  {% endif %}
+  {% set test_log = t('Protokoll der Test-APK', 'Log of the test APK') %}
   {% if not card.stores %}
   {% if card.test and card.test.log %}
   <details data-fold="apps-{{ card.key }}-test-log">
-    <summary>Protokoll der Test-APK</summary>
+    <summary>{{ test_log }}</summary>
     <pre class="small">{{ card.test.log }}</pre>
   </details>
   {% endif %}
   {% else %}
   <details data-fold="apps-{{ card.key }}-more">
-    <summary>Mehr: neu bauen, Store-Einträge, Protokolle</summary>
+    <summary>{{ t('Mehr: neu bauen, Store-Einträge, Protokolle', 'More: build again, store listings, logs') }}</summary>
     <div class="row-links wrap">
       {% for action in ('build-android', 'build-ios', 'build-screenshots', 'take-screenshots', 'play-listing', 'appstore', 'apk', 'setup') %}
       {% if not (action == 'build-android' and android_busy) and (card.screenshots or action not in ('build-screenshots', 'take-screenshots')) %}
@@ -84,40 +89,44 @@
     </div>
     {% if card.review_login is not none %}
     <details data-fold="apps-{{ card.key }}-review">
-      <summary>Demo-Konto für Screenshots{% if card.review_login %} · {{ card.review_login }} · Passwort gespeichert ✓{% else %} · fehlt{% endif %}</summary>
-      {% if card.review_login %}<p class="small tone-done">✓ Anmeldung und Passwort sind gespeichert{% if card.review_at %} ({{ card.review_at[:16] | replace('T', ' ') }} UTC){% endif %}. Zum Ändern beides neu eingeben.</p>{% endif %}
+      <summary>{{ t('Demo-Konto für Screenshots', 'Demo account for screenshots') }}{% if card.review_login %} · {{ card.review_login }} · {{ t('Passwort gespeichert', 'password saved') }} ✓{% else %} · {{ t('fehlt', 'missing') }}{% endif %}</summary>
+      {% if card.review_login %}<p class="small tone-done">✓ {{ t('Anmeldung und Passwort sind gespeichert', 'Login and password are saved') }}{% if card.review_at %} ({{ card.review_at[:16] | replace('T', ' ') }} UTC){% endif %}. {{ t('Zum Ändern beides neu eingeben.', 'To change them, enter both again.') }}</p>{% endif %}
       <form method="post" action="/admin/apps/review-account" class="stack">
         <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
         <input type="hidden" name="app" value="{{ card.key }}">
-        <label>Anmeldung (E-Mail oder Name)<input name="login" required maxlength="254" autocomplete="off" value="{{ card.review_login or '' }}"></label>
-        <label>Passwort des Demo-Kontos<input type="password" name="secret" required maxlength="256" autocomplete="new-password"{% if card.review_login %} placeholder="gespeichert, nicht angezeigt"{% endif %}></label>
-        <label>Dein Passwort<input type="password" name="password" required autocomplete="current-password"></label>
-        <p class="muted small">Damit meldet sich „Screenshots erzeugen“ in der App an. „Einrichten“ legt es als geheime Variablen in die eigene Codemagic-Gruppe {{ card.key }}_screenshots, getrennt von den Store-Schlüsseln. Das Passwort wird nie wieder angezeigt.</p>
-        <button type="submit" class="secondary">Speichern</button>
+        <label>{{ t('Anmeldung (E-Mail oder Name)', 'Login (email or name)') }}<input name="login" required maxlength="254" autocomplete="off" value="{{ card.review_login or '' }}"></label>
+        <label>{{ t('Passwort des Demo-Kontos', 'Password of the demo account') }}<input type="password" name="secret" required maxlength="256" autocomplete="new-password"{% if card.review_login %} placeholder="{{ t('gespeichert, nicht angezeigt', 'saved, not shown') }}"{% endif %}></label>
+        <label>{{ t('Dein Passwort', 'Your password') }}<input type="password" name="password" required autocomplete="current-password"></label>
+        <p class="muted small">{{ t('Damit meldet sich „Screenshots erzeugen“ in der App an. „Einrichten“ legt es als geheime Variablen in die eigene Codemagic-Gruppe ' ~ card.key ~ '_screenshots, getrennt von den Store-Schlüsseln. Das Passwort wird nie wieder angezeigt.', '"Make screenshots" signs in to the app with it. "Set up" puts it as secret variables into its own Codemagic group ' ~ card.key ~ '_screenshots, apart from the store keys. The password is never shown again.') }}</p>
+        <button type="submit" class="secondary">{{ t('Speichern', 'Save') }}</button>
       </form>
     </details>
     {% endif %}
+    {% if en %}
+    <p class="muted small">Always <code>main</code> is built: Android on this server (then in internal testing on Google Play), iOS at Codemagic (then in TestFlight). The store texts come from the repository, and so do the screenshots, unless "Make screenshots" (the real app at Codemagic in the simulator and emulator) followed by "Take over screenshots" fetched newer ones. "Set up" checks the access keys and makes missing keys. "Fetch APK for download" downloads Google's installable APK of the last App Bundle and offers it publicly for download.</p>
+    {% else %}
     <p class="muted small">Gebaut wird immer <code>main</code>: Android auf diesem Server (danach im internen Test bei Google Play), iOS bei Codemagic (danach in TestFlight). Die Store-Texte kommen aus dem Repository, die Screenshots auch, außer „Screenshots erzeugen“ (die echte App bei Codemagic im Simulator und Emulator) und danach „Screenshots übernehmen“ hat neuere geholt. „Einrichten“ prüft die Zugänge und legt fehlende Schlüssel an. „APK zum Herunterladen holen“ lädt Googles installierbare APK des letzten App Bundles und stellt sie öffentlich zum Download.</p>
+    {% endif %}
     {% if card.android and card.android.latest %}
-    <p class="small">Letztes App Bundle: <a href="/admin/stores-android/{{ card.android.latest.file }}">{{ card.android.latest.file }}</a> <span class="muted">· Version {{ card.android.latest.version }} ({{ card.android.latest.build }})</span></p>
+    <p class="small">{{ t('Letztes App Bundle:', 'Last App Bundle:') }} <a href="/admin/stores-android/{{ card.android.latest.file }}">{{ card.android.latest.file }}</a> <span class="muted">· Version {{ card.android.latest.version }} ({{ card.android.latest.build }})</span></p>
     {% endif %}
     {% if card.apk %}
-    <p class="small">Zum Herunterladen (öffentlich): <a href="/download/{{ card.key }}.apk">{{ request.base_url }}download/{{ card.key }}.apk</a> <span class="muted">· Version {{ card.apk.version }} ({{ card.apk.build }}), von Google signiert, geholt {{ card.apk.at[:16] | replace('T', ' ') }} UTC</span></p>
+    <p class="small">{{ t('Zum Herunterladen (öffentlich):', 'For download (public):') }} <a href="/download/{{ card.key }}.apk">{{ request.base_url }}download/{{ card.key }}.apk</a> <span class="muted">· Version {{ card.apk.version }} ({{ card.apk.build }}), {{ t('von Google signiert, geholt', 'signed by Google, fetched') }} {{ card.apk.at[:16] | replace('T', ' ') }} UTC</span></p>
     {% endif %}
     {% if card.android and card.android.log %}
     <details data-fold="apps-{{ card.key }}-android-log">
-      <summary>Protokoll des Android-Builds</summary>
+      <summary>{{ t('Protokoll des Android-Builds', 'Log of the Android build') }}</summary>
       <pre class="small">{{ card.android.log }}</pre>
     </details>
     {% endif %}
     {% if card.test and card.test.log %}
     <details data-fold="apps-{{ card.key }}-test-log">
-      <summary>Protokoll der Test-APK</summary>
+      <summary>{{ test_log }}</summary>
       <pre class="small">{{ card.test.log }}</pre>
     </details>
     {% endif %}
     {% for name, result in card.results %}
-    <p class="small"><strong>{{ name }}</strong> <span class="muted">zuletzt {{ result.at[:16] | replace('T', ' ') }} UTC</span>{% if result.running %} · läuft …{% endif %}</p>
+    <p class="small"><strong>{{ name }}</strong> <span class="muted">{{ t('zuletzt', 'last') }} {{ result.at[:16] | replace('T', ' ') }} UTC</span>{% if result.running %} · {{ t('läuft …', 'running …') }}{% endif %}</p>
     {% if result.steps %}
     <ul class="parts">
       {% for step in result.steps %}

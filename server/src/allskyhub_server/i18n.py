@@ -3,9 +3,9 @@
 The app sends ``Accept-Language``; for ``/api/`` requests :class:`LanguageMiddleware` picks
 German or English for the rest of the request, and the texts the API returns read it with
 ``tr("Deutsch", "English")``, German first like in the app (app/lib/l10n.dart). A web page
-takes the language its visitor chose (``?lang=`` or the cookie, web/lang.py), so messages
-of the pages that have both languages (SharedSky, sign-up) follow it too. Mails to a user
-outside a request use the user's stored language (``pick``); everything else is German.
+takes the language its visitor chose (``?lang=`` or the cookie, web/lang.py), and since
+2026-11-27 every page has both, so its messages follow it too. Mails to a user outside a
+request use the user's stored language (``pick``); without a choice it is German.
 """
 
 from __future__ import annotations

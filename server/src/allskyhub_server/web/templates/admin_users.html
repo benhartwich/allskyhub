@@ -1,39 +1,44 @@
 {% extends "base.html" %}
-{% block title %}Konten · Admin · allskyhub{% endblock %}
+{% block lang %}{{ 'en' if en else 'de' }}{% endblock %}
+{% block title %}{{ t('Konten', 'Accounts') }} · Admin · allskyhub{% endblock %}
 {% block content %}
-<div class="page-head"><h1>Konten</h1><p class="muted"><a href="/admin">Admin</a> › Konten</p></div>
+<div class="page-head"><h1>{{ t('Konten', 'Accounts') }}</h1><p class="muted"><a href="/admin">Admin</a> › {{ t('Konten', 'Accounts') }}</p></div>
 
 <section class="card stack">
   <form method="get" action="/admin/users" class="search-row">
-    <label>Suchen<input name="q" value="{{ q }}" placeholder="E-Mail-Adresse" maxlength="254"></label>
-    <label class="narrow">Art<select name="kind">{% for key, label in filters.items() %}<option value="{{ key }}"{% if key == kind %} selected{% endif %}>{{ label }}</option>{% endfor %}</select></label>
-    <button type="submit" class="secondary">Filtern</button>
+    <label>{{ t('Suchen', 'Search') }}<input name="q" value="{{ q }}" placeholder="{{ t('E-Mail-Adresse', 'Email address') }}" maxlength="254"></label>
+    <label class="narrow">{{ t('Art', 'Kind') }}<select name="kind">{% for key, label in filters.items() %}<option value="{{ key }}"{% if key == kind %} selected{% endif %}>{{ label }}</option>{% endfor %}</select></label>
+    <button type="submit" class="secondary">{{ t('Filtern', 'Filter') }}</button>
   </form>
   <div class="table-scroll"><table class="stats users-list">
-    <tr><th>E-Mail</th><th>Art</th><th>Kameras</th><th>Zuletzt aktiv</th><th>Angelegt</th><th>Status</th></tr>
+    <tr><th>{{ t('E-Mail', 'Email') }}</th><th>{{ t('Art', 'Kind') }}</th><th>{{ t('Kameras', 'Cameras') }}</th><th>{{ t('Zuletzt aktiv', 'Last active') }}</th><th>{{ t('Angelegt', 'Created') }}</th><th>Status</th></tr>
     {% for row in rows %}
     <tr>
       <td><a href="/admin/users/{{ row.user.id }}">{{ row.user.email }}</a>{% if row.user.email.lower() in admins %} <span class="badge">Admin</span>{% endif %}</td>
       <td>{{ kinds.get(row.user.kind, row.user.kind) }}</td>
-      <td>{% if row.own %}{{ row.own }} eigene{% endif %}{% if row.own and row.shared %}, {% endif %}{% if row.shared %}{{ row.shared }} geteilt{% endif %}{% if not row.own and not row.shared %}–{% endif %}</td>
-      <td>{{ row.last_active | localtime if row.last_active else 'nie' }}</td>
+      <td>{% if row.own %}{{ row.own }} {{ t('eigene', 'own') }}{% endif %}{% if row.own and row.shared %}, {% endif %}{% if row.shared %}{{ row.shared }} {{ t('geteilt', 'shared') }}{% endif %}{% if not row.own and not row.shared %}–{% endif %}</td>
+      <td>{{ row.last_active | localtime if row.last_active else t('nie', 'never') }}</td>
       <td>{{ row.user.created_at | localtime }}</td>
-      <td>{% if row.user.is_active %}<span class="badge ok">aktiv</span>{% elif row.user.kind == 'reporter' %}<span class="badge warn">unbestätigt</span>{% else %}<span class="badge warn">gesperrt</span>{% endif %}</td>
+      <td>{% if row.user.is_active %}<span class="badge ok">{{ t('aktiv', 'active') }}</span>{% elif row.user.kind == 'reporter' %}<span class="badge warn">{{ t('unbestätigt', 'unconfirmed') }}</span>{% else %}<span class="badge warn">{{ t('gesperrt', 'locked') }}</span>{% endif %}</td>
     </tr>
     {% else %}
-    <tr><td colspan="6" class="muted">Keine Konten gefunden.</td></tr>
+    <tr><td colspan="6" class="muted">{{ t('Keine Konten gefunden.', 'No accounts found.') }}</td></tr>
     {% endfor %}
   </table></div>
+  {% if en %}
+  <p class="muted small">{{ rows | length }}{% if rows | length >= limit %}+ (the newest {{ limit }}; please search){% endif %} shown · {{ totals.get('owner', 0) }} camera accounts, {{ totals.get('reporter', 0) }} reporters in all. Access requests are still on the <a href="/admin">admin page</a>.</p>
+  {% else %}
   <p class="muted small">{{ rows | length }}{% if rows | length >= limit %}+ (die neuesten {{ limit }}; bitte suchen){% endif %} angezeigt · {{ totals.get('owner', 0) }} Kamera-Konten, {{ totals.get('reporter', 0) }} Melder insgesamt. Zugangsanfragen stehen weiter auf der <a href="/admin">Admin-Seite</a>.</p>
+  {% endif %}
 </section>
 
 <section class="card stack">
-  <h2>Neues Konto einladen</h2>
+  <h2>{{ t('Neues Konto einladen', 'Invite a new account') }}</h2>
   <form method="post" action="/admin/users/invite" class="search-row">
     <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-    <label>E-Mail-Adresse<input type="email" name="email" required maxlength="254" placeholder="name@example.org" autocomplete="off"></label>
-    <button type="submit">Einladung senden</button>
+    <label>{{ t('E-Mail-Adresse', 'Email address') }}<input type="email" name="email" required maxlength="254" placeholder="name@example.org" autocomplete="off"></label>
+    <button type="submit">{{ t('Einladung senden', 'Send invitation') }}</button>
   </form>
-  <p class="muted small">Konten entstehen nur per Einladung; der Link gilt 7 Tage und nur einmal.</p>
+  <p class="muted small">{{ t('Konten entstehen nur per Einladung; der Link gilt 7 Tage und nur einmal.', 'Accounts are made by invitation only; the link is valid for 7 days and only once.') }}</p>
 </section>
 {% endblock %}

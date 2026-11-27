@@ -103,6 +103,11 @@ SETUP_STEPS = {
     "mask": "Himmelsmaske gelernt",
     "orientation": "Ausrichtung (Norden) bestimmt",
 }
+SETUP_STEPS_EN = {
+    "frames": "Images arrive",
+    "mask": "Sky mask learnt",
+    "orientation": "Orientation (north) found",
+}
 HUB_SAYS = {
     "disk": "disk",
     "clock": "clock",
@@ -137,7 +142,7 @@ def setup_steps(device: Device) -> list[Step]:
     if not found or all(c["state"] == "ok" for c in found.values()):
         return []
     return [
-        Step(title, found[key]["state"], found[key]["detail"])
+        Step(tr(title, SETUP_STEPS_EN[key]), found[key]["state"], found[key]["detail"])
         for key, title in SETUP_STEPS.items()
         if key in found
     ]

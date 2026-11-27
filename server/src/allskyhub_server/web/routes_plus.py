@@ -20,7 +20,7 @@ from allskyhub_server.auth.sessions import SessionInfo
 from allskyhub_server.billing import paddle, plus
 from allskyhub_server.billing.paddle import Paddle, PaddleError
 from allskyhub_server.devices import queries
-from allskyhub_server.i18n import english
+from allskyhub_server.i18n import english, tr
 from allskyhub_server.models import Device, Subscription
 from allskyhub_server.settings import Settings
 from allskyhub_server.web.deps import (
@@ -86,7 +86,10 @@ async def terms(request: Request, session: OptionalSession) -> Response:
     return render(
         request,
         "agb.html",
-        {"price_month": plus.PRICE_MONTH, "price_year": plus.PRICE_YEAR},
+        {
+            "price_month": tr(plus.PRICE_MONTH, plus.PRICE_MONTH_EN),
+            "price_year": tr(plus.PRICE_YEAR, plus.PRICE_YEAR_EN),
+        },
         session=session,
     )
 
@@ -114,7 +117,13 @@ async def checkout(
     client = _paddle(request)
     device = await _own(db, session.user.id, device_id)
     if not consent:
-        raise HTTPException(400, "Bitte AGB und sofortigen Beginn bestätigen.")
+        raise HTTPException(
+            400,
+            tr(
+                "Bitte AGB und sofortigen Beginn bestätigen.",
+                "Please confirm the terms and the immediate start.",
+            ),
+        )
     if await plus.running_subscription(db, device.id) is not None:
         return RedirectResponse(f"/cameras/{device.id}#plus", status_code=303)
     price = settings.paddle_price_month if plan == "month" else settings.paddle_price_year
@@ -122,7 +131,11 @@ async def checkout(
         transaction = await client.checkout(price, device, session.user)
     except PaddleError:
         raise HTTPException(
-            502, "Paddle ist gerade nicht erreichbar. Bitte später noch einmal."
+            502,
+            tr(
+                "Paddle ist gerade nicht erreichbar. Bitte später noch einmal.",
+                "Paddle cannot be reached right now. Please try again later.",
+            ),
         ) from None
     return _checkout_page(request, settings, session, transaction, device)
 
@@ -175,7 +188,11 @@ async def manage(
         url = await client.portal(sub.customer_id, sub.id)
     except PaddleError:
         raise HTTPException(
-            502, "Paddle ist gerade nicht erreichbar. Bitte später noch einmal."
+            502,
+            tr(
+                "Paddle ist gerade nicht erreichbar. Bitte später noch einmal.",
+                "Paddle cannot be reached right now. Please try again later.",
+            ),
         ) from None
     return RedirectResponse(url, status_code=303)
 

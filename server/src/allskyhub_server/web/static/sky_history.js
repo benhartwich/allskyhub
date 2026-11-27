@@ -3,6 +3,7 @@
 // slider picks a frame or a time; the drawing comes from the hub as JSON and uses the same
 // classes as the live image, so the layer switches of overlay.js work here too.
 (() => {
+  const EN = document.documentElement.lang === "en";
   const root = document.querySelector("[data-sky-history]");
   const raw = document.getElementById("sky-frames");
   for (const select of document.querySelectorAll("[data-autosubmit]")) {
@@ -113,12 +114,12 @@
   slider.addEventListener("input", () => show(Number(slider.value)));
 
   let timer = null;
-  const stop = () => { clearInterval(timer); timer = null; play.textContent = "▶"; play.setAttribute("aria-label", "Abspielen"); };
+  const stop = () => { clearInterval(timer); timer = null; play.textContent = "▶"; play.setAttribute("aria-label", EN ? "Play" : "Abspielen"); };
   play.addEventListener("click", () => {
     if (timer) return stop();
     if (Number(slider.value) >= items().length - 1) slider.value = "0";
     play.textContent = "❚❚";
-    play.setAttribute("aria-label", "Anhalten");
+    play.setAttribute("aria-label", EN ? "Pause" : "Anhalten");
     show(Number(slider.value));
     timer = setInterval(() => {
       const next = Number(slider.value) + 1;

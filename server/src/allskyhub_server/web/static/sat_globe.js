@@ -32,7 +32,11 @@ function kind(s) {
   return s.sunlit ? "sun" : "shadow";
 }
 
-const COMPASS = ["N", "NO", "O", "SO", "S", "SW", "W", "NW"];
+const EN = document.documentElement.lang === "en";
+const COMPASS = EN ? ["N", "NE", "E", "SE", "S", "SW", "W", "NW"] : ["N", "NO", "O", "SO", "S", "SW", "W", "NW"];
+const T = EN
+  ? { high: "km high", eye: "naked eye", sun: "sunlit", shadow: "in Earth’s shadow", cam: "in the picture", none: "No bright satellite is above the horizon right now." }
+  : { high: "km hoch", eye: "mit bloßem Auge", sun: "sonnenbeschienen", shadow: "im Erdschatten", cam: "im Bild", none: "Gerade ist kein heller Satellit über dem Horizont." };
 const compass = (az) => COMPASS[Math.round(az / 45) % 8];
 
 function escapeHtml(text) {
@@ -48,9 +52,9 @@ function fillList() {
   const up = data.satellites.filter((s) => s.up).sort((a, b) => b.altitude - a.altitude);
   count.textContent = `· ${up.length}`;
   list.innerHTML = up.map((s) => `<li class="sat-row" data-norad="${s.norad}" tabindex="0" aria-current="${s.norad === chosen}">
-    <b>${escapeHtml(s.name)}</b><span class="when">${Math.round(s.altitude)}° ${compass(s.azimuth)} · ${s.height_km} km hoch</span>
-    <span class="tags">${s.naked_eye ? '<span class="st eye">mit bloßem Auge</span>' : ""}${s.sunlit ? '<span class="st sun">sonnenbeschienen</span>' : '<span class="st shadow">im Erdschatten</span>'}${s.altitude >= 10 ? '<span class="st cam">im Bild</span>' : ""}</span></li>`).join("")
-    || '<li class="muted">Gerade ist kein heller Satellit über dem Horizont.</li>';
+    <b>${escapeHtml(s.name)}</b><span class="when">${Math.round(s.altitude)}° ${compass(s.azimuth)} · ${s.height_km} ${T.high}</span>
+    <span class="tags">${s.naked_eye ? `<span class="st eye">${T.eye}</span>` : ""}${s.sunlit ? `<span class="st sun">${T.sun}</span>` : `<span class="st shadow">${T.shadow}</span>`}${s.altitude >= 10 ? `<span class="st cam">${T.cam}</span>` : ""}</span></li>`).join("")
+    || `<li class="muted">${T.none}</li>`;
 }
 
 function choose(norad) {
@@ -71,15 +75,17 @@ async function load() {
     globe.build();
     fillList();
     const at = new Date(data.at);
-    const note = globe.ready ? "" : " · Dieser Browser kann kein WebGL: nur die Liste.";
+    const note = globe.ready ? "" : EN ? " · This browser cannot do WebGL: the list only." : " · Dieser Browser kann kein WebGL: nur die Liste.";
     const text = data.satellites.length
-      ? `Stand ${at.toLocaleTimeString("de-DE", { hour: "2-digit", minute: "2-digit" })} Uhr · ${data.satellites.length} helle Satelliten`
+      ? EN
+        ? `As of ${at.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" })} · ${data.satellites.length} bright satellites`
+        : `Stand ${at.toLocaleTimeString("de-DE", { hour: "2-digit", minute: "2-digit" })} Uhr · ${data.satellites.length} helle Satelliten`
       : data.loaded === false
-        ? "Die Bahndaten von CelesTrak sind gerade nicht zu bekommen; der Hub versucht es innerhalb einer Stunde wieder."
-        : "Keine hellen Satelliten in den Bahndaten.";
+        ? EN ? "The orbital elements from CelesTrak cannot be had right now; the hub tries again within an hour." : "Die Bahndaten von CelesTrak sind gerade nicht zu bekommen; der Hub versucht es innerhalb einer Stunde wieder."
+        : EN ? "No bright satellites in the orbital elements." : "Keine hellen Satelliten in den Bahndaten.";
     statusLine.textContent = text + note;
   } catch {
-    statusLine.textContent = "Die Satelliten konnten nicht geladen werden; neuer Versuch in einer Minute.";
+    statusLine.textContent = EN ? "The satellites could not be loaded; trying again in a minute." : "Die Satelliten konnten nicht geladen werden; neuer Versuch in einer Minute.";
   }
 }
 

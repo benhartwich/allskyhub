@@ -23,31 +23,41 @@ from allskyhub_protocol import (
 )
 from allskyhub_server.devices.settings import CAMERA_CHOICES
 from allskyhub_server.devices.tonight import DEFAULT_ZONE
+from allskyhub_server.i18n import pick
 from allskyhub_server.models import Device
 
+CAMERA_CHOICES_EN = {"auto": "Detect automatically", "sim": "Simulation (test)"}
 FALLBACK: list[SettingSpec] = [
     SettingSpec.model_validate(s)
     for s in (
-        {"key": "location", "type": "location", "label": "Standort", "group": "Standort"},
+        {
+            "key": "location",
+            "type": "location",
+            "label": {"de": "Standort", "en": "Location"},
+            "group": {"de": "Standort", "en": "Location"},
+        },
         {
             "key": "timezone",
             "type": "string",
-            "label": "Zeitzone",
-            "group": "Standort",
+            "label": {"de": "Zeitzone", "en": "Time zone"},
+            "group": {"de": "Standort", "en": "Location"},
             "max_length": 64,
         },
         {
             "key": "camera",
             "type": "choice",
-            "label": "Kamera",
-            "group": "Kamera",
-            "choices": [{"value": v, "label": t} for v, t in CAMERA_CHOICES.items()],
+            "label": {"de": "Kamera", "en": "Camera"},
+            "group": {"de": "Kamera", "en": "Camera"},
+            "choices": [
+                {"value": v, "label": {"de": t, "en": CAMERA_CHOICES_EN.get(v, t)}}
+                for v, t in CAMERA_CHOICES.items()
+            ],
         },
         {
             "key": "day_delay_s",
             "type": "number",
-            "label": "Pause am Tag",
-            "group": "Aufnahme",
+            "label": {"de": "Pause am Tag", "en": "Pause by day"},
+            "group": {"de": "Aufnahme", "en": "Capture"},
             "unit": "s",
             "min": 0,
             "max": 3600,
@@ -55,8 +65,8 @@ FALLBACK: list[SettingSpec] = [
         {
             "key": "night_delay_s",
             "type": "number",
-            "label": "Pause in der Nacht",
-            "group": "Aufnahme",
+            "label": {"de": "Pause in der Nacht", "en": "Pause at night"},
+            "group": {"de": "Aufnahme", "en": "Capture"},
             "unit": "s",
             "min": 0,
             "max": 3600,
@@ -169,7 +179,7 @@ def _number(text: str) -> float | None:
 def changes(
     schema: list[SettingSpec], current: dict[str, Any], form: dict[str, str], lang: str = "de"
 ) -> tuple[dict[str, Any], str | None]:
-    """The keys that differ from the camera's values, or a German error. Empty fields stay
+    """The keys that differ from the camera's values, or an error in ``lang``. Empty fields stay
     unchanged; a nullable field emptied by the user becomes null (SPEC §6.5)."""
     labels = {s.key: localized(s.label, lang) for s in schema}
     values: dict[str, Any] = {}
@@ -182,7 +192,11 @@ def changes(
                 continue
             la, lo = _number(lat), _number(lon)
             if la is None or lo is None:
-                return {}, "Bitte Breite und Länge als Zahlen angeben (beide oder keine)."
+                return {}, pick(
+                    lang,
+                    "Bitte Breite und Länge als Zahlen angeben (beide oder keine).",
+                    "Please give latitude and longitude as numbers (both or neither).",
+                )
             values["latitude"], values["longitude"] = la, lo
             continue
         if spec.type is SettingType.BOOL:
@@ -214,7 +228,10 @@ def changes(
         else:
             values[key] = text
     if unreadable:
-        return {}, f"Bitte als Zahl angeben: {', '.join(unreadable)}."
+        listed = ", ".join(unreadable)
+        return {}, pick(
+            lang, f"Bitte als Zahl angeben: {listed}.", f"Please give as a number: {listed}."
+        )
     secret = {s.key for s in schema if s.write_only}
     diff = {k: v for k, v in values.items() if k in secret or current.get(k) != v}
     if ("latitude" in diff) != ("longitude" in diff) and "latitude" in values:
@@ -228,7 +245,8 @@ def changes(
     if bad:
         names = [labels.get("location", "Standort") if k in ("latitude", "longitude")
                  else labels.get(k, k) for k in bad]  # fmt: skip
-        return {}, f"Ungültige Angabe: {', '.join(dict.fromkeys(names))}."
+        listed = ", ".join(dict.fromkeys(names))
+        return {}, pick(lang, f"Ungültige Angabe: {listed}.", f"Not valid: {listed}.")
     return diff, None
 
 

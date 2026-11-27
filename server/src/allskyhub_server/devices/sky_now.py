@@ -28,7 +28,7 @@ LEVEL_TEXT: dict[Level, str] = {
 }
 LEVEL_TEXT_EN: dict[Level, str] = {
     "good": "well calibrated",
-    "usable": "usably calibrated",
+    "usable": "adequately calibrated",
     "rough": "roughly calibrated",
 }
 

@@ -49,6 +49,9 @@ async def test_atom_feed(
     title = feed.find(f"{ATOM}title")
     assert title is not None
     assert title.text == "Sternwarte <&>: Ereignisse am Himmel"
+    # Cached publicly: the same German feed whatever language the visitor chose.
+    english = await new_client.get(f"/sky/{slug}/events.atom?lang=en")
+    assert english.content == r.content
     entries = feed.findall(f"{ATOM}entry")
     assert len(entries) == 1
     assert "/events/20261012/meteor-1.jpg" in r.text

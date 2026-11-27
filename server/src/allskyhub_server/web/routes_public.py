@@ -30,7 +30,7 @@ from allskyhub_server.devices.images import ImageStore
 from allskyhub_server.devices.map_tiles import MapTiles
 from allskyhub_server.devices.space_weather import KpCache, OvationCache
 from allskyhub_server.devices.tonight import ForecastCache
-from allskyhub_server.i18n import english, tr
+from allskyhub_server.i18n import english, german, tr
 from allskyhub_server.models import Device
 from allskyhub_server.web.deps import DbSession, OptionalSession, SettingsDep, client_ip
 from allskyhub_server.web.render import render
@@ -344,10 +344,13 @@ async def sky_events_feed(request: Request, db: DbSession, slug: str) -> Respons
         raise HTTPException(404)
     events = await public.recent_events(db, device, limit=30)
     base = str(request.base_url).rstrip("/")
-    body = templates.get_template("public_events.atom.xml").render(
-        {**_base(device, slug), "event_titles": EVENT_TITLES, "events": events, "base_url": base,
-         "updated": events[0].start if events else device.paired_at or dt.datetime.now(dt.UTC)}
-    )  # fmt: skip
+    # One feed for everyone (it is cached publicly): German, whatever the visitor chose.
+    with german():
+        body = templates.get_template("public_events.atom.xml").render(
+            {**_base(device, slug), "event_titles": EVENT_TITLES, "events": events,
+             "base_url": base,
+             "updated": events[0].start if events else device.paired_at or dt.datetime.now(dt.UTC)}
+        )  # fmt: skip
     return Response(
         body,
         media_type="application/atom+xml; charset=utf-8",

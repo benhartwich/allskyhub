@@ -5,6 +5,7 @@ live fragment with ``?lang=en`` or the cookie (web/lang.py), German unchanged ot
 
 from __future__ import annotations
 
+import dataclasses
 import datetime as dt
 import re
 
@@ -179,3 +180,12 @@ def test_sky_labels_in_english() -> None:
     lay_en = sky_layers.in_english(lay)
     assert [m.text for m in lay_en.cardinals] == ["N", "E", "S", "W"]
     assert [m.text for m in lay_en.planets] == [m.text for m in lay.planets] == ["Saturn"]
+    # Names that differ: the moon (with its phase) and Mercury.
+    shown = dataclasses.replace(
+        lay,
+        planets=[
+            dataclasses.replace(lay.planets[0], text="Merkur"),
+            dataclasses.replace(lay.planets[0], text="Mond 80 %"),
+        ],
+    )
+    assert [m.text for m in sky_layers.in_english(shown).planets] == ["Mercury", "Moon 80 %"]

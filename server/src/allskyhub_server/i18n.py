@@ -21,6 +21,16 @@ def english() -> bool:
     return _english.get()
 
 
+class german:  # lower case: used like a function, ``with german():``
+    """German for a block, whatever the request asked (shared caches, e.g. a public feed)."""
+
+    def __enter__(self) -> None:
+        self._token = _english.set(False)
+
+    def __exit__(self, *_: object) -> None:
+        _english.reset(self._token)
+
+
 def tr(de: str, en: str) -> str:
     """The text in the language of the current request."""
     return en if _english.get() else de

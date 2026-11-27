@@ -8,8 +8,10 @@ language and remembers it in the ``ash_lang`` cookie; the menu's switch goes thr
 ``/sprache/{code}`` and, when signed in, also keeps it as the account's language for its
 mails (``User.lang``). Since 2026-11-27 also every public page a visitor without an account
 sees: the sky pages (/sky/…, their nights and measurements), the map, Plus, hardware,
-fireballs, meteor showers and the imprint; their scripts read ``<html lang>``. The privacy
-policy, the terms, mails and the signed-in pages stay German; templates say
+fireballs, meteor showers and the imprint; their scripts read ``<html lang>``. Benjamin,
+2026-11-27: every page has both languages, the signed-in pages, the admin pages and the
+legal texts too (their English versions follow in their own change; until then parts
+shared with the public pages already show English there). Templates say
 ``{{ t('…', '…') }}``, Python ``i18n.tr`` (the request's language,
 i18n.LanguageMiddleware).
 """

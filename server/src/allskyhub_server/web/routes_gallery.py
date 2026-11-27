@@ -45,6 +45,7 @@ from allskyhub_server.devices.queries import Role
 from allskyhub_server.devices.tonight import ForecastCache
 from allskyhub_server.i18n import english, tr
 from allskyhub_server.models import AircraftPass, Device, EventRecord, Frame, RenderJob
+from allskyhub_server.web import lang
 from allskyhub_server.web.deps import CurrentSession, DbSession, csrf_protect
 from allskyhub_server.web.render import render
 from allskyhub_server.web.templating import UI_ZONE
@@ -217,7 +218,9 @@ async def sky_history_frame(
         raise HTTPException(404)
     satellites = request.app.state.bright_satellites.loaded()
     night_events = await events.events(db, device.id, night_id=night_id, limit=2000)
-    drawn = await sky_history.frame_sky(db, device, frame.captured_at, satellites, night_events)
+    drawn = await sky_history.frame_sky(
+        db, device, frame.captured_at, satellites, night_events, english=lang.is_en(request)
+    )
     return JSONResponse(drawn or {}, headers=SKY_HEADERS)
 
 
@@ -259,7 +262,9 @@ async def sky_history_time(
         raise HTTPException(422, tr("Zeit außerhalb dieser Nacht", "Time outside this night"))
     satellites = request.app.state.bright_satellites.loaded()
     night_events = await events.events(db, device.id, night_id=night_id, limit=2000)
-    drawn = await sky_history.frame_sky(db, device, at, satellites, night_events)
+    drawn = await sky_history.frame_sky(
+        db, device, at, satellites, night_events, english=lang.is_en(request)
+    )
     return JSONResponse(drawn or {}, headers=SKY_HEADERS)
 
 

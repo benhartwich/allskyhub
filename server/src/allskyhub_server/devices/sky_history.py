@@ -18,7 +18,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from allskyhub_server.devices import events as event_kinds
-from allskyhub_server.devices import radiosondes, sky_layers
+from allskyhub_server.devices import radiosondes, sky_layers, sky_overlay
 from allskyhub_server.devices.satellite_match import Catalogue
 from allskyhub_server.devices.sky_overlay import build as constellations
 from allskyhub_server.devices.sky_overlay import orientation as usable_orientation
@@ -123,15 +123,22 @@ async def frame_sky(
     satellites: Catalogue | None,
     night_events: list[EventRecord],
     balloons: list[radiosondes.Sonde] | None = None,
+    *,
+    english: bool = False,
 ) -> dict[str, Any] | None:
     """Everything to draw over a frame taken ``at``, as JSON for the page; None without a
-    usable lens or place. ``balloons`` only for the camera's viewers (app 1.5.0)."""
+    usable lens or place. ``balloons`` only for the camera's viewers (app 1.5.0).
+    ``english``: IAU names, Moon and planets, E for east (the web page in English; the
+    app's API keeps German, as deployed apps expect)."""
     raw = await orientation_at(db, device, at)
     status: dict[str, Any] = {**(device.last_status or {}), "orientation": raw}
     lines = constellations(status, at)
     layers = sky_layers.build(status, at, satellites, balloons)
     if lines is None or layers is None:
         return None
+    if english:
+        lines = sky_overlay.in_english(lines)
+        layers = sky_layers.in_english(layers)
 
     def marks(items: list[sky_layers.Mark]) -> list[dict[str, Any]]:
         return [

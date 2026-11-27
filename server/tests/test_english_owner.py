@@ -169,15 +169,16 @@ async def test_owner_pages_in_english(app: FastAPI, client: httpx.AsyncClient) -
 
 
 async def test_filters_follow_the_language(client: httpx.AsyncClient) -> None:
-    """age, stamp, night_title, filesize and heater_text read the request's language."""
+    """The filters follow the page's language (templates pass ``en``), heater_text and the
+    event titles the request's."""
     from allskyhub_server import i18n
 
+    assert templating.night_title("20261006", en=True) == "Tue 6 Oct → Wed 7 Oct"
+    assert templating.filesize(3 * 1024 * 1024 // 2, en=True) == "1.5 MB"
+    assert templating.age(None, en=True) == "never"
     token = i18n._english.set(True)  # pyright: ignore[reportPrivateUsage]
     try:
-        assert templating.night_title("20261006") == "Tue 06.10. → Wed 07.10."
-        assert templating.filesize(3 * 1024 * 1024 // 2) == "1.5 MB"
         assert templating.heater_text({"on": True, "reason": "humidity"}) == "on: high humidity"
-        assert templating.age(None) == "never"
         assert templating.event_titles()["aurora"] == "Aurora"
     finally:
         i18n._english.reset(token)  # pyright: ignore[reportPrivateUsage]

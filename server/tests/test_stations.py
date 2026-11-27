@@ -156,9 +156,15 @@ async def test_open_api(
         assert [(s.sqm_mag, s.stars) for s in sky] == [(21.05, 400)]
         await db.execute(update(Device).where(Device.id == station_id).values(latest_thumb_at=None))
         await db.commit()
+    # A full frame the hub no longer wants (the solve finished after it asked): taken like a
+    # thumbnail and answered "no more", so the station goes back to thumbnails.
     r = await new_client.post("/api/connect/v1/frames", files=_files(meta, _jpeg(noise=True)),
                               headers=auth)  # fmt: skip
-    assert (r.status_code, r.json()) == (413, {"error": "too_large"})  # a full frame unasked
+    assert (r.status_code, r.json()) == (200, {"want_full_frame": False})
+    # A big frame that isn't the full frame is refused.
+    other = _files(meta, _jpeg(W - 8, H, noise=True))
+    r = await new_client.post("/api/connect/v1/frames", files=other, headers=auth)
+    assert (r.status_code, r.json()) == (413, {"error": "too_large"})
     r = await new_client.post("/api/connect/v1/frames", files=_files(meta, b"not a jpeg"),
                               headers=auth)  # fmt: skip
     assert (r.status_code, r.json()) == (400, {"error": "bad_image"})

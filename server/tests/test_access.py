@@ -287,3 +287,11 @@ async def test_the_way_in(client: httpx.AsyncClient) -> None:
     steps = await client.get("/start", params={"kamera": "nein"})
     assert 'aria-current="step"' in steps.text
     assert "Zurück zur Auswahl" in steps.text
+
+
+async def test_pages_are_not_kept_across_a_language_switch(client: httpx.AsyncClient) -> None:
+    """2026-11-27: after switching the language on a phone the old page could come back;
+    pages vary by the cookie and are asked for again."""
+    r = await client.get("/mitmachen")
+    assert r.headers["vary"] == "Cookie"
+    assert r.headers["cache-control"] == "private, no-cache"

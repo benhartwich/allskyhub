@@ -32,6 +32,12 @@ REASONS = {
     "artifact": "Bildfehler",
     "other": "Sonstiges",
 }
+REASONS_EN = {
+    "aircraft": "Aircraft",
+    "satellite": "Satellite",
+    "artifact": "Image artefact",
+    "other": "Other",
+}
 REPLY_TIMEOUT_S = 10.0
 # Codes after which the hub stops sending a label: the camera does not know the event
 # (any more), cannot store labels at all (older agent), or finds the label invalid.

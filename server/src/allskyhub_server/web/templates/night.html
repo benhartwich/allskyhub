@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% block lang %}{{ 'en' if en else 'de' }}{% endblock %}
 {% block title %}{{ night_id | night_title }} · {{ device.name }} · allskyhub{% endblock %}
 {% block head %}
   <link rel="stylesheet" href="{{ asset('uplot.min.css') }}">
@@ -7,10 +8,10 @@
   <script src="{{ asset('charts.js') }}" defer></script>
 {% endblock %}
 {% block content %}
-<a class="back" href="/cameras/{{ device.id }}/gallery">← Galerie</a>
+<a class="back" href="/cameras/{{ device.id }}/gallery">← {{ t('Galerie', 'Gallery') }}</a>
 <h1>{{ night_id | night_title }}</h1>
-{% if overflights %}<p><a href="/cameras/{{ device.id }}/ueberfluege?nacht={{ night_id }}">{{ overflights }}</a> <span class="muted small">· auf der Himmelskarte</span></p>{% endif %}
-{% if day_aircraft %}<p><a href="/cameras/{{ device.id }}/ueberfluege?nacht={{ night_id }}#am-tag">{{ day_aircraft }} {{ "Flugzeug" if day_aircraft == 1 else "Flugzeuge" }} am Tag</a></p>{% endif %}
+{% if overflights %}<p><a href="/cameras/{{ device.id }}/ueberfluege?nacht={{ night_id }}">{{ overflights }}</a> <span class="muted small">· {{ t('auf der Himmelskarte', 'on the sky map') }}</span></p>{% endif %}
+{% if day_aircraft %}<p><a href="/cameras/{{ device.id }}/ueberfluege?nacht={{ night_id }}#am-tag">{{ day_aircraft }} {{ t("Flugzeug" if day_aircraft == 1 else "Flugzeuge", "aircraft") }} {{ t('am Tag', 'by day') }}</a></p>{% endif %}
 {% if products %}
 <div class="public-products">
   {% for p in products %}
@@ -23,12 +24,12 @@
 {% endif %}
 {% if sky_charts %}
 <section class="stack">
-  <h2>Messwerte dieser Nacht</h2>
+  <h2>{{ t('Messwerte dieser Nacht', 'Readings of this night') }}</h2>
   {% with data_url = "/cameras/" ~ device.id ~ "/charts/data", with_status = true, compact = true, default_range = night_id, full_url = "/cameras/" ~ device.id ~ "/charts?night=" ~ night_id %}{% include "_chart_viewer.html" %}{% endwith %}
 </section>
 {% endif %}
 {% if events %}
-<h2>Ereignisse</h2>
+<h2>{{ t('Ereignisse', 'Events') }}</h2>
 {% if meteors %}<p class="muted">{{ meteors }}</p>{% endif %}
 <div class="event-strip">
   {% for e in events %}{% include "_item_thumb.html" %}{% endfor %}
@@ -36,12 +37,12 @@
 {% endif %}
 {% if brightness_chart %}{% include "_brightness_map.html" %}{% endif %}
 {% if frames %}
-<p><a class="button small secondary" href="/cameras/{{ device.id }}/himmel?nacht={{ night_id }}">Himmel über diesen Bildern ansehen</a></p>
+<p><a class="button small secondary" href="/cameras/{{ device.id }}/himmel?nacht={{ night_id }}">{{ t('Himmel über diesen Bildern ansehen', 'View the sky over these images') }}</a></p>
 <ul class="thumbs">
   {% for f in frames %}
   <li>
-    <a href="/cameras/{{ device.id }}/frames/{{ night_id }}/{{ f.name }}/{{ 'full' if f.has_full else 'thumb' }}.jpg"{% if not f.has_full %} data-full="/cameras/{{ device.id }}/frames/{{ night_id }}/{{ f.name }}/full.jpg"{% endif %} data-lightbox="frames" data-caption="Aufnahme {{ f.captured_at | clock }} Uhr{{ ' · Mond-HDR' if f.hdr }}" title="{{ f.captured_at | clock }}">
-      <img src="/cameras/{{ device.id }}/frames/{{ night_id }}/{{ f.name }}/thumb.jpg" alt="Aufnahme {{ f.captured_at | clock }}" loading="lazy">
+    <a href="/cameras/{{ device.id }}/frames/{{ night_id }}/{{ f.name }}/{{ 'full' if f.has_full else 'thumb' }}.jpg"{% if not f.has_full %} data-full="/cameras/{{ device.id }}/frames/{{ night_id }}/{{ f.name }}/full.jpg"{% endif %} data-lightbox="frames" data-caption="{% if en %}Image at {{ f.captured_at | clock }}{{ ' · moon HDR' if f.hdr }}{% else %}Aufnahme {{ f.captured_at | clock }} Uhr{{ ' · Mond-HDR' if f.hdr }}{% endif %}" title="{{ f.captured_at | clock }}">
+      <img src="/cameras/{{ device.id }}/frames/{{ night_id }}/{{ f.name }}/thumb.jpg" alt="{{ t('Aufnahme', 'Image at') }} {{ f.captured_at | clock }}" loading="lazy">
       <span>{{ f.captured_at | clock }}</span>
     </a>
   </li>

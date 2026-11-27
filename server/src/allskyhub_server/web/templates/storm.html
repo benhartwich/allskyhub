@@ -1,16 +1,17 @@
 {% extends "base.html" %}
-{% block title %}Gewitter · {{ device.name }} · allskyhub{% endblock %}
+{% block lang %}{{ 'en' if en else 'de' }}{% endblock %}
+{% block title %}{{ t('Gewitter', 'Thunderstorm') }} · {{ device.name }} · allskyhub{% endblock %}
 {% block content %}
 <a class="back" href="/cameras/{{ device.id }}/nights/{{ storm.night_id }}">← {{ storm.night_id | night_title }}</a>
-<h1>Gewitter</h1>
-<p class="muted">{{ storm.start | localtime }} – {{ storm.end | clock }} · {{ storm.flashes | length }} Blitz{{ 'e' if storm.flashes | length != 1 }}</p>
+<h1>{{ t('Gewitter', 'Thunderstorm') }}</h1>
+<p class="muted">{{ storm.start | localtime }} – {{ storm.end | clock }} · {{ storm.flashes | length }} {{ t('Blitze' if storm.flashes | length != 1 else 'Blitz', 'flashes' if storm.flashes | length != 1 else 'flash') }}</p>
 <section class="card stack">
-  <h2>Blitzsatellit <span class="muted small">(Quelle: EUMETSAT)</span></h2>
+  <h2>{{ t('Blitzsatellit', 'Lightning satellite') }} <span class="muted small">({{ t('Quelle', 'source') }}: EUMETSAT)</span></h2>
   <p>{{ li.text }}</p>
   {% if li.confirmed %}
-  <p class="muted small">Ein Blitz zählt, wenn der Satellit im Umkreis von 400 km in Richtung des Leuchtens (±60°) einen Blitz sah. Solange einer zählt, bleibt das ganze Gewitter unmarkiert.</p>
+  <p class="muted small">{{ t('Ein Blitz zählt, wenn der Satellit im Umkreis von 400 km in Richtung des Leuchtens (±60°) einen Blitz sah. Solange einer zählt, bleibt das ganze Gewitter unmarkiert.', 'A flash counts when the satellite saw lightning within 400 km in the direction of the glow (±60°). As long as one counts, the whole storm stays unmarked.') }}</p>
   <div class="table-scroll"><table class="stats">
-    <thead><tr><th>Zeit</th><th>Leuchten aus</th><th>Satellitenblitz</th></tr></thead>
+    <thead><tr><th>{{ t('Zeit', 'Time') }}</th><th>{{ t('Leuchten aus', 'Glow from') }}</th><th>{{ t('Satellitenblitz', 'Satellite flash') }}</th></tr></thead>
     <tbody>
     {% for e in li.confirmed[:20] %}
     <tr>

@@ -39,15 +39,15 @@ from allskyhub_server.devices import (
     tonight,
 )
 from allskyhub_server.devices.connections import ConnectionRegistry
-from allskyhub_server.devices.event_text import EVENT_TITLES, event_rows, meteor_summary
+from allskyhub_server.devices.event_text import event_rows, meteor_summary
 from allskyhub_server.devices.images import ImageStore
 from allskyhub_server.devices.queries import Role
 from allskyhub_server.devices.tonight import ForecastCache
-from allskyhub_server.i18n import english
+from allskyhub_server.i18n import english, tr
 from allskyhub_server.models import AircraftPass, Device, EventRecord, Frame, RenderJob
 from allskyhub_server.web.deps import CurrentSession, DbSession, csrf_protect
 from allskyhub_server.web.render import render
-from allskyhub_server.web.templating import UI_ZONE
+from allskyhub_server.web.templating import UI_ZONE, event_titles
 from allskyhub_sky.objects import catalogue
 
 router = APIRouter(dependencies=[Depends(csrf_protect)])
@@ -62,6 +62,18 @@ PRODUCT_TITLES = {
     "day_timelapse": "Zeitraffer am Tag",
     "day_keogram": "Keogramm am Tag",
 }
+PRODUCT_TITLES_EN = {
+    "keogram": "Keogram",
+    "startrails": "Star trails",
+    "timelapse": "Timelapse",
+    "day_timelapse": "Daytime timelapse",
+    "day_keogram": "Daytime keogram",
+}
+
+
+def product_titles() -> dict[str, str]:
+    """``PRODUCT_TITLES`` in the request's language (every page is bilingual, 2026-11-27)."""
+    return PRODUCT_TITLES_EN if english() else PRODUCT_TITLES
 
 
 async def _access(
@@ -125,8 +137,8 @@ async def night(
             "meteors": meteor_summary(night_events),
             "overflights": events.overflight_count(all_events),
             "day_aircraft": await day_aircraft.count(db, device.id, night_id),
-            "titles": PRODUCT_TITLES,
-            "event_titles": EVENT_TITLES,
+            "titles": product_titles(),
+            "event_titles": event_titles(),
         },
         session=session,
     )
@@ -241,7 +253,7 @@ async def sky_history_time(
         at = at.replace(tzinfo=dt.UTC)
     slack = sky_history.PLANETARIUM_STEP
     if window is None or not window[0] - slack <= at <= window[1] + slack:
-        raise HTTPException(422, "Zeit außerhalb dieser Nacht")
+        raise HTTPException(422, tr("Zeit außerhalb dieser Nacht", "Time outside this night"))
     satellites = request.app.state.bright_satellites.loaded()
     night_events = await events.events(db, device.id, night_id=night_id, limit=2000)
     drawn = await sky_history.frame_sky(db, device, at, satellites, night_events)
@@ -295,7 +307,7 @@ async def product_page(
     return render(
         request,
         "product.html",
-        {**await _product_state(request, db, device, night_id, name), "titles": PRODUCT_TITLES},
+        {**await _product_state(request, db, device, night_id, name), "titles": product_titles()},
         session=session,
     )
 
@@ -358,7 +370,7 @@ async def event_list(
             "page": page,
             "more": len(rows) > 50 * page,
             "show_all": all,
-            "event_titles": EVENT_TITLES,
+            "event_titles": event_titles(),
         },
         session=session,
     )
@@ -427,8 +439,8 @@ async def overflights(
             "night_lines": overflight_map.lines([t for t in tracks if t.path]),
             "day_lines": overflight_map.day_lines(day_passes),
             "skies": skies,
-            "group_titles": MAP_GROUPS,
-            "one": OVERFLIGHT_TITLES,
+            "group_titles": MAP_GROUPS_EN if english() else MAP_GROUPS,
+            "one": OVERFLIGHT_TITLES_EN if english() else OVERFLIGHT_TITLES,
             "count": events.overflight_count([t.event for t in tracks]),
             "meteor_count": sum(t.group == "meteor" for t in tracks),
             "zone": str(series.zone(device)),
@@ -447,6 +459,12 @@ OVERFLIGHT_TITLES = {
 # The map's kinds: the overflights and, for comparison, the possible meteors.
 MAP_GROUPS = {**events.OVERFLIGHT_GROUPS, "meteor": "Meteore"}
 OVERFLIGHT_HEADINGS = {**OVERFLIGHT_TITLES, "unknown": "Unbekanntes Objekt"}
+OVERFLIGHT_TITLES_EN = {
+    "satellite": "Satellite", "aircraft": "Aircraft", "unknown": "Unknown", "meteor": "Meteor",
+}  # fmt: skip
+MAP_GROUPS_EN = {"satellite": "Satellites", "aircraft": "Aircraft", "unknown": "Unknown",
+                 "meteor": "Meteors"}  # fmt: skip
+OVERFLIGHT_HEADINGS_EN = {**OVERFLIGHT_TITLES_EN, "unknown": "Unknown object"}
 
 
 async def _event(db: DbSession, device: Device, night_id: str, event_id: str) -> EventRecord:
@@ -547,9 +565,9 @@ async def event_page(
             "has_frame": events.has_frame(event),
             # SPEC §6.4 Overflights: named as what they are, and back to their list.
             "heading": (
-                OVERFLIGHT_HEADINGS[group]
+                (OVERFLIGHT_HEADINGS_EN if english() else OVERFLIGHT_HEADINGS)[group]
                 if (group := events.overflight(event))
-                else EVENT_TITLES.get(event.kind, event.kind)
+                else event_titles().get(event.kind, event.kind)
             ),
             "back_overflights": von == "ueberfluege",
             "original_state": "ready" if event.has_original else "none",
@@ -560,8 +578,8 @@ async def event_page(
             "gmn_shower": gmn.shower_name,
             "fireball": science.fireball_facts(event),
             "fireball_form": science.FIREBALL_FORM,
-            "event_titles": EVENT_TITLES,
-            "label_reasons": labels.REASONS,
+            "event_titles": event_titles(),
+            "label_reasons": labels.REASONS_EN if english() else labels.REASONS,
         },
         session=session,
     )
@@ -706,7 +724,7 @@ async def storm_page(
         {
             "device": device,
             "storm": events.Storm(storm, flashes),
-            "event_titles": EVENT_TITLES,
+            "event_titles": event_titles(),
             "li": lightning_li.storm_check(flashes),
             "direction": lightning_li.direction,
         },
@@ -882,7 +900,11 @@ async def render_request(
         await renders.request(db, device, kind, begin, finish, fps)
     except ValueError:
         return await _render_page(
-            request, db, session, device, error="Bitte Datum und Uhrzeit angeben."
+            request,
+            db,
+            session,
+            device,
+            error=tr("Bitte Datum und Uhrzeit angeben.", "Please give a date and time."),
         )
     except renders.RenderError as exc:
         return await _render_page(request, db, session, device, error=str(exc))
@@ -925,7 +947,13 @@ async def render_delete(
     device = await _own(db, session, device_id, "admin")
     job = await _job(db, device, job_id)
     if job.state == "running":
-        return await _render_page(request, db, session, device, error="Läuft gerade, bitte warten.")
+        return await _render_page(
+            request,
+            db,
+            session,
+            device,
+            error=tr("Läuft gerade, bitte warten.", "Running right now, please wait."),
+        )
     store: ImageStore = request.app.state.images
     store.render_path(device.id, str(job.id), renders.SUFFIX[job.kind]).unlink(missing_ok=True)
     await db.delete(job)
@@ -989,7 +1017,7 @@ async def target_page(
             "chosen": chosen,
             "plan": found,
             "unknown": bool(objekt) and chosen is None,
-            "verdicts": target.VERDICT_TEXT,
+            "verdicts": target.VERDICT_TEXT_EN if english() else target.VERDICT_TEXT,
         },
         session=session,
     )

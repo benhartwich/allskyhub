@@ -24,7 +24,7 @@ from allskyhub_server.auth.sessions import SessionInfo
 from allskyhub_server.devices import image_url, map_tiles, network, public, station_flow, stations
 from allskyhub_server.devices.images import ImageStore
 from allskyhub_server.devices.stations import SecretKey
-from allskyhub_server.i18n import pick, tr
+from allskyhub_server.i18n import english, pick, tr
 from allskyhub_server.mail.send import Mail, Mailer
 from allskyhub_server.models import Device, StationSource, User
 from allskyhub_server.web import flash
@@ -72,7 +72,18 @@ STATES = {
     "declined": "abgelehnt",
     "paused": "pausiert",
 }
+STATES_EN = {
+    "pending": "waiting for review",
+    "approved": "approved",
+    "declined": "declined",
+    "paused": "paused",
+}
 DOCS = "/entwickler/connect"
+
+
+def _states() -> dict[str, str]:
+    """STATES in the request's language, for the admin's pages."""
+    return STATES_EN if english() else STATES
 
 
 def _wrong_password() -> str:
@@ -356,7 +367,7 @@ async def admin_list(
     return render(
         request,
         "admin_stations.html",
-        {"rows": rows, "states": STATES, **kept},
+        {"rows": rows, "states": _states(), **kept},
         session=session,
         status_code=status,
     )
@@ -400,7 +411,7 @@ async def admin_station(
             "source": source,
             "device": device,
             "owner": owner,
-            "states": STATES,
+            "states": _states(),
             "place": place,
             "preview": base64.b64encode(thumb).decode() if thumb else None,
             "problem": problem,
@@ -452,10 +463,11 @@ async def admin_decide(
     source, device, owner = await _admin_station(db, device_id)
     back = f"/admin/stationen/{device_id}"
     if not await confirmed(request, session, password):
-        return flash.redirect(request, session, back, 403, {"error": "Dein Passwort stimmt nicht."})
+        return flash.redirect(request, session, back, 403, {"error": _wrong_password()})
     state, word = DECISIONS[decision]
     if state == "declined" and not reason.strip():
-        return flash.redirect(request, session, back, 400, {"error": "Bitte einen Grund angeben."})
+        error = tr("Bitte einen Grund angeben.", "Please give a reason.")
+        return flash.redirect(request, session, back, 400, {"error": error})
     now = dt.datetime.now(dt.UTC)
     source.state, source.reason = state, reason.strip()
     source.reviewed_at = now
@@ -494,7 +506,8 @@ async def admin_decide(
                       f"Hello,\n\nyour station \"{device.name}\" {text}\n{why}\n{page}\n\n"
                       "allskyhub\n"),
         ))  # fmt: skip
-    return flash.redirect(request, session, back, 200, {"notice": f"Station {word}."})
+    notice = tr(f"Station {word}.", f"Station {STATES_EN[state]}.")
+    return flash.redirect(request, session, back, 200, {"notice": notice})
 
 
 # Public

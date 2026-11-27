@@ -1,48 +1,49 @@
 {% extends "base.html" %}
-{% block title %}Statistik {{ stats.year }} · {{ device.name }}{% endblock %}
+{% block lang %}{{ 'en' if en else 'de' }}{% endblock %}
+{% block title %}{{ t('Statistik', 'Statistics') }} {{ stats.year }} · {{ device.name }}{% endblock %}
 {% block content %}
 <a class="back" href="/cameras/{{ device.id }}">← {{ device.name }}</a>
 <div class="page-head">
-  <h1>Statistik {{ stats.year }}</h1>
-  <a class="button small secondary" href="/cameras/{{ device.id }}/charts">Messdaten</a>
-  <a class="button small secondary" href="/cameras/{{ device.id }}/export">Daten exportieren</a>
+  <h1>{{ t('Statistik', 'Statistics') }} {{ stats.year }}</h1>
+  <a class="button small secondary" href="/cameras/{{ device.id }}/charts">{{ t('Messdaten', 'Readings') }}</a>
+  <a class="button small secondary" href="/cameras/{{ device.id }}/export">{{ t('Daten exportieren', 'Export data') }}</a>
   {% if stats.years | length > 1 %}
-  <nav class="actions" aria-label="Jahr">
+  <nav class="actions" aria-label="{{ t('Jahr', 'Year') }}">
     {% for y in stats.years %}<a class="button small{{ '' if y == stats.year else ' secondary' }}" href="?year={{ y }}">{{ y }}</a>{% endfor %}
   </nav>
   {% endif %}
 </div>
-{% set t = stats.total %}
-{% if t.nights == 0 %}
-<div class="card empty"><h2>Noch keine Nächte</h2><p class="muted">Die Statistik wächst mit jeder Nacht. Die Werte einer Nacht kommen am Morgen danach dazu.</p></div>
+{% set tot = stats.total %}
+{% if tot.nights == 0 %}
+<div class="card empty"><h2>{{ t('Noch keine Nächte', 'No nights yet') }}</h2><p class="muted">{{ t('Die Statistik wächst mit jeder Nacht. Die Werte einer Nacht kommen am Morgen danach dazu.', 'The statistics grow with every night. A night is added the morning after.') }}</p></div>
 {% else %}
 <div class="stat-tiles">
-  <div class="card"><small>Nächte mit Daten</small><strong>{{ t.nights }}</strong></div>
-  <div class="card"><small>Klare Nächte</small><strong>{{ t.clear_nights }}</strong><span class="muted">mind. 2 h klar</span></div>
-  <div class="card"><small>Klare Stunden</small><strong>{{ '%.0f' | format(t.clear_hours) }}</strong></div>
-  <div class="card"><small>Dunkelster Himmel</small><strong>{{ '%.2f' | format(t.best_sqm) | replace('.', ',') if t.best_sqm is not none else '–' }}</strong><span class="muted">mag/⁠″²</span></div>
-  <div class="card"><small>Meteore</small><strong>{{ t.meteors }}</strong></div>
-  <div class="card"><small>Polarlicht · Gewitter</small><strong>{{ t.aurora }} · {{ t.storms }}</strong></div>
+  <div class="card"><small>{{ t('Nächte mit Daten', 'Nights with data') }}</small><strong>{{ tot.nights }}</strong></div>
+  <div class="card"><small>{{ t('Klare Nächte', 'Clear nights') }}</small><strong>{{ tot.clear_nights }}</strong><span class="muted">{{ t('mind. 2 h klar', 'at least 2 h clear') }}</span></div>
+  <div class="card"><small>{{ t('Klare Stunden', 'Clear hours') }}</small><strong>{{ '%.0f' | format(tot.clear_hours) }}</strong></div>
+  <div class="card"><small>{{ t('Dunkelster Himmel', 'Darkest sky') }}</small><strong>{{ '%.2f' | format(tot.best_sqm) | replace('.', '.' if en else ',') if tot.best_sqm is not none else '–' }}</strong><span class="muted">mag/⁠″²</span></div>
+  <div class="card"><small>{{ t('Meteore', 'Meteors') }}</small><strong>{{ tot.meteors }}</strong></div>
+  <div class="card"><small>{{ t('Polarlicht · Gewitter', 'Aurora · thunderstorms') }}</small><strong>{{ tot.aurora }} · {{ tot.storms }}</strong></div>
 </div>
 
 <section class="card">
-  <h2>Klare Stunden pro Monat</h2>
-  <ol class="month-bars" aria-label="Klare Stunden pro Monat">
+  <h2>{{ t('Klare Stunden pro Monat', 'Clear hours per month') }}</h2>
+  <ol class="month-bars" aria-label="{{ t('Klare Stunden pro Monat', 'Clear hours per month') }}">
     {% for m in stats.months %}
     {% set level = ((m.clear_hours / stats.max_clear_hours) * 10) | round | int %}
-    <li class="h{{ level }}" title="{{ m.label }}: {{ '%.0f' | format(m.clear_hours) }} h klar in {{ m.clear_nights }} klaren Nächten"><span class="bar"></span><small>{{ m.label }}</small></li>
+    <li class="h{{ level }}" title="{{ m.label }}: {{ '%.0f' | format(m.clear_hours) }} {{ t('h klar in', 'h clear in') }} {{ m.clear_nights }} {{ t('klaren Nächten', 'clear nights') }}"><span class="bar"></span><small>{{ m.label }}</small></li>
     {% endfor %}
   </ol>
 </section>
 
 <section class="card">
-  <h2>Monate</h2>
+  <h2>{{ t('Monate', 'Months') }}</h2>
   <div class="table-scroll">
   <table class="stats">
-    <thead><tr><th>Monat</th><th>Nächte</th><th>klar</th><th>Stunden klar</th><th>bester SQM</th>{% if stats.has_hfr %}<th title="Median der Sterngröße in klaren Nächten, kleiner ist schärfer">Sternschärfe</th>{% endif %}<th>Meteore</th><th>Polarlicht</th><th>Gewitter</th></tr></thead>
+    <thead><tr><th>{{ t('Monat', 'Month') }}</th><th>{{ t('Nächte', 'Nights') }}</th><th>{{ t('klar', 'clear') }}</th><th>{{ t('Stunden klar', 'Hours clear') }}</th><th>{{ t('bester SQM', 'best SQM') }}</th>{% if stats.has_hfr %}<th title="{{ t('Median der Sterngröße in klaren Nächten, kleiner ist schärfer', 'Median star size on clear nights, smaller is sharper') }}">{{ t('Sternschärfe', 'Star sharpness') }}</th>{% endif %}<th>{{ t('Meteore', 'Meteors') }}</th><th>{{ t('Polarlicht', 'Aurora') }}</th><th>{{ t('Gewitter', 'Thunderstorms') }}</th></tr></thead>
     <tbody>
       {% for m in stats.months if m.nights %}
-      <tr><td>{{ m.label }}</td><td>{{ m.nights }}</td><td>{{ m.clear_nights }}</td><td>{{ '%.1f' | format(m.clear_hours) | replace('.', ',') }}</td><td>{{ '%.2f' | format(m.best_sqm) | replace('.', ',') if m.best_sqm is not none else '–' }}</td>{% if stats.has_hfr %}<td>{{ ('%.1f px' | format(m.hfr)) | replace('.', ',') if m.hfr is not none else '–' }}</td>{% endif %}<td>{{ m.meteors }}</td><td>{{ m.aurora }}</td><td>{{ m.storms }}</td></tr>
+      <tr><td>{{ m.label }}</td><td>{{ m.nights }}</td><td>{{ m.clear_nights }}</td><td>{{ '%.1f' | format(m.clear_hours) | replace('.', '.' if en else ',') }}</td><td>{{ '%.2f' | format(m.best_sqm) | replace('.', '.' if en else ',') if m.best_sqm is not none else '–' }}</td>{% if stats.has_hfr %}<td>{{ ('%.1f px' | format(m.hfr)) | replace('.', '.' if en else ',') if m.hfr is not none else '–' }}</td>{% endif %}<td>{{ m.meteors }}</td><td>{{ m.aurora }}</td><td>{{ m.storms }}</td></tr>
       {% endfor %}
     </tbody>
   </table>
@@ -53,19 +54,19 @@
 {% if maps %}
 {% from "_brightness_svg.html" import polar, scale %}
 <section class="card stack brightness-map">
-  <div class="cam-meta"><h2>Himmelshelligkeit nach Richtung</h2><span class="muted small">pro Monat, mag/⁠″², höher ist dunkler</span></div>
+  <div class="cam-meta"><h2>{{ t('Himmelshelligkeit nach Richtung', 'Sky brightness by direction') }}</h2><span class="muted small">{{ t('pro Monat, mag/⁠″², höher ist dunkler', 'per month, mag/⁠″², higher is darker') }}</span></div>
   <div class="brightness-months">
-    {% for label, b in maps %}<figure>{{ polar(b, 'Himmelshelligkeit pro Richtung im ' ~ label) }}<figcaption>{{ label }} · {{ ('%.1f' | format(b.darkest.value)) | replace('.', ',') }}</figcaption></figure>{% endfor %}
+    {% for label, b in maps %}<figure>{{ polar(b, t('Himmelshelligkeit pro Richtung im ', 'Sky brightness per direction in ') ~ label) }}<figcaption>{{ label }} · {{ ('%.1f' | format(b.darkest.value)) | replace('.', '.' if en else ',') }}</figcaption></figure>{% endfor %}
   </div>
-  {{ scale(maps[0][1], false) }}
-  <p class="muted small">Median der Nachtkarten eines Monats (mindestens 3 Nächte je Feld, nur klare Aufnahmen ohne Mond). Die Zahl ist das dunkelste Feld. So lässt sich sehen, ob eine Richtung über die Monate heller wird, etwa durch neue Beleuchtung.</p>
+  {{ scale(maps[0][1], en) }}
+  <p class="muted small">{{ t('Median der Nachtkarten eines Monats (mindestens 3 Nächte je Feld, nur klare Aufnahmen ohne Mond). Die Zahl ist das dunkelste Feld. So lässt sich sehen, ob eine Richtung über die Monate heller wird, etwa durch neue Beleuchtung.', 'Median of a month’s night maps (at least 3 nights per cell, clear images without the moon only). The number is the darkest cell. This shows whether a direction gets brighter over the months, for example from new lighting.') }}</p>
 </section>
 {% endif %}
 
 {% if stats.showers %}
 <section class="card">
-  <h2>Meteore nach Strom</h2>
-  <p class="muted">Nur Meteore, deren Bahn die Kamera einem Radianten zuordnen konnte (ausgerichtete Kamera).</p>
+  <h2>{{ t('Meteore nach Strom', 'Meteors by shower') }}</h2>
+  <p class="muted">{{ t('Nur Meteore, deren Bahn die Kamera einem Radianten zuordnen konnte (ausgerichtete Kamera).', 'Only meteors whose path the camera could trace back to a radiant (oriented camera).') }}</p>
   <dl class="facts">
     {% for name, count in stats.showers.items() %}<dt>{{ name }}</dt><dd>{{ count }}</dd>{% endfor %}
   </dl>
@@ -74,16 +75,16 @@
 {% endif %}
 {% if trend.months %}
 <section class="card stack">
-  <h2>Himmelshelligkeit über die Jahre</h2>
+  <h2>{{ t('Himmelshelligkeit über die Jahre', 'Sky brightness over the years') }}</h2>
   <p>{{ trend.text }}</p>
   {% set lo = trend.months | map(attribute='sqm') | min %}{% set hi = trend.months | map(attribute='sqm') | max %}
-  <ol class="month-bars sqm-bars" aria-label="Himmelshelligkeit pro Monat">
+  <ol class="month-bars sqm-bars" aria-label="{{ t('Himmelshelligkeit pro Monat', 'Sky brightness per month') }}">
     {% for m in trend.months[-36:] %}
     {% set level = (((m.sqm - lo) / (hi - lo)) * 9 + 1) | round | int if hi > lo else 5 %}
-    <li class="h{{ level }}" title="{{ m.label }}: {{ '%.2f' | format(m.sqm) | replace('.', ',') }} mag/⁠″² ({{ m.nights }} Nächte)"><span class="bar"></span><small>{{ m.label[:2] }}</small></li>
+    <li class="h{{ level }}" title="{{ m.label }}: {{ '%.2f' | format(m.sqm) | replace('.', '.' if en else ',') }} mag/⁠″² ({{ m.nights }} {{ t('Nächte', 'nights') }})"><span class="bar"></span><small>{{ m.label[:2] }}</small></li>
     {% endfor %}
   </ol>
-  <p class="muted small">Median der dunkelsten Messung klarer Nächte ohne viel Mond, je Monat; höher ist dunkler. Die Jahreszeiten (Milchstraße im Zenit, Schnee) verschieben einzelne Monate. Die Kamera ist nicht gegen ein SQM-Messgerät geeicht: Der Trend sagt mehr als der absolute Wert.</p>
+  <p class="muted small">{{ t('Median der dunkelsten Messung klarer Nächte ohne viel Mond, je Monat; höher ist dunkler. Die Jahreszeiten (Milchstraße im Zenit, Schnee) verschieben einzelne Monate. Die Kamera ist nicht gegen ein SQM-Messgerät geeicht: Der Trend sagt mehr als der absolute Wert.', 'Median of the darkest reading of clear nights without much moon, per month; higher is darker. The seasons (Milky Way at the zenith, snow) shift single months. The camera is not calibrated against an SQM meter: the trend says more than the absolute value.') }}</p>
 </section>
 {% endif %}
 

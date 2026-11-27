@@ -1,44 +1,45 @@
 {% extends "base.html" %}
-{% block title %}Himmel · {{ device.name }} · allskyhub{% endblock %}
+{% block lang %}{{ 'en' if en else 'de' }}{% endblock %}
+{% block title %}{{ t('Himmel', 'Sky') }} · {{ device.name }} · allskyhub{% endblock %}
 {% block head %}<script src="{{ asset('sky_history.js') }}" defer></script>{% endblock %}
 {% block content %}
 {# Draft 6 (2026-11-13): a night's saved frames with the sky drawn over them
    (routes_gallery.sky_history_page, devices/sky_history.py). #}
 <a class="back" href="/cameras/{{ device.id }}">← {{ device.name }}</a>
-<div class="page-head"><h1>Himmel</h1>
+<div class="page-head"><h1>{{ t('Himmel', 'Sky') }}</h1>
   {% if nights %}
   <form method="get" class="inline-form">
-    <select id="nacht" name="nacht" data-autosubmit aria-label="Nacht">
-      {% for n in nights %}<option value="{{ n.night_id }}"{{ ' selected' if n.night_id == night_id }}>{{ 'Heute Nacht' if n.night_id == tonight_id else 'Nacht' }} {{ n.night_id[6:8] }}.{{ n.night_id[4:6] }}.{{ n.night_id[:4] }} · {{ n.frames ~ ' Bilder' if n.frames else 'Planetarium' }}</option>{% endfor %}
+    <select id="nacht" name="nacht" data-autosubmit aria-label="{{ t('Nacht', 'Night') }}">
+      {% for n in nights %}<option value="{{ n.night_id }}"{{ ' selected' if n.night_id == night_id }}>{{ t('Heute Nacht', 'Tonight') if n.night_id == tonight_id else t('Nacht', 'Night') }} {{ n.night_id[6:8] }}.{{ n.night_id[4:6] }}.{{ n.night_id[:4] }} · {{ n.frames ~ t(' Bilder', ' images') if n.frames else t('Planetarium', 'planetarium') }}</option>{% endfor %}
     </select>
-    <noscript><button type="submit" class="secondary small">Zeigen</button></noscript>
+    <noscript><button type="submit" class="secondary small">{{ t('Zeigen', 'Show') }}</button></noscript>
   </form>
   {% endif %}
 </div>
 {% if not frames and not times %}
-<p class="card muted">Für diese Nacht hat der Hub keine Bilder, und ohne Standort der Kamera kann er den Himmel nicht zeichnen. Er bewahrt die Bilder auf, die er beim Zuschauen oder für Ereignisse angefordert hat.</p>
+<p class="card muted">{{ t('Für diese Nacht hat der Hub keine Bilder, und ohne Standort der Kamera kann er den Himmel nicht zeichnen. Er bewahrt die Bilder auf, die er beim Zuschauen oder für Ereignisse angefordert hat.', "The hub has no images of this night, and without the camera's location it cannot draw the sky. It keeps the images it asked for while someone was watching or for events.") }}</p>
 {% else %}
 <figure class="live sky-history{{ '' if frames else ' planetarium' }}" data-sky-history data-device="{{ device.id }}" data-night="{{ night_id }}">
   <div class="sky-frame">
-    {% if frames %}<img data-sky-image src="/cameras/{{ device.id }}/frames/{{ night_id }}/{{ frames[-1].name }}/{{ 'full' if frames[-1].full else 'thumb' }}.jpg" alt="Aufnahme der Nacht">{% endif %}
+    {% if frames %}<img data-sky-image src="/cameras/{{ device.id }}/frames/{{ night_id }}/{{ frames[-1].name }}/{{ 'full' if frames[-1].full else 'thumb' }}.jpg" alt="{{ t('Aufnahme der Nacht', 'Image of the night') }}">{% endif %}
     <div class="sky-disc" data-sky-disc aria-hidden="true"></div>
     <div data-sky-drawing></div>
   </div>
-  <div class="layer-chips" role="group" aria-label="Ebenen über dem Bild">
-    <button type="button" class="layer-chip" data-overlay-toggle aria-pressed="false">Sternbilder</button>
-    <button type="button" class="layer-chip" data-overlay-toggle="stars" aria-pressed="false">Sternnamen</button>
-    <button type="button" class="layer-chip" data-overlay-toggle="grid" aria-pressed="false">Raster</button>
-    <button type="button" class="layer-chip" data-overlay-toggle="planets" aria-pressed="false">Mond &amp; Planeten</button>
-    <button type="button" class="layer-chip" data-overlay-toggle="sats" aria-pressed="false">Satelliten</button>
-    <button type="button" class="layer-chip" data-overlay-toggle="events" aria-pressed="false">Ereignisse</button>
-    {% if frames and times %}<button type="button" class="layer-chip" data-sky-mode aria-pressed="false">Ohne Bild (Planetarium)</button>{% endif %}
+  <div class="layer-chips" role="group" aria-label="{{ t('Ebenen über dem Bild', 'Layers over the image') }}">
+    <button type="button" class="layer-chip" data-overlay-toggle aria-pressed="false">{{ t('Sternbilder', 'Constellations') }}</button>
+    <button type="button" class="layer-chip" data-overlay-toggle="stars" aria-pressed="false">{{ t('Sternnamen', 'Star names') }}</button>
+    <button type="button" class="layer-chip" data-overlay-toggle="grid" aria-pressed="false">{{ t('Raster', 'Grid') }}</button>
+    <button type="button" class="layer-chip" data-overlay-toggle="planets" aria-pressed="false">{{ t('Mond', 'Moon') }} &amp; {{ t('Planeten', 'planets') }}</button>
+    <button type="button" class="layer-chip" data-overlay-toggle="sats" aria-pressed="false">{{ t('Satelliten', 'Satellites') }}</button>
+    <button type="button" class="layer-chip" data-overlay-toggle="events" aria-pressed="false">{{ t('Ereignisse', 'Events') }}</button>
+    {% if frames and times %}<button type="button" class="layer-chip" data-sky-mode aria-pressed="false">{{ t('Ohne Bild (Planetarium)', 'Without image (planetarium)') }}</button>{% endif %}
   </div>
   <div class="sky-timebar">
-    <button type="button" class="secondary small" data-sky-play aria-label="Abspielen">▶</button>
-    <input type="range" data-sky-time min="0" max="0" value="0" step="1" aria-label="Zeit in der Nacht">
+    <button type="button" class="secondary small" data-sky-play aria-label="{{ t('Abspielen', 'Play') }}">▶</button>
+    <input type="range" data-sky-time min="0" max="0" value="0" step="1" aria-label="{{ t('Zeit in der Nacht', 'Time in the night') }}">
     <output data-sky-clock></output>
   </div>
-  <figcaption class="muted small">{% if frames %}{{ frames | length }} Bilder dieser Nacht. {% else %}Für diese Nacht gibt es noch keine Bilder: der Himmel von Sonnenuntergang bis Sonnenaufgang, alle 10 Minuten. {% endif %}Ereignisse zeigen Meteore und Überflüge bis 3 Minuten um den Zeitpunkt. Gezeichnet mit der Ausrichtung, die die Kamera zu der Zeit hatte. Satelliten nur, solange ihre Bahndaten höchstens acht Tage vom Zeitpunkt entfernt sind; für ältere Nächte wären sie zu ungenau.</figcaption>
+  {% if en %}<figcaption class="muted small">{% if frames %}{{ frames | length }} images of this night. {% else %}There are no images of this night yet: the sky from sunset to sunrise, every 10 minutes. {% endif %}Events show meteors and overflights within 3 minutes of the time. Drawn with the orientation the camera had at the time. Satellites only while their orbital elements are at most eight days from the time; for older nights they would be too inaccurate.</figcaption>{% else %}<figcaption class="muted small">{% if frames %}{{ frames | length }} Bilder dieser Nacht. {% else %}Für diese Nacht gibt es noch keine Bilder: der Himmel von Sonnenuntergang bis Sonnenaufgang, alle 10 Minuten. {% endif %}Ereignisse zeigen Meteore und Überflüge bis 3 Minuten um den Zeitpunkt. Gezeichnet mit der Ausrichtung, die die Kamera zu der Zeit hatte. Satelliten nur, solange ihre Bahndaten höchstens acht Tage vom Zeitpunkt entfernt sind; für ältere Nächte wären sie zu ungenau.</figcaption>{% endif %}
 </figure>
 <script type="application/json" id="sky-frames">{{ frames | tojson }}</script>
 <script type="application/json" id="sky-times">{{ times | tojson }}</script>

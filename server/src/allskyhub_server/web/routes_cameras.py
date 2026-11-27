@@ -42,11 +42,11 @@ from allskyhub_server.devices import (
 )
 from allskyhub_server.devices import settings as camera_settings
 from allskyhub_server.devices.connections import ConnectionRegistry
-from allskyhub_server.devices.event_text import EVENT_TITLES, orientation_line, update_line
+from allskyhub_server.devices.event_text import orientation_line, update_line
 from allskyhub_server.devices.images import ImageStore
 from allskyhub_server.devices.queries import Role
 from allskyhub_server.devices.tonight import ForecastCache
-from allskyhub_server.i18n import english
+from allskyhub_server.i18n import english, tr
 from allskyhub_server.models import Device, Product, User
 from allskyhub_server.web.deps import (
     CurrentSession,
@@ -57,6 +57,7 @@ from allskyhub_server.web.deps import (
     csrf_protect,
 )
 from allskyhub_server.web.render import render
+from allskyhub_server.web.templating import event_titles
 
 router = APIRouter(dependencies=[Depends(csrf_protect)])
 
@@ -132,7 +133,11 @@ async def pair(
         )
         device = await pairing.claim(db, session.user.id, code, name)
     except ratelimit.RateLimitedError:
-        error, status = "Zu viele Versuche. Bitte später erneut versuchen.", 429
+        error = tr(
+            "Zu viele Versuche. Bitte später erneut versuchen.",
+            "Too many attempts. Please try again later.",
+        )
+        status = 429
     except pairing.PairingError as exc:
         await db.rollback()
         error, status = str(exc), 400
@@ -200,8 +205,8 @@ async def _camera_context(
         "events": events.collapse(await events.events(db, device.id, limit=200, hide_false=True))[
             :6
         ],
-        "event_titles": EVENT_TITLES,
-        "settings_groups": settings_form.groups(schema, current, form),
+        "event_titles": event_titles(),
+        "settings_groups": settings_form.groups(schema, current, form, _lang()),
         "own_schema": own_schema,
         "orientation": orientation_line(device.last_status),
         "update": update_line(device.last_status),
@@ -212,15 +217,15 @@ async def _camera_context(
         "members": await sharing.members(db, device.id) if role == "owner" else [],
         "discord": discord.settings_of(device) if role == "owner" else None,
         "plus": await plus.state(db, device, now) if role == "owner" else None,
-        "plus_message": plus.MESSAGES.get(request.query_params.get("plus", "")),
+        "plus_message": plus.message(request.query_params.get("plus", "")),
         "plus_trial_free": role == "owner" and await _trial_free(db, device),
         "billing": request.app.state.settings.billing,
-        "price_month": plus.PRICE_MONTH,
-        "price_year": plus.PRICE_YEAR,
-        "discord_kinds": discord.KINDS,
+        "price_month": tr(plus.PRICE_MONTH, plus.PRICE_MONTH_EN),
+        "price_year": tr(plus.PRICE_YEAR, plus.PRICE_YEAR_EN),
+        "discord_kinds": discord.kinds(),
         "youtube": youtube.settings_of(device) if role == "owner" else None,
         "youtube_available": role == "owner" and request.app.state.youtube.available,
-        "youtube_privacy": youtube.PRIVACY,
+        "youtube_privacy": youtube.PRIVACY_EN if english() else youtube.PRIVACY,
         "youtube_videos": await _youtube_videos(db, device) if role == "owner" else [],
         "masked": discord.masked,
         **extra,
@@ -468,6 +473,24 @@ PUBLIC_SECTIONS = {
     "observatory": "Was das Teleskop gerade aufnimmt (N.I.N.A.: Ziel, Sequenz, letztes Bild)",
     "aircraft": "Flugzeuge über dem aktuellen Bild (Daten: adsb.lol)",
 }
+PUBLIC_SECTIONS_EN = {
+    "live": "Current image",
+    "loop": "The last hour as a loop",
+    "events": "Meteors, aurora and lightning",
+    "sky": "Sky quality (clouds, SQM, stars)",
+    "aurora": "Aurora outlook (Kp index)",
+    "archive": "Night archive with keogram and star trails",
+    "observatory": "What the telescope is imaging now (N.I.N.A.: target, sequence, last image)",
+    "aircraft": "Aircraft over the current image (data: adsb.lol)",
+}
+
+
+def _sections() -> dict[str, str]:
+    return PUBLIC_SECTIONS_EN if english() else PUBLIC_SECTIONS
+
+
+def _lang() -> str:
+    return "en" if english() else "de"
 
 
 @router.post("/cameras/{device_id}/public/visibility")
@@ -495,7 +518,7 @@ async def public_edit(
 
 
 def _public_edit_context(device: Device) -> dict[str, object]:
-    return {"device": device, "profile": public.profile(device), "sections": PUBLIC_SECTIONS}
+    return {"device": device, "profile": public.profile(device), "sections": _sections()}
 
 
 @router.post("/cameras/{device_id}/public/edit")
@@ -518,8 +541,11 @@ async def public_save(
             {
                 "device": device,
                 "profile": public.profile(device),
-                "sections": PUBLIC_SECTIONS,
-                "error": "Ein Text ist zu lang (Titel 100, Felder 200, Notizen 2000 Zeichen).",
+                "sections": _sections(),
+                "error": tr(
+                    "Ein Text ist zu lang (Titel 100, Felder 200, Notizen 2000 Zeichen).",
+                    "A text is too long (title 100, fields 200, notes 2000 characters).",
+                ),
             },
             session=session,
             status_code=400,
@@ -541,25 +567,29 @@ async def change_settings(
     device, role = await _visible(db, session, device_id, "admin")
     form = {k: v for k, v in (await request.form()).items() if isinstance(v, str)}
     schema, _ = settings_form.schema_of(device)
-    diff, error = settings_form.changes(schema, settings_form.current_values(device), form)
+    diff, error = settings_form.changes(schema, settings_form.current_values(device), form, _lang())
     notice = None
     if error is None and not diff:
         # Nothing differs from what the camera reports now (e.g. the page was older than
         # its last status): no error, the page shows the current values again.
-        notice = "Nichts zu speichern: Die Kamera hat diese Einstellungen schon."
+        notice = tr(
+            "Nichts zu speichern: Die Kamera hat diese Einstellungen schon.",
+            "Nothing to save: the camera has these settings already.",
+        )
         form = {}
     elif error is None:
         outcome = await camera_settings.apply(
             _registry(request),
             device.id,
             diff,
-            settings_form.field_labels(schema),
+            settings_form.field_labels(schema, _lang()),
             owner=role == "owner",
         )
         error = outcome.message
         if outcome.ok:
-            notice = (
-                "Gespeichert. Die Kamera startet die Aufnahme neu und meldet sich gleich wieder."
+            notice = tr(
+                "Gespeichert. Die Kamera startet die Aufnahme neu und meldet sich gleich wieder.",
+                "Saved. The camera restarts its capture and reports back in a moment.",
             )
     context = await _camera_context(
         request, db, device, form, role=role, error=error, notice=notice
@@ -624,7 +654,14 @@ async def public_domain(
         await domains.request(db, device, domain, settings.base_url, settings.data_dir)
     except (domains.DomainError, ratelimit.RateLimitedError) as exc:
         limited = isinstance(exc, ratelimit.RateLimitedError)
-        error = "Zu viele Versuche. Bitte später erneut versuchen." if limited else str(exc)
+        error = (
+            tr(
+                "Zu viele Versuche. Bitte später erneut versuchen.",
+                "Too many attempts. Please try again later.",
+            )
+            if limited
+            else str(exc)
+        )
         return render(
             request,
             "public_edit.html",
@@ -707,13 +744,25 @@ async def discord_test(
         result = "limited"
     notice = error = None
     if result == "limited":
-        error = "Bitte ein paar Minuten warten, bevor du noch eine Testnachricht schickst."
+        error = tr(
+            "Bitte ein paar Minuten warten, bevor du noch eine Testnachricht schickst.",
+            "Please wait a few minutes before you send another test message.",
+        )
     elif result == "ok":
-        notice = "Testnachricht gesendet. Schau in deinen Discord-Kanal."
+        notice = tr(
+            "Testnachricht gesendet. Schau in deinen Discord-Kanal.",
+            "Test message sent. Have a look at your Discord channel.",
+        )
     elif result == "gone":
-        error = "Discord kennt diesen Webhook nicht (mehr). Bitte eine neue Adresse eintragen."
+        error = tr(
+            "Discord kennt diesen Webhook nicht (mehr). Bitte eine neue Adresse eintragen.",
+            "Discord does not know this webhook (any more). Please enter a new address.",
+        )
     else:
-        error = "Discord war nicht erreichbar. Bitte später noch einmal versuchen."
+        error = tr(
+            "Discord war nicht erreichbar. Bitte später noch einmal versuchen.",
+            "Discord could not be reached. Please try again later.",
+        )
     context = await _camera_context(request, db, device, error=error, notice=notice)
     return render(request, "camera.html", context, session=session)
 

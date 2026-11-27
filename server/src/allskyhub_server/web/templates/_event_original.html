@@ -4,21 +4,21 @@
   {% if event.original_w and event.original_h %}
   {%- set w, h = event.original_w, event.original_h -%}
   <a href="{{ base }}/image?variant=original&v={{ rev }}" data-lightbox>
-    <svg class="product-image original-frame" viewBox="0 0 {{ w }} {{ h }}" role="img" aria-label="Ganzes Bild der Kamera{% if crop %}, Ausschnitt markiert{% endif %}">
+    <svg class="product-image original-frame" viewBox="0 0 {{ w }} {{ h }}" role="img" aria-label="{{ t('Ganzes Bild der Kamera', 'The camera’s whole image') }}{% if crop %}{{ t(', Ausschnitt markiert', ', section marked') }}{% endif %}">
       <image href="{{ base }}/image?variant=original&v={{ rev }}" width="{{ w }}" height="{{ h }}"/>
       {% if crop %}<rect class="crop" x="{{ crop[0] }}" y="{{ crop[1] }}" width="{{ crop[2] }}" height="{{ crop[3] }}" stroke-width="{{ [w, h] | max // 250 + 2 }}"/>{% endif %}
     </svg>
   </a>
   {% else %}
-  <a href="{{ base }}/image?variant=original&v={{ rev }}" data-lightbox><img class="product-image" src="{{ base }}/image?variant=original&v={{ rev }}" alt="Ganzes Bild der Kamera"></a>
+  <a href="{{ base }}/image?variant=original&v={{ rev }}" data-lightbox><img class="product-image" src="{{ base }}/image?variant=original&v={{ rev }}" alt="{{ t('Ganzes Bild der Kamera', 'The camera’s whole image') }}"></a>
   {% endif %}
-  <p class="muted small">Das ganze Bild, in dem die Kamera das Ereignis gefunden hat{% if crop %}; der Rahmen zeigt den Ausschnitt oben{% endif %}.</p>
+  <p class="muted small">{{ t('Das ganze Bild, in dem die Kamera das Ereignis gefunden hat', 'The whole image in which the camera found the event') }}{% if crop %}{{ t('; der Rahmen zeigt den Ausschnitt oben', '; the frame shows the section above') }}{% endif %}.</p>
 {% elif original_state == "fetching" %}
   <div hx-get="{{ base }}/original?n={{ n }}" hx-trigger="every 3s" hx-target="#original" hx-swap="innerHTML">
-    <p class="muted">Ganzes Bild wird von der Kamera geholt …</p>
+    <p class="muted">{{ t('Ganzes Bild wird von der Kamera geholt …', 'Fetching the whole image from the camera …') }}</p>
   </div>
 {% elif original_state == "offline" %}
-  <p class="muted">Das ganze Bild kommt, sobald die Kamera wieder verbunden ist.</p>
+  <p class="muted">{{ t('Das ganze Bild kommt, sobald die Kamera wieder verbunden ist.', 'The whole image comes as soon as the camera is connected again.') }}</p>
 {% elif original_state == "gone" %}
-  <p class="muted">Die Kamera hat das ganze Bild nicht geschickt: Es ist schon gelöscht, oder ihre Software kann das noch nicht.</p>
+  <p class="muted">{{ t('Die Kamera hat das ganze Bild nicht geschickt: Es ist schon gelöscht, oder ihre Software kann das noch nicht.', 'The camera did not send the whole image: it has been deleted already, or its software cannot do that yet.') }}</p>
 {% endif %}

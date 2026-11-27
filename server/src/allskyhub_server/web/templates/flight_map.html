@@ -1,5 +1,6 @@
 {% extends "base.html" %}
-{% block title %}Flugzeuge · {{ device.name }} · allskyhub{% endblock %}
+{% block lang %}{{ 'en' if en else 'de' }}{% endblock %}
+{% block title %}{{ t('Flugzeuge', 'Aircraft') }} · {{ device.name }} · allskyhub{% endblock %}
 {% block head %}<link rel="stylesheet" href="{{ asset('leaflet/leaflet.css') }}">
 <script src="{{ asset('leaflet/leaflet.js') }}" defer></script>
 <script src="{{ asset('flight_map.js') }}" defer></script>{% endblock %}
@@ -8,22 +9,24 @@
    (web/routes_cameras.flight_map_page, devices/flight_map.py). Only for the camera's own
    viewers: the map shows its exact place. #}
 <a class="back" href="/cameras/{{ device.id }}">← {{ device.name }}</a>
-<div class="page-head"><h1>Flugzeuge</h1></div>
+<div class="page-head"><h1>{{ t('Flugzeuge', 'Aircraft') }}</h1></div>
 {% if not where %}
-<p class="card muted">Die Kamera hat ihren Standort noch nicht gemeldet.</p>
+<p class="card muted">{{ t('Die Kamera hat ihren Standort noch nicht gemeldet.', 'The camera has not reported its location yet.') }}</p>
 {% elif not adsb %}
-<p class="card muted">Flugzeugdaten sind auf diesem Hub ausgeschaltet.</p>
+<p class="card muted">{{ t('Flugzeugdaten sind auf diesem Hub ausgeschaltet.', 'Aircraft data are switched off on this hub.') }}</p>
 {% else %}
 <div class="flight-page">
   <div class="card flight-map-card">
-    <div id="flight-map" class="flight-map" data-url="/cameras/{{ device.id }}/flugzeuge.json" role="region" aria-label="Karte der Flugzeuge um die Kamera"></div>
-    <p class="muted small">Fläche: Wo ein Flugzeug in 10 km Höhe im Bild der Kamera steht.
+    <div id="flight-map" class="flight-map" data-url="/cameras/{{ device.id }}/flugzeuge.json" role="region" aria-label="{{ t('Karte der Flugzeuge um die Kamera', 'Map of the aircraft around the camera') }}"></div>
+    {% if en %}<p class="muted small">Area: where an aircraft at 10 km altitude is in the camera’s picture.
+      {% for r in rings %}Within {{ r.km | round | int }} km it is at least {{ r.elevation | int }}° up{{ '; ' if not loop.last else '.' }}{% endfor %}
+      Highlighted: aircraft in the picture right now (from 10° up). The trail shows the last two minutes.</p>{% else %}<p class="muted small">Fläche: Wo ein Flugzeug in 10 km Höhe im Bild der Kamera steht.
       {% for r in rings %}Innerhalb von {{ r.km | round | int }} km ist es mindestens {{ r.elevation | int }}° hoch{{ '; ' if not loop.last else '.' }}{% endfor %}
-      Hervorgehoben: Flugzeuge gerade im Bild (ab 10° Höhe). Die Spur zeigt die letzten zwei Minuten.</p>
+      Hervorgehoben: Flugzeuge gerade im Bild (ab 10° Höhe). Die Spur zeigt die letzten zwei Minuten.</p>{% endif %}
   </div>
   <section class="card stack" aria-labelledby="flight-list-h">
-    <div class="cam-meta"><h2 id="flight-list-h">In der Nähe</h2><span class="muted small" data-flight-count></span></div>
-    <ul class="flight-list" data-flight-list><li class="muted">Lade …</li></ul>
+    <div class="cam-meta"><h2 id="flight-list-h">{{ t('In der Nähe', 'Nearby') }}</h2><span class="muted small" data-flight-count></span></div>
+    <ul class="flight-list" data-flight-list><li class="muted">{{ t('Lade …', 'Loading …') }}</li></ul>
     <p class="muted small" data-flight-credit></p>
   </section>
 </div>

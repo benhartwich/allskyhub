@@ -15,20 +15,25 @@ from allskyhub_server.admin import appstore
 from allskyhub_server.admin import stores as admin_stores
 from allskyhub_server.auth.reporters import turnstile_from
 from allskyhub_server.devices import youtube
+from allskyhub_server.i18n import tr
 from allskyhub_server.push.fcm import Sender
 from allskyhub_server.web.deps import CurrentSession, DbSession, SettingsDep, csrf_protect
-from allskyhub_server.web.routes_admin import admin_only, confirmed, page
+from allskyhub_server.web.routes_admin import admin_only, confirmed, page, wrong_password
 
 router = APIRouter(dependencies=[Depends(csrf_protect)])
 log = logging.getLogger(__name__)
 
-WRONG_PASSWORD = "Das Passwort stimmt nicht."  # noqa: S105 - the message
+
+def _still_sending() -> str:
+    return tr("Die Übertragung läuft noch.", "The transfer is still running.")
 
 
 async def _read(upload: UploadFile) -> bytes:
     data = await upload.read(admin_stores.MAX_UPLOAD + 1)
     if len(data) > admin_stores.MAX_UPLOAD:
-        raise admin_stores.StoreError("Die Datei ist zu groß für einen Schlüssel.")
+        raise admin_stores.StoreError(
+            tr("Die Datei ist zu groß für einen Schlüssel.", "The file is too large for a key.")
+        )
     return data
 
 
@@ -48,9 +53,11 @@ async def upload_store_key(
 ) -> Response:
     admin_only(session, settings)
     if kind not in admin_stores.UPLOADED:
-        return await page(request, db, session, 404, error="Unbekannter Zugang.")
+        return await page(
+            request, db, session, 404, error=tr("Unbekannter Zugang.", "Unknown access.")
+        )
     if not await confirmed(request, session, password):
-        return await page(request, db, session, 400, error=WRONG_PASSWORD)
+        return await page(request, db, session, 400, error=wrong_password())
     stores: admin_stores.Stores = request.app.state.stores
     try:
         if kind == "codemagic":
@@ -60,7 +67,9 @@ async def upload_store_key(
         elif kind == "turnstile":
             secret, meta = admin_stores.parse_turnstile(site_key, token)
         elif file is None:
-            raise admin_stores.StoreError("Bitte die Datei auswählen.")
+            raise admin_stores.StoreError(
+                tr("Bitte die Datei auswählen.", "Please choose the file.")
+            )
         elif kind == "play":
             secret, meta = admin_stores.parse_play(await _read(file))
         elif kind == "fcm":
@@ -75,20 +84,35 @@ async def upload_store_key(
         return await page(request, db, session, 400, error=str(exc))
     stores.vault.put(kind, secret, meta, session.user.email)
     if kind == "youtube":
-        notice = "YouTube-OAuth-Client gespeichert. Besitzer können YouTube jetzt verbinden."
+        notice = tr(
+            "YouTube-OAuth-Client gespeichert. Besitzer können YouTube jetzt verbinden.",
+            "YouTube OAuth client saved. Owners can connect YouTube now.",
+        )
     elif kind == "fcm":
         # Takes effect at once, without a restart.
         request.app.state.notifier.set_sender(Sender(secret))
-        notice = "Firebase-Dienstkonto gespeichert: Der Hub kann jetzt Push-Nachrichten senden."
+        notice = tr(
+            "Firebase-Dienstkonto gespeichert: Der Hub kann jetzt Push-Nachrichten senden.",
+            "Firebase service account saved: the hub can send push messages now.",
+        )
     elif kind == "github":
         request.app.state.github.token = request.app.state.latest_image.token = secret.decode()
         request.app.state.github.forget()
-        notice = "GitHub-Token gespeichert: Der Hub hat jetzt 5000 Abrufe pro Stunde."
+        notice = tr(
+            "GitHub-Token gespeichert: Der Hub hat jetzt 5000 Abrufe pro Stunde.",
+            "GitHub token saved: the hub now has 5000 requests an hour.",
+        )
     elif kind == "turnstile":
         request.app.state.turnstile = turnstile_from(settings, stores.vault)
-        notice = "Turnstile gespeichert: Die Melder-Registrierung (/melden/konto) ist offen."
+        notice = tr(
+            "Turnstile gespeichert: Die Melder-Registrierung (/melden/konto) ist offen.",
+            "Turnstile saved: the reporter sign-up (/melden/konto) is open.",
+        )
     else:
-        notice = f"{admin_stores.TITLES[kind]} gespeichert. Jetzt „Prüfen und einrichten“."
+        notice = tr(
+            f"{admin_stores.TITLES[kind]} gespeichert. Jetzt „Prüfen und einrichten“.",
+            f'{admin_stores.TITLES_EN[kind]} saved. Now "Check and set up".',
+        )
     return await page(request, db, session, notice=notice)
 
 
@@ -140,7 +164,12 @@ async def fcm_app(
             found[package] = found.get(package, {}) | ids_ios
         projects = {v["sender_id"] for v in found.values()}
         if len(projects) > 1:
-            raise admin_stores.StoreError("Die Dateien sind aus verschiedenen Projekten.")
+            raise admin_stores.StoreError(
+                tr(
+                    "Die Dateien sind aus verschiedenen Projekten.",
+                    "The files are from different projects.",
+                )
+            )
         fields |= found.get(admin_stores.PACKAGE, {})
         ids = admin_stores.parse_fcm_app(fields) if fields["sender_id"] or not found else None
     except admin_stores.StoreError as exc:
@@ -154,11 +183,17 @@ async def fcm_app(
             kept = stores.vault.read_json(other.fcm_file) or {}
             stores.vault.write_json(other.fcm_file, kept | found[package])
             others.append(other.title)
-    notice = "Firebase-Kennungen der App gespeichert." if ids is not None else ""
+    notice = (
+        tr("Firebase-Kennungen der App gespeichert.", "The app's Firebase identifiers saved.")
+        if ids is not None
+        else ""
+    )
     if others:
-        notice += (
+        notice += tr(
             f" Firebase-Kennungen für {', '.join(others)} gespeichert; in dessen Builds "
-            "kommen sie mit „prüfen und einrichten“ (Codemagic) und beim nächsten Android-Release."
+            "kommen sie mit „prüfen und einrichten“ (Codemagic) und beim nächsten Android-Release.",
+            f" Firebase identifiers for {', '.join(others)} saved; they get into its builds "
+            'with "check and set up" (Codemagic) and with the next Android release.',
         )
     return await page(request, db, session, notice=notice)
 
@@ -189,7 +224,12 @@ async def upload_screenshots(
     stores: admin_stores.Stores = request.app.state.stores
     try:
         if len(files) > admin_stores.SCREENSHOTS[1]:
-            raise admin_stores.StoreError("Google Play nimmt höchstens acht Screenshots.")
+            raise admin_stores.StoreError(
+                tr(
+                    "Google Play nimmt höchstens acht Screenshots.",
+                    "Google Play takes at most eight screenshots.",
+                )
+            )
         data: list[bytes] = []
         for f in files:
             raw = await f.read(admin_stores.SCREENSHOT_MAX + 1)
@@ -199,7 +239,8 @@ async def upload_screenshots(
         return await page(request, db, session, 400, error=str(exc))
     return await page(
         request, db, session,
-        notice=f"{len(data)} Screenshots gespeichert. Jetzt „Android: Play-Eintrag übertragen“.",
+        notice=tr(f"{len(data)} Screenshots gespeichert. Jetzt „Android: Play-Eintrag übertragen“.",
+                  f'{len(data)} screenshots saved. Now "Android: send Play listing".'),
     )  # fmt: skip
 
 
@@ -210,11 +251,13 @@ async def push_listing(
     admin_only(session, settings)
     stores: admin_stores.Stores = request.app.state.stores
     if not stores.start_listing(session.user.email):
-        return await page(request, db, session, 409, error="Die Übertragung läuft noch.")
+        return await page(request, db, session, 409, error=_still_sending())
     return await page(
         request, db, session,
-        notice="Übertragung zu Google Play gestartet; sie dauert gut eine Minute. Danach die "
-        "Seite neu laden, das Ergebnis steht unter „Android: Eintrag bei Google Play“.",
+        notice=tr("Übertragung zu Google Play gestartet; sie dauert gut eine Minute. Danach die "
+                  "Seite neu laden, das Ergebnis steht unter „Android: Eintrag bei Google Play“.",
+                  "Sending to Google Play started; it takes a good minute. Then reload the page; "
+                  'the result is under "Android: listing on Google Play".'),
     )  # fmt: skip
 
 
@@ -225,11 +268,13 @@ async def push_appstore(
     admin_only(session, settings)
     stores: admin_stores.Stores = request.app.state.stores
     if not appstore.start(stores, session.user.email):
-        return await page(request, db, session, 409, error="Die Übertragung läuft noch.")
+        return await page(request, db, session, 409, error=_still_sending())
     return await page(
         request, db, session,
-        notice="Übertragung zum App Store gestartet; sie dauert ein bis zwei Minuten. Danach "
-        "die Seite neu laden, das Ergebnis steht unter „iOS: App Store und TestFlight“.",
+        notice=tr("Übertragung zum App Store gestartet; sie dauert ein bis zwei Minuten. Danach "
+                  "die Seite neu laden, das Ergebnis steht unter „iOS: App Store und TestFlight“.",
+                  "Sending to the App Store started; it takes one to two minutes. Then reload the "
+                  'page; the result is under "iOS: App Store and TestFlight".'),
     )  # fmt: skip
 
 
@@ -260,7 +305,7 @@ async def other_app(
         or not other.stores
         or action not in ("setup", "build", "android", "play", "appstore")
     ):
-        return await page(request, db, session, 400, error="Unbekannte App.")
+        return await page(request, db, session, 400, error=tr("Unbekannte App.", "Unknown app."))
     stores: admin_stores.Stores = request.app.state.stores
     if action in ("play", "appstore"):
         started = (
@@ -270,9 +315,17 @@ async def other_app(
         )
         where = "Google Play" if action == "play" else "App Store Connect"
         notice = (
-            f"{other.title}: Eintrag wird an {where} übertragen; das Ergebnis steht gleich hier."
+            tr(
+                f"{other.title}: Eintrag wird an {where} übertragen; das Ergebnis steht "
+                "gleich hier.",
+                f"{other.title}: the listing is being sent to {where}; the result shows here "
+                "shortly.",
+            )
             if started
-            else f"{other.title}: Eine Übertragung läuft noch."
+            else tr(
+                f"{other.title}: Eine Übertragung läuft noch.",
+                f"{other.title}: a transfer is still running.",
+            )
         )
         return await page(request, db, session, notice=notice)
     if action == "setup":
@@ -284,10 +337,17 @@ async def other_app(
     except admin_stores.StoreError as exc:
         return await page(request, db, session, 400, error=str(exc))
     notice = (
-        f"{other.title}: Android-Release angefordert; der Server baut es und lädt es zu "
-        "Google Play hoch."
+        tr(
+            f"{other.title}: Android-Release angefordert; der Server baut es und lädt es zu "
+            "Google Play hoch.",
+            f"{other.title}: Android release requested; the server builds it and uploads it to "
+            "Google Play.",
+        )
         if platform == "android"
-        else f"{other.title}: iOS-Release bei Codemagic gestartet."
+        else tr(
+            f"{other.title}: iOS-Release bei Codemagic gestartet.",
+            f"{other.title}: iOS release started at Codemagic.",
+        )
     )
     return await page(request, db, session, notice=notice)
 
@@ -305,7 +365,13 @@ async def submit_review(
     admin_only(session, settings)
     other = admin_stores.OTHER_APPS.get(app) if app else None
     if (app and (other is None or not other.stores)) or store not in ("appstore", "play"):
-        return await page(request, db, session, 400, error="Unbekannte App oder Store.")
+        return await page(
+            request,
+            db,
+            session,
+            400,
+            error=tr("Unbekannte App oder Store.", "Unknown app or store."),
+        )
     stores: admin_stores.Stores = request.app.state.stores
     if store == "play":
         report = await stores.submit_play(other.package if other else admin_stores.PACKAGE)
@@ -331,16 +397,22 @@ async def build_release(
 ) -> Response:
     admin_only(session, settings)
     if platform not in admin_stores.PLATFORMS:
-        return await page(request, db, session, 400, error="Unbekannte Plattform.")
+        return await page(
+            request, db, session, 400, error=tr("Unbekannte Plattform.", "Unknown platform.")
+        )
     stores: admin_stores.Stores = request.app.state.stores
     try:
         await stores.build(platform, session.user.email)
     except admin_stores.StoreError as exc:
         return await page(request, db, session, 400, error=str(exc))
     notice = (
-        "Android-Release angefordert: der Server baut es (gut 10 Minuten) und lädt es zu "
-        "Google Play hoch."
+        tr(
+            "Android-Release angefordert: der Server baut es (gut 10 Minuten) und lädt es zu "
+            "Google Play hoch.",
+            "Android release requested: the server builds it (a good 10 minutes) and uploads "
+            "it to Google Play.",
+        )
         if platform == "android"
-        else "iOS-Release bei Codemagic gestartet."
+        else tr("iOS-Release bei Codemagic gestartet.", "iOS release started at Codemagic.")
     )
     return await page(request, db, session, notice=notice)

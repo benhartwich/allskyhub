@@ -28,6 +28,7 @@ from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from allskyhub_server.devices import events, meteor_pairs, triangulation
+from allskyhub_server.i18n import english
 from allskyhub_server.models import Device, EventRecord, GmnMeteor
 
 log = logging.getLogger(__name__)
@@ -55,10 +56,20 @@ SHOWERS = {
 }  # fmt: skip
 
 
+SHOWERS_EN = {
+    "QUA": "Quadrantids", "LYR": "Lyrids", "ETA": "Eta Aquariids",
+    "SDA": "Southern Delta Aquariids", "CAP": "Alpha Capricornids", "PER": "Perseids",
+    "KCG": "Kappa Cygnids", "DRA": "Draconids", "ORI": "Orionids",
+    "STA": "Southern Taurids", "NTA": "Northern Taurids", "LEO": "Leonids",
+    "GEM": "Geminids", "URS": "Ursids", "MON": "Monocerotids", "HYD": "Sigma Hydrids",
+}  # fmt: skip
+
+
 def shower_name(code: str | None) -> str:
+    """The shower's name in the request's language (i18n.py)."""
     if not code:
-        return "sporadisch (kein Strom)"
-    return SHOWERS.get(code, code)
+        return "sporadic (no shower)" if english() else "sporadisch (kein Strom)"
+    return (SHOWERS_EN if english() else SHOWERS).get(code, code)
 
 
 # (name in the header, how many times it came before): GMN repeats some names.

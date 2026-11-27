@@ -1,6 +1,6 @@
 <!doctype html>
 {# Draft C: the stream view for OBS (web/routes_obs.py); no page around the picture. #}
-<html lang="de" class="obs {{ classes }}{% if red %} obs-red{% endif %}">
+<html lang="{{ 'en' if en else 'de' }}" class="obs {{ classes }}{% if red %} obs-red{% endif %}">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">

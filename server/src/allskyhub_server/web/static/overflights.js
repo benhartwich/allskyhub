@@ -6,6 +6,7 @@
 // the lists show every row.
 (function () {
   "use strict";
+  const EN = document.documentElement.lang === "en";
   const RECENT = 20 * 60; // seconds shown bright while playing
   const STEP = 60; // seconds of the night per frame
   const FRAME_MS = 80;
@@ -25,7 +26,7 @@
 
     const hidden = new Set();
     const clockFmt = root
-      ? new Intl.DateTimeFormat("de-AT", {
+      ? new Intl.DateTimeFormat(EN ? "en-GB" : "de-AT", {
           hour: "2-digit", minute: "2-digit", timeZone: root.dataset.zone || undefined,
         })
       : null;
@@ -51,7 +52,7 @@
         for (const s of skies) s.hidden = s !== best;
       }
       const out = root && root.querySelector("[data-ovf-clock]");
-      if (out) out.textContent = now === null ? "alle" : clockFmt.format(new Date(now * 1000));
+      if (out) out.textContent = now === null ? (EN ? "all" : "alle") : clockFmt.format(new Date(now * 1000));
     }
 
     function select(i) {
@@ -127,13 +128,13 @@
       clearInterval(timer);
       timer = null;
       play.textContent = "▶";
-      play.setAttribute("aria-label", "Abspielen");
+      play.setAttribute("aria-label", EN ? "Play" : "Abspielen");
     }
     play.addEventListener("click", () => {
       if (timer) return stop();
       if (now === null || now >= Number(range.max)) now = Number(range.min);
       play.textContent = "❚❚";
-      play.setAttribute("aria-label", "Anhalten");
+      play.setAttribute("aria-label", EN ? "Pause" : "Anhalten");
       timer = setInterval(() => {
         now = Math.min(Number(range.max), now + STEP);
         range.value = now;
@@ -163,12 +164,12 @@
     const search = document.createElement("input");
     search.type = "search";
     search.className = "list-search";
-    search.placeholder = "Suchen: Name, Rufzeichen, Typ, Richtung";
-    search.setAttribute("aria-label", "Liste durchsuchen");
+    search.placeholder = EN ? "Search: name, call sign, type, direction" : "Suchen: Name, Rufzeichen, Typ, Richtung";
+    search.setAttribute("aria-label", EN ? "Search the list" : "Liste durchsuchen");
     search.autocomplete = "off";
     const none = document.createElement("p");
     none.className = "muted small";
-    none.textContent = "Nichts gefunden.";
+    none.textContent = EN ? "Nothing found." : "Nichts gefunden.";
     const more = document.createElement("button");
     more.type = "button";
     more.className = "secondary small";
@@ -188,7 +189,7 @@
       }
       none.hidden = !q || shown > 0;
       more.hidden = Boolean(q) || shown <= LONG;
-      more.textContent = full ? "Weniger zeigen" : `Alle ${shown} zeigen`;
+      more.textContent = full ? (EN ? "Show fewer" : "Weniger zeigen") : EN ? `Show all ${shown}` : `Alle ${shown} zeigen`;
     };
     search.addEventListener("input", () => {
       apply();

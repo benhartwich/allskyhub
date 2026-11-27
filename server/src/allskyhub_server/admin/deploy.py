@@ -20,6 +20,8 @@ from typing import Any
 
 import httpx
 
+from allskyhub_server.i18n import tr
+
 log = logging.getLogger(__name__)
 
 SHA = re.compile(r"^[0-9a-f]{40}$")
@@ -148,7 +150,7 @@ class GitHub:
             raise DeployError(self._failed[1]) from exc
         except (httpx.HTTPError, ValueError) as exc:
             log.warning("admin: GitHub not reachable: %s", exc)
-            self._failed = (time.monotonic(), "GitHub ist gerade nicht erreichbar.")
+            self._failed = (time.monotonic(), _unreachable())
             raise DeployError(self._failed[1]) from exc
         finally:
             if self._client is None:
@@ -179,15 +181,35 @@ def _refused(r: httpx.Response, token: str | None = None) -> str:
     """GitHub's anonymous limit (60 an hour) is per address, shared with everything else
     on the server: say so, with the time it resets."""
     if r.status_code == 401 and token:
-        return "GitHub lehnt den hinterlegten Token ab (abgelaufen?). Bitte neu eintragen."
+        return tr(
+            "GitHub lehnt den hinterlegten Token ab (abgelaufen?). Bitte neu eintragen.",
+            "GitHub refuses the stored token (expired?). Please enter a new one.",
+        )
     if r.status_code in (403, 429) and r.headers.get("x-ratelimit-remaining") == "0":
-        limit = "" if token else " (60 pro Stunde; mit GitHub-Token 5000, unten eintragen)"
+        limit = (
+            ""
+            if token
+            else tr(
+                " (60 pro Stunde; mit GitHub-Token 5000, unten eintragen)",
+                " (60 an hour; 5000 with a GitHub token, enter it below)",
+            )
+        )
         try:
             reset = dt.datetime.fromtimestamp(int(r.headers["x-ratelimit-reset"]), dt.UTC)
         except (KeyError, ValueError):
-            return f"GitHub-Abrufgrenze dieses Servers erreicht{limit}."
-        return f"GitHub-Abrufgrenze dieses Servers erreicht{limit}; wieder ab {reset:%H:%M} UTC."
-    return "GitHub ist gerade nicht erreichbar."
+            return tr(
+                f"GitHub-Abrufgrenze dieses Servers erreicht{limit}.",
+                f"This server reached its GitHub request limit{limit}.",
+            )
+        return tr(
+            f"GitHub-Abrufgrenze dieses Servers erreicht{limit}; wieder ab {reset:%H:%M} UTC.",
+            f"This server reached its GitHub request limit{limit}; again from {reset:%H:%M} UTC.",
+        )
+    return _unreachable()
+
+
+def _unreachable() -> str:
+    return tr("GitHub ist gerade nicht erreichbar.", "GitHub cannot be reached right now.")
 
 
 def spool(data_dir: Path) -> Path:
@@ -224,13 +246,20 @@ def job(data_dir: Path) -> Job:
 def request(data_dir: Path, sha: str, by: str, running: str | None, upstream: Upstream) -> None:
     """Leave the request for the root helper; refuses what the helper would refuse too."""
     if not SHA.fullmatch(sha) or sha != upstream.sha:
-        raise DeployError("Auf main ist inzwischen etwas Neues. Bitte die Seite neu laden.")
+        raise DeployError(
+            tr(
+                "Auf main ist inzwischen etwas Neues. Bitte die Seite neu laden.",
+                "There is something newer on main by now. Please reload the page.",
+            )
+        )
     if sha == running:
-        raise DeployError("Diese Version läuft schon.")
+        raise DeployError(tr("Diese Version läuft schon.", "This version is already running."))
     if upstream.ci != "success":
-        raise DeployError("Die CI für diese Version ist nicht grün.")
+        raise DeployError(
+            tr("Die CI für diese Version ist nicht grün.", "CI is not green for this version.")
+        )
     if job(data_dir).busy:
-        raise DeployError("Es läuft schon ein Deploy.")
+        raise DeployError(tr("Es läuft schon ein Deploy.", "A deploy is already running."))
     folder = spool(data_dir)
     folder.mkdir(mode=0o750, exist_ok=True)
     tmp = folder / "request.tmp"

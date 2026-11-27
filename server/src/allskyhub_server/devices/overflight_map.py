@@ -18,6 +18,7 @@ from typing import TYPE_CHECKING, Any
 
 from allskyhub_server.devices import events
 from allskyhub_server.devices.event_text import shower_name
+from allskyhub_server.i18n import english
 from allskyhub_server.models import EventRecord
 from allskyhub_sky import sky_lines
 
@@ -166,7 +167,7 @@ def skies(place: tuple[float, float] | None, start: dt.datetime, end: dt.datetim
     out: list[Sky] = []
     for h in range(min(hours, 16)):
         at = first + dt.timedelta(hours=h)
-        found = sky_lines(*place, at, min_alt=0.0)
+        found = sky_lines(*place, at, min_alt=0.0, latin=english())
         out.append(
             Sky(
                 at,
@@ -183,9 +184,10 @@ def rings() -> list[tuple[int, float]]:
 
 
 def compass() -> list[tuple[str, float, float]]:
-    """N, O, S, W just outside the horizon."""
+    """N, O, S, W (N, E, S, W in English) just outside the horizon."""
     out: list[tuple[str, float, float]] = []
-    for name, az in (("N", 0.0), ("O", 90.0), ("S", 180.0), ("W", 270.0)):
+    east = "E" if english() else "O"
+    for name, az in (("N", 0.0), (east, 90.0), ("S", 180.0), ("W", 270.0)):
         a = math.radians(az)
         r = RADIUS + 13
         out.append(

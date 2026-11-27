@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% block lang %}{{ 'en' if en else 'de' }}{% endblock %}
 {% block title %}Apps · Admin · allskyhub{% endblock %}
 {% block head %}<script src="{{ asset('fold.js') }}" defer></script>
 <script src="{{ asset('apps_poll.js') }}" defer></script>{% endblock %}
@@ -18,17 +19,21 @@
 
 {% from "_pending.html" import pending %}
 <section class="card stack">
-  <h2>Was ist zu tun?</h2>
+  <h2>{{ t('Was ist zu tun?', 'What needs doing?') }}</h2>
   <div class="store-rows">
     {% for card in cards %}
     <div class="store-row">
       <strong><a href="#app-{{ card.key }}">{{ card.title }}</a></strong>
-      <span>{{ pending(card) }}{% for row in card.rows if row.tone in ('todo', 'fail') %}<br><span class="small">{{ row.store }}: {{ row.status }}</span>{% endfor %}</span>
+      <span>{{ pending(card, en) }}{% for row in card.rows if row.tone in ('todo', 'fail') %}<br><span class="small">{{ row.store }}: {{ row.status }}</span>{% endfor %}</span>
       <span></span>
     </div>
     {% endfor %}
   </div>
+  {% if en %}
+  <p class="muted small">New commits: changes on <code>main</code> in the app's folders since its last build (Android: that build's commit, iOS: the start of the Codemagic build), from GitHub every ten minutes. Then build again and, if the version is new, submit.</p>
+  {% else %}
   <p class="muted small">Neue Commits: Änderungen auf <code>main</code> in den Ordnern der App seit ihrem letzten Build (Android: dessen Commit, iOS: Start des Codemagic-Builds), von GitHub alle zehn Minuten. Dann neu bauen und, wenn die Version neu ist, einreichen.</p>
+  {% endif %}
 </section>
 
 {% for card in cards %}
@@ -36,8 +41,8 @@
 {% endfor %}
 
 <section class="card stack">
-  <h2>Zugänge</h2>
+  <h2>{{ t('Zugänge', 'Access') }}</h2>
   <p>{% for e in accounts %}<span class="{{ 'tone-done' if e.meta else 'tone-fail' }}">{{ '✓' if e.meta else '✕' }} {{ e.title }}</span>{% if not loop.last %} · {% endif %}{% endfor %}</p>
-  <p class="muted small">Einmalig hinterlegt; ändern auf der <a href="/admin#stores">Admin-Seite</a>.</p>
+  <p class="muted small">{% if en %}Stored once; change them on the <a href="/admin#stores">admin page</a>.{% else %}Einmalig hinterlegt; ändern auf der <a href="/admin#stores">Admin-Seite</a>.{% endif %}</p>
 </section>
 {% endblock %}

@@ -1,13 +1,14 @@
 {% extends "base.html" %}
-{% block title %}Stationen prüfen · Admin · allskyhub{% endblock %}
+{% block lang %}{{ 'en' if en else 'de' }}{% endblock %}
+{% block title %}{{ t('Stationen prüfen', 'Review stations') }} · Admin · allskyhub{% endblock %}
 {% block content %}
-<div class="page-head"><h1>Stationen prüfen</h1><p class="muted"><a href="/admin">Admin</a> › Stationen</p></div>
+<div class="page-head"><h1>{{ t('Stationen prüfen', 'Review stations') }}</h1><p class="muted"><a href="/admin">Admin</a> › {{ t('Stationen', 'Stations') }}</p></div>
 {% if notice %}<p class="msg ok" role="status">{{ notice }}</p>{% endif %}
 {% if error %}<p class="msg error" role="alert">{{ error }}</p>{% endif %}
 <section class="card stack">
-  <p class="muted small">SharedSky-Stationen über ihre Bild-Adresse (SPEC §10.7). Jede prüft ein Admin von Hand, bevor der Hub ihr Bild abholt.</p>
+  <p class="muted small">{{ t('SharedSky-Stationen über ihre Bild-Adresse (SPEC §10.7). Jede prüft ein Admin von Hand, bevor der Hub ihr Bild abholt.', 'SharedSky stations by their image address (SPEC §10.7). An admin checks each by hand before the hub fetches its image.') }}</p>
   <div class="table-scroll"><table class="stats users-list">
-    <tr><th>Station</th><th>Besitzer</th><th>Adresse</th><th>Angefragt</th><th>Stand</th></tr>
+    <tr><th>Station</th><th>{{ t('Besitzer', 'Owner') }}</th><th>{{ t('Adresse', 'Address') }}</th><th>{{ t('Angefragt', 'Requested') }}</th><th>{{ t('Stand', 'State') }}</th></tr>
     {% for source, device, owner in rows %}
     <tr>
       <td><a href="/admin/stationen/{{ device.id }}">{{ device.name }}</a></td>
@@ -17,7 +18,7 @@
       <td><span class="badge {{ 'ok' if source.state == 'approved' else 'warn' }}">{{ states.get(source.state, source.state) }}</span></td>
     </tr>
     {% else %}
-    <tr><td colspan="5" class="muted">Noch keine Station über eine Bild-Adresse.</td></tr>
+    <tr><td colspan="5" class="muted">{{ t('Noch keine Station über eine Bild-Adresse.', 'No station by an image address yet.') }}</td></tr>
     {% endfor %}
   </table></div>
 </section>

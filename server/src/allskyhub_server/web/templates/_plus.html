@@ -2,39 +2,39 @@
   <summary><h2>Plus</h2></summary>
   {% if plus_message %}<p class="msg">{{ plus_message }}</p>{% endif %}
   {% if plus.kind == 'gift' %}
-  <p class="plus-state">Plus ist für diese Kamera freigeschaltet, {% if plus.until %}geschenkt bis {{ plus.until | localtime }}{% else %}dauerhaft{% endif %}.</p>
+  <p class="plus-state">{% if en %}Plus is unlocked for this camera, {% if plus.until %}as a gift until {{ plus.until | localtime }}{% else %}for good{% endif %}.{% else %}Plus ist für diese Kamera freigeschaltet, {% if plus.until %}geschenkt bis {{ plus.until | localtime }}{% else %}dauerhaft{% endif %}.{% endif %}</p>
   {% elif plus.kind == 'paid' %}
-  <p class="plus-state">Plus aktiv{% if plus.until %}, {{ 'verlängert sich am' if plus.renews else 'endet am' }} {{ plus.until | localtime }}{% endif %}.</p>
-  {% if plus.past_due %}<p class="warn">Die letzte Zahlung ist nicht durchgegangen. Bitte unter „Abo verwalten“ die Zahlungsart prüfen.</p>{% endif %}
+  <p class="plus-state">{{ t('Plus aktiv', 'Plus active') }}{% if plus.until %}, {{ (t('verlängert sich am', 'renews on') if plus.renews else t('endet am', 'ends on')) }} {{ plus.until | localtime }}{% endif %}.</p>
+  {% if plus.past_due %}<p class="warn">{{ t('Die letzte Zahlung ist nicht durchgegangen. Bitte unter „Abo verwalten“ die Zahlungsart prüfen.', 'The last payment did not go through. Please check the payment method under “Manage subscription”.') }}</p>{% endif %}
   {% elif plus.kind == 'trial' %}
-  <p class="plus-state">Probemonat bis {{ plus.until | localtime }}.</p>
+  <p class="plus-state">{{ t('Probemonat bis', 'Trial month until') }} {{ plus.until | localtime }}.</p>
   {% elif plus.kind == 'ended' %}
-  <p>Plus ist am {{ plus.until | localtime }} abgelaufen. Das lange Archiv bleibt noch 30 Tage danach.</p>
+  <p>{% if en %}Plus ended on {{ plus.until | localtime }}. The long archive stays for another 30 days.{% else %}Plus ist am {{ plus.until | localtime }} abgelaufen. Das lange Archiv bleibt noch 30 Tage danach.{% endif %}</p>
   {% endif %}
   {% if not plus.active or plus.kind == 'trial' %}
-  <p class="muted">Plus behält Vollbilder und Zeitraffer 90 Tage und Vorschaubilder, Keogramme und Sternspuren ein Jahr. <a href="/plus">Mehr zu Plus</a></p>
+  <p class="muted">{{ t('Plus behält Vollbilder und Zeitraffer 90 Tage und Vorschaubilder, Keogramme und Sternspuren ein Jahr.', 'Plus keeps full images and timelapses for 90 days and thumbnails, keograms and star trails for a year.') }} <a href="/plus">{{ t('Mehr zu Plus', 'More about Plus') }}</a></p>
   {% if plus_trial_free and not plus.active %}
   <form method="post" action="/cameras/{{ device.id }}/plus/trial" class="inline">
     <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-    <button type="submit">Einen Monat kostenlos testen</button>
+    <button type="submit">{{ t('Einen Monat kostenlos testen', 'Try it free for a month') }}</button>
   </form>
-  <p class="muted small">Ohne Zahlungsdaten; endet von selbst. Einmal pro Konto.</p>
+  <p class="muted small">{{ t('Ohne Zahlungsdaten; endet von selbst. Einmal pro Konto.', 'No payment details; ends by itself. Once per account.') }}</p>
   {% endif %}
   {% if billing %}
   <form method="post" action="/cameras/{{ device.id }}/plus/checkout" class="stack">
     <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-    <label class="check"><input type="radio" name="plan" value="year" checked> {{ price_year }} im Jahr</label>
-    <label class="check"><input type="radio" name="plan" value="month"> {{ price_month }} im Monat</label>
-    <label class="check"><input type="checkbox" name="consent" value="true" required> <span>Ich stimme den <a href="/agb">AGB</a> zu und verlange, dass Plus sofort beginnt. Mir ist bekannt, dass ich bei einem <a href="/agb#widerruf">Widerruf</a> für die bis dahin genutzte Zeit anteilig zahle.</span></label>
-    <button type="submit" class="secondary">Plus kaufen</button>
+    <label class="check"><input type="radio" name="plan" value="year" checked> {{ price_year }} {{ t('im Jahr', 'a year') }}</label>
+    <label class="check"><input type="radio" name="plan" value="month"> {{ price_month }} {{ t('im Monat', 'a month') }}</label>
+    <label class="check"><input type="checkbox" name="consent" value="true" required> <span>{% if en %}I agree to the <a href="/agb">terms</a> and ask for Plus to start at once. I know that if I <a href="/agb#widerruf">withdraw</a>, I pay pro rata for the time used until then.{% else %}Ich stimme den <a href="/agb">AGB</a> zu und verlange, dass Plus sofort beginnt. Mir ist bekannt, dass ich bei einem <a href="/agb#widerruf">Widerruf</a> für die bis dahin genutzte Zeit anteilig zahle.{% endif %}</span></label>
+    <button type="submit" class="secondary">{{ t('Plus kaufen', 'Buy Plus') }}</button>
   </form>
   {% endif %}
   {% endif %}
   {% if plus.kind == 'paid' and plus.subscription_id and billing %}
   <form method="post" action="/cameras/{{ device.id }}/plus/manage" class="inline">
     <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-    <button type="submit" class="secondary small">Abo verwalten</button>
+    <button type="submit" class="secondary small">{{ t('Abo verwalten', 'Manage subscription') }}</button>
   </form>
-  <p class="muted small">Bei Paddle: kündigen, Zahlungsart ändern, Rechnungen.</p>
+  <p class="muted small">{{ t('Bei Paddle: kündigen, Zahlungsart ändern, Rechnungen.', 'At Paddle: cancel, change the payment method, invoices.') }}</p>
   {% endif %}
 </details>

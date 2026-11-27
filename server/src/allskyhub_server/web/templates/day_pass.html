@@ -1,13 +1,14 @@
 {% extends "base.html" %}
+{% block lang %}{{ 'en' if en else 'de' }}{% endblock %}
 {% block title %}{{ p.callsign or p.icao }} · {{ device.name }} · allskyhub{% endblock %}
 {% block content %}
-<a class="back" href="/cameras/{{ device.id }}/ueberfluege?nacht={{ p.night_id }}">← Überflüge {{ p.night_id | night_title }}</a>
+<a class="back" href="/cameras/{{ device.id }}/ueberfluege?nacht={{ p.night_id }}">← {{ t('Überflüge', 'Overflights') }} {{ p.night_id | night_title }}</a>
 <h1>{{ p.callsign or p.icao | upper }}{% if p.type_code %} <span class="muted">· {{ p.type_code }}</span>{% endif %}</h1>
-<p>{{ p.start | clock }}–{{ p.end | clock }} Uhr · höchster Punkt {{ p.top_alt_deg | round | int }}° im {{ p.top_az_deg | compass }} um {{ p.top_at | clock }} · {{ "%.1f" | format(p.min_km) | replace(".", ",") }} km entfernt{% if p.alt_m is not none %} · Flughöhe {{ "%.1f" | format(p.alt_m / 1000) | replace(".", ",") }} km{% endif %}{% if p.registration %} · {{ p.registration }}{% endif %}</p>
+{% if en %}<p>{{ p.start | clock }}–{{ p.end | clock }} · highest point {{ p.top_alt_deg | round | int }}° in the {{ p.top_az_deg | compass }} at {{ p.top_at | clock }} · {{ "%.1f" | format(p.min_km) }} km away{% if p.alt_m is not none %} · altitude {{ "%.1f" | format(p.alt_m / 1000) }} km{% endif %}{% if p.registration %} · {{ p.registration }}{% endif %}</p>{% else %}<p>{{ p.start | clock }}–{{ p.end | clock }} Uhr · höchster Punkt {{ p.top_alt_deg | round | int }}° im {{ p.top_az_deg | compass }} um {{ p.top_at | clock }} · {{ "%.1f" | format(p.min_km) | replace(".", ",") }} km entfernt{% if p.alt_m is not none %} · Flughöhe {{ "%.1f" | format(p.alt_m / 1000) | replace(".", ",") }} km{% endif %}{% if p.registration %} · {{ p.registration }}{% endif %}</p>{% endif %}
 {% if frame %}
 <figure class="live sky-on">
   <div class="sky-frame">
-    <img src="/cameras/{{ device.id }}/frames/{{ frame.night_id }}/{{ frame.name }}/{{ 'full' if frame.has_full else 'thumb' }}.jpg" alt="Himmelsbild um {{ frame.captured_at | clock }} Uhr">
+    <img src="/cameras/{{ device.id }}/frames/{{ frame.night_id }}/{{ frame.name }}/{{ 'full' if frame.has_full else 'thumb' }}.jpg" alt="{% if en %}Sky image at {{ frame.captured_at | clock }}{% else %}Himmelsbild um {{ frame.captured_at | clock }} Uhr{% endif %}">
     {% if drawing %}
     <svg class="sky-overlay" viewBox="0 0 {{ drawing.width }} {{ drawing.height }}" preserveAspectRatio="xMidYMid meet" aria-hidden="true">
       <path class="air-trail" d="{{ drawing.path }}"/>
@@ -15,10 +16,10 @@
     </svg>
     {% endif %}
   </div>
-  <figcaption class="muted">Bild der Kamera um {{ frame.captured_at | clock }} Uhr{% if drawing %} · gestrichelt: die Bahn des Flugzeugs, Punkt: höchster Punkt{% else %} · ohne Ausrichtung der Kamera keine eingezeichnete Bahn{% endif %}{% if not frame.has_full %} · das Bild in voller Größe kommt gleich, Seite neu laden{% endif %}</figcaption>
+  {% if en %}<figcaption class="muted">The camera's image at {{ frame.captured_at | clock }}{% if drawing %} · dashed: the aircraft's path, dot: highest point{% else %} · without the camera's orientation no path is drawn{% endif %}{% if not frame.has_full %} · the full-size image is on its way, reload the page{% endif %}</figcaption>{% else %}<figcaption class="muted">Bild der Kamera um {{ frame.captured_at | clock }} Uhr{% if drawing %} · gestrichelt: die Bahn des Flugzeugs, Punkt: höchster Punkt{% else %} · ohne Ausrichtung der Kamera keine eingezeichnete Bahn{% endif %}{% if not frame.has_full %} · das Bild in voller Größe kommt gleich, Seite neu laden{% endif %}</figcaption>{% endif %}
 </figure>
 {% else %}
-<div class="card empty"><p class="muted">Vom Zeitpunkt dieses Überflugs hat der Hub kein Bild der Kamera.</p></div>
+<div class="card empty"><p class="muted">{{ t('Vom Zeitpunkt dieses Überflugs hat der Hub kein Bild der Kamera.', 'The hub has no image from the camera at the time of this pass.') }}</p></div>
 {% endif %}
-<p><a href="{{ adsb_link }}" rel="noopener">Flug bei adsb.lol ansehen</a> <span class="muted small">· {{ credit }}</span></p>
+<p><a href="{{ adsb_link }}" rel="noopener">{{ t('Flug bei adsb.lol ansehen', 'View the flight on adsb.lol') }}</a> <span class="muted small">· {{ credit }}</span></p>
 {% endblock %}

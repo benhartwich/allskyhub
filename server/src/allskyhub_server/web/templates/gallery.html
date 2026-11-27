@@ -1,8 +1,9 @@
 {% extends "base.html" %}
-{% block title %}Galerie · {{ device.name }} · allskyhub{% endblock %}
+{% block lang %}{{ 'en' if en else 'de' }}{% endblock %}
+{% block title %}{{ t('Galerie', 'Gallery') }} · {{ device.name }} · allskyhub{% endblock %}
 {% block content %}
 <a class="back" href="/cameras/{{ device.id }}">← {{ device.name }}</a>
-<div class="page-head"><h1>Galerie</h1><a class="button small secondary" href="/cameras/{{ device.id }}/renders">Zeitraffer &amp; Keogramme</a></div>
+<div class="page-head"><h1>{{ t('Galerie', 'Gallery') }}</h1><a class="button small secondary" href="/cameras/{{ device.id }}/renders">{{ t('Zeitraffer', 'Timelapses') }} &amp; {{ t('Keogramme', 'keograms') }}</a></div>
 {% if nights %}
 <ul class="card list nights">
   {% for n in nights %}
@@ -10,11 +11,11 @@
     <a href="/cameras/{{ device.id }}/nights/{{ n.night_id }}">
       <strong>{{ n.night_id | night_title }}</strong>
       <span class="muted">
-        {% if n.frames %}{{ n.frames }} Bild{{ "er" if n.frames != 1 }}{% endif %}
+        {% if n.frames %}{{ n.frames }} {{ t('Bilder' if n.frames != 1 else 'Bild', 'images' if n.frames != 1 else 'image') }}{% endif %}
         {% if n.first and n.last %} · {{ n.first | clock }}–{{ n.last | clock }}{% endif %}
-        {% if n.products %} · {{ n.products }} Produkt{{ 'e' if n.products != 1 }}{% endif %}
-        {% if n.events %} · {{ n.events }} Ereignis{{ 'se' if n.events != 1 }}{% endif %}
-        {% if n.sky %} · Himmelsdaten{% endif %}
+        {% if n.products %} · {{ n.products }} {{ t('Produkte' if n.products != 1 else 'Produkt', 'products' if n.products != 1 else 'product') }}{% endif %}
+        {% if n.events %} · {{ n.events }} {{ t('Ereignisse' if n.events != 1 else 'Ereignis', 'events' if n.events != 1 else 'event') }}{% endif %}
+        {% if n.sky %} · {{ t('Himmelsdaten', 'sky data') }}{% endif %}
       </span>
     </a>
   </li>
@@ -22,7 +23,7 @@
 </ul>
 {% else %}
 <div class="card empty">
-  <p class="muted">Noch keine Bilder im Archiv. Der Hub sammelt etwa jede Minute ein Vorschaubild, solange die Kamera verbunden ist.</p>
+  <p class="muted">{{ t('Noch keine Bilder im Archiv. Der Hub sammelt etwa jede Minute ein Vorschaubild, solange die Kamera verbunden ist.', 'No images in the archive yet. The hub keeps a preview image about every minute while the camera is connected.') }}</p>
 </div>
 {% endif %}
 {% endblock %}

@@ -28,6 +28,7 @@ from allskyhub_server.auth.passwords import verify_secret_async
 from allskyhub_server.auth.sessions import SessionInfo
 from allskyhub_server.devices import health, sightings, youtube
 from allskyhub_server.devices.connections import ConnectionRegistry
+from allskyhub_server.i18n import english, tr
 from allskyhub_server.mail.send import Mail, Mailer
 from allskyhub_server.models import AuroraFlag, AuroraReport, Device, SkySample, User
 from allskyhub_server.settings import Settings
@@ -47,6 +48,14 @@ UPDATE_STATES = {
     "rolled_back": "Update zurückgerollt",
     "failed": "Update fehlgeschlagen",
 }
+UPDATE_STATES_EN = {
+    "downloading": "downloading an update",
+    "waiting": "update waits for the day",
+    "installing": "installing an update",
+    "installed": "update installed",
+    "rolled_back": "update rolled back",
+    "failed": "update failed",
+}
 
 
 def admin_only(session: SessionInfo, settings: Settings) -> None:
@@ -62,9 +71,36 @@ async def confirmed(request: Request, session: SessionInfo, password: str) -> bo
         )
     except ratelimit.RateLimitedError as exc:
         raise HTTPException(
-            429, "Zu viele Versuche.", {"Retry-After": str(exc.retry_after)}
+            429,
+            tr("Zu viele Versuche.", "Too many attempts."),
+            {"Retry-After": str(exc.retry_after)},
         ) from None
     return await verify_secret_async(session.user.password_hash, password)
+
+
+# Messages the admin pages share, in the request's language.
+def wrong_password() -> str:
+    return tr("Das Passwort stimmt nicht.", "The password is wrong.")
+
+
+def your_password_wrong() -> str:
+    return tr("Dein Passwort stimmt nicht.", "Your password is wrong.")
+
+
+def mail_refused() -> str:
+    return tr("Der Mailserver hat die Mail nicht angenommen.", "The mail server refused the mail.")
+
+
+def invite_sent(email: str) -> str:
+    return tr(f"Einladung an {email} ist raus.", f"Invitation sent to {email}.")
+
+
+def mail_not_sent(email: str, link: str) -> str:
+    """No mail: the admin passes the link on by hand."""
+    return tr(
+        f"Die Mail an {email} ging nicht raus. Schick den Link selbst: {link}",
+        f"The mail to {email} did not go out. Send the link yourself: {link}",
+    )
 
 
 # The admin's camera list shows the newest star count of this many days.
@@ -93,7 +129,9 @@ class CameraRow:
         if found is None:
             return None
         reason, message = found
-        return "wartet auf Standort" if reason == "location" else f"Kamerafehler: {message or '?'}"
+        if reason == "location":
+            return tr("wartet auf Standort", "waiting for its location")
+        return tr("Kamerafehler", "Camera error") + f": {message or '?'}"
 
     @property
     def silent(self) -> bool:
@@ -178,7 +216,7 @@ async def page(
             ),
             "camera_rows": await all_cameras(db, request.app.state.connections),
             "now": dt.datetime.now(dt.UTC),
-            "update_states": UPDATE_STATES,
+            "update_states": UPDATE_STATES_EN if english() else UPDATE_STATES,
             "repo": settings.deploy_repo,
             "access_requests": await access_requests.open_requests(db),
             "fcm_app": stores.vault.read_json(admin_stores.FCM_APP_FILE) or {},
@@ -195,7 +233,7 @@ async def page(
                     .order_by(AuroraReport.created_at)
                 )
             ),
-            "stages": access_requests.STAGES,
+            "stages": access_requests.STAGES_EN if english() else access_requests.STAGES,
             "plus": (
                 await db.execute(
                     select(Device, User.email)
@@ -205,7 +243,7 @@ async def page(
                 )
             ).all(),
             "stores": stores.vault.entries(),
-            "store_titles": admin_stores.TITLES,
+            "store_titles": admin_stores.titles(),
             "youtube_redirect": youtube.redirect_uri(request.app.state.settings.base_url),
             "other_apps": [a for a in admin_stores.OTHER_APPS.values() if a.stores],
             "screenshots": len(stores.screenshots()),
@@ -250,7 +288,7 @@ async def start_deploy(
 ) -> Response:
     admin_only(session, settings)
     if not await confirmed(request, session, password):
-        return await page(request, db, session, 400, error="Das Passwort stimmt nicht.")
+        return await page(request, db, session, 400, error=wrong_password())
     github: deploy.GitHub = request.app.state.github
     github.forget()  # decide on GitHub's current answer, not a cached one
     try:
@@ -259,8 +297,10 @@ async def start_deploy(
     except deploy.DeployError as exc:
         return await page(request, db, session, 400, error=str(exc))
     return await page(
-        request, db, session, notice="Deploy angefordert. Der Server holt ihn gleich ab."
-    )
+        request, db, session,
+        notice=tr("Deploy angefordert. Der Server holt ihn gleich ab.",
+                  "Deploy requested. The server picks it up shortly."),
+    )  # fmt: skip
 
 
 @router.get("/admin/storage/job")
@@ -287,7 +327,7 @@ async def grow_storage(
     """Grow the images' file system to the disk's new size (admin/storage.py)."""
     admin_only(session, settings)
     if not await confirmed(request, session, password):
-        return await page(request, db, session, 400, error="Das Passwort stimmt nicht.")
+        return await page(request, db, session, 400, error=wrong_password())
     found = await asyncio.to_thread(storage.disk, settings.image_dir)
     try:
         storage.request(settings.data_dir, found, session.user.email)
@@ -296,8 +336,10 @@ async def grow_storage(
     device = found.device if found else None
     log.info("admin storage grow", extra={"admin": session.user.email, "device": device})
     return await page(
-        request, db, session, notice="Vergrößern angefordert. Der Server holt es gleich ab."
-    )
+        request, db, session,
+        notice=tr("Vergrößern angefordert. Der Server holt es gleich ab.",
+                  "Growing requested. The server picks it up shortly."),
+    )  # fmt: skip
 
 
 @router.post("/admin/plus")
@@ -314,18 +356,22 @@ async def gift_plus(
     admin_only(session, settings)
     device = await db.get(Device, device_id.strip().lower())
     if device is None or device.owner_id is None:
-        return await page(request, db, session, 400, error="Keine gekoppelte Kamera mit dieser ID.")
+        error = tr("Keine gekoppelte Kamera mit dieser ID.", "No paired camera with this ID.")
+        return await page(request, db, session, 400, error=error)
     device.plus_gift = gift
     until = dt.datetime.now(dt.UTC) + dt.timedelta(days=days) if gift and days else None
     device.plus_gift_until = until
     await db.commit()
     name = device.name or device.id
     if not gift:
-        notice = f"Plus-Geschenk für „{name}“ beendet."
+        notice = tr(f"Plus-Geschenk für „{name}“ beendet.", f'Plus gift for "{name}" ended.')
     elif until is not None:
-        notice = f"Plus für „{name}“ geschenkt bis {until:%d.%m.%Y}."
+        notice = tr(
+            f"Plus für „{name}“ geschenkt bis {until:%d.%m.%Y}.",
+            f'Plus given to "{name}" until {until:%Y-%m-%d}.',
+        )
     else:
-        notice = f"Plus für „{name}“ geschenkt."
+        notice = tr(f"Plus für „{name}“ geschenkt.", f'Plus given to "{name}".')
     return await page(request, db, session, notice=notice)
 
 
@@ -336,7 +382,8 @@ async def mail_test(
     admin_only(session, settings)
     mailer: Mailer = request.app.state.mailer
     if not mailer.enabled:
-        return await page(request, db, session, 400, error="E-Mail ist nicht eingerichtet.")
+        error = tr("E-Mail ist nicht eingerichtet.", "Email is not set up.")
+        return await page(request, db, session, 400, error=error)
     sent = await mailer.send(
         Mail(
             to=session.user.email,
@@ -345,10 +392,11 @@ async def mail_test(
         )
     )
     if not sent:
-        return await page(
-            request, db, session, 502, error="Der Mailserver hat die Mail nicht angenommen."
-        )
-    return await page(request, db, session, notice=f"Testmail an {session.user.email} ist raus.")
+        return await page(request, db, session, 502, error=mail_refused())
+    notice = tr(
+        f"Testmail an {session.user.email} ist raus.", f"Test mail sent to {session.user.email}."
+    )
+    return await page(request, db, session, notice=notice)
 
 
 @router.post("/admin/access/{request_id}/invite")
@@ -369,12 +417,9 @@ async def invite_request(
     await db.commit()
     mailer: Mailer = request.app.state.mailer
     if mailer.enabled and await mailer.send(mail):
-        return await page(request, db, session, notice=f"Einladung an {asked.email} ist raus.")
+        return await page(request, db, session, notice=invite_sent(asked.email))
     # No mail: the admin passes the link on by hand.
-    return await page(
-        request, db, session,
-        notice=f"Die Mail an {asked.email} ging nicht raus. Schick den Link selbst: {link}",
-    )  # fmt: skip
+    return await page(request, db, session, notice=mail_not_sent(asked.email, link))
 
 
 @router.post("/admin/access/{request_id}/decline")
@@ -391,7 +436,8 @@ async def decline_request(
     except AccountError as exc:
         return await page(request, db, session, 400, error=exc.message)
     await db.commit()
-    return await page(request, db, session, notice=f"Anfrage von {asked.email} abgelehnt.")
+    notice = tr(f"Anfrage von {asked.email} abgelehnt.", f"Request from {asked.email} declined.")
+    return await page(request, db, session, notice=notice)
 
 
 @router.get("/admin/aurora-photos/{report_id}.jpg")
@@ -420,7 +466,9 @@ async def review_aurora_photo(
     admin_only(session, settings)
     report = await db.get(AuroraReport, report_id)
     if report is None or action not in ("approve", "reject"):
-        return await page(request, db, session, 400, error="Unbekanntes Foto.")
+        return await page(
+            request, db, session, 400, error=tr("Unbekanntes Foto.", "Unknown photo.")
+        )
     if action == "approve":
         report.photo = "approved"
         report.flags = 0
@@ -429,7 +477,10 @@ async def review_aurora_photo(
         report.photo = "rejected"
         await asyncio.to_thread(sightings.delete_photo, settings.data_dir / "sightings", report.id)
     await db.commit()
-    notice = "Foto freigegeben." if action == "approve" else "Foto abgelehnt und gelöscht."
+    if action == "approve":
+        notice = tr("Foto freigegeben.", "Photo approved.")
+    else:
+        notice = tr("Foto abgelehnt und gelöscht.", "Photo rejected and deleted.")
     return await page(request, db, session, notice=notice)
 
 

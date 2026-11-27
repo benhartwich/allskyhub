@@ -6,20 +6,20 @@
   {% set air = air_overlay(device) %}
   {% set lay = sky_layers(device) %}
   <div class="sky-frame">
-  <a href="/cameras/{{ device.id }}/image/full.jpg?t={{ device.latest_image_at.timestamp() | int }}" data-lightbox data-caption="Aktuelles Himmelsbild · {{ device.latest_image_at | clock }} Uhr" title="Vollbild"><img src="/cameras/{{ device.id }}/image/full.jpg?t={{ device.latest_image_at.timestamp() | int }}" alt="Aktuelles Himmelsbild"></a>
+  <a href="/cameras/{{ device.id }}/image/full.jpg?t={{ device.latest_image_at.timestamp() | int }}" data-lightbox data-caption="{{ t('Aktuelles Himmelsbild', 'Current sky image') }} · {{ device.latest_image_at | clock }}{{ t(' Uhr', '') }}" title="{{ t('Vollbild', 'Full screen') }}"><img src="/cameras/{{ device.id }}/image/full.jpg?t={{ device.latest_image_at.timestamp() | int }}" alt="{{ t('Aktuelles Himmelsbild', 'Current sky image') }}"></a>
   {% if ov %}{% include "_sky_overlay.html" %}{% endif %}
   {% if air %}{% include "_air_overlay.html" %}{% endif %}
   {% if lay %}{% include "_sky_layers.html" %}{% endif %}
   </div>
   {% if ov or air or lay %}{% include "_layer_chips.html" %}{% endif %}
-  <figcaption class="muted">Bild {{ device.latest_image_at | age }}{% if online %} · live{% endif %}{% if air %}<span class="air-credit"> · {{ air.credit }}</span>{% endif %}{% if lay and lay.balloons %}<span class="balloon-credit"> · {{ balloon_credit }}</span>{% endif %}</figcaption>
+  <figcaption class="muted">{{ t('Bild', 'Image') }} {{ device.latest_image_at | age }}{% if online %} · live{% endif %}{% if air %}<span class="air-credit"> · {{ air.credit }}</span>{% endif %}{% if lay and lay.balloons %}<span class="balloon-credit"> · {{ balloon_credit }}</span>{% endif %}</figcaption>
   {% set ob = orientation_badge(device) %}
-  {% if ob %}<p class="solve-line"><span class="pill {{ ob.level }}">{{ ob.text }}</span>{% if ob.stars is not none %}<span>{{ ob.stars }} Sterne</span>{% endif %}{% if ob.rms_deg is not none %}<span>Abweichung {{ '%.2f' | format(ob.rms_deg) | replace('.', ',') }}°</span>{% endif %}<span>Norden bei {{ ob.north_deg }}°</span>{% if ob.solved_at %}<span>{{ ob.solved_at | age }}</span>{% endif %}</p>{% endif %}
+  {% if ob %}<p class="solve-line"><span class="pill {{ ob.level }}">{{ ob.text }}</span>{% if ob.stars is not none %}<span>{{ ob.stars }} {{ t('Sterne', 'stars') }}</span>{% endif %}{% if ob.rms_deg is not none %}<span>{{ t('Abweichung', 'Deviation') }} {{ '%.2f' | format(ob.rms_deg) | replace('.', '.' if en else ',') }}°</span>{% endif %}<span>{{ t('Norden bei', 'North at') }} {{ ob.north_deg }}°</span>{% if ob.solved_at %}<span>{{ ob.solved_at | age }}</span>{% endif %}</p>{% endif %}
   {% set fl = flat_line(device) %}
-  {% if fl %}<p class="solve-line" data-flat><span class="pill {{ fl.level }}">{{ fl.text }}</span>{% if fl.detail %}<span>{{ fl.detail }}</span>{% endif %}{% if fl.max_gain is not none %}<span>Rand bis ×{{ '%.2f' | format(fl.max_gain) | replace('.', ',') }}</span>{% endif %}{% if fl.at %}<span>{{ fl.at | age }}</span>{% endif %}</p>{% endif %}
+  {% if fl %}<p class="solve-line" data-flat><span class="pill {{ fl.level }}">{{ fl.text }}</span>{% if fl.detail %}<span>{{ fl.detail }}</span>{% endif %}{% if fl.max_gain is not none %}<span>{{ t('Rand bis', 'Edge up to') }} ×{{ '%.2f' | format(fl.max_gain) | replace('.', '.' if en else ',') }}</span>{% endif %}{% if fl.at %}<span>{{ fl.at | age }}</span>{% endif %}</p>{% endif %}
   {% else %}
   <div class="sky-ph" aria-hidden="true"></div>
-  <figcaption class="muted">{% if online %}Warte auf das erste Bild …{% else %}Noch kein Bild.{% endif %}</figcaption>
+  <figcaption class="muted">{% if online %}{{ t('Warte auf das erste Bild …', 'Waiting for the first image …') }}{% else %}{{ t('Noch kein Bild.', 'No image yet.') }}{% endif %}</figcaption>
   {% endif %}
 </figure>
 {% set sn = sky_now(device) %}
@@ -30,19 +30,19 @@
     <span class="badge {{ 'ok' if online else '' }}">{{ 'online' if online else 'offline' }}</span>
   </div>
   <dl class="facts">
-    <dt>Zuletzt gesehen</dt><dd>{{ device.last_seen_at | age }}</dd>
+    <dt>{{ t('Zuletzt gesehen', 'Last seen') }}</dt><dd>{{ device.last_seen_at | age }}</dd>
     {% if st %}
-    {% if st.mode is defined %}<dt>Modus</dt><dd>{{ 'Nacht' if st.mode == 'night' else 'Tag' }}</dd>{% endif %}
-    {% if st.exposure_us is defined %}<dt>Belichtung</dt><dd>{{ '%.3g' | format(st.exposure_us / 1e6) }} s{% if st.gain is defined %}, Gain {{ st.gain }}{% endif %}</dd>{% endif %}
+    {% if st.mode is defined %}<dt>{{ t('Modus', 'Mode') }}</dt><dd>{{ t('Nacht', 'Night') if st.mode == 'night' else t('Tag', 'Day') }}</dd>{% endif %}
+    {% if st.exposure_us is defined %}<dt>{{ t('Belichtung', 'Exposure') }}</dt><dd>{{ '%.3g' | format(st.exposure_us / 1e6) }} s{% if st.gain is defined %}, Gain {{ st.gain }}{% endif %}</dd>{% endif %}
     {% if st.sensor_temp_c is defined and st.sensor_temp_c is not none %}<dt>Sensor</dt><dd>{{ '%.1f' | format(st.sensor_temp_c) }} °C</dd>{% endif %}
     {% set env = st.env if st.env is defined and st.env else none %}
-    {% if env and not env.error and env.temperature_c is not none %}<dt>Am Gehäuse</dt><dd>{{ '%.1f' | format(env.temperature_c) }} °C{% if env.humidity_pct is not none %}, {{ env.humidity_pct | round | int }} %{% endif %}{% if env.dewpoint_c is not none %}, Taupunkt {{ '%.1f' | format(env.dewpoint_c) }} °C{% endif %}</dd>{% endif %}
-    {% if st.heater is defined and st.heater %}<dt>Kuppelheizung</dt><dd>{{ heater_text(st.heater) }}</dd>{% endif %}
+    {% if env and not env.error and env.temperature_c is not none %}<dt>{{ t('Am Gehäuse', 'At the housing') }}</dt><dd>{{ '%.1f' | format(env.temperature_c) }} °C{% if env.humidity_pct is not none %}, {{ env.humidity_pct | round | int }} %{% endif %}{% if env.dewpoint_c is not none %}, {{ t('Taupunkt', 'dew point') }} {{ '%.1f' | format(env.dewpoint_c) }} °C{% endif %}</dd>{% endif %}
+    {% if st.heater is defined and st.heater %}<dt>{{ t('Kuppelheizung', 'Dome heater') }}</dt><dd>{{ heater_text(st.heater) }}</dd>{% endif %}
     {% set ls = st.lightning_sensor if st.lightning_sensor is defined and st.lightning_sensor else none %}
-    {% if ls and not ls.error %}<dt>Blitzsensor</dt><dd>{% if ls.strikes_30min %}{{ ls.strikes_30min }} Blitz{{ 'e' if ls.strikes_30min != 1 }} in 30 Min.{% if ls.nearest_km is not none %}, nächster {{ ls.nearest_km | round | int }} km{% endif %}{% else %}keine Blitze in 30 Min.{% endif %}</dd>{% endif %}
-    {% if st.disk_free_pct is defined and st.disk_free_pct is not none %}<dt>Speicher frei</dt><dd>{{ st.disk_free_pct | round | int }} %</dd>{% endif %}
-    {% if st.time_trusted is defined and not st.time_trusted %}<dt>Uhrzeit</dt><dd class="warn">nicht synchronisiert</dd>{% endif %}
+    {% if ls and not ls.error %}<dt>{{ t('Blitzsensor', 'Lightning sensor') }}</dt><dd>{% if en %}{% if ls.strikes_30min %}{{ ls.strikes_30min }} strike{{ 's' if ls.strikes_30min != 1 }} in 30 min{% if ls.nearest_km is not none %}, nearest {{ ls.nearest_km | round | int }} km{% endif %}{% else %}no strikes in 30 min{% endif %}{% else %}{% if ls.strikes_30min %}{{ ls.strikes_30min }} Blitz{{ 'e' if ls.strikes_30min != 1 }} in 30 Min.{% if ls.nearest_km is not none %}, nächster {{ ls.nearest_km | round | int }} km{% endif %}{% else %}keine Blitze in 30 Min.{% endif %}{% endif %}</dd>{% endif %}
+    {% if st.disk_free_pct is defined and st.disk_free_pct is not none %}<dt>{{ t('Speicher frei', 'Free storage') }}</dt><dd>{{ st.disk_free_pct | round | int }} %</dd>{% endif %}
+    {% if st.time_trusted is defined and not st.time_trusted %}<dt>{{ t('Uhrzeit', 'Clock') }}</dt><dd class="warn">{{ t('nicht synchronisiert', 'not synchronised') }}</dd>{% endif %}
     {% endif %}
-    {% if fr.sun_elevation is defined %}<dt>Sonnenhöhe</dt><dd>{{ '%.1f' | format(fr.sun_elevation) }}°</dd>{% endif %}
+    {% if fr.sun_elevation is defined %}<dt>{{ t('Sonnenhöhe', 'Sun altitude') }}</dt><dd>{{ '%.1f' | format(fr.sun_elevation) }}°</dd>{% endif %}
   </dl>
 </div>

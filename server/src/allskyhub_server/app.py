@@ -71,7 +71,7 @@ from allskyhub_server.devices.space_weather import KpCache, OvationCache
 from allskyhub_server.devices.stations import SecretKey
 from allskyhub_server.devices.tonight import ForecastCache
 from allskyhub_server.devices.youtube import YouTube
-from allskyhub_server.i18n import LanguageMiddleware
+from allskyhub_server.i18n import LanguageMiddleware, tr
 from allskyhub_server.mail.send import SmtpMailer
 from allskyhub_server.push.fcm import Sender
 from allskyhub_server.push.notify import Notifier
@@ -214,8 +214,8 @@ class CachedStaticFiles(StaticFiles):
 
 
 _MESSAGES = {
-    403: "Dafür fehlt dir die Berechtigung.",
-    404: "Nicht gefunden.",
+    403: ("Dafür fehlt dir die Berechtigung.", "You are not allowed to do that."),
+    404: ("Nicht gefunden.", "Not found."),
 }
 
 
@@ -223,7 +223,8 @@ async def _http_error(request: Request, exc: HTTPException) -> Response:
     headers = dict(exc.headers or {})
     if not _wants_html(request):
         return JSONResponse({"detail": exc.detail}, status_code=exc.status_code, headers=headers)
-    message = _MESSAGES.get(exc.status_code, str(exc.detail))
+    known = _MESSAGES.get(exc.status_code)
+    message = tr(*known) if known else str(exc.detail)
     response = render(
         request, "error.html", {"message": message, "status": exc.status_code},
         status_code=exc.status_code,

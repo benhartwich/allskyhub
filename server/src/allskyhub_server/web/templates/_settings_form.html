@@ -1,9 +1,9 @@
 {# SPEC §6.9: the settings form from the camera's schema (or the fixed fields). #}
 <details class="card fold" id="einstellungen" data-fold="einstellungen" open>
-<summary><h2>Einstellungen</h2></summary>
+<summary><h2>{{ t('Einstellungen', 'Settings') }}</h2></summary>
 <form method="post" action="/cameras/{{ device.id }}/settings" class="stack settings-form">
   <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-  {% if not settings_reported %}<p class="muted">Die Kamera hat ihre aktuellen Einstellungen noch nicht gemeldet. Leere Felder bleiben unverändert.</p>{% endif %}
+  {% if not settings_reported %}<p class="muted">{{ t('Die Kamera hat ihre aktuellen Einstellungen noch nicht gemeldet. Leere Felder bleiben unverändert.', 'The camera has not reported its current settings yet. Empty fields stay unchanged.') }}</p>{% endif %}
   {% for group in settings_groups %}
   {# Benjamin 2026-10-13: groups fold; the first one open, all of them after an error. #}
   <details class="settings-group" data-fold="einstellungen:{{ group.name }}"{% if loop.first or error %} open{% endif %}{% if error %} data-fold-keep{% endif %}>
@@ -13,8 +13,8 @@
     {% set s = f.spec %}
     {% if s.type == 'location' %}
     <div class="grid-2">
-      <label>Breite<input name="latitude" inputmode="decimal" value="{{ f.lat }}" placeholder="50.04"></label>
-      <label>Länge<input name="longitude" inputmode="decimal" value="{{ f.lon }}" placeholder="10.39"></label>
+      <label>{{ t('Breite', 'Latitude') }}<input name="latitude" inputmode="decimal" value="{{ f.lat }}" placeholder="50.04"></label>
+      <label>{{ t('Länge', 'Longitude') }}<input name="longitude" inputmode="decimal" value="{{ f.lon }}" placeholder="10.39"></label>
     </div>
     {% elif s.type == 'bool' %}
     <input type="hidden" name="{{ s.key }}__present" value="1">
@@ -22,7 +22,7 @@
     {% elif s.type == 'choice' %}
     <label>{{ f.label }}
       <select name="{{ s.key }}">
-        <option value="">– unverändert –</option>
+        <option value="">– {{ t('unverändert', 'unchanged') }} –</option>
         {% for value, title in f.choices %}<option value="{{ value }}"{% if f.value == value %} selected{% endif %}>{{ title }}</option>{% endfor %}
       </select>
     </label>
@@ -32,21 +32,21 @@
     </label>
     {% elif s.write_only %}
     <label>{{ f.label }}
-      <input type="password" name="{{ s.key }}" maxlength="{{ s.max_length or 200 }}" autocomplete="off" placeholder="{{ 'gesetzt – leer lassen zum Behalten' if f.is_set else 'nicht gesetzt' }}">
+      <input type="password" name="{{ s.key }}" maxlength="{{ s.max_length or 200 }}" autocomplete="off" placeholder="{{ t('gesetzt – leer lassen zum Behalten', 'set – leave empty to keep') if f.is_set else t('nicht gesetzt', 'not set') }}">
     </label>
-    {% if f.is_set %}<label class="check"><input type="checkbox" name="{{ s.key }}__clear" value="1"> {{ f.label }} löschen</label>{% endif %}
+    {% if f.is_set %}<label class="check"><input type="checkbox" name="{{ s.key }}__clear" value="1"> {{ t(f.label ~ ' löschen', 'Delete ' ~ f.label) }}</label>{% endif %}
     {% else %}
     <label>{{ f.label }}{% if s.unit %} ({{ s.unit }}){% endif %}
       <input name="{{ s.key }}" maxlength="{{ s.max_length or 200 }}" value="{{ f.value }}">
     </label>
     {% endif %}
     {% if f.help %}<p class="muted small">{{ f.help }}</p>{% endif %}
-    {% if s.type in ('number', 'int') and (s.min is not none or s.max is not none) %}<p class="muted small">Erlaubt: {{ s.min | int if s.min is not none and s.min == s.min | int else s.min }} bis {{ s.max | int if s.max is not none and s.max == s.max | int else s.max }}{% if s.unit %} {{ s.unit }}{% endif %}.</p>{% endif %}
+    {% if s.type in ('number', 'int') and (s.min is not none or s.max is not none) %}<p class="muted small">{{ t('Erlaubt:', 'Allowed:') }} {{ s.min | int if s.min is not none and s.min == s.min | int else s.min }} {{ t('bis', 'to') }} {{ s.max | int if s.max is not none and s.max == s.max | int else s.max }}{% if s.unit %} {{ s.unit }}{% endif %}.</p>{% endif %}
     {% endfor %}
     </div>
   </details>
   {% endfor %}
-  <p class="muted">Die Kamera übernimmt die Werte sofort und startet dafür die Aufnahme neu. Das geht nur, solange sie verbunden ist.</p>
-  <button type="submit"{% if not online %} disabled{% endif %}>Einstellungen übernehmen</button>
+  <p class="muted">{{ t('Die Kamera übernimmt die Werte sofort und startet dafür die Aufnahme neu. Das geht nur, solange sie verbunden ist.', 'The camera applies the values at once and restarts its capture for it. This only works while it is connected.') }}</p>
+  <button type="submit"{% if not online %} disabled{% endif %}>{{ t('Einstellungen übernehmen', 'Apply settings') }}</button>
 </form>
 </details>

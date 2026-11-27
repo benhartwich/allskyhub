@@ -1,23 +1,24 @@
 {% extends "base.html" %}
+{% block lang %}{{ 'en' if en else 'de' }}{% endblock %}
 {% block title %}Export · {{ device.name }}{% endblock %}
 {% block content %}
-<a class="back" href="/cameras/{{ device.id }}/stats">← Statistik</a>
-<h1>Daten für die Wissenschaft</h1>
-<p class="lead">Die Messungen deiner Kamera als CSV, lesbar ohne allskyhub: Zeiten in UTC, Richtungen als Azimut und Höhe, sobald die Kamera ausgerichtet ist.</p>
+<a class="back" href="/cameras/{{ device.id }}/stats">← {{ t('Statistik', 'Statistics') }}</a>
+<h1>{{ t('Daten für die Wissenschaft', 'Data for science') }}</h1>
+<p class="lead">{{ t('Die Messungen deiner Kamera als CSV, lesbar ohne allskyhub: Zeiten in UTC, Richtungen als Azimut und Höhe, sobald die Kamera ausgerichtet ist.', 'Your camera’s measurements as CSV, readable without allskyhub: times in UTC, directions as azimuth and altitude once the camera is oriented.') }}</p>
 <div class="stack">
   <div class="card stack">
-    <h2>Meteore, einzeln</h2>
-    <p class="muted">Jeder erkannte Meteor mit Zeit, Dauer, Richtung, Helligkeit, Strom und deiner Markierung. Für eigene Auswertungen oder den Abgleich mit Meteornetzwerken.</p>
+    <h2>{{ t('Meteore, einzeln', 'Meteors, one by one') }}</h2>
+    <p class="muted">{{ t('Jeder erkannte Meteor mit Zeit, Dauer, Richtung, Helligkeit, Strom und deiner Markierung. Für eigene Auswertungen oder den Abgleich mit Meteornetzwerken.', 'Every detected meteor with time, duration, direction, brightness, shower and your mark. For your own analyses or for comparing with meteor networks.') }}</p>
     <p><a class="button secondary" href="/cameras/{{ device.id }}/export/meteors.csv" download>meteors.csv</a></p>
   </div>
   <div class="card stack">
-    <h2>Meteore pro Stunde</h2>
-    <p class="muted">Zählung pro UTC-Stunde nach Strom (nur über den Radianten zugeordnet), sporadisch und ohne Zuordnung, ohne als Fehlalarm markierte. Die Grundlage für Raten wie in IMO-Berichten.</p>
+    <h2>{{ t('Meteore pro Stunde', 'Meteors per hour') }}</h2>
+    <p class="muted">{{ t('Zählung pro UTC-Stunde nach Strom (nur über den Radianten zugeordnet), sporadisch und ohne Zuordnung, ohne als Fehlalarm markierte. Die Grundlage für Raten wie in IMO-Berichten.', 'Counts per UTC hour by shower (assigned by radiant only), sporadic and unassigned, without those marked as false alarms. The basis for rates like in IMO reports.') }}</p>
     <p><a class="button secondary" href="/cameras/{{ device.id }}/export/meteors-hourly.csv" download>meteors-hourly.csv</a></p>
   </div>
   <div class="card stack">
-    <h2>Himmelshelligkeit pro Nacht</h2>
-    <p class="muted">Die dunkelste Messung jeder Nacht mit Zeit und Ort (letzte 30 Tage). Passt für <a href="{{ globe_at_night }}" rel="noopener" target="_blank">Globe at Night</a>; der Wert ist eine Näherung aus dem Kamerabild, solange die Kamera nicht mit einem SQM abgeglichen ist.</p>
+    <h2>{{ t('Himmelshelligkeit pro Nacht', 'Sky brightness per night') }}</h2>
+    {% if en %}<p class="muted">The darkest reading of every night with time and place (last 30 days). Suits <a href="{{ globe_at_night }}" rel="noopener" target="_blank">Globe at Night</a>; the value is an estimate from the camera image as long as the camera is not matched against an SQM.</p>{% else %}<p class="muted">Die dunkelste Messung jeder Nacht mit Zeit und Ort (letzte 30 Tage). Passt für <a href="{{ globe_at_night }}" rel="noopener" target="_blank">Globe at Night</a>; der Wert ist eine Näherung aus dem Kamerabild, solange die Kamera nicht mit einem SQM abgeglichen ist.</p>{% endif %}
     <p><a class="button secondary" href="/cameras/{{ device.id }}/export/sqm.csv" download>sqm.csv</a></p>
   </div>
 </div>

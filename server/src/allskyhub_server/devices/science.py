@@ -19,6 +19,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from allskyhub_server.devices import events
 from allskyhub_server.devices.event_text import shower_name
 from allskyhub_server.devices.events import dismissed
+from allskyhub_server.i18n import tr
 from allskyhub_server.models import Device, EventRecord, SkySample
 
 # IMO fireball report form; it cannot be prefilled, so the page lists what to enter.
@@ -138,18 +139,27 @@ def fireball_facts(event: EventRecord) -> list[tuple[str, str]] | None:
     peak = event.data.get("peak")
     if not isinstance(peak, int | float) or peak < FIREBALL_PEAK:
         return None
+    seconds = f"{(event.end - event.start).total_seconds():.1f} s"
     facts = [
-        ("Zeit (UTC)", event.start.astimezone(dt.UTC).strftime("%d.%m.%Y %H:%M:%S")),
-        ("Dauer", f"{(event.end - event.start).total_seconds():.1f} s".replace(".", ",")),
+        (
+            tr("Zeit (UTC)", "Time (UTC)"),
+            event.start.astimezone(dt.UTC).strftime(tr("%d.%m.%Y %H:%M:%S", "%Y-%m-%d %H:%M:%S")),
+        ),
+        (tr("Dauer", "Duration"), tr(seconds.replace(".", ","), seconds)),
     ]
     az, alt = event.data.get("azimuth_deg"), event.data.get("altitude_deg")
     if isinstance(az, int | float) and isinstance(alt, int | float):
-        facts.append(("Richtung (Mitte der Spur)", f"Azimut {az:.0f}°, Höhe {alt:.0f}°"))
+        facts.append((
+            tr("Richtung (Mitte der Spur)", "Direction (middle of the trail)"),
+            tr(f"Azimut {az:.0f}°, Höhe {alt:.0f}°", f"azimuth {az:.0f}°, altitude {alt:.0f}°"),
+        ))  # fmt: skip
     shower = event.data.get("shower")
     if event.data.get("shower_match") == "radiant":
-        facts.append(
-            ("Strom", shower_name(shower) if isinstance(shower, str) and shower else "sporadisch")
-        )
+        facts.append((
+            tr("Strom", "Shower"),
+            shower_name(shower) if isinstance(shower, str) and shower
+            else tr("sporadisch", "sporadic"),
+        ))  # fmt: skip
     return facts
 
 

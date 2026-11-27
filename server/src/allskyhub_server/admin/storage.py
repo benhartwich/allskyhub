@@ -16,6 +16,8 @@ import os
 from dataclasses import dataclass
 from pathlib import Path
 
+from allskyhub_server.i18n import tr
+
 STATES = ("requested", "running", "ok", "failed")
 LOG_TAIL = 40
 # The disk must be this much bigger than its file system before growing is offered:
@@ -130,9 +132,14 @@ def job(data_dir: Path) -> Job:
 def request(data_dir: Path, found: Disk | None, by: str) -> None:
     """Leave the request; refuses what the helper would have nothing to do for."""
     if found is None or not found.growable:
-        raise StorageError("Die Platte ist nicht größer als ihr Dateisystem: nichts zu tun.")
+        raise StorageError(
+            tr(
+                "Die Platte ist nicht größer als ihr Dateisystem: nichts zu tun.",
+                "The disk is not larger than its file system: nothing to do.",
+            )
+        )
     if job(data_dir).busy:
-        raise StorageError("Das Vergrößern läuft schon.")
+        raise StorageError(tr("Das Vergrößern läuft schon.", "Growing is already running."))
     folder = spool(data_dir)
     folder.mkdir(mode=0o750, exist_ok=True)
     tmp = folder / "request.tmp"

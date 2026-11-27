@@ -1,37 +1,43 @@
 {% extends "base.html" %}
+{% block lang %}{{ 'en' if en else 'de' }}{% endblock %}
 {% block title %}Admin · allskyhub{% endblock %}
 {% block content %}
+{% macro your_password() %}<label>{{ t('Dein Passwort', 'Your password') }}<input type="password" name="password" autocomplete="current-password" required></label>{% endmacro %}
+{% macro confirm_password() %}<label>{{ t('Passwort zur Bestätigung', 'Password to confirm') }}<input type="password" name="password" autocomplete="current-password" required></label>{% endmacro %}
+{% set save = t('Speichern', 'Save') %}
+{% set upload = t('Hochladen', 'Upload') %}
+{% set service_json = t('JSON-Schlüssel des Dienstkontos', 'Service account JSON key') %}
 <div class="page-head"><h1>Admin</h1></div>
 
 <section class="card stack">
   <h2>Version</h2>
   <dl class="facts">
-    <dt>Läuft</dt><dd><code>{{ running[:7] if running else 'unbekannt' }}</code></dd>
+    <dt>{{ t('Läuft', 'Running') }}</dt><dd><code>{{ running[:7] if running else t('unbekannt', 'unknown') }}</code></dd>
     {% if upstream %}
-    <dt>main auf GitHub</dt><dd><a href="{{ upstream.ci_url }}"><code>{{ upstream.sha[:7] }}</code></a></dd>
-    <dt>CI</dt><dd class="{{ 'ok' if upstream.ci == 'success' else 'warn' }}">{{ {'success': 'grün', 'failure': 'rot', 'pending': 'läuft noch', 'unknown': 'unbekannt'}[upstream.ci] }}</dd>
+    <dt>{{ t('main auf GitHub', 'main on GitHub') }}</dt><dd><a href="{{ upstream.ci_url }}"><code>{{ upstream.sha[:7] }}</code></a></dd>
+    <dt>CI</dt><dd class="{{ 'ok' if upstream.ci == 'success' else 'warn' }}">{{ ({'success': 'green', 'failure': 'red', 'pending': 'still running', 'unknown': 'unknown'} if en else {'success': 'grün', 'failure': 'rot', 'pending': 'läuft noch', 'unknown': 'unbekannt'})[upstream.ci] }}</dd>
     {% endif %}
   </dl>
   {% if upstream_error %}<p class="msg error">{{ upstream_error }}</p>{% endif %}
   <details>
-    <summary>{{ store_titles.github }}{% if github_token %} · hinterlegt{% endif %}</summary>
+    <summary>{{ store_titles.github }}{% if github_token %} · {{ t('hinterlegt', 'stored') }}{% endif %}</summary>
     <form method="post" action="/admin/stores/github" class="stack">
       <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-      <p class="muted small">Ohne Token erlaubt GitHub 60 Abrufe pro Stunde für den ganzen Server, mit Token 5000. GitHub → Settings → Developer settings → Personal access tokens → Fine-grained tokens → Generate new token: Repository access „Public repositories (read-only)“, keine weiteren Berechtigungen, mit Ablaufdatum (danach hier neu eintragen). So kann ein Token, der abhandenkommt, nichts außer Abrufe. Wirkt sofort; wird nie wieder angezeigt.</p>
+      <p class="muted small">{{ t('Ohne Token erlaubt GitHub 60 Abrufe pro Stunde für den ganzen Server, mit Token 5000. GitHub → Settings → Developer settings → Personal access tokens → Fine-grained tokens → Generate new token: Repository access „Public repositories (read-only)“, keine weiteren Berechtigungen, mit Ablaufdatum (danach hier neu eintragen). So kann ein Token, der abhandenkommt, nichts außer Abrufe. Wirkt sofort; wird nie wieder angezeigt.', 'Without a token GitHub allows 60 requests an hour for the whole server, with one 5000. GitHub → Settings → Developer settings → Personal access tokens → Fine-grained tokens → Generate new token: repository access "Public repositories (read-only)", no further permissions, with an expiry date (then enter a new one here). So a lost token can do nothing but read. Takes effect at once; never shown again.') }}</p>
       <label>Token<input type="password" name="token" required maxlength="512" autocomplete="off" placeholder="github_pat_…"></label>
-      <label>Dein Passwort<input type="password" name="password" autocomplete="current-password" required></label>
-      <button type="submit" class="secondary">Speichern</button>
+      {{ your_password() }}
+      <button type="submit" class="secondary">{{ save }}</button>
     </form>
   </details>
   {% if upstream and upstream.commits %}
-  <h3>Neu seit der laufenden Version ({{ upstream.ahead }})</h3>
+  <h3>{{ t('Neu seit der laufenden Version', 'New since the running version') }} ({{ upstream.ahead }})</h3>
   <ul class="commit-list">
     {% for c in upstream.commits[:30] %}
     <li><a href="https://github.com/{{ repo }}/commit/{{ c.sha }}"><code>{{ c.sha[:7] }}</code></a> {{ c.title }}{% if c.at %} <span class="muted small">· {{ c.at | localtime }}</span>{% endif %}</li>
     {% endfor %}
   </ul>
   {% elif upstream %}
-  <p class="muted">Der Server ist auf dem neuesten Stand.</p>
+  <p class="muted">{{ t('Der Server ist auf dem neuesten Stand.', 'The server is up to date.') }}</p>
   {% endif %}
 
   <div id="deploy-job">{% include "_deploy_job.html" %}</div>
@@ -40,71 +46,76 @@
   <form method="post" action="/admin/deploy" class="stack">
     <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
     <input type="hidden" name="sha" value="{{ upstream.sha }}">
-    <label>Passwort zur Bestätigung<input type="password" name="password" autocomplete="current-password" required></label>
-    <p class="muted small">Holt <code>{{ upstream.sha[:7] }}</code> von main, führt die Migrationen aus und startet den Hub neu. Kameras verbinden sich danach von selbst wieder. Schlägt die Migration fehl, bleibt die alte Version.</p>
-    <button type="submit"{% if upstream.ci != 'success' %} disabled title="Erst wenn die CI grün ist"{% endif %}>Jetzt deployen</button>
+    {{ confirm_password() }}
+    <p class="muted small">{% if en %}Fetches <code>{{ upstream.sha[:7] }}</code> from main, runs the migrations and restarts the hub. Cameras then reconnect by themselves. If the migration fails, the old version stays.{% else %}Holt <code>{{ upstream.sha[:7] }}</code> von main, führt die Migrationen aus und startet den Hub neu. Kameras verbinden sich danach von selbst wieder. Schlägt die Migration fehl, bleibt die alte Version.{% endif %}</p>
+    <button type="submit"{% if upstream.ci != 'success' %} disabled title="{{ t('Erst wenn die CI grün ist', 'Only once CI is green') }}"{% endif %}>{{ t('Jetzt deployen', 'Deploy now') }}</button>
   </form>
   {% endif %}
 </section>
 
 <section class="card stack" id="bildspeicher">
-  <h2>Bildspeicher</h2>
+  <h2>{{ t('Bildspeicher', 'Image storage') }}</h2>
   <div id="storage-job">{% include "_storage_job.html" %}</div>
   {% if images_disk and images_disk.growable and not storage_job.busy %}
   <form method="post" action="/admin/storage/grow" class="stack">
     <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-    <label>Passwort zur Bestätigung<input type="password" name="password" autocomplete="current-password" required></label>
-    <p class="muted small">Vergrößert das Dateisystem auf die neue Größe der Platte. Das geht im laufenden Betrieb, Kameras und Seiten merken nichts davon.</p>
-    <button type="submit">Auf {{ '%.0f' | format(images_disk.disk_bytes / 1e9) }} GB vergrößern</button>
+    {{ confirm_password() }}
+    <p class="muted small">{{ t('Vergrößert das Dateisystem auf die neue Größe der Platte. Das geht im laufenden Betrieb, Kameras und Seiten merken nichts davon.', 'Grows the file system to the new size of the disk. That works while running; cameras and pages notice nothing.') }}</p>
+    <button type="submit">{{ t('Auf', 'Grow to') }} {{ '%.0f' | format(images_disk.disk_bytes / 1e9) }} GB{{ t(' vergrößern', '') }}</button>
   </form>
   {% elif images_disk %}
-  <p class="muted small">Wird es eng (die Überwachung warnt ab 70 %): bei netcup den Local Block Storage erweitern, dann hier vergrößern.</p>
+  <p class="muted small">{{ t('Wird es eng (die Überwachung warnt ab 70 %): bei netcup den Local Block Storage erweitern, dann hier vergrößern.', 'When space runs low (monitoring warns from 70 %): extend the Local Block Storage at netcup, then grow it here.') }}</p>
   {% endif %}
 </section>
 
 <section class="card stack">
   <h2>Server</h2>
   <dl class="facts">
-    <dt>Konten</dt><dd><a href="/admin/users">{{ users }} verwalten</a></dd>
-    <dt>SharedSky</dt><dd><a href="/admin/stationen">Stationen prüfen</a></dd>
-    <dt>Gekoppelte Kameras</dt><dd>{{ cameras }}</dd>
-    <dt>Speicher frei</dt><dd class="{{ 'warn' if disk_free_pct < 15 }}">{{ '%.1f' | format(disk_free_gb) | replace('.', ',') }} GB ({{ disk_free_pct | round | int }} %)</dd>
-    <dt>E-Mail</dt><dd>{{ 'eingerichtet' if mail_enabled else 'aus' }}</dd>
+    <dt>{{ t('Konten', 'Accounts') }}</dt><dd><a href="/admin/users">{{ users }} {{ t('verwalten', 'manage') }}</a></dd>
+    <dt>SharedSky</dt><dd><a href="/admin/stationen">{{ t('Stationen prüfen', 'Review stations') }}</a></dd>
+    <dt>{{ t('Gekoppelte Kameras', 'Paired cameras') }}</dt><dd>{{ cameras }}</dd>
+    <dt>{{ t('Speicher frei', 'Free space') }}</dt><dd class="{{ 'warn' if disk_free_pct < 15 }}">{{ '%.1f' | format(disk_free_gb) if en else '%.1f' | format(disk_free_gb) | replace('.', ',') }} GB ({{ disk_free_pct | round | int }} %)</dd>
+    <dt>{{ t('E-Mail', 'Email') }}</dt><dd>{{ t('eingerichtet', 'set up') if mail_enabled else t('aus', 'off') }}</dd>
   </dl>
   {% if mail_enabled %}
   <form method="post" action="/admin/mail-test" class="inline">
     <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-    <button type="submit" class="secondary small">Testmail an mich</button>
+    <button type="submit" class="secondary small">{{ t('Testmail an mich', 'Test mail to me') }}</button>
   </form>
   {% endif %}
 </section>
 <section class="card stack" id="kameras">
-  <h2>Kameras</h2>
+  <h2>{{ t('Kameras', 'Cameras') }}</h2>
   {% if camera_rows %}
   {% set own = camera_rows | rejectattr('device.kind', 'equalto', 'station') | list %}
+  {% set stations = camera_rows | length - own | length %}
+  {% if en %}
+  <p class="muted small">{{ camera_rows | selectattr('online') | list | length }} of {{ camera_rows | length }} online · {{ own | length }} allskyhub {{ 'camera' if own | length == 1 else 'cameras' }}, {{ stations }} SharedSky {{ 'station' if stations == 1 else 'stations' }}. No images: private cameras open only for their owners.</p>
+  {% else %}
   <p class="muted small">{{ camera_rows | selectattr('online') | list | length }} von {{ camera_rows | length }} online · {{ own | length }} allskyhub-{{ 'Kamera' if own | length == 1 else 'Kameras' }}, {{ camera_rows | length - own | length }} SharedSky-{{ 'Station' if camera_rows | length - own | length == 1 else 'Stationen' }}. Ohne Bilder: private Kameras öffnen nur ihre Besitzer.</p>
+  {% endif %}
   <div class="table-scroll"><table class="stats">
-    <thead><tr><th>Kamera</th><th>Konto</th><th>Art</th><th>Version</th><th>Zuletzt</th><th>Bild</th><th>Sterne</th></tr></thead>
+    <thead><tr><th>{{ t('Kamera', 'Camera') }}</th><th>{{ t('Konto', 'Account') }}</th><th>{{ t('Art', 'Kind') }}</th><th>Version</th><th>{{ t('Zuletzt', 'Last seen') }}</th><th>{{ t('Bild', 'Image') }}</th><th>{{ t('Sterne', 'Stars') }}</th></tr></thead>
     <tbody>
     {% for c in camera_rows %}
     <tr>
       <td>{% if c.device.public_slug %}<a href="/sky/{{ c.device.public_slug }}">{{ c.device.name or c.device.id }}</a>{% else %}{{ c.device.name or c.device.id }}{% endif %}<br><code class="small">{{ c.device.id }}</code></td>
       <td>{{ c.email }}</td>
-      <td>{% if c.device.kind == 'station' %}Station · {{ c.device.software or '–' }}{% else %}Kamera · {{ c.device.profile }}{% endif %}</td>
+      <td>{% if c.device.kind == 'station' %}Station · {{ c.device.software or '–' }}{% else %}{{ t('Kamera', 'Camera') }} · {{ c.device.profile }}{% endif %}</td>
       <td>{{ c.device.agent_version }}{% if c.update %}<br><span class="small {{ 'warn' if c.update in ('failed', 'rolled_back') }}">{{ update_states.get(c.update, c.update) }}</span>{% endif %}</td>
-      <td>{% if c.online %}online{% elif c.device.last_seen_at %}<span class="warn">{{ c.device.last_seen_at | localtime }}</span>{% else %}<span class="muted">nie</span>{% endif %}</td>
-      <td>{% if c.waiting %}<span class="warn">{{ c.waiting }}</span>{% elif c.silent %}<span class="warn">noch nichts gesendet</span>{% elif c.picture_at %}{{ c.picture_at | age }}{% else %}<span class="muted">–</span>{% endif %}</td>
+      <td>{% if c.online %}online{% elif c.device.last_seen_at %}<span class="warn">{{ c.device.last_seen_at | localtime }}</span>{% else %}<span class="muted">{{ t('nie', 'never') }}</span>{% endif %}</td>
+      <td>{% if c.waiting %}<span class="warn">{{ c.waiting }}</span>{% elif c.silent %}<span class="warn">{{ t('noch nichts gesendet', 'nothing sent yet') }}</span>{% elif c.picture_at %}{{ c.picture_at | age }}{% else %}<span class="muted">–</span>{% endif %}</td>
       <td>{% if c.stars is not none %}{{ c.stars }} <span class="muted small">{{ c.stars_at | age }}</span>{% else %}<span class="muted">–</span>{% endif %}</td>
     </tr>
     {% endfor %}
     </tbody>
   </table></div>
   {% else %}
-  <p class="muted">Noch keine gekoppelte Kamera.</p>
+  <p class="muted">{{ t('Noch keine gekoppelte Kamera.', 'No paired camera yet.') }}</p>
   {% endif %}
 </section>
 <section class="card stack" id="zugang">
-  <h2>Zugangsanfragen</h2>
+  <h2>{{ t('Zugangsanfragen', 'Access requests') }}</h2>
   {% if access_requests %}
   <ul class="parts">
     {% for r in access_requests %}
@@ -115,78 +126,86 @@
       <span class="part-links">
         <form method="post" action="/admin/access/{{ r.id }}/invite" class="inline">
           <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-          <button type="submit" class="small">Einladen</button>
+          <button type="submit" class="small">{{ t('Einladen', 'Invite') }}</button>
         </form>
         <form method="post" action="/admin/access/{{ r.id }}/decline" class="inline">
           <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-          <button type="submit" class="secondary small">Ablehnen</button>
+          <button type="submit" class="secondary small">{{ t('Ablehnen', 'Decline') }}</button>
         </form>
       </span>
     </li>
     {% endfor %}
   </ul>
   {% else %}
-  <p class="muted">Keine offenen Anfragen.</p>
+  <p class="muted">{{ t('Keine offenen Anfragen.', 'No open requests.') }}</p>
   {% endif %}
-  <p class="muted small">„Einladen“ schickt den Einladungslink (14 Tage gültig) und den Link zu den ersten Schritten per E-Mail. „Ablehnen“ schickt nichts.</p>
+  <p class="muted small">{{ t('„Einladen“ schickt den Einladungslink (14 Tage gültig) und den Link zu den ersten Schritten per E-Mail. „Ablehnen“ schickt nichts.', '"Invite" emails the invitation link (valid for 14 days) and the link to the first steps. "Decline" sends nothing.') }}</p>
 </section>
 <section class="card stack" id="push">
-  <h2>Push und Melder-Registrierung</h2>
+  <h2>{{ t('Push und Melder-Registrierung', 'Push and reporter sign-up') }}</h2>
   <dl class="facts">
-    <dt>Push-Versand (Firebase)</dt>
-    <dd>{% if push_on %}an{% if push_from_settings %} <span class="muted small">(aus der Server-Einstellung)</span>{% elif fcm_meta %} · Projekt <code>{{ fcm_meta.project_id }}</code>{% endif %}{% else %}<span class="muted">aus</span>{% endif %}</dd>
-    <dt>Firebase-Kennungen der App</dt>
-    <dd>{% if fcm_app.sender_id %}Sender-ID <code>{{ fcm_app.sender_id }}</code> · Android {{ 'ja' if fcm_app.android_app_id else 'fehlt' }} · iOS {{ 'ja' if fcm_app.ios_app_id else 'fehlt' }}{% else %}<span class="muted">fehlen</span>{% endif %}</dd>
-    <dt>Melder-Registrierung (Turnstile)</dt>
-    <dd>{% if turnstile_on %}offen{% if turnstile_from_settings %} <span class="muted small">(aus der Server-Einstellung)</span>{% elif turnstile_meta %} · Site-Key <code>{{ turnstile_meta.site_key }}</code>{% endif %} · <a href="/melden/konto">/melden/konto</a>{% else %}<span class="muted">aus</span>{% endif %}</dd>
+    <dt>{{ t('Push-Versand (Firebase)', 'Push delivery (Firebase)') }}</dt>
+    <dd>{% if push_on %}{{ t('an', 'on') }}{% if push_from_settings %} <span class="muted small">{{ t('(aus der Server-Einstellung)', '(from the server setting)') }}</span>{% elif fcm_meta %} · {{ t('Projekt', 'project') }} <code>{{ fcm_meta.project_id }}</code>{% endif %}{% else %}<span class="muted">{{ t('aus', 'off') }}</span>{% endif %}</dd>
+    <dt>{{ t('Firebase-Kennungen der App', "The app's Firebase identifiers") }}</dt>
+    <dd>{% if fcm_app.sender_id %}{{ t('Sender-ID', 'Sender ID') }} <code>{{ fcm_app.sender_id }}</code> · Android {{ t('ja', 'yes') if fcm_app.android_app_id else t('fehlt', 'missing') }} · iOS {{ t('ja', 'yes') if fcm_app.ios_app_id else t('fehlt', 'missing') }}{% else %}<span class="muted">{{ t('fehlen', 'missing') }}</span>{% endif %}</dd>
+    <dt>{{ t('Melder-Registrierung (Turnstile)', 'Reporter sign-up (Turnstile)') }}</dt>
+    <dd>{% if turnstile_on %}{{ t('offen', 'open') }}{% if turnstile_from_settings %} <span class="muted small">{{ t('(aus der Server-Einstellung)', '(from the server setting)') }}</span>{% elif turnstile_meta %} · {{ t('Site-Key', 'site key') }} <code>{{ turnstile_meta.site_key }}</code>{% endif %} · <a href="/melden/konto">/melden/konto</a>{% else %}<span class="muted">{{ t('aus', 'off') }}</span>{% endif %}</dd>
   </dl>
   <details>
-    <summary>Firebase und Turnstile eintragen</summary>
+    <summary>{{ t('Firebase und Turnstile eintragen', 'Enter Firebase and Turnstile') }}</summary>
     <form method="post" action="/admin/stores/fcm" enctype="multipart/form-data" class="stack">
       <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
       <h3>{{ store_titles.fcm }}</h3>
-      <label>JSON-Schlüssel des Dienstkontos<input type="file" name="file" accept=".json,application/json" required></label>
-      <p class="muted small">Firebase-Konsole → Projekteinstellungen → Dienstkonten → Neuen privaten Schlüssel generieren. Wirkt sofort; wird nie wieder angezeigt.</p>
-      <label>Dein Passwort<input type="password" name="password" autocomplete="current-password" required></label>
-      <button type="submit" class="secondary">Hochladen</button>
+      <label>{{ service_json }}<input type="file" name="file" accept=".json,application/json" required></label>
+      <p class="muted small">{{ t('Firebase-Konsole → Projekteinstellungen → Dienstkonten → Neuen privaten Schlüssel generieren. Wirkt sofort; wird nie wieder angezeigt.', 'Firebase console → Project settings → Service accounts → Generate new private key. Takes effect at once; never shown again.') }}</p>
+      {{ your_password() }}
+      <button type="submit" class="secondary">{{ upload }}</button>
     </form>
     <form method="post" action="/admin/stores-fcm-app" enctype="multipart/form-data" class="stack">
       <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-      <h3>Firebase-Kennungen der App</h3>
+      <h3>{{ t('Firebase-Kennungen der App', "The app's Firebase identifiers") }}</h3>
+      {% if en %}
+      <p class="muted small">Firebase console → Project settings → General → Your apps: download <code>google-services.json</code> (one for all Android apps of the project) and the <code>GoogleService-Info.plist</code> of each iOS app and upload them here; the hub sorts them by app: <code>{{ package }}</code>{% for o in other_apps %} and <code>{{ o.package }}</code> ({{ o.title }}, for its builds){% endfor %}. Public identifiers (they are in every app too) that the app fetches from the hub when it starts. For iOS also upload the APNs key in the Firebase console under Cloud Messaging.</p>
+      {% else %}
       <p class="muted small">Firebase-Konsole → Projekteinstellungen → Allgemein → Meine Apps: <code>google-services.json</code> (eine für alle Android-Apps des Projekts) und die <code>GoogleService-Info.plist</code> jeder iOS-App herunterladen und hier hochladen; der Hub sortiert sie nach App: <code>{{ package }}</code>{% for o in other_apps %} und <code>{{ o.package }}</code> ({{ o.title }}, für dessen Builds){% endfor %}. Öffentliche Kennungen (stehen auch in jeder App), die die App beim Start vom Hub holt. Für iOS in der Firebase-Konsole zusätzlich unter Cloud Messaging den APNs-Schlüssel hochladen.</p>
+      {% endif %}
       <label>google-services.json (Android)<input type="file" name="android_file" accept=".json,application/json"></label>
-      <label>GoogleService-Info.plist (iOS, auch mehrere)<input type="file" name="ios_files" accept=".plist" multiple></label>
+      <label>GoogleService-Info.plist {{ t('(iOS, auch mehrere)', '(iOS, several at once too)') }}<input type="file" name="ios_files" accept=".plist" multiple></label>
       <details>
-        <summary>Oder von Hand eintragen</summary>
-      <label>Sender-ID (Projektnummer)<input name="sender_id" value="{{ fcm_app.sender_id or '' }}" maxlength="200" autocomplete="off"></label>
-      <label>Android: App-ID<input name="android_app_id" value="{{ fcm_app.android_app_id or '' }}" maxlength="200" autocomplete="off" placeholder="1:…:android:…"></label>
-      <label>Android: API-Schlüssel<input name="android_api_key" value="{{ fcm_app.android_api_key or '' }}" maxlength="200" autocomplete="off" placeholder="AIza…"></label>
-      <label>iOS: App-ID<input name="ios_app_id" value="{{ fcm_app.ios_app_id or '' }}" maxlength="200" autocomplete="off" placeholder="1:…:ios:…"></label>
-      <label>iOS: API-Schlüssel<input name="ios_api_key" value="{{ fcm_app.ios_api_key or '' }}" maxlength="200" autocomplete="off" placeholder="AIza…"></label>
+        <summary>{{ t('Oder von Hand eintragen', 'Or enter by hand') }}</summary>
+      <label>{{ t('Sender-ID (Projektnummer)', 'Sender ID (project number)') }}<input name="sender_id" value="{{ fcm_app.sender_id or '' }}" maxlength="200" autocomplete="off"></label>
+      <label>Android: {{ t('App-ID', 'app ID') }}<input name="android_app_id" value="{{ fcm_app.android_app_id or '' }}" maxlength="200" autocomplete="off" placeholder="1:…:android:…"></label>
+      <label>Android: {{ t('API-Schlüssel', 'API key') }}<input name="android_api_key" value="{{ fcm_app.android_api_key or '' }}" maxlength="200" autocomplete="off" placeholder="AIza…"></label>
+      <label>iOS: {{ t('App-ID', 'app ID') }}<input name="ios_app_id" value="{{ fcm_app.ios_app_id or '' }}" maxlength="200" autocomplete="off" placeholder="1:…:ios:…"></label>
+      <label>iOS: {{ t('API-Schlüssel', 'API key') }}<input name="ios_api_key" value="{{ fcm_app.ios_api_key or '' }}" maxlength="200" autocomplete="off" placeholder="AIza…"></label>
       </details>
-      <button type="submit" class="secondary">Speichern</button>
+      <button type="submit" class="secondary">{{ save }}</button>
     </form>
     <form method="post" action="/admin/stores/turnstile" class="stack">
       <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
       <h3>{{ store_titles.turnstile }}</h3>
+      {% if en %}
+      <p class="muted small">Cloudflare dashboard → Turnstile → Add widget, hostname <code>allskyhub.org</code>, mode "Managed". Opens the reporter sign-up at once.</p>
+      {% else %}
       <p class="muted small">Cloudflare-Dashboard → Turnstile → Widget hinzufügen, Hostname <code>allskyhub.org</code>, Modus „Verwaltet“. Öffnet die Melder-Registrierung sofort.</p>
-      <label>Site-Key<input name="site_key" required maxlength="200" autocomplete="off"></label>
-      <label>Secret-Key<input type="password" name="token" required maxlength="200" autocomplete="off"></label>
-      <label>Dein Passwort<input type="password" name="password" autocomplete="current-password" required></label>
-      <button type="submit" class="secondary">Speichern</button>
+      {% endif %}
+      <label>{{ t('Site-Key', 'Site key') }}<input name="site_key" required maxlength="200" autocomplete="off"></label>
+      <label>{{ t('Secret-Key', 'Secret key') }}<input type="password" name="token" required maxlength="200" autocomplete="off"></label>
+      {{ your_password() }}
+      <button type="submit" class="secondary">{{ save }}</button>
     </form>
   </details>
 </section>
 <section class="card stack" id="fotos">
-  <h2>Polarlicht-Fotos zur Freigabe</h2>
+  <h2>{{ t('Polarlicht-Fotos zur Freigabe', 'Aurora photos to approve') }}</h2>
   {% if aurora_photos %}
   <ul class="parts">
     {% for r in aurora_photos %}
     <li>
-      <img src="/admin/aurora-photos/{{ r.id }}.jpg" alt="Polarlicht-Foto" loading="lazy" style="max-width: 100%; border-radius: 8px">
-      <span class="muted small">{{ r.created_at | localtime }} · {{ '%.1f' | format(r.lat) }}°, {{ '%.1f' | format(r.lon) }}° · Name: {{ r.author or 'anonym' }}{% if r.flags %} · {{ r.flags }}× gemeldet{% endif %}</span>
+      <img src="/admin/aurora-photos/{{ r.id }}.jpg" alt="{{ t('Polarlicht-Foto', 'Aurora photo') }}" loading="lazy" style="max-width: 100%; border-radius: 8px">
+      <span class="muted small">{{ r.created_at | localtime }} · {{ '%.1f' | format(r.lat) }}°, {{ '%.1f' | format(r.lon) }}° · Name: {{ r.author or t('anonym', 'anonymous') }}{% if r.flags %} · {{ r.flags }}× {{ t('gemeldet', 'reported') }}{% endif %}</span>
       <span class="part-links">
-        {% for action, label, cls in (('approve', 'Freigeben', 'small'), ('reject', 'Ablehnen und löschen', 'secondary small')) %}
+        {% for action, label, cls in (('approve', t('Freigeben', 'Approve'), 'small'), ('reject', t('Ablehnen und löschen', 'Reject and delete'), 'secondary small')) %}
         <form method="post" action="/admin/aurora-photos/{{ r.id }}" class="inline">
           <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
           <input type="hidden" name="action" value="{{ action }}">
@@ -198,16 +217,16 @@
     {% endfor %}
   </ul>
   {% else %}
-  <p class="muted">Keine Fotos offen.</p>
+  <p class="muted">{{ t('Keine Fotos offen.', 'No photos waiting.') }}</p>
   {% endif %}
-  <p class="muted small">Fotos aus der App („Polarlicht gesehen?“) erscheinen erst nach der Freigabe, mit Name und CC BY 4.0. Dreimal als unpassend gemeldete Fotos kommen hierher zurück.</p>
+  <p class="muted small">{{ t('Fotos aus der App („Polarlicht gesehen?“) erscheinen erst nach der Freigabe, mit Name und CC BY 4.0. Dreimal als unpassend gemeldete Fotos kommen hierher zurück.', 'Photos from the app ("Seen an aurora?") show only once approved, with name and CC BY 4.0. Photos reported as unsuitable three times come back here.') }}</p>
 </section>
 <section class="card stack" id="apps-link">
   <h2>Apps</h2>
-  <p>Bauen, Store-Einträge und Einreichen für allskyhub und bortle: <a href="/admin/apps"><strong>Apps verwalten →</strong></a></p>
+  <p>{{ t('Bauen, Store-Einträge und Einreichen für allskyhub und bortle:', 'Building, store listings and submitting for allskyhub and bortle:') }} <a href="/admin/apps"><strong>{{ t('Apps verwalten →', 'Manage apps →') }}</strong></a></p>
 </section>
 <section class="card stack" id="stores">
-  <h2>Store-Zugänge</h2>
+  <h2>{{ t('Store-Zugänge', 'Store access') }}</h2>
   {% if store_report %}
   <ul class="parts">
     {% for step in store_report.steps %}
@@ -218,62 +237,74 @@
   <dl class="facts">
     {% for e in stores %}
     <dt>{{ e.title }}</dt>
-    <dd>{% if e.meta %}hinterlegt {{ e.meta.at[:10] }}
+    <dd>{% if e.meta %}{{ t('hinterlegt', 'stored') }} {{ e.meta.at[:10] }}
       {%- if e.meta.client_email %}<br><code class="small">{{ e.meta.client_email }}</code>{% endif %}
-      {%- if e.meta.key_id %}<br><span class="small">Key-ID <code>{{ e.meta.key_id }}</code></span>{% endif %}
+      {%- if e.meta.key_id %}<br><span class="small">{{ t('Key-ID', 'Key ID') }} <code>{{ e.meta.key_id }}</code></span>{% endif %}
       {%- if e.meta.sha256 %}<br><span class="small">SHA-256 <code>{{ e.meta.sha256 }}</code></span>{% endif %}
-      {%- if e.meta.app_id %}<br><span class="small">Codemagic-App <code>{{ e.meta.app_id }}</code></span>{% endif %}
-    {%- else %}<span class="muted">{{ 'fehlt' if e.kind in ('play', 'asc', 'codemagic', 'youtube', 'fcm', 'turnstile', 'github') else 'wird beim Einrichten erzeugt' }}</span>{% endif %}</dd>
+      {%- if e.meta.app_id %}<br><span class="small">{{ t('Codemagic-App', 'Codemagic app') }} <code>{{ e.meta.app_id }}</code></span>{% endif %}
+    {%- else %}<span class="muted">{{ t('fehlt', 'missing') if e.kind in ('play', 'asc', 'codemagic', 'youtube', 'fcm', 'turnstile', 'github') else t('wird beim Einrichten erzeugt', 'made on setup') }}</span>{% endif %}</dd>
     {% endfor %}
   </dl>
   <form method="post" action="/admin/stores-setup" class="inline">
     <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-    <button type="submit">Prüfen und einrichten</button>
+    <button type="submit">{{ t('Prüfen und einrichten', 'Check and set up') }}</button>
   </form>
+  {% if en %}
+  <p class="muted small">Checks each access, makes the signing keys, registers the bundle ID {{ package }} at Apple, adds the repository in Codemagic and puts all keys there into the protected variable group <code>allskyhub_store</code>. The keys are only on the server and never shown again.</p>
+  {% else %}
   <p class="muted small">Prüft jeden Zugang, erzeugt die Signierschlüssel, legt die Bundle-ID {{ package }} bei Apple an, fügt das Repository in Codemagic hinzu und legt dort alle Schlüssel in die geschützte Variablengruppe <code>allskyhub_store</code>. Die Schlüssel stehen nur auf dem Server und werden nie wieder angezeigt.</p>
+  {% endif %}
 
   {% if stores[0].meta %}
   <form method="post" action="/admin/stores-screenshots" enctype="multipart/form-data" class="stack">
     <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    {% if en %}
+    <label>Your own phone screenshots for Google Play (2 to 8, PNG or JPEG; they replace those from the repository, now {{ screenshots or 'none' }}{% if screenshots and not uploaded_screenshots %} from the repository{% endif %})<input type="file" name="files" accept="image/png,image/jpeg" multiple required></label>
+    {% else %}
     <label>Eigene Handy-Screenshots für Google Play (2 bis 8, PNG oder JPEG; ersetzen die aus dem Repository, jetzt {{ screenshots or 'keine' }}{% if screenshots and not uploaded_screenshots %} aus dem Repository{% endif %})<input type="file" name="files" accept="image/png,image/jpeg" multiple required></label>
-    <button type="submit" class="secondary">Screenshots hochladen</button>
+    {% endif %}
+    <button type="submit" class="secondary">{{ t('Screenshots hochladen', 'Upload screenshots') }}</button>
   </form>
   {% endif %}
   <details>
-    <summary>Zugänge hochladen</summary>
+    <summary>{{ t('Zugänge hochladen', 'Upload access keys') }}</summary>
     <form method="post" action="/admin/stores/play" enctype="multipart/form-data" class="stack">
       <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
       <h3>{{ store_titles.play }}</h3>
-      <label>JSON-Schlüssel des Dienstkontos<input type="file" name="file" accept=".json,application/json" required></label>
-      <p class="muted small">Google Cloud → IAM → Dienstkonten → Schlüssel → JSON. In der Play Console das Dienstkonto unter Nutzer und Berechtigungen einladen und für {{ package }} Releases erlauben. Im Cloud-Projekt muss die „Google Play Android Developer API“ aktiv sein.</p>
-      <label>Dein Passwort<input type="password" name="password" autocomplete="current-password" required></label>
-      <button type="submit" class="secondary">Hochladen</button>
+      <label>{{ service_json }}<input type="file" name="file" accept=".json,application/json" required></label>
+      <p class="muted small">{{ t('Google Cloud → IAM → Dienstkonten → Schlüssel → JSON. In der Play Console das Dienstkonto unter Nutzer und Berechtigungen einladen und für ' ~ package ~ ' Releases erlauben. Im Cloud-Projekt muss die „Google Play Android Developer API“ aktiv sein.', 'Google Cloud → IAM → Service accounts → Keys → JSON. In the Play Console invite the service account under Users and permissions and allow releases for ' ~ package ~ '. The "Google Play Android Developer API" must be enabled in the Cloud project.') }}</p>
+      {{ your_password() }}
+      <button type="submit" class="secondary">{{ upload }}</button>
     </form>
     <form method="post" action="/admin/stores/asc" enctype="multipart/form-data" class="stack">
       <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
       <h3>{{ store_titles.asc }}</h3>
-      <label>Schlüsseldatei (.p8)<input type="file" name="file" accept=".p8" required></label>
-      <label>Key-ID<input name="key_id" required maxlength="10" autocomplete="off"></label>
-      <label>Issuer-ID<input name="issuer_id" required maxlength="36" autocomplete="off"></label>
-      <p class="muted small">App Store Connect → Benutzer und Zugriff → Integrationen → App Store Connect API → Teamschlüssel, Rolle „App Manager“. Die .p8-Datei lässt sich nur einmal laden.</p>
-      <label>Dein Passwort<input type="password" name="password" autocomplete="current-password" required></label>
-      <button type="submit" class="secondary">Hochladen</button>
+      <label>{{ t('Schlüsseldatei (.p8)', 'Key file (.p8)') }}<input type="file" name="file" accept=".p8" required></label>
+      <label>{{ t('Key-ID', 'Key ID') }}<input name="key_id" required maxlength="10" autocomplete="off"></label>
+      <label>{{ t('Issuer-ID', 'Issuer ID') }}<input name="issuer_id" required maxlength="36" autocomplete="off"></label>
+      <p class="muted small">{{ t('App Store Connect → Benutzer und Zugriff → Integrationen → App Store Connect API → Teamschlüssel, Rolle „App Manager“. Die .p8-Datei lässt sich nur einmal laden.', 'App Store Connect → Users and Access → Integrations → App Store Connect API → Team keys, role "App Manager". The .p8 file can be downloaded only once.') }}</p>
+      {{ your_password() }}
+      <button type="submit" class="secondary">{{ upload }}</button>
     </form>
     <form method="post" action="/admin/stores/codemagic" class="stack">
       <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
       <h3>{{ store_titles.codemagic }}</h3>
-      <label>API-Token<input type="password" name="token" required maxlength="512" autocomplete="off"></label>
-      <p class="muted small">Codemagic → Teams → Persönliches Konto oder Team → Integrationen → Codemagic API → Show.</p>
-      <label>Dein Passwort<input type="password" name="password" autocomplete="current-password" required></label>
-      <button type="submit" class="secondary">Speichern</button>
+      <label>{{ t('API-Token', 'API token') }}<input type="password" name="token" required maxlength="512" autocomplete="off"></label>
+      <p class="muted small">{{ t('Codemagic → Teams → Persönliches Konto oder Team → Integrationen → Codemagic API → Show.', 'Codemagic → Teams → Personal account or team → Integrations → Codemagic API → Show.') }}</p>
+      {{ your_password() }}
+      <button type="submit" class="secondary">{{ save }}</button>
     </form>
     <form method="post" action="/admin/stores/youtube" enctype="multipart/form-data" class="stack">
       <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
       <h3>{{ store_titles.youtube }}</h3>
-      <label>JSON des OAuth-Clients<input type="file" name="file" accept=".json,application/json" required></label>
+      <label>{{ t('JSON des OAuth-Clients', 'OAuth client JSON') }}<input type="file" name="file" accept=".json,application/json" required></label>
+      {% if en %}
+      <p class="muted small">Google Cloud → APIs &amp; Services → Credentials → OAuth client ID, type "Web application", authorised redirect URI <code>{{ youtube_redirect }}</code> → download JSON. The "YouTube Data API v3" must be enabled in the project.</p>
+      {% else %}
       <p class="muted small">Google Cloud → APIs und Dienste → Anmeldedaten → OAuth-Client-ID, Typ „Webanwendung“, autorisierter Weiterleitungs-URI <code>{{ youtube_redirect }}</code> → JSON herunterladen. Im Projekt muss die „YouTube Data API v3“ aktiv sein.</p>
-      <label>Dein Passwort<input type="password" name="password" autocomplete="current-password" required></label>
-      <button type="submit" class="secondary">Hochladen</button>
+      {% endif %}
+      {{ your_password() }}
+      <button type="submit" class="secondary">{{ upload }}</button>
     </form>
   </details>
 </section>
@@ -281,33 +312,33 @@
   <h2>Plus</h2>
   {% if plus %}
   <div class="table-scroll"><table class="stats">
-    <thead><tr><th>Kamera</th><th>Konto</th><th>Plus</th><th></th></tr></thead>
+    <thead><tr><th>{{ t('Kamera', 'Camera') }}</th><th>{{ t('Konto', 'Account') }}</th><th>Plus</th><th></th></tr></thead>
     <tbody>
     {% for device, email in plus %}
     <tr>
       <td>{{ device.name or device.id }}<br><code class="small">{{ device.id }}</code></td>
       <td>{{ email }}</td>
-      <td>{% if device.plus_gift %}geschenkt{% if device.plus_gift_until %} bis {{ device.plus_gift_until | localtime }}{% if device.plus_gift_until <= now %} <span class="warn">abgelaufen</span>{% endif %}{% endif %}{% elif device.plus_until %}bis {{ device.plus_until | localtime }}{% endif %}</td>
+      <td>{% if device.plus_gift %}{{ t('geschenkt', 'gift') }}{% if device.plus_gift_until %} {{ t('bis', 'until') }} {{ device.plus_gift_until | localtime }}{% if device.plus_gift_until <= now %} <span class="warn">{{ t('abgelaufen', 'expired') }}</span>{% endif %}{% endif %}{% elif device.plus_until %}{{ t('bis', 'until') }} {{ device.plus_until | localtime }}{% endif %}</td>
       <td>{% if device.plus_gift %}
         <form method="post" action="/admin/plus" class="inline">
           <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
           <input type="hidden" name="device_id" value="{{ device.id }}">
-          <button type="submit" class="secondary small">Geschenk beenden</button>
+          <button type="submit" class="secondary small">{{ t('Geschenk beenden', 'End gift') }}</button>
         </form>{% endif %}</td>
     </tr>
     {% endfor %}
     </tbody>
   </table></div>
   {% else %}
-  <p class="muted">Noch keine Kamera mit Plus.</p>
+  <p class="muted">{{ t('Noch keine Kamera mit Plus.', 'No camera with Plus yet.') }}</p>
   {% endif %}
   <form method="post" action="/admin/plus" class="stack">
     <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
     <input type="hidden" name="gift" value="true">
-    <label>Kamera-ID<input name="device_id" required maxlength="26" autocomplete="off"></label>
-    <label>Laufzeit<select name="days"><option value="365">1 Jahr</option><option value="0">unbefristet</option></select></label>
-    <p class="muted small">Plus als Geschenk, ein Jahr oder ohne Ende: 90 Tage Vollbilder und Zeitraffer, ein Jahr Vorschaubilder und Nachtprodukte. Die ID steht in der Adresse der Kameraseite.</p>
-    <button type="submit" class="secondary">Plus schenken</button>
+    <label>{{ t('Kamera-ID', 'Camera ID') }}<input name="device_id" required maxlength="26" autocomplete="off"></label>
+    <label>{{ t('Laufzeit', 'Duration') }}<select name="days"><option value="365">{{ t('1 Jahr', '1 year') }}</option><option value="0">{{ t('unbefristet', 'unlimited') }}</option></select></label>
+    <p class="muted small">{{ t('Plus als Geschenk, ein Jahr oder ohne Ende: 90 Tage Vollbilder und Zeitraffer, ein Jahr Vorschaubilder und Nachtprodukte. Die ID steht in der Adresse der Kameraseite.', "Plus as a gift, for a year or without end: 90 days of full images and timelapses, a year of previews and night products. The ID is in the address of the camera's page.") }}</p>
+    <button type="submit" class="secondary">{{ t('Plus schenken', 'Give Plus') }}</button>
   </form>
 </section>
 {% endblock %}

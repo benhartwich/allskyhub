@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% block lang %}{{ 'en' if en else 'de' }}{% endblock %}
 {% block title %}{{ device.name }} · allskyhub{% endblock %}
 {% block head %}
   <link rel="stylesheet" href="{{ asset('uplot.min.css') }}">
@@ -8,10 +9,10 @@
   <script src="{{ asset('fold.js') }}" defer></script>
 {% endblock %}
 {% block content %}
-<a class="back" href="/">← Meine Kameras</a>
+<a class="back" href="/">← {{ t('Meine Kameras', 'My cameras') }}</a>
 <div class="page-head">
   <h1>{{ device.name }}</h1>
-  <span class="actions"><a class="button small secondary" href="/cameras/{{ device.id }}/charts">Messdaten</a><a class="button small secondary" href="/cameras/{{ device.id }}/stats">Statistik</a><a class="button small secondary" href="/cameras/{{ device.id }}/ziel">Ziel frei?</a><a class="button small secondary" href="/cameras/{{ device.id }}/himmel">Himmel</a><a class="button small secondary" href="/cameras/{{ device.id }}/ueberfluege">Überflüge</a><a class="button small secondary" href="/cameras/{{ device.id }}/flugzeuge">Flugzeuge</a><a class="button small" href="/cameras/{{ device.id }}/gallery">Galerie</a></span>
+  <span class="actions"><a class="button small secondary" href="/cameras/{{ device.id }}/charts">{{ t('Messdaten', 'Readings') }}</a><a class="button small secondary" href="/cameras/{{ device.id }}/stats">{{ t('Statistik', 'Statistics') }}</a><a class="button small secondary" href="/cameras/{{ device.id }}/ziel">{{ t('Ziel frei?', 'Target clear?') }}</a><a class="button small secondary" href="/cameras/{{ device.id }}/himmel">{{ t('Himmel', 'Sky') }}</a><a class="button small secondary" href="/cameras/{{ device.id }}/ueberfluege">{{ t('Überflüge', 'Passes') }}</a><a class="button small secondary" href="/cameras/{{ device.id }}/flugzeuge">{{ t('Flugzeuge', 'Aircraft') }}</a><a class="button small" href="/cameras/{{ device.id }}/gallery">{{ t('Galerie', 'Gallery') }}</a></span>
 </div>
 <div class="cam-page">
 <div class="cam-left">
@@ -20,46 +21,46 @@
 </div>
 {% if charts %}
 <section class="stack cam-charts">
-  <h2>Verlauf</h2>
+  <h2>{{ t('Verlauf', 'History') }}</h2>
   {% with data_url = "/cameras/" ~ device.id ~ "/charts/data", with_status = true, compact = true, default_range = "24", full_url = "/cameras/" ~ device.id ~ "/charts" %}{% include "_chart_viewer.html" %}{% endwith %}
 </section>
 {% endif %}
 </div>
 {% if setup_steps %}
 <div class="card health setup-steps" id="einrichtung">
-  <h2>Einrichtung</h2>
-  <p class="muted">Die Kamera ist noch nicht ganz eingerichtet. Was noch fehlt, sagt dir ihre eigene Prüfung:</p>
+  <h2>{{ t('Einrichtung', 'Setup') }}</h2>
+  <p class="muted">{{ t('Die Kamera ist noch nicht ganz eingerichtet. Was noch fehlt, sagt dir ihre eigene Prüfung:', 'The camera is not fully set up yet. Its own check tells you what is missing:') }}</p>
   <ul class="health-list">
     {% for s in setup_steps %}<li class="health-line {{ 'ok' if s.state == 'ok' else ('error' if s.state == 'fail' else 'warn') }}"><strong>{{ s.title }}</strong>{% if s.state != 'ok' %}: {{ s.detail }}{% endif %}</li>{% endfor %}
   </ul>
 </div>
 {% endif %}
 <div class="card health">
-  <h2>Zustand</h2>
-  {% if reboot_required and online %}<p class="health-line">Sicherheitsupdates warten auf einen Neustart; die Kamera startet dafür tagsüber von selbst neu.</p>{% endif %}
-  {% if paused and online %}<p class="health-line warn">Aufnahme pausiert: Die Kamera nimmt keine Bilder auf, bis du sie in ihrer lokalen Seite fortsetzt.</p>{% endif %}
+  <h2>{{ t('Zustand', 'Health') }}</h2>
+  {% if reboot_required and online %}<p class="health-line">{{ t('Sicherheitsupdates warten auf einen Neustart; die Kamera startet dafür tagsüber von selbst neu.', 'Security updates are waiting for a restart; the camera restarts by itself during the day.') }}</p>{% endif %}
+  {% if paused and online %}<p class="health-line warn">{{ t('Aufnahme pausiert: Die Kamera nimmt keine Bilder auf, bis du sie in ihrer lokalen Seite fortsetzt.', 'Capture paused: the camera takes no images until you resume it on its local page.') }}</p>{% endif %}
   {% if health %}
   <ul class="health-list">
     {% for p in health %}<li class="health-line {{ p.level }}">{{ p.text }}</li>{% endfor %}
   </ul>
   {% elif not paused and online %}
-  <p class="health-line ok">Alles in Ordnung: verbunden, neue Bilder, genug Speicher, Temperaturen und Uhr unauffällig.</p>
+  <p class="health-line ok">{{ t('Alles in Ordnung: verbunden, neue Bilder, genug Speicher, Temperaturen und Uhr unauffällig.', 'All fine: connected, new images, enough storage, temperatures and clock normal.') }}</p>
   {% elif not paused %}
-  <p class="health-line">Gerade nicht verbunden{% if device.last_seen_at %} (zuletzt {{ device.last_seen_at | when }} Uhr){% endif %}. Beim letzten Kontakt war alles in Ordnung.</p>
+  <p class="health-line">{% if en %}Not connected right now{% if device.last_seen_at %} (last seen {{ device.last_seen_at | when }}){% endif %}. Everything was fine at the last contact.{% else %}Gerade nicht verbunden{% if device.last_seen_at %} (zuletzt {{ device.last_seen_at | when }} Uhr){% endif %}. Beim letzten Kontakt war alles in Ordnung.{% endif %}</p>
   {% endif %}
 </div>
 {% if observatory %}{% include "_observatory.html" %}{% endif %}
 {% if nowcast %}{% include "_nowcast.html" %}{% endif %}
 {% if tonight %}{% include "_tonight.html" %}{% endif %}
 <section class="card stack sats" id="satelliten" aria-labelledby="satelliten-h">
-  <h2 id="satelliten-h">Satelliten</h2>
-  <div class="sat-box" hx-get="/cameras/{{ device.id }}/satelliten" hx-trigger="load" hx-swap="outerHTML"><p class="muted">Lade …</p></div>
+  <h2 id="satelliten-h">{{ t('Satelliten', 'Satellites') }}</h2>
+  <div class="sat-box" hx-get="/cameras/{{ device.id }}/satelliten" hx-trigger="load" hx-swap="outerHTML"><p class="muted">{{ t('Lade …', 'Loading …') }}</p></div>
 </section>
 {% if last_night %}{% include "_last_night.html" %}{% endif %}
 {% if brightness_chart %}{% include "_brightness_map.html" %}{% endif %}
 {% if events %}
 <section class="card">
-  <div class="page-head"><h2>Letzte Ereignisse</h2><a href="/cameras/{{ device.id }}/events">Alle</a></div>
+  <div class="page-head"><h2>{{ t('Letzte Ereignisse', 'Latest events') }}</h2><a href="/cameras/{{ device.id }}/events">{{ t('Alle', 'All') }}</a></div>
   <div class="event-strip">
     {% for e in events %}{% include "_item_thumb.html" %}{% endfor %}
   </div>
@@ -67,26 +68,26 @@
 {% endif %}
 {% if role in ('owner', 'admin') %}{% include "_settings_form.html" %}{% endif %}
 <details class="card fold" id="geraet" data-fold="geraet">
-  <summary><h2>Gerät</h2></summary>
+  <summary><h2>{{ t('Gerät', 'Device') }}</h2></summary>
   <dl class="facts">
-    <dt>Profil</dt><dd>{{ device.profile }}</dd>
+    <dt>{{ t('Profil', 'Profile') }}</dt><dd>{{ device.profile }}</dd>
     <dt>Software</dt><dd>{{ device.agent_version }}{% if update %} · <span class="{{ 'warn' if update[1] }}">{{ update[0] }}</span>{% endif %}</dd>
-    <dt>Gekoppelt</dt><dd>{{ device.paired_at | localtime }}</dd>
-    <dt>Ausrichtung</dt><dd>{{ orientation or "noch nicht kalibriert (braucht eine klare Nacht)" }}</dd>
-    <dt>Geräte-ID</dt><dd><code>{{ device.id }}</code></dd>
+    <dt>{{ t('Gekoppelt', 'Paired') }}</dt><dd>{{ device.paired_at | localtime }}</dd>
+    <dt>{{ t('Ausrichtung', 'Orientation') }}</dt><dd>{{ orientation or t('noch nicht kalibriert (braucht eine klare Nacht)', 'not calibrated yet (needs a clear night)') }}</dd>
+    <dt>{{ t('Geräte-ID', 'Device ID') }}</dt><dd><code>{{ device.id }}</code></dd>
   </dl>
 </details>
 {% if role == 'owner' %}
 <details class="card fold" id="teilen" data-fold="teilen">
-  <summary><h2>Teilen</h2></summary>
-  <p class="muted">Gib die Kamera für andere allskyhub-Konten frei, etwa für Familie oder Verein. „Ansehen“ zeigt Bild, Galerie, Ereignisse und Statistik; „Verwalten“ erlaubt dazu Einstellungen und das Markieren von Ereignissen. Koppeln, Entfernen, öffentliche Seite und lokaler Zugang bleiben bei dir.</p>
+  <summary><h2>{{ t('Teilen', 'Sharing') }}</h2></summary>
+  <p class="muted">{{ t('Gib die Kamera für andere allskyhub-Konten frei, etwa für Familie oder Verein. „Ansehen“ zeigt Bild, Galerie, Ereignisse und Statistik; „Verwalten“ erlaubt dazu Einstellungen und das Markieren von Ereignissen. Koppeln, Entfernen, öffentliche Seite und lokaler Zugang bleiben bei dir.', 'Share the camera with other allskyhub accounts, for family or a club. “View” shows the image, gallery, events and statistics; “Manage” also allows settings and marking events. Pairing, removing, the public page and local access stay with you.') }}</p>
   {% if members %}
   <ul class="list">
     {% for m in members %}
-    <li class="cam-meta"><span>{{ m.email }} · {{ 'verwalten' if m.role == 'admin' else 'ansehen' }}</span>
+    <li class="cam-meta"><span>{{ m.email }} · {{ t('verwalten', 'manage') if m.role == 'admin' else t('ansehen', 'view') }}</span>
       <form method="post" action="/cameras/{{ device.id }}/members/{{ m.user_id }}/remove" class="inline">
         <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-        <button class="link">Entfernen</button>
+        <button class="link">{{ t('Entfernen', 'Remove') }}</button>
       </form>
     </li>
     {% endfor %}
@@ -95,57 +96,57 @@
   <form method="post" action="/cameras/{{ device.id }}/members" class="stack">
     <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
     <div class="grid-2">
-      <label>E-Mail-Adresse<input type="email" name="email" required autocomplete="off"></label>
-      <label>Rolle<select name="role"><option value="viewer">ansehen</option><option value="admin">verwalten</option></select></label>
+      <label>{{ t('E-Mail-Adresse', 'Email address') }}<input type="email" name="email" required autocomplete="off"></label>
+      <label>{{ t('Rolle', 'Role') }}<select name="role"><option value="viewer">{{ t('ansehen', 'view') }}</option><option value="admin">{{ t('verwalten', 'manage') }}</option></select></label>
     </div>
-    <button type="submit" class="secondary">Freigeben</button>
+    <button type="submit" class="secondary">{{ t('Freigeben', 'Share') }}</button>
   </form>
 </details>
 {% if plus %}{% include "_plus.html" %}{% endif %}
 <details class="card fold" id="netz" data-fold="netz">
-  <summary><h2>Kameranetz</h2></summary>
-  <p class="muted">Sehen deine Kamera und die Kamera eines anderen Teilnehmers denselben Meteor, berechnet der Hub aus beiden Blickwinkeln seine Bahn und Höhe. Beide Besitzer sehen sie bei ihrem Ereignis. Dafür rechnet der Hub mit den genauen Standorten, und aus gemeinsamen Meteoren lässt sich ungefähr ablesen, wo die andere Kamera steht. Deine eigenen Kameras gleicht der Hub immer miteinander ab.</p>
+  <summary><h2>{{ t('Kameranetz', 'Camera network') }}</h2></summary>
+  <p class="muted">{{ t('Sehen deine Kamera und die Kamera eines anderen Teilnehmers denselben Meteor, berechnet der Hub aus beiden Blickwinkeln seine Bahn und Höhe. Beide Besitzer sehen sie bei ihrem Ereignis. Dafür rechnet der Hub mit den genauen Standorten, und aus gemeinsamen Meteoren lässt sich ungefähr ablesen, wo die andere Kamera steht. Deine eigenen Kameras gleicht der Hub immer miteinander ab.', 'When your camera and another participant’s camera see the same meteor, the hub works out its path and height from both viewpoints. Both owners see it with their event. For this the hub uses the exact locations, and shared meteors roughly reveal where the other camera stands. Your own cameras are always matched with each other.') }}</p>
   <form method="post" action="/cameras/{{ device.id }}/network" class="stack">
     <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-    <label class="check"><input type="checkbox" name="network"{% if device.network %} checked{% endif %}> Diese Kamera nimmt am Kameranetz teil</label>
-    <button type="submit" class="secondary">Speichern</button>
+    <label class="check"><input type="checkbox" name="network"{% if device.network %} checked{% endif %}> {{ t('Diese Kamera nimmt am Kameranetz teil', 'This camera takes part in the camera network') }}</label>
+    <button type="submit" class="secondary">{{ t('Speichern', 'Save') }}</button>
   </form>
-  {% if role == 'owner' %}<p class="muted small"><a href="/nachreichen/{{ device.id }}">Feuerkugel nachreichen</a> · eine ältere Aufnahme, geprüft an den Sternen</p>{% endif %}
+  {% if role == 'owner' %}<p class="muted small"><a href="/nachreichen/{{ device.id }}">{{ t('Feuerkugel nachreichen', 'Send a fireball later') }}</a> · {{ t('eine ältere Aufnahme, geprüft an den Sternen', 'an older recording, checked against the stars') }}</p>{% endif %}
 </details>
 <details class="card fold" id="flugzeuge" data-fold="flugzeuge">
-  <summary><h2>Flugzeuge am Tag</h2></summary>
-  <p class="muted">Tagsüber listet der Hub die Flugzeuge, die mindestens 20° über deiner Kamera vorbeifliegen, unter „Überflüge“, mit Rufzeichen, Typ und Bild. Die Positionen kommen von adsb.lol; der Hub fragt dafür nur einen auf etwa 10 km gerundeten Punkt ab.</p>
+  <summary><h2>{{ t('Flugzeuge am Tag', 'Aircraft by day') }}</h2></summary>
+  <p class="muted">{{ t('Tagsüber listet der Hub die Flugzeuge, die mindestens 20° über deiner Kamera vorbeifliegen, unter „Überflüge“, mit Rufzeichen, Typ und Bild. Die Positionen kommen von adsb.lol; der Hub fragt dafür nur einen auf etwa 10 km gerundeten Punkt ab.', 'By day the hub lists the aircraft passing at least 20° above your camera under “Passes”, with call sign, type and image. The positions come from adsb.lol; the hub only asks for a point rounded to about 10 km.') }}</p>
   <form method="post" action="/cameras/{{ device.id }}/day-aircraft" class="stack">
     <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-    <label class="check"><input type="checkbox" name="day_aircraft"{% if device.day_aircraft %} checked{% endif %}> Flugzeuge am Tag auflisten</label>
-    <button type="submit" class="secondary">Speichern</button>
+    <label class="check"><input type="checkbox" name="day_aircraft"{% if device.day_aircraft %} checked{% endif %}> {{ t('Flugzeuge am Tag auflisten', 'List aircraft by day') }}</label>
+    <button type="submit" class="secondary">{{ t('Speichern', 'Save') }}</button>
   </form>
 </details>
 <details class="card fold" id="discord" data-fold="discord">
   <summary><h2>Discord</h2></summary>
-  <p class="muted">Meteore, Polarlicht und die Nacht am Morgen in einem Discord-Kanal, mit Bild. In Discord: Servereinstellungen → Integrationen → Webhooks → Neuer Webhook → Webhook-URL kopieren. Links in den Nachrichten führen zur öffentlichen Seite, wenn sie an ist.</p>
-  {% if discord and discord.broken %}<p class="warn">Discord kennt diesen Webhook nicht mehr. Bitte eine neue Adresse eintragen.</p>{% endif %}
+  <p class="muted">{{ t('Meteore, Polarlicht und die Nacht am Morgen in einem Discord-Kanal, mit Bild. In Discord: Servereinstellungen → Integrationen → Webhooks → Neuer Webhook → Webhook-URL kopieren. Links in den Nachrichten führen zur öffentlichen Seite, wenn sie an ist.', 'Meteors, aurora and the night in the morning in a Discord channel, with an image. In Discord: Server Settings → Integrations → Webhooks → New Webhook → Copy Webhook URL. Links in the messages lead to the public page when it is on.') }}</p>
+  {% if discord and discord.broken %}<p class="warn">{{ t('Discord kennt diesen Webhook nicht mehr. Bitte eine neue Adresse eintragen.', 'Discord no longer knows this webhook. Please enter a new address.') }}</p>{% endif %}
   <form method="post" action="/cameras/{{ device.id }}/discord" class="stack">
     <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-    <label>Webhook-Adresse<input type="url" name="webhook" autocomplete="off" {% if discord %}placeholder="{{ masked(discord.webhook) }} (leer lassen = behalten)"{% else %}required placeholder="https://discord.com/api/webhooks/…"{% endif %}></label>
+    <label>{{ t('Webhook-Adresse', 'Webhook address') }}<input type="url" name="webhook" autocomplete="off" {% if discord %}placeholder="{{ masked(discord.webhook) }} ({{ t('leer lassen = behalten', 'leave empty = keep') }})"{% else %}required placeholder="https://discord.com/api/webhooks/…"{% endif %}></label>
     <div class="stack">
-      <strong>Was in den Kanal geht</strong>
+      <strong>{{ t('Was in den Kanal geht', 'What goes to the channel') }}</strong>
       {% for key, label in discord_kinds.items() %}
       <label class="check"><input type="checkbox" name="kind_{{ key }}" {% if key in (discord.kinds if discord else ['meteor', 'aurora', 'nlc']) %}checked{% endif %}> {{ label }}</label>
       {% endfor %}
-      <label class="check"><input type="checkbox" name="summary" {% if not discord or discord.summary %}checked{% endif %}> Die Nacht am Morgen (mit Sternspuren oder Keogramm)</label>
+      <label class="check"><input type="checkbox" name="summary" {% if not discord or discord.summary %}checked{% endif %}> {{ t('Die Nacht am Morgen (mit Sternspuren oder Keogramm)', 'The night in the morning (with star trails or keogram)') }}</label>
     </div>
-    <button type="submit" class="secondary">Speichern</button>
+    <button type="submit" class="secondary">{{ t('Speichern', 'Save') }}</button>
   </form>
   {% if discord %}
   <div class="actions">
     <form method="post" action="/cameras/{{ device.id }}/discord/test">
       <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-      <button type="submit" class="secondary">Testnachricht senden</button>
+      <button type="submit" class="secondary">{{ t('Testnachricht senden', 'Send a test message') }}</button>
     </form>
     <form method="post" action="/cameras/{{ device.id }}/discord/remove">
       <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-      <button type="submit" class="danger">Discord trennen</button>
+      <button type="submit" class="danger">{{ t('Discord trennen', 'Disconnect Discord') }}</button>
     </form>
   </div>
   {% endif %}
@@ -153,21 +154,21 @@
 {% if youtube_available or youtube %}
 <details class="card fold" id="youtube" data-fold="youtube">
   <summary><h2>YouTube</h2></summary>
-  <p class="muted">Der Zeitraffer jeder Nacht morgens auf deinem YouTube-Kanal, einmal pro Nacht. allskyhub darf nur Videos hochladen, nichts lesen oder löschen; trennen kannst du jederzeit hier oder in deinem Google-Konto.</p>
-  {% if youtube and youtube.broken %}<p class="warn">YouTube nimmt die Verbindung nicht mehr an. Bitte neu verbinden.</p>{% endif %}
+  <p class="muted">{{ t('Der Zeitraffer jeder Nacht morgens auf deinem YouTube-Kanal, einmal pro Nacht. allskyhub darf nur Videos hochladen, nichts lesen oder löschen; trennen kannst du jederzeit hier oder in deinem Google-Konto.', 'Each night’s timelapse on your YouTube channel in the morning, once per night. allskyhub may only upload videos, not read or delete anything; you can disconnect at any time here or in your Google account.') }}</p>
+  {% if youtube and youtube.broken %}<p class="warn">{{ t('YouTube nimmt die Verbindung nicht mehr an. Bitte neu verbinden.', 'YouTube no longer accepts the connection. Please connect again.') }}</p>{% endif %}
   {% if youtube %}
-  <p>Verbunden{% if youtube.channel %} mit <strong>{{ youtube.channel }}</strong>{% endif %}.</p>
+  <p>{{ t('Verbunden', 'Connected') }}{% if youtube.channel %} {{ t('mit', 'to') }} <strong>{{ youtube.channel }}</strong>{% endif %}.</p>
   <form method="post" action="/cameras/{{ device.id }}/youtube" class="stack">
     <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-    <label>Sichtbarkeit der Videos<select name="privacy">
+    <label>{{ t('Sichtbarkeit der Videos', 'Video visibility') }}<select name="privacy">
       {% for key, label in youtube_privacy.items() %}<option value="{{ key }}" {% if youtube.privacy == key %}selected{% endif %}>{{ label }}</option>{% endfor %}
     </select></label>
-    <label class="check"><input type="checkbox" name="day" {% if youtube.day %}checked{% endif %}> Auch den Zeitraffer des Tages (abends)</label>
-    <button type="submit" class="secondary">Speichern</button>
+    <label class="check"><input type="checkbox" name="day" {% if youtube.day %}checked{% endif %}> {{ t('Auch den Zeitraffer des Tages (abends)', 'The day’s timelapse too (in the evening)') }}</label>
+    <button type="submit" class="secondary">{{ t('Speichern', 'Save') }}</button>
   </form>
   {% if youtube_videos %}
   <ul class="list small">
-    {% for night, kind, url in youtube_videos %}<li><a href="{{ url }}" rel="noopener">{{ "Tag" if kind == "day_timelapse" else "Nacht" }} {{ night | night_title }}</a></li>{% endfor %}
+    {% for night, kind, url in youtube_videos %}<li><a href="{{ url }}" rel="noopener">{{ t('Tag', 'Day') if kind == 'day_timelapse' else t('Nacht', 'Night') }} {{ night | night_title }}</a></li>{% endfor %}
   </ul>
   {% endif %}
   {% endif %}
@@ -175,83 +176,83 @@
     {% if youtube_available %}
     <form method="post" action="/cameras/{{ device.id }}/youtube/verbinden">
       <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-      <button type="submit" class="{{ 'secondary' if youtube and not youtube.broken else '' }}">{{ "Neu verbinden" if youtube else "Mit YouTube verbinden" }}</button>
+      <button type="submit" class="{{ 'secondary' if youtube and not youtube.broken else '' }}">{{ t('Neu verbinden', 'Connect again') if youtube else t('Mit YouTube verbinden', 'Connect to YouTube') }}</button>
     </form>
     {% endif %}
     {% if youtube %}
     <form method="post" action="/cameras/{{ device.id }}/youtube/trennen">
       <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-      <button type="submit" class="danger">YouTube trennen</button>
+      <button type="submit" class="danger">{{ t('YouTube trennen', 'Disconnect YouTube') }}</button>
     </form>
     {% endif %}
   </div>
 </details>
 {% endif %}
 <details class="card fold" id="lokal" data-fold="lokal">
-  <summary><h2>Lokale Seite der Kamera</h2></summary>
-  <p class="muted">Im Heimnetz hat die Kamera eine eigene Seite. Dort meldest du dich mit „Mit allskyhub anmelden“ an. Für Zeiten ohne Internet gibt es einen Offline-Code.</p>
+  <summary><h2>{{ t('Lokale Seite der Kamera', 'The camera’s local page') }}</h2></summary>
+  <p class="muted">{{ t('Im Heimnetz hat die Kamera eine eigene Seite. Dort meldest du dich mit „Mit allskyhub anmelden“ an. Für Zeiten ohne Internet gibt es einen Offline-Code.', 'On your home network the camera has a page of its own. Sign in there with “Sign in with allskyhub”. For times without internet there is an offline code.') }}</p>
   {% if device.local_access_set_at %}
-  <p>Offline-Code angelegt am {{ device.local_access_set_at | localtime }}{% if device.local_access_pending %} · <span class="warn">noch nicht bei der Kamera</span>{% else %} · bei der Kamera{% endif %}</p>
+  <p>{{ t('Offline-Code angelegt am', 'Offline code created on') }} {{ device.local_access_set_at | localtime }}{% if device.local_access_pending %} · <span class="warn">{{ t('noch nicht bei der Kamera', 'not on the camera yet') }}</span>{% else %} · {{ t('bei der Kamera', 'on the camera') }}{% endif %}</p>
   {% endif %}
   <div class="actions">
     <form method="post" action="/cameras/{{ device.id }}/local-access">
       <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-      <button type="submit" class="secondary">{{ 'Neuen Offline-Code erzeugen' if device.local_access_set_at else 'Offline-Code erzeugen' }}</button>
+      <button type="submit" class="secondary">{{ t('Neuen Offline-Code erzeugen', 'Create a new offline code') if device.local_access_set_at else t('Offline-Code erzeugen', 'Create an offline code') }}</button>
     </form>
     {% if device.local_access_set_at %}
     <form method="post" action="/cameras/{{ device.id }}/local-access/remove">
       <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-      <button type="submit" class="danger">Offline-Code löschen</button>
+      <button type="submit" class="danger">{{ t('Offline-Code löschen', 'Delete the offline code') }}</button>
     </form>
     {% endif %}
   </div>
 </details>
 <details class="card fold" id="oeffentlich" data-fold="oeffentlich">
-  <summary><h2>Öffentliche Seite{% if device.public_slug %} <span class="fold-note">· an</span>{% endif %}</h2></summary>
+  <summary><h2>{{ t('Öffentliche Seite', 'Public page') }}{% if device.public_slug %} <span class="fold-note">· {{ t('an', 'on') }}</span>{% endif %}</h2></summary>
   {% if device.public_slug %}
   {% set url = request.base_url ~ "sky/" ~ device.public_slug %}
-  <p>Jeder mit diesem Link sieht, was du für die Seite ausgewählt hast:</p>
+  <p>{{ t('Jeder mit diesem Link sieht, was du für die Seite ausgewählt hast:', 'Anyone with this link sees what you have chosen for the page:') }}</p>
   <p><a href="/sky/{{ device.public_slug }}" class="code-link">{{ url }}</a></p>
   <form method="post" action="/cameras/{{ device.id }}/public/visibility" class="stack">
     <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
     {% set profile = public_profile %}
     {% include "_public_visibility.html" %}
-    {% if public_profile.show_coordinates and not public_coordinates %}<p class="muted">Die Kamera kennt ihren Standort noch nicht; ohne ihn erscheint sie nicht auf der Karte.</p>{% endif %}
-    <button type="submit" class="secondary">Sichtbarkeit speichern</button>
+    {% if public_profile.show_coordinates and not public_coordinates %}<p class="muted">{{ t('Die Kamera kennt ihren Standort noch nicht; ohne ihn erscheint sie nicht auf der Karte.', 'The camera does not know its location yet; without it, it does not appear on the map.') }}</p>{% endif %}
+    <button type="submit" class="secondary">{{ t('Sichtbarkeit speichern', 'Save visibility') }}</button>
   </form>
-  <p><a class="button secondary" href="/cameras/{{ device.id }}/public/edit">Seite gestalten</a></p>
+  <p><a class="button secondary" href="/cameras/{{ device.id }}/public/edit">{{ t('Seite gestalten', 'Design the page') }}</a></p>
   <form method="post" action="/cameras/{{ device.id }}/public">
     <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
     <input type="hidden" name="enabled" value="false">
-    <button type="submit" class="secondary">Öffentliche Seite ausschalten</button>
+    <button type="submit" class="secondary">{{ t('Öffentliche Seite ausschalten', 'Switch the public page off') }}</button>
   </form>
-  <p class="muted">Ausschalten macht den Link sofort ungültig; beim Wiedereinschalten gibt es einen neuen.</p>
+  <p class="muted">{{ t('Ausschalten macht den Link sofort ungültig; beim Wiedereinschalten gibt es einen neuen.', 'Switching off invalidates the link at once; switching on again gives a new one.') }}</p>
   {% else %}
-  <p class="muted">Teile den Himmel über deiner Kamera mit anderen: aktuelles Bild, die letzte Stunde als Loop, Meteore, Himmelsqualität, Polarlicht-Aussichten und Nachtarchiv. Was davon zu sehen ist, legst du fest. Standort und Gerätedaten bleiben privat, solange du sie nicht freigibst.</p>
+  <p class="muted">{{ t('Teile den Himmel über deiner Kamera mit anderen: aktuelles Bild, die letzte Stunde als Loop, Meteore, Himmelsqualität, Polarlicht-Aussichten und Nachtarchiv. Was davon zu sehen ist, legst du fest. Standort und Gerätedaten bleiben privat, solange du sie nicht freigibst.', 'Share the sky above your camera with others: the current image, the last hour as a loop, meteors, sky quality, aurora outlook and the night archive. You decide what is shown. Location and device data stay private unless you share them.') }}</p>
   <form method="post" action="/cameras/{{ device.id }}/public">
     <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
     <input type="hidden" name="enabled" value="true">
-    <button type="submit">Öffentliche Seite einschalten</button>
+    <button type="submit">{{ t('Öffentliche Seite einschalten', 'Switch the public page on') }}</button>
   </form>
   {% endif %}
 </details>
 <details class="card fold" id="stream" data-fold="stream">
-  <summary><h2>Für Streams (OBS)</h2></summary>
-  <p class="muted">Eine Seite nur mit dem Himmelsbild und den Ebenen, die du wählst, zum Einbinden in OBS oder andere Stream-Programme. Sie funktioniert auch, wenn die Kamera nicht öffentlich ist.</p>
-  <p><a class="button secondary" href="/cameras/{{ device.id }}/stream">Adresse für Streams</a></p>
+  <summary><h2>{{ t('Für Streams (OBS)', 'For streams (OBS)') }}</h2></summary>
+  <p class="muted">{{ t('Eine Seite nur mit dem Himmelsbild und den Ebenen, die du wählst, zum Einbinden in OBS oder andere Stream-Programme. Sie funktioniert auch, wenn die Kamera nicht öffentlich ist.', 'A page with just the sky image and the layers you choose, for OBS or other streaming software. It works even when the camera is not public.') }}</p>
+  <p><a class="button secondary" href="/cameras/{{ device.id }}/stream">{{ t('Adresse für Streams', 'Address for streams') }}</a></p>
 </details>
 <form method="post" action="/cameras/{{ device.id }}/remove" class="card danger">
   <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-  <p class="muted">Entfernen trennt die Kamera von deinem Konto. Sie zeigt danach einen neuen Kopplungscode.</p>
-  <button type="submit" class="danger">Kamera entfernen</button>
+  <p class="muted">{{ t('Entfernen trennt die Kamera von deinem Konto. Sie zeigt danach einen neuen Kopplungscode.', 'Removing unlinks the camera from your account. It then shows a new pairing code.') }}</p>
+  <button type="submit" class="danger">{{ t('Kamera entfernen', 'Remove camera') }}</button>
 </form>
 {% else %}
 <div class="card">
-  <h2>Geteilte Kamera</h2>
-  <p class="muted">Diese Kamera wurde für dich freigegeben ({{ 'verwalten' if role == 'admin' else 'ansehen' }}).</p>
+  <h2>{{ t('Geteilte Kamera', 'Shared camera') }}</h2>
+  <p class="muted">{{ t('Diese Kamera wurde für dich freigegeben', 'This camera has been shared with you') }} ({{ t('verwalten', 'manage') if role == 'admin' else t('ansehen', 'view') }}).</p>
   <form method="post" action="/cameras/{{ device.id }}/members/{{ user.id }}/remove">
     <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-    <button type="submit" class="secondary">Nicht mehr anzeigen</button>
+    <button type="submit" class="secondary">{{ t('Nicht mehr anzeigen', 'Stop showing it') }}</button>
   </form>
 </div>
 {% endif %}

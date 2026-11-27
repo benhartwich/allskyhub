@@ -21,6 +21,7 @@ from urllib.parse import urlsplit
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from allskyhub_server.i18n import tr
 from allskyhub_server.models import Device
 
 log = logging.getLogger(__name__)
@@ -66,20 +67,41 @@ async def request(
     domain = normalize(value)
     hub = urlsplit(base_url).hostname or ""
     if not DOMAIN.fullmatch(domain):
-        raise DomainError("Das ist kein gültiger Domainname (z. B. himmel.example.org).")
+        raise DomainError(
+            tr(
+                "Das ist kein gültiger Domainname (z. B. himmel.example.org).",
+                "That is not a valid domain name (e.g. sky.example.org).",
+            )
+        )
     if domain == hub or domain.endswith("." + hub):
-        raise DomainError("Bitte eine eigene Domain, nicht die des Hubs.")
+        raise DomainError(
+            tr(
+                "Bitte eine eigene Domain, nicht die des Hubs.",
+                "Please use a domain of your own, not the hub's.",
+            )
+        )
     taken = await db.scalar(
         select(Device.id).where(Device.custom_domain == domain, Device.id != device.id)
     )
     if taken is not None:
-        raise DomainError("Diese Domain wird schon für eine andere Kamera verwendet.")
+        raise DomainError(
+            tr(
+                "Diese Domain wird schon für eine andere Kamera verwendet.",
+                "This domain is already used for another camera.",
+            )
+        )
     if device.public_slug is None:
-        raise DomainError("Schalte zuerst die öffentliche Seite ein.")
+        raise DomainError(
+            tr("Schalte zuerst die öffentliche Seite ein.", "Switch the public page on first.")
+        )
     if not await points_here(domain, base_url):
         raise DomainError(
-            f"{domain} zeigt noch nicht auf {hub}. Lege im DNS einen CNAME-Eintrag auf {hub} an "
-            "und versuche es nach ein paar Minuten noch einmal."
+            tr(
+                f"{domain} zeigt noch nicht auf {hub}. Lege im DNS einen CNAME-Eintrag auf {hub} "
+                "an und versuche es nach ein paar Minuten noch einmal.",
+                f"{domain} does not point to {hub} yet. Create a CNAME record pointing to {hub} "
+                "in the DNS and try again in a few minutes.",
+            )
         )
     folder = spool(data_dir)
     folder.mkdir(mode=0o750, exist_ok=True)

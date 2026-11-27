@@ -1,13 +1,13 @@
 {# Roadmap N4: clouds in the next hour from the camera and its neighbours (devices/nowcast.py). #}
 <div class="card nowcast">
-  <div class="cam-meta"><h2>Die nächste Stunde</h2><span class="badge{{ ' ok' if nowcast.cover <= 0.3 }}">jetzt {{ (nowcast.cover * 100) | round | int }} % Wolken</span></div>
+  <div class="cam-meta"><h2>{{ t('Die nächste Stunde', 'The next hour') }}</h2><span class="badge{{ ' ok' if nowcast.cover <= 0.3 }}">{{ t('jetzt', 'now') }} {{ (nowcast.cover * 100) | round | int }} % {{ t('Wolken', 'clouds') }}</span></div>
   <p class="tonight-summary">{{ nowcast.summary }}</p>
   {% if nowcast.steps %}
   <ol class="list nowcast-steps">
     {% for s in nowcast.steps %}
-    <li><strong>in {{ s.minutes }} Min.</strong> etwa {{ (s.cover * 100) | round | int }} % Wolken <span class="muted">({{ s.label }})</span></li>
+    <li><strong>in {{ s.minutes }} {{ t('Min.', 'min') }}</strong> {{ t('etwa', 'about') }} {{ (s.cover * 100) | round | int }} % {{ t('Wolken', 'clouds') }} <span class="muted">({{ s.label }})</span></li>
     {% endfor %}
   </ol>
   {% endif %}
-  <p class="muted small">{{ nowcast.wind_text }} in etwa 3 km Höhe. Aus der eigenen Wolkenkarte{% if device.network %} und den Kameras im Kameranetz gegen den Wind{% else %}; mit dem Kameranetz kämen die Kameras gegen den Wind dazu{% endif %}.</p>
+  <p class="muted small">{% if en %}{{ nowcast.wind_text }} at about 3 km altitude. From the camera’s own cloud map{% if device.network %} and the cameras upwind in the camera network{% else %}; with the camera network, the cameras upwind would be added{% endif %}.{% else %}{{ nowcast.wind_text }} in etwa 3 km Höhe. Aus der eigenen Wolkenkarte{% if device.network %} und den Kameras im Kameranetz gegen den Wind{% else %}; mit dem Kameranetz kämen die Kameras gegen den Wind dazu{% endif %}.{% endif %}</p>
 </div>

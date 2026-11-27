@@ -2,6 +2,7 @@
 // flight_map_data), refreshed every 10 s. The rings show where an aircraft at 10 km stands
 // 10° and 30° up; the ones in the picture are drawn bright.
 (() => {
+  const EN = document.documentElement.lang === "en";
   const el = document.getElementById("flight-map");
   const raw = document.getElementById("map-config");
   if (!el || !raw || !window.L) return;
@@ -28,7 +29,7 @@
     }).addTo(map);
   }
   L.circleMarker([lat, lon], { radius: 6, color: "#000", weight: 2, fillColor: accent, fillOpacity: 1 })
-    .bindTooltip("Kamera").addTo(map);
+    .bindTooltip(EN ? "Camera" : "Kamera").addTo(map);
   map.fitBounds(L.latLng(lat, lon).toBounds(outer * 2600));
 
   const layer = L.layerGroup().addTo(map);
@@ -36,7 +37,7 @@
   const count = document.querySelector("[data-flight-count]");
   const credit = document.querySelector("[data-flight-credit]");
   const text = (value) => document.createTextNode(value);
-  const km = (v) => String(v).replace(".", ",");
+  const km = (v) => (EN ? String(v) : String(v).replace(".", ","));
 
   const draw = (data) => {
     layer.clearLayers();
@@ -54,21 +55,21 @@
       const name = document.createElement("b");
       name.append(text(p.name));
       const what = document.createElement("span");
-      what.append(text([p.type, `${km(p.alt_km)} km hoch`, `${Math.round(p.distance_km)} km entfernt`].filter(Boolean).join(" · ")));
+      what.append(text([p.type, EN ? `${km(p.alt_km)} km up` : `${km(p.alt_km)} km hoch`, EN ? `${Math.round(p.distance_km)} km away` : `${Math.round(p.distance_km)} km entfernt`].filter(Boolean).join(" · ")));
       const where = document.createElement("span");
       where.className = "where";
-      where.append(text(p.in_picture ? `im Bild, ${Math.round(p.elevation)}°` : p.elevation > 0 ? `${Math.round(p.elevation)}°, zu tief` : "unter dem Horizont"));
+      where.append(text(p.in_picture ? (EN ? `in the picture, ${Math.round(p.elevation)}°` : `im Bild, ${Math.round(p.elevation)}°`) : p.elevation > 0 ? (EN ? `${Math.round(p.elevation)}°, too low` : `${Math.round(p.elevation)}°, zu tief`) : EN ? "below the horizon" : "unter dem Horizont"));
       li.append(name, what, where);
       list.append(li);
     }
     if (!data.planes.length) {
       const li = document.createElement("li");
       li.className = "muted";
-      li.append(text("Gerade kein Flugzeug in der Nähe, oder die Daten kommen noch."));
+      li.append(text(EN ? "No aircraft nearby right now, or the data are still coming." : "Gerade kein Flugzeug in der Nähe, oder die Daten kommen noch."));
       list.append(li);
     }
     const inside = data.planes.filter((p) => p.in_picture).length;
-    count.textContent = `${data.planes.length} in 150 km · ${inside} im Bild`;
+    count.textContent = EN ? `${data.planes.length} within 150 km · ${inside} in the picture` : `${data.planes.length} in 150 km · ${inside} im Bild`;
     credit.textContent = data.credit;
   };
 

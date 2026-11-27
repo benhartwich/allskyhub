@@ -5,9 +5,9 @@
 {% elif state == "fetching" %}
   <div hx-get="/cameras/{{ device.id }}/events/{{ event.night_id }}/{{ event.event_id }}/state" hx-trigger="every 3s" hx-target="#event" hx-swap="innerHTML">
     {% if event.has_thumb %}<img class="product-image" src="{{ image }}?variant=thumb&v={{ rev }}" alt="">{% endif %}
-    <p class="muted">Vollbild wird von der Kamera geholt …</p>
+    <p class="muted">{{ t('Vollbild wird von der Kamera geholt …', 'Fetching the full image from the camera …') }}</p>
   </div>
 {% elif state == "offline" %}
   {% if event.has_thumb %}<img class="product-image" src="{{ image }}?variant=thumb&v={{ rev }}" alt="">{% endif %}
-  <p class="muted">Das Vollbild kommt, sobald die Kamera wieder verbunden ist.</p>
+  <p class="muted">{{ t('Das Vollbild kommt, sobald die Kamera wieder verbunden ist.', 'The full image comes as soon as the camera is connected again.') }}</p>
 {% endif %}

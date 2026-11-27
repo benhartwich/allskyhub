@@ -1,19 +1,14 @@
-"""German or English for the public pages (Benjamin, 2026-10-22; SharedSky 2026-11-05).
+"""German or English for every web page (Benjamin, 2026-10-22; SharedSky 2026-11-05;
+every page bilingual by the owner's decision of 2026-11-27).
 
-In English so far: the start page, asking for access, the guide for Allsky cameras, and
-since SharedSky everything a newcomer passes through: /mitmachen, /entwickler/connect,
-signing up and confirming, signing in, a forgotten password, the way in (/start) and
-connecting a camera with its station pages. ``?lang=en`` or ``?lang=de`` picks the
-language and remembers it in the ``ash_lang`` cookie; the menu's switch goes through
-``/sprache/{code}`` and, when signed in, also keeps it as the account's language for its
-mails (``User.lang``). Since 2026-11-27 also every public page a visitor without an account
-sees: the sky pages (/sky/…, their nights and measurements), the map, Plus, hardware,
-fireballs, meteor showers and the imprint; their scripts read ``<html lang>``. Benjamin,
-2026-11-27: every page has both languages, the signed-in pages, the admin pages and the
-legal texts too (their English versions follow in their own change; until then parts
-shared with the public pages already show English there). Templates say
-``{{ t('…', '…') }}``, Python ``i18n.tr`` (the request's language,
-i18n.LanguageMiddleware).
+Every page exists in German and English: the public pages, the signed-in owner's pages
+(cameras, gallery, statistics, account, sharing, streams, Plus), the admin pages and the
+privacy policy (the German text is binding, the English one says so). ``?lang=en`` or
+``?lang=de`` picks the language and remembers it in the ``ash_lang`` cookie; the menu's
+switch goes through ``/sprache/{code}`` and, when signed in, also keeps it as the
+account's language for its mails (``User.lang``). German is the default. Templates say
+``{{ t('…', '…') }}`` and set ``{% block lang %}``; Python says ``i18n.tr`` (the request's
+language, i18n.LanguageMiddleware); German numbers take a decimal comma, English a point.
 """
 
 from __future__ import annotations

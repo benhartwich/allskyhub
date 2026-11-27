@@ -1,35 +1,38 @@
 {% extends "base.html" %}
+{% block lang %}{{ 'en' if en else 'de' }}{% endblock %}
 {% block title %}{{ heading }} · {{ device.name }} · allskyhub{% endblock %}
 {% block content %}
-{% if back_overflights %}<a class="back" href="/cameras/{{ device.id }}/ueberfluege?nacht={{ event.night_id }}">← Überflüge {{ event.night_id | night_title }}</a>
+{% if back_overflights %}<a class="back" href="/cameras/{{ device.id }}/ueberfluege?nacht={{ event.night_id }}">← {{ t('Überflüge', 'Overflights') }} {{ event.night_id | night_title }}</a>
 {% else %}<a class="back" href="/cameras/{{ device.id }}/nights/{{ event.night_id }}">← {{ event.night_id | night_title }}</a>{% endif %}
 <h1>{{ heading }}</h1>
-<p class="muted">{{ event.start | localtime }}{% if (event.data or {}).get("ongoing") %} · <strong>läuft noch</strong>{% endif %}</p>
+<p class="muted">{{ event.start | localtime }}{% if (event.data or {}).get("ongoing") %} · <strong>{{ t('läuft noch', 'still going') }}</strong>{% endif %}</p>
 <div id="event">{% include "_event_view.html" %}</div>
 {% if has_frame %}
 <div id="original" class="stack">
   {% if event.has_original %}{% include "_event_original.html" %}
-  {% else %}<button type="button" class="secondary small" hx-get="/cameras/{{ device.id }}/events/{{ event.night_id }}/{{ event.event_id }}/original" hx-target="#original" hx-swap="innerHTML">Ganzes Bild zeigen</button>{% endif %}
+  {% else %}<button type="button" class="secondary small" hx-get="/cameras/{{ device.id }}/events/{{ event.night_id }}/{{ event.event_id }}/original" hx-target="#original" hx-swap="innerHTML">{{ t('Ganzes Bild zeigen', 'Show the whole image') }}</button>{% endif %}
 </div>
 {% endif %}
 <form method="post" action="/cameras/{{ device.id }}/events/{{ event.night_id }}/{{ event.event_id }}/label" class="card label-form">
   <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
   {% if event.label == "false_positive" and event.label_auto %}
-  <p><strong>Automatisch als „kein {{ event_titles[event.kind] or event.kind }}“ markiert: {{ label_reasons[event.label_reason] or "" }}{% if event.label_detail %} {{ event.label_detail }}{% endif %}.</strong> {% if event.kind == "lightning" %}Der Blitzsatellit sah während des ganzen Gewitters keine Blitze im Umkreis von 400 km: wohl Licht in der Nähe der Kamera.{% else %}Die Spur passt zu seiner Bahn;{% endif %} Zählt nirgends mit.</p>
-  <button type="submit" name="label" value="" class="secondary">Doch kein {{ label_reasons[event.label_reason] or "Fehlalarm" }}: Markierung entfernen</button>
+  {% if en %}<p><strong>Automatically marked “not a {{ (event_titles[event.kind] or event.kind) | lower }}”: {{ label_reasons[event.label_reason] or "" }}{% if event.label_detail %} {{ event.label_detail }}{% endif %}.</strong> {% if event.kind == "lightning" %}The lightning satellite saw no flashes within 400 km during the whole storm: probably light near the camera.{% else %}The trail matches its path;{% endif %} it counts nowhere.</p>
+  <button type="submit" name="label" value="" class="secondary">It was real: remove the mark</button>
+  {% else %}<p><strong>Automatisch als „kein {{ event_titles[event.kind] or event.kind }}“ markiert: {{ label_reasons[event.label_reason] or "" }}{% if event.label_detail %} {{ event.label_detail }}{% endif %}.</strong> {% if event.kind == "lightning" %}Der Blitzsatellit sah während des ganzen Gewitters keine Blitze im Umkreis von 400 km: wohl Licht in der Nähe der Kamera.{% else %}Die Spur passt zu seiner Bahn;{% endif %} Zählt nirgends mit.</p>
+  <button type="submit" name="label" value="" class="secondary">Doch kein {{ label_reasons[event.label_reason] or "Fehlalarm" }}: Markierung entfernen</button>{% endif %}
   {% elif event.label == "false_positive" %}
-  <p><strong>Als „kein {{ event_titles[event.kind] or event.kind }}“ markiert{% if event.label_reason %} ({{ label_reasons[event.label_reason] }}){% endif %}.</strong> Zählt nirgends mit.</p>
-  <button type="submit" name="label" value="" class="secondary">Markierung entfernen</button>
+  {% if en %}<p><strong>Marked “not a {{ (event_titles[event.kind] or event.kind) | lower }}”{% if event.label_reason %} ({{ label_reasons[event.label_reason] }}){% endif %}.</strong> It counts nowhere.</p>{% else %}<p><strong>Als „kein {{ event_titles[event.kind] or event.kind }}“ markiert{% if event.label_reason %} ({{ label_reasons[event.label_reason] }}){% endif %}.</strong> Zählt nirgends mit.</p>{% endif %}
+  <button type="submit" name="label" value="" class="secondary">{{ t('Markierung entfernen', 'Remove the mark') }}</button>
   {% elif event.label == "confirmed" %}
-  <p><strong>Als echt bestätigt.</strong></p>
-  <button type="submit" name="label" value="" class="secondary">Markierung entfernen</button>
+  <p><strong>{{ t('Als echt bestätigt.', 'Confirmed as real.') }}</strong></p>
+  <button type="submit" name="label" value="" class="secondary">{{ t('Markierung entfernen', 'Remove the mark') }}</button>
   {% else %}
-  <p class="muted">Stimmt die Erkennung? Deine Antwort hilft, die Erkennung zu verbessern.</p>
+  <p class="muted">{{ t('Stimmt die Erkennung? Deine Antwort hilft, die Erkennung zu verbessern.', 'Is the detection right? Your answer helps to improve it.') }}</p>
   <div class="actions">
-    <button type="submit" name="label" value="confirmed">Echt</button>
+    <button type="submit" name="label" value="confirmed">{{ t('Echt', 'Real') }}</button>
   </div>
   <div class="actions label-reasons">
-    <span class="muted">Kein {{ event_titles[event.kind] or event.kind }}, sondern:</span>
+    <span class="muted">{% if en %}Not a {{ (event_titles[event.kind] or event.kind) | lower }}, but:{% else %}Kein {{ event_titles[event.kind] or event.kind }}, sondern:{% endif %}</span>
     {% for key, title in label_reasons.items() %}<button type="submit" name="label" value="false_positive:{{ key }}" class="secondary small">{{ title }}</button>{% endfor %}
   </div>
   {% endif %}
@@ -38,16 +41,16 @@
 {% for s in seen_too %}
 {% set p = s.pair %}
 <div class="card trajectory">
-  <h2>Bahn des Meteors</h2>
-  <p>Auch gesehen von {% for c in s.cameras %}{% if c.link %}<a href="{{ c.link }}">{{ c.name }}</a>{% else %}{{ c.name }}{% endif %}{{ (' und ' if loop.revindex == 2 else ', ') if not loop.last }}{% endfor %}. Aus {{ 'allen' if s.cameras | length > 1 else 'beiden' }} Blickwinkeln ergibt sich:</p>
+  <h2>{{ t('Bahn des Meteors', 'The meteor’s trajectory') }}</h2>
+  {% if en %}<p>Also seen by {% for c in s.cameras %}{% if c.link %}<a href="{{ c.link }}">{{ c.name }}</a>{% else %}{{ c.name }}{% endif %}{{ (' and ' if loop.revindex == 2 else ', ') if not loop.last }}{% endfor %}. From {{ 'all' if s.cameras | length > 1 else 'both' }} viewpoints it follows:</p>{% else %}<p>Auch gesehen von {% for c in s.cameras %}{% if c.link %}<a href="{{ c.link }}">{{ c.name }}</a>{% else %}{{ c.name }}{% endif %}{{ (' und ' if loop.revindex == 2 else ', ') if not loop.last }}{% endfor %}. Aus {{ 'allen' if s.cameras | length > 1 else 'beiden' }} Blickwinkeln ergibt sich:</p>{% endif %}
   <dl class="facts">
-    <dt>Höhe</dt><dd>{{ '%.0f' | format(p.high_km) }} km → {{ '%.0f' | format(p.low_km) }} km</dd>
-    <dt>Länge der Spur</dt><dd>{{ '%.0f' | format(p.length_km) }} km</dd>
-    <dt>Über</dt><dd>{{ coords(p.high_lat, p.high_lon, 2) }} → {{ coords(p.low_lat, p.low_lon, 2) }}</dd>
-    <dt>Schnittwinkel</dt><dd>{{ p.convergence_deg | round | int }}° {% if p.convergence_deg < 20 %}<span class="warn">(flach, ungenauer)</span>{% endif %}</dd>
-    {% if p.low_err_km is not none %}<dt>Genauigkeit</dt><dd>{% if p.high_err_km is not none %}Anfang ± {{ '%.1f' | format(p.high_err_km) | replace('.', ',') }} km, {% endif %}Ende ± {{ '%.1f' | format(p.low_err_km) | replace('.', ',') }} km</dd>{% endif %}
+    <dt>{{ t('Höhe', 'Height') }}</dt><dd>{{ '%.0f' | format(p.high_km) }} km → {{ '%.0f' | format(p.low_km) }} km</dd>
+    <dt>{{ t('Länge der Spur', 'Length of the trail') }}</dt><dd>{{ '%.0f' | format(p.length_km) }} km</dd>
+    <dt>{{ t('Über', 'Over') }}</dt><dd>{{ coords(p.high_lat, p.high_lon, 2) }} → {{ coords(p.low_lat, p.low_lon, 2) }}</dd>
+    <dt>{{ t('Schnittwinkel', 'Convergence angle') }}</dt><dd>{{ p.convergence_deg | round | int }}° {% if p.convergence_deg < 20 %}<span class="warn">{{ t('(flach, ungenauer)', '(shallow, less accurate)') }}</span>{% endif %}</dd>
+    {% if p.low_err_km is not none %}<dt>{{ t('Genauigkeit', 'Accuracy') }}</dt><dd>{% if p.high_err_km is not none %}{{ t('Anfang', 'start') }} ± {{ '%.1f' | format(p.high_err_km) | replace('.', '.' if en else ',') }} km, {% endif %}{{ t('Ende', 'end') }} ± {{ '%.1f' | format(p.low_err_km) | replace('.', '.' if en else ',') }} km</dd>{% endif %}
   </dl>
-  {% if s.fireball %}<p>{% if s.meteorite %}<span class="badge warn">Meteoritenfall möglich</span> {% endif %}<a href="/feuerkugeln/{{ p.id }}">Bahn{{ ' und mögliches Fallgebiet' if s.meteorite }} auf der Karte</a></p>{% endif %}
+  {% if s.fireball %}<p>{% if s.meteorite %}<span class="badge warn">{{ t('Meteoritenfall möglich', 'Meteorite fall possible') }}</span> {% endif %}<a href="/feuerkugeln/{{ p.id }}">{% if en %}Trajectory{{ ' and possible strewn field' if s.meteorite }} on the map{% else %}Bahn{{ ' und mögliches Fallgebiet' if s.meteorite }} auf der Karte{% endif %}</a></p>{% endif %}
 </div>
 {% endfor %}
 <div class="card">
@@ -57,10 +60,10 @@
 </div>
 {% if fireball %}
 <div class="card">
-  <h2>Feuerkugel?</h2>
-  <p class="muted">Ein sehr heller Meteor. Wenn er dir auch so vorkam: Die International Meteor Organization sammelt Meldungen, um Bahn und Herkunft zu bestimmen. Das Formular fragt nach diesen Angaben:</p>
+  <h2>{{ t('Feuerkugel?', 'Fireball?') }}</h2>
+  <p class="muted">{{ t('Ein sehr heller Meteor. Wenn er dir auch so vorkam: Die International Meteor Organization sammelt Meldungen, um Bahn und Herkunft zu bestimmen. Das Formular fragt nach diesen Angaben:', 'A very bright meteor. If it looked like that to you too: the International Meteor Organization collects reports to work out its path and origin. The form asks for these details:') }}</p>
   <dl class="facts">{% for label, value in fireball %}<dt>{{ label }}</dt><dd>{{ value }}</dd>{% endfor %}</dl>
-  <p><a class="button secondary" href="{{ fireball_form }}" rel="noopener" target="_blank">Feuerkugel bei der IMO melden</a></p>
+  <p><a class="button secondary" href="{{ fireball_form }}" rel="noopener" target="_blank">{{ t('Feuerkugel bei der IMO melden', 'Report the fireball to the IMO') }}</a></p>
 </div>
 {% endif %}
 {% endblock %}

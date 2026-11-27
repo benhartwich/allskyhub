@@ -41,6 +41,7 @@ from allskyhub_server.admin.stores import (
     build_url,
     github_token,
 )
+from allskyhub_server.i18n import english, tr
 
 log = logging.getLogger(__name__)
 
@@ -69,6 +70,15 @@ APPLE_REVIEW = {
     "PROCESSING_FOR_APP_STORE": "ist freigegeben und kommt gleich in den App Store",
     "READY_FOR_SALE": "ist im App Store",
     "READY_FOR_DISTRIBUTION": "ist im App Store",
+}
+APPLE_REVIEW_EN = {
+    "WAITING_FOR_REVIEW": "waits at Apple for review",
+    "IN_REVIEW": "is in review at Apple",
+    "PENDING_DEVELOPER_RELEASE": "is approved by Apple and waits to be released",
+    "PENDING_APPLE_RELEASE": "is approved by Apple",
+    "PROCESSING_FOR_APP_STORE": "is approved and comes to the App Store shortly",
+    "READY_FOR_SALE": "is in the App Store",
+    "READY_FOR_DISTRIBUTION": "is in the App Store",
 }
 APPLE_REJECTED = {"REJECTED", "METADATA_REJECTED", "INVALID_BINARY"}
 # main's commits read per app and path at most (GitHub's page); more show as "100+".
@@ -436,6 +446,52 @@ def _steps(store: str, version: str, names: tuple[str, ...], *done: Step) -> Ste
     return Steps(store, version, (*done, *rest))
 
 
+# Texts of several steps, in the request's language (step names stay German keys; the
+# page translates them, _app_card.html).
+def _not_set_up() -> str:
+    return tr("Noch nicht eingerichtet.", "Not set up yet.")
+
+
+def _no_build() -> str:
+    return tr("Noch kein Build.", "No build yet.")
+
+
+def _build_release() -> str:
+    return tr("Release bauen", "Build release")
+
+
+def _build_again() -> str:
+    return tr("Neu bauen", "Build again")
+
+
+def _send_listing() -> str:
+    return tr("Store-Eintrag übertragen", "Send store listing")
+
+
+def _send_appstore() -> str:
+    return tr("App Store übertragen", "Send to App Store")
+
+
+def _submit() -> str:
+    return tr("Zur Prüfung einreichen", "Submit for review")
+
+
+def _submit_again() -> str:
+    return tr("Erneut einreichen", "Submit again")
+
+
+def _submit_failed() -> str:
+    return tr("Einreichen ging nicht: ", "Submitting failed: ")
+
+
+def _at_codemagic() -> str:
+    return tr("Bei Codemagic ansehen", "View at Codemagic")
+
+
+def _last() -> str:
+    return tr("zuletzt:", "last:")
+
+
 ANDROID = ("Gebaut", "Interner Test", "Eingereicht", "Google")
 
 
@@ -456,15 +512,26 @@ def android_steps(
         return _steps("Android", version, ANDROID, *done)
 
     if not has_key:
-        return way(Step("Gebaut", "current", "Noch nicht eingerichtet.", action="setup",
-                        label="Einrichten"))  # fmt: skip
+        return way(Step("Gebaut", "current", _not_set_up(), action="setup",
+                        label=tr("Einrichten", "Set up")))  # fmt: skip
     if job.busy:
-        return way(Step("Gebaut", "wait", "Der Server baut gerade das App Bundle …"))
+        return way(
+            Step(
+                "Gebaut",
+                "wait",
+                tr(
+                    "Der Server baut gerade das App Bundle …",
+                    "The server is building the App Bundle …",
+                ),
+            )
+        )
     if further and main and _newer(main, version):
-        newer = (f"main ist Version {main}; der Hub kennt noch {version}. „Store-Eintrag "
-                 "übertragen“ holt den neuen Stand, danach lässt er sich bauen.")  # fmt: skip
+        newer = tr(f"main ist Version {main}; der Hub kennt noch {version}. „Store-Eintrag "
+                   "übertragen“ holt den neuen Stand, danach lässt er sich bauen.",
+                   f"main is version {main}; the hub still knows {version}. \"Send store "
+                   "listing\" fetches the new state, then it can be built.")  # fmt: skip
         return way(Step("Gebaut", "current", newer, action="play-listing",
-                        label="Store-Eintrag übertragen"))  # fmt: skip
+                        label=_send_listing()))  # fmt: skip
     number, built = latest.get("build"), str(latest.get("version", ""))
     at = str(latest.get("built_at", ""))
     made = Step("Gebaut", "done", f"Build {number} (Version {built})", at, aab or None,
@@ -474,55 +541,73 @@ def android_steps(
         status = release.get("status")
         earlier = (made, Step("Interner Test", "done"), Step("Eingereicht", "done"))
         if status == "draft":
-            draft = (f"Build {number} ({built}) liegt als Entwurf in der Produktion: in der "
-                     "Play Console einführen.")  # fmt: skip
+            draft = tr(f"Build {number} ({built}) liegt als Entwurf in der Produktion: in der "
+                       "Play Console einführen.",
+                       f"Build {number} ({built}) is a draft in production: roll it out in the "
+                       "Play Console.")  # fmt: skip
             return way(*earlier, Step("Google", "current", draft))
         if status == "halted":
-            return way(*earlier, Step("Google", "fail", f"Build {number} ({built}): die "
-                       "Einführung ist angehalten (Play Console)."))  # fmt: skip
+            return way(*earlier, Step("Google", "fail", tr(f"Build {number} ({built}): die "
+                       "Einführung ist angehalten (Play Console).",
+                       f"Build {number} ({built}): the rollout is halted "
+                       "(Play Console).")))  # fmt: skip
         if public == built:
-            return way(*earlier, Step("Google", "done", f"Build {number} ({built}) ist bei "
-                       "Google Play live."))  # fmt: skip
-        return way(*earlier, Step("Google", "store", f"Build {number} ({built}) ist in der "
-                   "Produktion: bei Google in Prüfung oder schon live."))  # fmt: skip
+            return way(*earlier, Step("Google", "done", tr(f"Build {number} ({built}) ist bei "
+                       "Google Play live.",
+                       f"Build {number} ({built}) is live on Google Play.")))  # fmt: skip
+        return way(*earlier, Step("Google", "store", tr(f"Build {number} ({built}) ist in der "
+                   "Produktion: bei Google in Prüfung oder schon live.",
+                   f"Build {number} ({built}) is in production: in review at Google or already "
+                   "live.")))  # fmt: skip
     if job.state == "failed":
-        return way(Step("Gebaut", "fail", "Der letzte Build ist fehlgeschlagen (Protokoll "
-                        "unten).", action="build-android", label="Neu bauen"))  # fmt: skip
+        return way(Step("Gebaut", "fail", tr("Der letzte Build ist fehlgeschlagen (Protokoll "
+                        "unten).", "The last build failed (log below)."), action="build-android",
+                        label=_build_again()))  # fmt: skip
     if not latest:
-        return way(Step("Gebaut", "current", "Noch kein Build.", action="build-android",
-                        label="Release bauen"))  # fmt: skip
+        return way(Step("Gebaut", "current", _no_build(), action="build-android",
+                        label=_build_release()))  # fmt: skip
     if built != version and further and _newer(built, version):
         # The build is main; the hub's copy of a further app's version is from the last
         # listing fetch. Building again never changes that (bortle, Benjamin 2026-11-07).
-        stale = (f"Build {number} ist Version {built}; der Hub kennt noch {version}. "
-                 "„Store-Eintrag übertragen“ holt den neuen Stand aus dem Repository.")  # fmt: skip
+        stale = tr(f"Build {number} ist Version {built}; der Hub kennt noch {version}. "
+                   "„Store-Eintrag übertragen“ holt den neuen Stand aus dem Repository.",
+                   f"Build {number} is version {built}; the hub still knows {version}. "
+                   "\"Send store listing\" fetches the new state from the repository.")  # fmt: skip
         return way(Step("Gebaut", "current", stale, at, action="play-listing",
-                        label="Store-Eintrag übertragen"))  # fmt: skip
+                        label=_send_listing()))  # fmt: skip
     if built != version:
-        other = f"Build {number} ist Version {built}, nicht {version}."
+        other = tr(
+            f"Build {number} ist Version {built}, nicht {version}.",
+            f"Build {number} is version {built}, not {version}.",
+        )
         return way(Step("Gebaut", "current", other, at, action="build-android",
-                        label="Release bauen"))  # fmt: skip
+                        label=_build_release()))  # fmt: skip
     if job.state == "built":
-        return way(made, Step("Interner Test", "current", f"Build {number} ist gebaut. "
+        return way(made, Step("Interner Test", "current", tr(f"Build {number} ist gebaut. "
                    "Google kennt die App noch nicht: dieses erste App Bundle einmal von Hand "
-                   "in der Play Console hochladen.", link=aab, link_label="App Bundle "
-                   "herunterladen"))  # fmt: skip
-    tested = Step("Interner Test", "done", "Google Play: interner Test")
+                   "in der Play Console hochladen.", f"Build {number} is built. Google does not "
+                   "know the app yet: upload this first App Bundle once by hand in the Play "
+                   "Console."), link=aab, link_label=tr("App Bundle herunterladen",
+                   "Download App Bundle")))  # fmt: skip
+    tested = Step(
+        "Interner Test", "done", tr("Google Play: interner Test", "Google Play: internal test")
+    )
     google = Step("Google", "todo", _older_release(play, str(number)))
     if review and str(review.get("at", "")) > at:
         steps: list[dict[str, Any]] = review.get("steps") or []
         state, sent_at = _state(steps), str(review.get("at", ""))
         if state == "fail":
-            return way(made, tested, Step("Eingereicht", "fail", f"Einreichen ging nicht: "
+            return way(made, tested, Step("Eingereicht", "fail", _submit_failed() +
                        f"{_text(steps)}", sent_at, action="review-play",
-                       label="Erneut einreichen"), google)  # fmt: skip
+                       label=_submit_again()), google)  # fmt: skip
         if state == "warn":  # a draft to roll out in the Play Console, or an account missing
             return way(made, tested, Step("Eingereicht", "current", _text(steps), sent_at,
-                       action="review-play", label="Erneut einreichen"), google)  # fmt: skip
+                       action="review-play", label=_submit_again()), google)  # fmt: skip
         return way(made, tested, Step("Eingereicht", "done", _text(steps), sent_at), google)
-    return way(made, tested, Step("Eingereicht", "current", f"Build {number} (Version "
-               f"{built}) ist im internen Test.", action="review-play",
-               label="Zur Prüfung einreichen"), google)  # fmt: skip
+    return way(made, tested, Step("Eingereicht", "current", tr(f"Build {number} (Version "
+               f"{built}) ist im internen Test.", f"Build {number} (version {built}) is in "
+               "internal testing."), action="review-play",
+               label=_submit()), google)  # fmt: skip
 
 
 def _older_release(play: dict[str, Any] | None, code: str) -> str:
@@ -533,7 +618,10 @@ def _older_release(play: dict[str, Any] | None, code: str) -> str:
         return ""
     found: list[Any] = other.get("codes") or []
     codes = ", ".join(str(c) for c in found)
-    return f"zuletzt: Build {codes} in der Produktion ({other.get('status', '')})"
+    return tr(
+        f"zuletzt: Build {codes} in der Produktion ({other.get('status', '')})",
+        f"last: build {codes} in production ({other.get('status', '')})",
+    )
 
 
 def android_row(
@@ -555,6 +643,11 @@ APPLE_SHORT = {"REJECTED": "abgelehnt", "METADATA_REJECTED": "abgelehnt (Texte)"
                "INVALID_BINARY": "ungültiger Build", "DEVELOPER_REJECTED": "zurückgezogen",
                "READY_FOR_SALE": "im App Store", "READY_FOR_DISTRIBUTION": "im App Store",
                "PREPARE_FOR_SUBMISSION": "in Vorbereitung"}  # fmt: skip
+APPLE_SHORT_EN = {"REJECTED": "rejected", "METADATA_REJECTED": "rejected (texts)",
+                  "INVALID_BINARY": "invalid build", "DEVELOPER_REJECTED": "withdrawn",
+                  "READY_FOR_SALE": "in the App Store",
+                  "READY_FOR_DISTRIBUTION": "in the App Store",
+                  "PREPARE_FOR_SUBMISSION": "being prepared"}  # fmt: skip
 
 
 def _apple_note(apple: list[dict[str, str]] | None, version: str) -> str:
@@ -563,7 +656,8 @@ def _apple_note(apple: list[dict[str, str]] | None, version: str) -> str:
     if other is None:
         return ""
     state = other.get("state", "")
-    return f"zuletzt: {other.get('version', '')} {APPLE_SHORT.get(state, state.lower())}"
+    short = APPLE_SHORT_EN if english() else APPLE_SHORT
+    return f"{_last()} {other.get('version', '')} {short.get(state, state.lower())}"
 
 
 def ios_steps(
@@ -578,8 +672,8 @@ def ios_steps(
         return _steps("iOS", version, IOS, *done)
 
     if not codemagic:
-        return way(Step("Gebaut", "current", "Noch nicht eingerichtet.", action="setup",
-                        label="Einrichten"))  # fmt: skip
+        return way(Step("Gebaut", "current", _not_set_up(), action="setup",
+                        label=tr("Einrichten", "Set up")))  # fmt: skip
     # Where Apple has the current version (also when submitted in App Store Connect).
     there = next((v for v in apple or [] if v.get("version") == version), None)
     state = (there or {}).get("state", "")
@@ -592,71 +686,92 @@ def ios_steps(
     chosen = next((s for s in steps if s.get("title") == "Build"), None)
     fresh = bool(pushed) and pushed_at >= built_at and chosen is not None  # this build pushed
     number = _build_number(str((chosen or {}).get("text", ""))) if fresh else ""
-    made = Step("Gebaut", "done", f"Build {number}" if number else "bei Codemagic", built_at,
+    made = Step("Gebaut", "done",
+                f"Build {number}" if number else tr("bei Codemagic", "at Codemagic"), built_at,
                 link, "Codemagic ↗")  # fmt: skip
     if state in APPLE_REVIEW:
         apple_state = "done" if state in ("READY_FOR_SALE", "READY_FOR_DISTRIBUTION") else "store"
         return Steps("iOS", version, (
             made if build else Step("Gebaut", "done"), Step("Übertragen", "done"),
             Step("Bei Apple", "done"), Step("Eingereicht", "done"),
-            Step("Apple", apple_state, f"Version {version} {APPLE_REVIEW[state]}."),
+            Step("Apple", apple_state,
+                 f"Version {version} {(APPLE_REVIEW_EN if english() else APPLE_REVIEW)[state]}."),
         ))  # fmt: skip
     rsteps: list[dict[str, Any]] = (review or {}).get("steps") or []
     sent_at = str((review or {}).get("at", ""))
     rejected = state in APPLE_REJECTED
     if build is None:
         if rejected:  # rejected, and no build started here: build anew
-            return way(Step("Gebaut", "current", f"Apple hat Version {version} abgelehnt; "
-                            "für einen neuen Versuch neu bauen.", action="build-ios",
-                            label="Release bauen"))  # fmt: skip
-        return way(Step("Gebaut", "current", "Noch kein Build.", action="build-ios",
-                        label="Release bauen"))  # fmt: skip
+            return way(Step("Gebaut", "current", tr(f"Apple hat Version {version} abgelehnt; "
+                            "für einen neuen Versuch neu bauen.", f"Apple rejected version "
+                            f"{version}; build again for a new attempt."), action="build-ios",
+                            label=_build_release()))  # fmt: skip
+        return way(Step("Gebaut", "current", _no_build(), action="build-ios",
+                        label=_build_release()))  # fmt: skip
     if status in CM_FAILED:
-        failed = f"Der letzte Build bei Codemagic: {status}."
-        return way(Step("Gebaut", "fail", failed, built_at, link, "Bei Codemagic ansehen",
-                        "build-ios", "Neu bauen"))  # fmt: skip
+        failed = tr(
+            f"Der letzte Build bei Codemagic: {status}.", f"The last build at Codemagic: {status}."
+        )
+        return way(Step("Gebaut", "fail", failed, built_at, link, _at_codemagic(),
+                        "build-ios", _build_again()))  # fmt: skip
     if status not in CM_DONE:
-        return way(Step("Gebaut", "wait", f"Codemagic baut ({status or 'gestartet'}) …",
-                        built_at, link, "Bei Codemagic ansehen"))  # fmt: skip
-    verdict = Step("Apple", "todo", f"zuletzt: {version} abgelehnt" if rejected else note)
+        return way(Step("Gebaut", "wait", tr(f"Codemagic baut ({status or 'gestartet'}) …",
+                        f"Codemagic is building ({status or 'started'}) …"),
+                        built_at, link, _at_codemagic()))  # fmt: skip
+    verdict = Step(
+        "Apple",
+        "todo",
+        tr(f"zuletzt: {version} abgelehnt", f"last: {version} rejected") if rejected else note,
+    )
     if pushed and pushed.get("running"):
-        return way(made, Step("Übertragen", "wait", "Die Übertragung zum App Store läuft …"),
+        return way(made, Step("Übertragen", "wait", tr("Die Übertragung zum App Store läuft …",
+                                                       "Sending to the App Store …")),
                    Step("Bei Apple", "todo"), Step("Eingereicht", "todo"), verdict)  # fmt: skip
     if not fresh:
-        return way(made, Step("Übertragen", "current", "Der Build ist fertig. Jetzt Texte, "
-                   "Screenshots und Build zum App Store übertragen.", action="appstore",
-                   label="App Store übertragen"), Step("Bei Apple", "todo"),
+        return way(made, Step("Übertragen", "current", tr("Der Build ist fertig. Jetzt Texte, "
+                   "Screenshots und Build zum App Store übertragen.", "The build is done. Now send "
+                   "texts, screenshots and build to the App Store."), action="appstore",
+                   label=_send_appstore()), Step("Bei Apple", "todo"),
                    Step("Eingereicht", "todo"), verdict)  # fmt: skip
-    sent = Step("Übertragen", "done", "Texte, Screenshots und Build", pushed_at)
+    sent = Step(
+        "Übertragen",
+        "done",
+        tr("Texte, Screenshots und Build", "Texts, screenshots and build"),
+        pushed_at,
+    )
     if (chosen or {}).get("state") != "ok":
-        return way(made, sent, Step("Bei Apple", "current", "Apple verarbeitet den Build noch "
+        return way(made, sent, Step("Bei Apple", "current", tr("Apple verarbeitet den Build noch "
                    "(dauert meist 10–30 Minuten); danach noch einmal übertragen.",
-                   action="appstore", label="App Store übertragen"),
+                   "Apple is still processing the build (mostly 10–30 minutes); then send "
+                   "again."), action="appstore", label=_send_appstore()),
                    Step("Eingereicht", "todo"), verdict)  # fmt: skip
     ready = Step("Bei Apple", "done", f"{(chosen or {}).get('text', '')} In TestFlight.".strip())
     if review and sent_at > pushed_at:  # submitted after this push
         if any(s.get("title") in appstore.TO_PUSH for s in rsteps):  # the new build next
             return way(made, Step("Übertragen", "current", _text(rsteps), sent_at,
-                       action="appstore", label="App Store übertragen"),
+                       action="appstore", label=_send_appstore()),
                        Step("Bei Apple", "todo"), Step("Eingereicht", "todo"), verdict)  # fmt: skip
         if _state(rsteps) == "fail":
-            return way(made, sent, ready, Step("Eingereicht", "fail", f"Einreichen ging nicht: "
+            return way(made, sent, ready, Step("Eingereicht", "fail", _submit_failed() +
                        f"{_text(rsteps)}", sent_at, action="review-appstore",
-                       label="Erneut einreichen"), verdict)  # fmt: skip
+                       label=_submit_again()), verdict)  # fmt: skip
         if _state(rsteps) == "warn":
             return way(made, sent, ready, Step("Eingereicht", "current", _text(rsteps), sent_at,
-                       action="review-appstore", label="Erneut einreichen"), verdict)  # fmt: skip
+                       action="review-appstore", label=_submit_again()), verdict)  # fmt: skip
         if rejected:  # what was submitted here came back
             return way(made, sent, ready, Step("Eingereicht", "done", _text(rsteps), sent_at),
-                       Step("Apple", "fail", f"Apple hat Version {version} abgelehnt; die "
+                       Step("Apple", "fail", tr(f"Apple hat Version {version} abgelehnt; die "
                             "Begründung steht in App Store Connect (App-Prüfung).",
-                            action="review-appstore", label="Erneut einreichen"))  # fmt: skip
+                            f"Apple rejected version {version}; the reason is in App Store "
+                            "Connect (App Review)."),
+                            action="review-appstore", label=_submit_again()))  # fmt: skip
         return way(made, sent, ready, Step("Eingereicht", "done", _text(rsteps), sent_at),
                    Step("Apple", "todo", note))  # fmt: skip
     # This build went to Apple after the last submission: a rejection is only a note now.
-    return way(made, sent, ready, Step("Eingereicht", "current", "Bereit für die Prüfung.",
+    return way(made, sent, ready, Step("Eingereicht", "current",
+               tr("Bereit für die Prüfung.", "Ready for review."),
                action="review-appstore",
-               label="Erneut einreichen" if rejected else "Zur Prüfung einreichen"),
+               label=_submit_again() if rejected else _submit()),
                verdict)  # fmt: skip
 
 
@@ -762,8 +877,8 @@ async def cards(stores: Stores, only: str | None = None) -> list[Card]:
         found = stores.apk(key)
         card.apk = found[1] if found else None
         card.test = stores.test_job(app) if app and app.test_apk else None
-        results = (("Google-Play-Eintrag", listing), ("App Store", pushed),
-                   ("APK", stores.apk_state(app)))  # fmt: skip
+        results = ((tr("Google-Play-Eintrag", "Google Play listing"), listing),
+                   ("App Store", pushed), ("APK", stores.apk_state(app)))  # fmt: skip
         for name, result in results:
             if result:
                 card.results.append((name, result))

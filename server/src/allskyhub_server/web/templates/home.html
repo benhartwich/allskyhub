@@ -1,10 +1,11 @@
 {% extends "base.html" %}
-{% block title %}Meine Kameras · allskyhub{% endblock %}
+{% block lang %}{{ 'en' if en else 'de' }}{% endblock %}
+{% block title %}{{ t('Meine Kameras', 'My cameras') }} · allskyhub{% endblock %}
 {% from "_stores.html" import stores %}
 {% block content %}
 <div class="page-head">
-  <h1>Meine Kameras</h1>
-  <span class="actions"><a class="button small" href="/cameras/pair">Kamera koppeln</a> <a class="button small secondary" href="/stationen/neu">Kamera verbinden</a></span>
+  <h1>{{ t('Meine Kameras', 'My cameras') }}</h1>
+  <span class="actions"><a class="button small" href="/cameras/pair">{{ t('Kamera koppeln', 'Pair a camera') }}</a> <a class="button small secondary" href="/stationen/neu">{{ t('Kamera verbinden', 'Connect a camera') }}</a></span>
 </div>
 {% if cameras %}
 <ul class="cams">
@@ -12,15 +13,15 @@
   <li>
     <a class="card cam" href="/cameras/{{ device.id }}">
       {% if device.latest_image_at %}
-      <img src="/cameras/{{ device.id }}/image/thumb.jpg?t={{ device.latest_image_at.timestamp() | int }}" alt="Letztes Bild von {{ device.name }}" loading="lazy">
+      <img src="/cameras/{{ device.id }}/image/thumb.jpg?t={{ device.latest_image_at.timestamp() | int }}" alt="{{ t('Letztes Bild von', 'Latest image of') }} {{ device.name }}" loading="lazy">
       {% else %}
       <div class="sky-ph" aria-hidden="true"></div>
       {% endif %}
       <div class="cam-meta">
-        <strong>{{ device.name }}{% if role != 'owner' %} <span class="badge">geteilt</span>{% endif %}</strong>
+        <strong>{{ device.name }}{% if role != 'owner' %} <span class="badge">{{ t('geteilt', 'shared') }}</span>{% endif %}</strong>
         <span class="badge {{ 'ok' if online else '' }}">{{ 'online' if online else 'offline' }}</span>
       </div>
-      <span class="muted">Zuletzt gesehen {{ device.last_seen_at | age }}</span>
+      <span class="muted">{{ t('Zuletzt gesehen', 'Last seen') }} {{ device.last_seen_at | age }}</span>
       {% for p in problems if p.key != 'offline' %}<span class="health-line {{ p.level }}">{{ p.text }}</span>{% endfor %}
     </a>
   </li>
@@ -28,36 +29,36 @@
 </ul>
 {% else %}
 <div class="card empty">
-  <h2>Noch keine Kamera gekoppelt</h2>
-  <p class="muted">Noch keine Hardware oder mitten im Zusammenbau? Die ersten Schritte führen dich von der Einkaufsliste bis zum ersten Bild.</p>
-  <p class="actions"><a class="button" href="/start">Erste Schritte</a> <a class="button secondary" href="/cameras/pair">Kamera koppeln</a></p>
+  <h2>{{ t('Noch keine Kamera gekoppelt', 'No camera paired yet') }}</h2>
+  <p class="muted">{{ t('Noch keine Hardware oder mitten im Zusammenbau? Die ersten Schritte führen dich von der Einkaufsliste bis zum ersten Bild.', 'No hardware yet, or in the middle of building? The first steps take you from the shopping list to the first image.') }}</p>
+  <p class="actions"><a class="button" href="/start">{{ t('Erste Schritte', 'First steps') }}</a> <a class="button secondary" href="/cameras/pair">{{ t('Kamera koppeln', 'Pair a camera') }}</a></p>
 </div>
 {% endif %}
 <section class="stack">
-  <h2>SharedSky-Stationen</h2>
+  <h2>{{ t('SharedSky-Stationen', 'SharedSky stations') }}</h2>
   {% if stations %}
   <ul class="cams">
     {% for s in stations %}
     <li>
       <a class="card cam" href="/stationen/{{ s.id }}">
         {% if s.latest_thumb_at %}
-        <img src="/stationen/{{ s.id }}/bild.jpg?t={{ s.latest_thumb_at.timestamp() | int }}" alt="Letztes Bild von {{ s.name }}" loading="lazy">
+        <img src="/stationen/{{ s.id }}/bild.jpg?t={{ s.latest_thumb_at.timestamp() | int }}" alt="{{ t('Letztes Bild von', 'Latest image of') }} {{ s.name }}" loading="lazy">
         {% else %}
         <div class="sky-ph" aria-hidden="true"></div>
         {% endif %}
         <div class="cam-meta"><strong>{{ s.name }}</strong><span class="badge">Station</span></div>
-        <span class="muted">{% if s.last_seen_at %}Zuletzt gesehen {{ s.last_seen_at | age }}{% else %}Noch nichts empfangen{% endif %}</span>
+        <span class="muted">{% if s.last_seen_at %}{{ t('Zuletzt gesehen', 'Last seen') }} {{ s.last_seen_at | age }}{% else %}{{ t('Noch nichts empfangen', 'Nothing received yet') }}{% endif %}</span>
       </a>
     </li>
     {% endfor %}
   </ul>
   {% else %}
-  <p class="muted">Deine Kamera läuft mit indi-allsky, Allsky oder eigener Software? <a href="/stationen/neu">Verbinde sie mit SharedSky</a> und miss gemeinsam mit den anderen Kameras Feuerkugeln, Meteorströme und die Himmelshelligkeit. <a href="/mitmachen">Mehr erfahren</a></p>
+  <p class="muted">{% if en %}Does your camera run indi-allsky, Allsky or software of your own? <a href="/stationen/neu">Connect it to SharedSky</a> and measure fireballs, meteor showers and sky brightness together with the other cameras. <a href="/mitmachen">Learn more</a>{% else %}Deine Kamera läuft mit indi-allsky, Allsky oder eigener Software? <a href="/stationen/neu">Verbinde sie mit SharedSky</a> und miss gemeinsam mit den anderen Kameras Feuerkugeln, Meteorströme und die Himmelshelligkeit. <a href="/mitmachen">Mehr erfahren</a>{% endif %}</p>
   {% endif %}
 </section>
 <section class="card app-card stack">
-  <h2>Die App</h2>
-  <p class="muted">Deine Kameras unterwegs: Live-Bild, Meteore, Polarlicht und Zeitraffer, mit Benachrichtigung bei Ereignissen.</p>
-  {{ stores(false) }}
+  <h2>{{ t('Die App', 'The app') }}</h2>
+  <p class="muted">{{ t('Deine Kameras unterwegs: Live-Bild, Meteore, Polarlicht und Zeitraffer, mit Benachrichtigung bei Ereignissen.', 'Your cameras on the go: live image, meteors, aurora and timelapses, with notifications for events.') }}</p>
+  {{ stores(en) }}
 </section>
 {% endblock %}

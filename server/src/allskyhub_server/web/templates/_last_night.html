@@ -1,6 +1,6 @@
 {# Roadmap C3: summary of the night that ended this morning. #}
 <div class="card">
-  <div class="cam-meta"><h2>Letzte Nacht</h2><a href="/cameras/{{ device.id }}/nights/{{ last_night.night_id }}">{{ last_night.night_id | night_title }}</a></div>
+  <div class="cam-meta"><h2>{{ t('Letzte Nacht', 'Last night') }}</h2><a href="/cameras/{{ device.id }}/nights/{{ last_night.night_id }}">{{ last_night.night_id | night_title }}</a></div>
   {% if last_night.best %}
   {% set b = last_night.best %}
   <a class="best-shot" href="/cameras/{{ device.id }}/events/{{ b.night_id }}/{{ b.event_id }}">
@@ -9,5 +9,5 @@
   </a>
   {% endif %}
   <p>{{ last_night.line() }}</p>
-  {% if last_night.overflights %}<p class="small"><a href="/cameras/{{ device.id }}/ueberfluege?nacht={{ last_night.night_id }}">Überflüge ansehen</a></p>{% endif %}
+  {% if last_night.overflights %}<p class="small"><a href="/cameras/{{ device.id }}/ueberfluege?nacht={{ last_night.night_id }}">{{ t('Überflüge ansehen', 'See the passes') }}</a></p>{% endif %}
 </div>

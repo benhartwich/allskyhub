@@ -14,10 +14,11 @@ from fastapi.responses import Response
 from allskyhub_server.admin import apps, appstore
 from allskyhub_server.admin import stores as admin_stores
 from allskyhub_server.auth.sessions import SessionInfo
+from allskyhub_server.i18n import english, tr
 from allskyhub_server.web import flash
 from allskyhub_server.web.deps import CurrentSession, SettingsDep, csrf_protect
 from allskyhub_server.web.render import render
-from allskyhub_server.web.routes_admin import admin_only, confirmed
+from allskyhub_server.web.routes_admin import admin_only, confirmed, your_password_wrong
 
 router = APIRouter(dependencies=[Depends(csrf_protect)])
 log = logging.getLogger(__name__)
@@ -35,6 +36,23 @@ TITLES = {
     "build-screenshots": "Screenshots erzeugen",
     "take-screenshots": "Screenshots übernehmen",
 }
+TITLES_EN = {
+    "setup": "Set up",
+    "build-android": "Build Android release",
+    "build-ios": "Build iOS release",
+    "play-listing": "Send Google Play listing",
+    "appstore": "Send to App Store",
+    "review-play": "Submit Android for review",
+    "review-appstore": "Submit iOS for review",
+    "apk": "Fetch APK for download",
+    "build-test-apk": "Build test APK",
+    "build-screenshots": "Make screenshots",
+    "take-screenshots": "Take over screenshots",
+}
+
+
+def titles() -> dict[str, str]:
+    return TITLES_EN if english() else TITLES
 
 
 async def apps_page(
@@ -54,7 +72,7 @@ async def apps_page(
         "admin_apps.html",
         {
             "cards": cards,
-            "titles": TITLES,
+            "titles": titles(),
             "android_busy": stores.android_building(),
             "accounts": [
                 e
@@ -89,7 +107,7 @@ async def app_card(
     return render(
         request,
         "_app_card.html",
-        {"card": found[0], "titles": TITLES, "android_busy": stores.android_building()},
+        {"card": found[0], "titles": titles(), "android_busy": stores.android_building()},
         session=session,
     )
 
@@ -105,9 +123,16 @@ async def apps_action(
     admin_only(session, settings)
     other = admin_stores.OTHER_APPS.get(app)
     if (app != "allskyhub" and other is None) or action not in apps.ACTIONS:
-        return await apps_page(request, session, 400, error="Unbekannte App oder Aktion.")
+        return await apps_page(
+            request, session, 400, error=tr("Unbekannte App oder Aktion.", "Unknown app or action.")
+        )
     if other is not None and not other.stores and action != "build-test-apk":
-        return await apps_page(request, session, 400, error=f"{other.title}: nur die Test-APK.")
+        return await apps_page(
+            request,
+            session,
+            400,
+            error=f"{other.title}: " + tr("nur die Test-APK.", "only the test APK."),
+        )
     stores: admin_stores.Stores = request.app.state.stores
     by = session.user.email
     name = other.title if other else "allskyhub"
@@ -115,25 +140,38 @@ async def apps_action(
         if action == "setup":
             report = await (stores.setup_other(other, by) if other else stores.setup(by))
             return await apps_page(
-                request, session, report=report, report_title=f"{name}: Einrichten"
+                request, session, report=report, report_title=f"{name}: {titles()['setup']}"
             )
         if action == "build-screenshots":
             await stores.build("screenshots", by, app=other)
-            return await apps_page(request, session, notice=f"{name}: Codemagic startet die App "
-                                   "im iPhone-Simulator und im Android-Emulator (etwa 20 Minuten); "
-                                   "danach „Screenshots übernehmen“.")  # fmt: skip
+            return await apps_page(request, session, notice=f"{name}: " + tr(
+                "Codemagic startet die App im iPhone-Simulator und im Android-Emulator (etwa 20 "
+                "Minuten); danach „Screenshots übernehmen“.",
+                "Codemagic starts the app in the iPhone simulator and the Android emulator (about "
+                '20 minutes); then "Take over screenshots".'))  # fmt: skip
         if action == "take-screenshots":
             report = await stores.take_screenshots(other)
             return await apps_page(
-                request, session, report=report, report_title=f"{name}: Screenshots übernehmen"
+                request,
+                session,
+                report=report,
+                report_title=f"{name}: {titles()['take-screenshots']}",
             )
         if action in ("build-android", "build-ios"):
             platform = action.removeprefix("build-")
             await stores.build(platform, by, app=other)
             notice = (
-                "Der Server baut das App Bundle (gut 10 Minuten) und lädt es in den internen Test."
+                tr(
+                    "Der Server baut das App Bundle (gut 10 Minuten) und lädt es in den "
+                    "internen Test.",
+                    "The server builds the App Bundle (a good 10 minutes) and uploads it to "
+                    "internal testing.",
+                )
                 if platform == "android"
-                else "Codemagic baut (etwa 20 Minuten) und schickt den Build nach TestFlight."
+                else tr(
+                    "Codemagic baut (etwa 20 Minuten) und schickt den Build nach TestFlight.",
+                    "Codemagic builds (about 20 minutes) and sends the build to TestFlight.",
+                )
             )
             return await apps_page(request, session, notice=f"{name}: {notice}")
         if action == "play-listing":
@@ -144,10 +182,13 @@ async def apps_action(
             started = stores.start_apk(by, other)
         elif action == "build-test-apk":
             if other is None:
-                raise admin_stores.StoreError("Für diese App gibt es keine Test-APK.")
+                raise admin_stores.StoreError(
+                    tr("Für diese App gibt es keine Test-APK.", "This app has no test APK.")
+                )
             stores.request_test_apk(by, other)
-            return await apps_page(request, session, notice=f"{name}: Der Server baut die "
-                                   "Test-APK (gut 10 Minuten).")  # fmt: skip
+            return await apps_page(request, session, notice=f"{name}: " + tr(
+                "Der Server baut die Test-APK (gut 10 Minuten).",
+                "The server builds the test APK (a good 10 minutes)."))  # fmt: skip
         else:
             store = action.removeprefix("review-")
             if store == "play":
@@ -157,24 +198,34 @@ async def apps_action(
             withdrawn = any(x.title == appstore.WITHDRAWN for x in report.steps)
             # The waiting version now takes the new build.
             if withdrawn and not appstore.start(stores, by, other):
-                report.add(TITLES["appstore"], "warn", "Eine Übertragung läuft noch; danach "
-                           "„App Store übertragen“ noch einmal drücken.")  # fmt: skip
+                report.add(titles()["appstore"], "warn", tr(
+                    "Eine Übertragung läuft noch; danach „App Store übertragen“ noch einmal "
+                    "drücken.",
+                    'A transfer is still running; then press "Send to App Store" '
+                    "again."))  # fmt: skip
             apps.save_review(stores, other.key if other else "allskyhub", store, by, report)
             log.info(
                 "review %s %s submitted by %s: %s", store, name, by,
                 [(x.title, x.state, x.text) for x in report.steps],
             )  # fmt: skip
             return await apps_page(
-                request, session, report=report, report_title=f"{name}: {TITLES[action]}"
+                request, session, report=report, report_title=f"{name}: {titles()[action]}"
             )
     except admin_stores.StoreError as exc:
         return await apps_page(request, session, 400, error=f"{name}: {exc}")
     if not started:
-        return await apps_page(request, session, 409, error=f"{name}: Eine Übertragung läuft noch.")
+        return await apps_page(
+            request,
+            session,
+            409,
+            error=f"{name}: " + tr("Eine Übertragung läuft noch.", "A transfer is still running."),
+        )
     return await apps_page(
         request, session,
-        notice=f"{name}: {TITLES[action]} gestartet; das dauert ein bis zwei Minuten. "
-        "Danach die Seite neu laden.",
+        notice=tr(f"{name}: {TITLES[action]} gestartet; das dauert ein bis zwei Minuten. "
+                  "Danach die Seite neu laden.",
+                  f"{name}: {TITLES_EN[action]} started; that takes one to two minutes. "
+                  "Then reload the page."),
     )  # fmt: skip
 
 
@@ -193,9 +244,14 @@ async def review_account(
     admin_only(session, settings)
     other = admin_stores.OTHER_APPS.get(app)
     if other is None or not other.review_vars:
-        return await apps_page(request, session, 400, error="Diese App braucht kein Demo-Konto.")
+        return await apps_page(
+            request,
+            session,
+            400,
+            error=tr("Diese App braucht kein Demo-Konto.", "This app needs no demo account."),
+        )
     if not await confirmed(request, session, password):
-        return await apps_page(request, session, 400, error="Dein Passwort stimmt nicht.")
+        return await apps_page(request, session, 400, error=your_password_wrong())
     try:
         value, meta = admin_stores.parse_review(login, secret)
     except admin_stores.StoreError as exc:
@@ -205,6 +261,7 @@ async def review_account(
     log.info("demo account for %s screenshots set by %s", other.key, session.user.email)
     return await apps_page(
         request, session,
-        notice=f"{other.title}: Demo-Konto gespeichert. Jetzt „Einrichten“, dann „Screenshots "
-        "erzeugen“.",
+        notice=f"{other.title}: " + tr(
+            "Demo-Konto gespeichert. Jetzt „Einrichten“, dann „Screenshots erzeugen“.",
+            'Demo account saved. Now "Set up", then "Make screenshots".'),
     )  # fmt: skip

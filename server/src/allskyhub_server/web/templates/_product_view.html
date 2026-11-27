@@ -7,8 +7,8 @@
   {% endif %}
 {% elif state == "fetching" %}
   <div class="card" hx-get="/cameras/{{ device.id }}/products/{{ night_id }}/{{ product.name }}/state" hx-trigger="every 3s" hx-target="#product" hx-swap="innerHTML">
-    <p>Wird von der Kamera geholt … ({{ product.size | filesize }})</p>
+    <p>{{ t('Wird von der Kamera geholt …', 'Fetching from the camera …') }} ({{ product.size | filesize }})</p>
   </div>
 {% else %}
-  <div class="card"><p class="muted">Die Kamera ist offline. Die Datei kommt, sobald sie wieder verbunden ist.</p></div>
+  <div class="card"><p class="muted">{{ t('Die Kamera ist offline. Die Datei kommt, sobald sie wieder verbunden ist.', 'The camera is offline. The file comes as soon as it is connected again.') }}</p></div>
 {% endif %}

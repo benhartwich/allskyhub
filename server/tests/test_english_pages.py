@@ -147,6 +147,9 @@ async def test_contact_page_in_both_languages(client: httpx.AsyncClient) -> None
     assert "support@webinx.eu" in de.text
     assert "Fragen, Probleme, Rückmeldungen" in de.text
     assert 'href="/kontakt">Kontakt</a>' in de.text  # the footer
+    assert 'href="/allsky">Allsky-Nutzer</a>' in de.text  # as the English footer has it
+    assert "nie mitschicken" in de.text
+    assert "innerhalb eines Tages" not in de.text  # no promise made in Ben's name
     en = await client.get("/kontakt?lang=en")
     assert '<html lang="en">' in en.text
     assert "Questions, problems, feedback" in en.text

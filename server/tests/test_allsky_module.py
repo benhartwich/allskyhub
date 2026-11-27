@@ -292,6 +292,41 @@ async def test_module_sends_station_images_and_meteors(
     assert sorted(state["sent"]) == [f"{unseen}:0", f"{small}:0", f"{stamp}:0"]
 
 
+def test_module_goes_back_to_small_images_after_a_refused_full_frame(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """A hub that refuses a full frame it asked for (413, before #530) must not get the full
+    frame with every image: the module goes back to small images (v1.0.2)."""
+    allsky = _Allsky(tmp_path)
+    module = _load(monkeypatch, allsky)
+    sent: list[tuple[int, int]] = []
+
+    def transport(
+        method: str,
+        url: str,
+        *,
+        headers: dict[str, str],
+        json_body: dict[str, Any] | None = None,
+        files: dict[str, tuple[str, bytes, str]] | None = None,
+    ) -> tuple[int, dict[str, Any]]:
+        if files is None:
+            return 200, {"orientation": None, "want_full_frame": True}
+        size = Image.open(io.BytesIO(files["image"][1])).size
+        sent.append(size)
+        return (
+            (413, {"error": "too_large"}) if size == (W, H) else (200, {"want_full_frame": False})
+        )
+
+    module.ALLSKYSHAREDSKY.transport = staticmethod(transport)
+    params = {"stationid": "s1", "secret": "x" * 64, "hub": "https://hub.example"}
+    for _ in range(3):
+        module.sharedsky(params, "night")
+    assert sent[0] == (W, H)
+    assert len(sent) == 2
+    assert max(sent[1]) <= 640
+    assert any("refused the full frame: too_large" in m for _, m in allsky.logs)
+
+
 def _installer_meta_data(source: str, name: str = "meta_data") -> str | None:
     """Allsky's installer reads ``meta_data`` without running the module
     (``getMetaDataFromFileByName`` in html/includes/moduleinstallerutil.php), line by line:

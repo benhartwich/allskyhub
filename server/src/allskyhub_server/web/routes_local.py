@@ -16,6 +16,7 @@ from allskyhub_server.auth.hub_keys import HubKeys
 from allskyhub_server.auth.sessions import SessionInfo
 from allskyhub_server.devices import local_access, queries
 from allskyhub_server.devices.connections import ConnectionRegistry
+from allskyhub_server.i18n import tr
 from allskyhub_server.models import Device
 from allskyhub_server.web.deps import CurrentSession, DbSession, csrf_protect
 from allskyhub_server.web.render import render
@@ -85,7 +86,10 @@ async def _own(db: DbSession, session: SessionInfo, device_id: str) -> Device:
 def _check(return_: str, nonce: str) -> str:
     base = return_base(return_)
     if base is None or not _NONCE.fullmatch(nonce):
-        raise HTTPException(400, "Ungültige Anmeldeanfrage der Kamera.")
+        raise HTTPException(
+            400,
+            tr("Ungültige Anmeldeanfrage der Kamera.", "Invalid sign-in request from the camera."),
+        )
     return base
 
 

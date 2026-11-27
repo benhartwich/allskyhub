@@ -11,6 +11,7 @@ from fastapi import APIRouter, Depends, Form, HTTPException, Request
 from fastapi.responses import Response
 
 from allskyhub_server.auth import accounts, ratelimit, reporters
+from allskyhub_server.i18n import english, tr
 from allskyhub_server.mail.send import Mail, Mailer
 from allskyhub_server.web.deps import DbSession, SettingsDep, client_ip, csrf_protect
 from allskyhub_server.web.render import render
@@ -69,34 +70,50 @@ async def signup(
     try:
         await ratelimit.hit(request.app.state.engine, f"report-signup:{ip}", SIGNUP_PER_IP)
     except ratelimit.RateLimitedError:
-        return _page(request, settings, 429, error="Zu viele Versuche. Bitte später erneut.")
+        error = tr("Zu viele Versuche. Bitte später erneut.", "Too many tries. Please try later.")
+        return _page(request, settings, 429, error=error)
     if not privacy:
-        return _page(request, settings, 400, email=email,
-                     error="Bitte die Datenschutzerklärung bestätigen.")  # fmt: skip
+        error = tr("Bitte die Datenschutzerklärung bestätigen.",
+                   "Please confirm the privacy policy.")  # fmt: skip
+        return _page(request, settings, 400, email=email, error=error)
     if not await request.app.state.turnstile.verify(turnstile, ip):
-        error = "Die Prüfung gegen Bots hat nicht geklappt. Bitte noch einmal."
+        error = tr("Die Prüfung gegen Bots hat nicht geklappt. Bitte noch einmal.",
+                   "The check against bots did not work. Please try again.")  # fmt: skip
         return _page(request, settings, 400, email=email, error=error)
     try:
         user, token = await reporters.sign_up(db, email, password)
     except accounts.AccountError as exc:
         return _page(request, settings, 400, email=email, error=exc.message)
+    if token is not None:  # a new or still unconfirmed account: its mails in this language
+        user.lang = "en" if english() else "de"
     await db.commit()
     base = settings.base_url.rstrip("/")
+    # The mail in the language of the page it came from, and its links keep it.
+    lang = {"lang": "en"} if english() else {}
     if token is not None:
-        link = f"{base}/melden/bestaetigen?{urlencode({'token': token})}"
-        body = (
+        link = f"{base}/melden/bestaetigen?{urlencode({'token': token} | lang)}"
+        body = tr(
             "Hallo,\n\nmit diesem Link bestätigst du dein Melder-Konto bei allskyhub "
             f"(zwei Tage gültig):\n\n{link}\n\nDanach meldest du dich in der App unter "
             "„Mitmachen → Himmelshelligkeit melden“ an.\n\nWarst du das nicht, ignoriere "
-            "diese Nachricht; ohne Bestätigung wird das Konto gelöscht.\n\nallskyhub\n"
+            "diese Nachricht; ohne Bestätigung wird das Konto gelöscht.\n\nallskyhub\n",
+            "Hello,\n\nthis link confirms your reporter account at allskyhub (it works for "
+            f"two days):\n\n{link}\n\nThen sign in in the app under “Take part → Report "
+            "the sky brightness”.\n\nIf this wasn't you, just ignore this message; without "
+            "confirmation the account is deleted.\n\nallskyhub\n",
         )
     else:
-        body = (
+        suffix = f"?{urlencode(lang)}" if lang else ""
+        body = tr(
             "Hallo,\n\nfür diese Adresse gibt es schon ein allskyhub-Konto. Melde dich in der "
             "App einfach damit an. Passwort vergessen? Hier legst du ein neues fest:\n\n"
-            f"{base}/password/forgot\n\nallskyhub\n"
+            f"{base}/password/forgot\n\nallskyhub\n",
+            "Hello,\n\nthere already is an allskyhub account for this address. Just sign in "
+            "with it in the app. Forgot your password? Set a new one here:\n\n"
+            f"{base}/password/forgot{suffix}\n\nallskyhub\n",
         )
-    await mailer.send(Mail(to=user.email, subject="allskyhub: dein Melder-Konto", body=body))
+    subject = tr("allskyhub: dein Melder-Konto", "allskyhub: your reporter account")
+    await mailer.send(Mail(to=user.email, subject=subject, body=body))
     return _page(request, settings, sent=True)
 
 

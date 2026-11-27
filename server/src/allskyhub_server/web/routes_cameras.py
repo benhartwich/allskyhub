@@ -42,7 +42,7 @@ from allskyhub_server.devices import (
 )
 from allskyhub_server.devices import settings as camera_settings
 from allskyhub_server.devices.connections import ConnectionRegistry
-from allskyhub_server.devices.event_text import orientation_line, update_line
+from allskyhub_server.devices.event_text import event_titles, orientation_line, update_line
 from allskyhub_server.devices.images import ImageStore
 from allskyhub_server.devices.queries import Role
 from allskyhub_server.devices.tonight import ForecastCache
@@ -57,7 +57,6 @@ from allskyhub_server.web.deps import (
     csrf_protect,
 )
 from allskyhub_server.web.render import render
-from allskyhub_server.web.templating import event_titles
 
 router = APIRouter(dependencies=[Depends(csrf_protect)])
 

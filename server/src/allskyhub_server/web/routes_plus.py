@@ -23,6 +23,7 @@ from allskyhub_server.devices import queries
 from allskyhub_server.i18n import english, tr
 from allskyhub_server.models import Device, Subscription
 from allskyhub_server.settings import Settings
+from allskyhub_server.web import lang
 from allskyhub_server.web.deps import (
     CurrentSession,
     DbSession,
@@ -83,12 +84,14 @@ async def offer(request: Request, session: OptionalSession, settings: SettingsDe
 
 @router.get("/agb")
 async def terms(request: Request, session: OptionalSession) -> Response:
+    en = english() and not lang.original(request)  # the binding German text on ?original=1
     return render(
         request,
         "agb.html",
         {
-            "price_month": tr(plus.PRICE_MONTH, plus.PRICE_MONTH_EN),
-            "price_year": tr(plus.PRICE_YEAR, plus.PRICE_YEAR_EN),
+            "price_month": plus.PRICE_MONTH_EN if en else plus.PRICE_MONTH,
+            "price_year": plus.PRICE_YEAR_EN if en else plus.PRICE_YEAR,
+            "en": en,
         },
         session=session,
     )

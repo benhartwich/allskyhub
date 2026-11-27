@@ -34,7 +34,46 @@ STATES = ("requested", "running", "ok", "failed")
 
 
 class DeployError(Exception):
-    """German message for the page."""
+    """A message for the page, in the admin's language."""
+
+
+@dataclass(frozen=True)
+class Failure:
+    """Why GitHub did not answer, kept for FAILED_S and put into words for each request
+    (2026-11-27: the text was kept in the language of the admin who first saw it).
+    ``code``: "token" (the stored token refused), "limit" (the server's request limit,
+    ``reset`` when it ends, ``with_token`` whether a token was in use) or "unreachable"."""
+
+    code: str
+    with_token: bool = False
+    reset: dt.datetime | None = None
+
+    def text(self) -> str:
+        if self.code == "token":
+            return tr(
+                "GitHub lehnt den hinterlegten Token ab (abgelaufen?). Bitte neu eintragen.",
+                "GitHub refuses the stored token (expired?). Please enter a new one.",
+            )
+        if self.code != "limit":
+            return _unreachable()
+        limit = (
+            ""
+            if self.with_token
+            else tr(
+                " (60 pro Stunde; mit GitHub-Token 5000, unten eintragen)",
+                " (60 an hour; 5000 with a GitHub token, enter it below)",
+            )
+        )
+        if self.reset is None:
+            return tr(
+                f"GitHub-Abrufgrenze dieses Servers erreicht{limit}.",
+                f"This server reached its GitHub request limit{limit}.",
+            )
+        reset = self.reset
+        return tr(
+            f"GitHub-Abrufgrenze dieses Servers erreicht{limit}; wieder ab {reset:%H:%M} UTC.",
+            f"This server reached its GitHub request limit{limit}; again from {reset:%H:%M} UTC.",
+        )
 
 
 @dataclass(frozen=True)
@@ -112,7 +151,7 @@ class GitHub:
         self.token: str | None = None
         self._client = client
         self._cached: tuple[float, str | None, Upstream] | None = None
-        self._failed: tuple[float, str] | None = None
+        self._failed: tuple[float, Failure] | None = None
 
     async def upstream(self, running: str | None) -> Upstream:
         cached = self._cached
@@ -120,7 +159,7 @@ class GitHub:
             return cached[2]
         failed = self._failed
         if failed and time.monotonic() - failed[0] < FAILED_S:
-            raise DeployError(failed[1])
+            raise DeployError(failed[1].text())
         client = self._client or httpx.AsyncClient(timeout=10)
         headers = github_headers(self.token)
         try:
@@ -147,11 +186,11 @@ class GitHub:
         except httpx.HTTPStatusError as exc:
             log.warning("admin: GitHub not reachable: %s", exc)
             self._failed = (time.monotonic(), _refused(exc.response, self.token))
-            raise DeployError(self._failed[1]) from exc
+            raise DeployError(self._failed[1].text()) from exc
         except (httpx.HTTPError, ValueError) as exc:
             log.warning("admin: GitHub not reachable: %s", exc)
-            self._failed = (time.monotonic(), _unreachable())
-            raise DeployError(self._failed[1]) from exc
+            self._failed = (time.monotonic(), Failure("unreachable"))
+            raise DeployError(self._failed[1].text()) from exc
         finally:
             if self._client is None:
                 await client.aclose()
@@ -177,35 +216,18 @@ def github_headers(token: str | None) -> dict[str, str]:
     return headers
 
 
-def _refused(r: httpx.Response, token: str | None = None) -> str:
+def _refused(r: httpx.Response, token: str | None = None) -> Failure:
     """GitHub's anonymous limit (60 an hour) is per address, shared with everything else
     on the server: say so, with the time it resets."""
     if r.status_code == 401 and token:
-        return tr(
-            "GitHub lehnt den hinterlegten Token ab (abgelaufen?). Bitte neu eintragen.",
-            "GitHub refuses the stored token (expired?). Please enter a new one.",
-        )
+        return Failure("token")
     if r.status_code in (403, 429) and r.headers.get("x-ratelimit-remaining") == "0":
-        limit = (
-            ""
-            if token
-            else tr(
-                " (60 pro Stunde; mit GitHub-Token 5000, unten eintragen)",
-                " (60 an hour; 5000 with a GitHub token, enter it below)",
-            )
-        )
         try:
             reset = dt.datetime.fromtimestamp(int(r.headers["x-ratelimit-reset"]), dt.UTC)
         except (KeyError, ValueError):
-            return tr(
-                f"GitHub-Abrufgrenze dieses Servers erreicht{limit}.",
-                f"This server reached its GitHub request limit{limit}.",
-            )
-        return tr(
-            f"GitHub-Abrufgrenze dieses Servers erreicht{limit}; wieder ab {reset:%H:%M} UTC.",
-            f"This server reached its GitHub request limit{limit}; again from {reset:%H:%M} UTC.",
-        )
-    return _unreachable()
+            reset = None
+        return Failure("limit", with_token=bool(token), reset=reset)
+    return Failure("unreachable")
 
 
 def _unreachable() -> str:

@@ -1,13 +1,14 @@
 {% extends "base.html" %}
-{% block title %}Offline-Code · {{ device.name }}{% endblock %}
+{% block lang %}{{ 'en' if en else 'de' }}{% endblock %}
+{% block title %}{{ t('Offline-Code', 'Offline code') }} · {{ device.name }}{% endblock %}
 {% block content %}
 <a class="back" href="/cameras/{{ device.id }}">← {{ device.name }}</a>
-<h1>Offline-Code</h1>
+<h1>{{ t('Offline-Code', 'Offline code') }}</h1>
 <div class="card stack">
-  <p>Mit diesem Code meldest du dich an der lokalen Seite der Kamera an, wenn der Hub nicht erreichbar ist:</p>
+  <p>{{ t('Mit diesem Code meldest du dich an der lokalen Seite der Kamera an, wenn der Hub nicht erreichbar ist:', 'With this code you sign in to the camera’s local page when the hub cannot be reached:') }}</p>
   <p class="code">{{ code }}</p>
-  <p class="warn">Er wird nur jetzt angezeigt. Schreib ihn dir auf; ein neuer Code ersetzt ihn.</p>
-  <p class="muted">{% if online %}Die Kamera bekommt ihn sofort.{% else %}Die Kamera ist offline und bekommt ihn, sobald sie sich wieder verbindet.{% endif %} Er hat nichts mit deinem Passwort zu tun.</p>
-  <p><a class="button" href="/cameras/{{ device.id }}">Fertig</a></p>
+  <p class="warn">{{ t('Er wird nur jetzt angezeigt. Schreib ihn dir auf; ein neuer Code ersetzt ihn.', 'It is shown only now. Write it down; a new code replaces it.') }}</p>
+  <p class="muted">{% if online %}{{ t('Die Kamera bekommt ihn sofort.', 'The camera gets it right away.') }}{% else %}{{ t('Die Kamera ist offline und bekommt ihn, sobald sie sich wieder verbindet.', 'The camera is offline and gets it as soon as it connects again.') }}{% endif %} {{ t('Er hat nichts mit deinem Passwort zu tun.', 'It has nothing to do with your password.') }}</p>
+  <p><a class="button" href="/cameras/{{ device.id }}">{{ t('Fertig', 'Done') }}</a></p>
 </div>
 {% endblock %}
